@@ -360,7 +360,7 @@ public:
         if (columns[0]->is_nullable()) {
             const auto* column = down_cast<const NullableColumn*>(columns[0]);
             const Column* data_column = &column->data_column_ref();
-            const uint8_t* f_data = column->null_column()->raw_data();
+            const uint8_t* f_data = column->immutable_null_column_data().data();
             int offset = 0;
 
             // all not null
@@ -487,7 +487,7 @@ public:
         if (columns[0]->is_nullable()) {
             const auto* column = down_cast<const NullableColumn*>(columns[0]);
             const Column* data_column = &column->data_column_ref();
-            const uint8_t* f_data = column->null_column()->raw_data();
+            const uint8_t* f_data = column->immutable_null_column_data().data();
             int offset = 0;
 
 #ifdef __AVX2__
@@ -645,7 +645,7 @@ public:
                 return;
             }
 
-            const uint8_t* f_data = column->null_column()->raw_data();
+            const uint8_t* f_data = column->immutable_null_column_data().data();
             int offset = 0;
 #ifdef __AVX2__
             // !important: filter must be an uint8_t container
@@ -765,7 +765,7 @@ public:
                 return;
             }
 
-            const uint8_t* f_data = column->null_column()->raw_data();
+            const auto& f_data = column->immutable_null_column_data();
             for (size_t i = frame_start; i < frame_end; ++i) {
                 if (f_data[i] == 0) {
                     this->data(state).is_null = false;
@@ -829,7 +829,7 @@ public:
                     return;
                 }
 
-                const uint8_t* f_data = column->null_column()->raw_data();
+                const auto& f_data = column->immutable_null_column_data();
                 if (this->data(state).is_frame_init) {
                     // Since frame has been evaluated, we only need to update the boundary
                     const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
@@ -1024,7 +1024,7 @@ public:
                 // compute null_datas for column that has null.
                 if (columns[i]->has_null()) {
                     has_null = true;
-                    auto null_data = column->null_column()->raw_data();
+                    const auto& null_data = column->immutable_null_column_data();
                     for (size_t j = 0; j < chunk_size; ++j) {
                         null_data_result[j] |= null_data[j];
                     }

@@ -23,7 +23,7 @@
 #include "butil/time.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
@@ -2718,17 +2718,16 @@ TEST_F(VectorizedCastExprTest, json_to_map) {
 TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
     // Create source struct type: STRUCT<price INT, product_id VARCHAR>
     TypeDescriptor from_type = TypeDescriptor::create_struct_type(
-            {"price", "product_id"},
-            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+            {"price", "product_id"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
 
     // Create target struct type: STRUCT<product_id VARCHAR, price INT>
     // Note: same field names but different order
     TypeDescriptor to_type = TypeDescriptor::create_struct_type(
-            {"product_id", "price"},
-            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)});
+            {"product_id", "price"}, {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)});
 
     ObjectPool pool;
-    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
+    auto expr_result =
+            VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
     ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
     Expr* expr = expr_result.value();
     pool.add(expr);
@@ -2748,18 +2747,17 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_field_reorder) {
 // Test struct-to-struct cast with matching field order (no reordering needed)
 TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
     // Create source struct type: STRUCT<a INT, b VARCHAR>
-    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
-            {"a", "b"},
-            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor from_type =
+            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)});
 
     // Create target struct type: STRUCT<a BIGINT, b VARCHAR>
     // Same field order, just different types
-    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
-            {"a", "b"},
-            {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
+    TypeDescriptor to_type =
+            TypeDescriptor::create_struct_type({"a", "b"}, {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_VARCHAR)});
 
     ObjectPool pool;
-    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
+    auto expr_result =
+            VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
     ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
     Expr* expr = expr_result.value();
     pool.add(expr);
@@ -2778,16 +2776,15 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_same_order) {
 TEST_F(VectorizedCastExprTest, struct_to_struct_three_fields_reorder) {
     // Create source struct type: STRUCT<x INT, y INT, z INT>
     TypeDescriptor from_type = TypeDescriptor::create_struct_type(
-            {"x", "y", "z"},
-            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+            {"x", "y", "z"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
 
     // Create target struct type: STRUCT<z INT, x INT, y INT>
     TypeDescriptor to_type = TypeDescriptor::create_struct_type(
-            {"z", "x", "y"},
-            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+            {"z", "x", "y"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
 
     ObjectPool pool;
-    auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
+    auto expr_result =
+            VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false, /*cast_by_name=*/true);
     ASSERT_TRUE(expr_result.ok()) << expr_result.status().message();
     Expr* expr = expr_result.value();
     pool.add(expr);
@@ -2810,12 +2807,10 @@ TEST_F(VectorizedCastExprTest, struct_to_struct_three_fields_reorder) {
 TEST_F(VectorizedCastExprTest, struct_to_struct_position_cast_different_names) {
     // Source: STRUCT<key INT, value INT>  Target: STRUCT<key1 INT, value1 INT>
     // Names don't overlap, so positional mapping should be used: key→key1 (idx 0), value→value1 (idx 1).
-    TypeDescriptor from_type = TypeDescriptor::create_struct_type(
-            {"key", "value"},
-            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
-    TypeDescriptor to_type = TypeDescriptor::create_struct_type(
-            {"key1", "value1"},
-            {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor from_type =
+            TypeDescriptor::create_struct_type({"key", "value"}, {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
+    TypeDescriptor to_type = TypeDescriptor::create_struct_type({"key1", "value1"},
+                                                                {TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)});
 
     ObjectPool pool;
     auto expr_result = VectorizedCastExprFactory::create_cast_expr(&pool, from_type, to_type, false);

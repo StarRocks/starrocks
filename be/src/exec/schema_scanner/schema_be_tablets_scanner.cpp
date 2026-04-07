@@ -14,7 +14,7 @@
 
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/Types_types.h" // for TStorageMedium::type
 #include "gutil/strings/substitute.h"

@@ -37,6 +37,9 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.re2j.Matcher;
+import com.google.re2j.Pattern;
+import com.google.re2j.PatternSyntaxException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -1563,6 +1566,89 @@ public class ScalarOperatorFunctions {
                                            ConstantOperator replacement) {
         return ConstantOperator.createVarchar(
                 StringUtils.replace(value.getVarchar(), target.getVarchar(), replacement.getVarchar()));
+    }
+
+    @ConstantFunction(name = "regexp_replace", argTypes = {VARCHAR, VARCHAR, VARCHAR}, returnType = VARCHAR)
+    public static ConstantOperator regexpReplace(ConstantOperator value, ConstantOperator pattern,
+                                                 ConstantOperator replacement) {
+        String patternText = pattern.getVarchar();
+        if (patternText.isEmpty()) {
+            throw new IllegalArgumentException("empty regex falls back to BE");
+        }
+
+        final Pattern compiled;
+        try {
+            compiled = Pattern.compile(patternText, Pattern.DOTALL);
+        } catch (PatternSyntaxException e) {
+            throw new IllegalArgumentException("invalid regex falls back to BE", e);
+        }
+
+        boolean globalMode = !patternText.startsWith("^") && !patternText.endsWith("$");
+        String replaced = regexpReplaceWithBERewrite(value.getVarchar(), compiled, replacement.getVarchar(), globalMode);
+        return ConstantOperator.createVarchar(replaced);
+    }
+
+    private static String regexpReplaceWithBERewrite(String input, Pattern pattern, String rewrite, boolean globalMode) {
+        Matcher matcher = pattern.matcher(input);
+        if (!matcher.find()) {
+            return input;
+        }
+
+        StringBuilder result = new StringBuilder(input.length());
+        int lastEnd = 0;
+        do {
+            int start = matcher.start();
+            int end = matcher.end();
+            if (start == end) {
+                if (globalMode && start == input.length()) {
+                    break;
+                }
+                throw new IllegalArgumentException("zero-length regex match falls back to BE");
+            }
+            result.append(input, lastEnd, start);
+            appendBEStyleRegexRewrite(result, rewrite, matcher);
+            lastEnd = end;
+            if (!globalMode) {
+                break;
+            }
+        } while (matcher.find());
+
+        result.append(input, lastEnd, input.length());
+        return result.toString();
+    }
+
+    private static void appendBEStyleRegexRewrite(StringBuilder out, String rewrite, Matcher matcher) {
+        for (int i = 0; i < rewrite.length(); i++) {
+            char ch = rewrite.charAt(i);
+            if (ch != '\\') {
+                out.append(ch);
+                continue;
+            }
+
+            if (i + 1 >= rewrite.length()) {
+                throw new IllegalArgumentException("dangling replacement escape falls back to BE");
+            }
+
+            char next = rewrite.charAt(++i);
+            if (next == '\\') {
+                out.append('\\');
+                continue;
+            }
+
+            if (next >= '0' && next <= '9') {
+                int group = next - '0';
+                if (group > matcher.groupCount()) {
+                    throw new IllegalArgumentException("replacement group falls back to BE");
+                }
+                String groupValue = matcher.group(group);
+                if (groupValue != null) {
+                    out.append(groupValue);
+                }
+                continue;
+            }
+
+            throw new IllegalArgumentException("unsupported replacement escape falls back to BE");
+        }
     }
 
     private static ConstantOperator createDecimalConstant(BigDecimal result) {

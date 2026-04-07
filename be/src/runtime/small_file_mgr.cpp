@@ -40,9 +40,9 @@
 #include <sstream>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "base/crypto/md5.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"

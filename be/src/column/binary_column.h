@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <exception>
 #include <memory>
 #include <sstream>
 #include <type_traits>
@@ -108,7 +109,7 @@ public:
         // sometimes we may fill _bytes and _offsets separately and resize them in the final stage,
         // if an exception is thrown in the middle process, _offsets maybe inconsistent with _bytes,
         // we should skip the check.
-        if (std::uncaught_exception()) {
+        if (std::uncaught_exceptions() > 0) {
             return;
         }
 #endif
@@ -131,13 +132,6 @@ public:
             _build_slices();
         }
         return reinterpret_cast<const uint8_t*>(_slices.data());
-    }
-
-    uint8_t* mutable_raw_data() override {
-        if (!_slices_cache) {
-            _build_slices();
-        }
-        return reinterpret_cast<uint8_t*>(_slices.data());
     }
 
     size_t size() const override { return _offsets.size() - 1; }
@@ -350,7 +344,7 @@ public:
         return ImmBytes(_bytes.data(), _bytes.size());
     }
 
-    const uint8_t* continuous_data() const override { return _data_base(); }
+    const uint8_t* raw_bytes() const { return _data_base(); }
 
     Offsets& get_offset() { return _offsets; }
     const Offsets& get_offset() const { return _offsets; }
@@ -413,6 +407,9 @@ public:
     void build_slices(Container& slices) const;
 
 private:
+    template <typename SrcOffset>
+    void _append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count);
+
     void _build_slices() const;
     void _build_german_strings() const;
     void _ensure_materialized();

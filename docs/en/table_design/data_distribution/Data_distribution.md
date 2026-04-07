@@ -50,6 +50,7 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
 | ------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
 | Random distribution       | Random bucketing                                             | The entire table is considered a partition. The data in the table is randomly distributed into different buckets. This is the default data distribution method. |
 | Hash distribution         | Hash bucketing                                               | The entire table is considered a partition. The data in the table is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. |
+| Range distribution        | Range-based bucketing                                        | Supported from v4.1 onwards. The entire table is considered a partition. The data in the table is distributed to the corresponding buckets, which is based on the value range of the table key. |
 | Range+Random distribution | <ol><li>Range partitioning </li><li>Random bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in. </li><li>The data in the partition is randomly distributed across different buckets. </li></ol> |
 | Range+Hash distribution   | <ol><li>Range partitioning</li><li>Hash bucketing </li></ol> | <ol><li>The data in the table is distributed to the corresponding partitions, which is based on the ranges where partitioning column values fall in.</li><li>The data in the partition is distributed to the corresponding buckets, which is based on the hash values of the data's bucketing key by using a hash function. </li></ol> |
 | List+Random distribution  | <ol><li>Expression partitioning or list partitioning</li><li>Random bucketing </li></ol> | <ol><li>The data in the table is partitioned based on the value lists that the partitioning columns values belongs to.</li><li>The data in the partition is randomly distributed across different buckets.</li></ol> |
@@ -84,6 +85,25 @@ Also, StarRocks distributes data by implementing the two-level partitioning + bu
   AGGREGATE KEY (event_day, site_id, city_code, user_name)
   -- Use hash bucketing as the bucketing method and must specify the bucketing key.
   DISTRIBUTED BY HASH(event_day,site_id); 
+  ```
+
+- **Range distribution**
+
+  From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
+
+  :::note
+  To enable this semantic, you must set the FE configuration `enable_range_distribution` to `true`.
+  :::
+
+  ```SQL
+  CREATE TABLE users (
+    user_id bigint NOT NULL,
+    name string NOT NULL,
+    email string NULL,
+    address string NULL
+  ) 
+  PRIMARY KEY (user_id);
+  -- Because the bucketing method is not configured, while the key column is specified, range-based bucketing is used.
   ```
 
 - **Range+Random distribution** (This distribution method currently can only be used to create a Duplicate Key table.)
@@ -751,6 +771,90 @@ Practically speaking, you can use one or two bucketing columns based on your bus
 >
 > - Short queries involve scanning a small amount of data, and can be completed on a single node.
 > - Long queries involve scanning a large amount of data, and their performance can be significantly improved by parallel scanning across multiple nodes in a distributed cluster.
+
+### Range-based bucketing
+
+From v4.1 onwards, StarRocks supports the **Range-based Distribution semantic** (disabled by default), controlled by the FE configuration `enable_range_distribution`. The data will be sequenced according to the data range of the key columns, and each tablet contains the data from a certain range.
+
+The range-based distribution semantic is different from the default semantic in the following aspects:
+- If the key type (AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY) is explicitly specified, and a DISTRIBUTED BY clause is not specified, the data will be distributed by range by default.
+- If none of the key type, a DISTRIBUTED BY clause, or an ORDER BY is specified, a Duplicate Key table with the random bucketing strategy will be created.
+- If the key type and a DISTRIBUTED BY clause are not specified, but an ORDER BY clause is specified, a Duplicate Key table with the range-based distribution strategy will be created. In this case, DUPLICATE KEY is equivalent to an ORDER BY clause, and vice versa.
+- If both DUPLICATE KEY and an ORDER BY clause are specified, only the ORDER BY clause will take effect, and DUPLICATE KEY will be ignored.
+
+#### Advantages
+
+**Fewer concepts and simpler usage**
+
+- In most cases, table creation should require only column definitions and an `ORDER BY` clause.
+- Users do not have to define a `DISTRIBUTED BY` clause.
+
+**Ability to handle data skew**
+
+- Tablets support automatic splitting and merging, enabling the system to re-balance data dynamically and mitigate skew. For more instructions on splitting and merging tablets, see [ALTER TABLE - Split or merge tablets](../../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#split-or-merge-tablets).
+
+**Balanced data locality and distribution**
+
+- Data from a small tenant can be located on a single BE/CN for optimal locality.
+- Data from a large tenant can be distributed across multiple BEs/CNs to maintain scalability and performance.
+
+**No dependency on time-based partitioning**
+
+- Time-based partitioning is no longer a must for data management.
+- A single partition will be capable of storing large data volumes, and the amount of data in different partitions can vary greatly, allowing users to choose partitioning strategies based on their specific needs.
+
+#### Precautions
+
+- This semantic is supported from v4.1 onwards and disabled by default.
+- To enable this semantic, you must set the FE configuration `enable_range_distribution` to `true`.
+
+#### Examples
+
+The following examples omit the partition syntax.
+
+**Duplicate key tables:**
+
+```SQL
+-- When DUPLICATE KEY is specified, the data is distributed by range of the key column.
+CREATE TABLE dup_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+DUPLICATE KEY (tenant_id, created_time, id);
+
+-- When ORDER BY is specified, a Duplicate Key table is created. The data is distributed by range of the sort key.
+CREATE TABLE dup_table_order (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+ORDER BY (tenant_id, created_time, id);
+
+-- If both DUPLICATE KEY and ORDER BY are not specified, a Duplicate Key table with the random bucketing strategy is created.
+CREATE TABLE random_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+);
+```
+
+**Primary Key/Aggregate Key/Unique Key tables:**
+
+```SQL
+-- Take Primary Key table as an example.
+-- When the key type and the key column are specified, the data is distributed by range of the key column.
+CREATE TABLE pk_table (
+    tenant_id varchar(128),
+    created_time datetime,
+    id int, 
+    name varchar(64)
+)
+PRIMARY KEY (tenant_id, created_time, id);
+```
 
 ### Set the number of buckets
 

@@ -17,7 +17,7 @@
 #include <unordered_map>
 
 #include "column/column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/table_function/generate_series.h"
 #include "exprs/table_function/json_each.h"
 #include "exprs/table_function/list_rowsets.h"

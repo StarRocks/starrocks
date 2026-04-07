@@ -75,7 +75,6 @@ public:
 
     const uint8_t* raw_data() const override { NOT_SUPPORT(); }
 
-    uint8_t* mutable_raw_data() override { NOT_SUPPORT(); }
     size_t capacity() const override { NOT_SUPPORT(); }
     size_t byte_size() const override { NOT_SUPPORT(); }
     size_t type_size() const override { NOT_SUPPORT(); }

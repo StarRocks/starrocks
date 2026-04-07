@@ -56,7 +56,8 @@
 
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
-                               const std::string& symbol, FunctionContext* context);
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration);
 
 Analytor::~Analytor() {
     if (_state != nullptr) {
@@ -398,7 +399,7 @@ Status Analytor::open(RuntimeState* state) {
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
                 auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
-                                                  _agg_fn_ctxs[i]);
+                                                  _agg_fn_ctxs[i], fn.cloud_configuration);
                 RETURN_IF_ERROR(st);
                 attached_udaf_idx.emplace_back(i);
             }
@@ -682,12 +683,10 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
         SCOPED_TIMER(_column_resize_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+                // https://github.com/StarRocks/starrocks/pull/43065 confirms that _agg_expr_ctxs[i][j]->evaluate
+                // will not generate a single column larger than 4GB.
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
-                // When chunk's column is const, maybe need to unpack it.
-                if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
-                    ColumnHelper::ensure_large_binary_column(_agg_intput_columns[i][j]);
-                }
                 TRY_CATCH_BAD_ALLOC(
                         _append_column(chunk_size, _agg_intput_columns[i][j]->as_mutable_raw_ptr(), column));
 
@@ -703,9 +702,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _partition_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _partition_ctxs[i]->evaluate(chunk.get()));
-            if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
-                ColumnHelper::ensure_large_binary_column(_partition_columns[i]);
-            }
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _partition_columns[i].get(), column));
 
             // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB
@@ -718,9 +714,6 @@ Status Analytor::_add_chunk(const ChunkPtr& chunk) {
 
         for (size_t i = 0; i < _order_ctxs.size(); i++) {
             ASSIGN_OR_RETURN(ColumnPtr column, _order_ctxs[i]->evaluate(chunk.get()));
-            if (ColumnHelper::get_data_column(column.get())->is_large_binary()) {
-                ColumnHelper::ensure_large_binary_column(_order_columns[i]);
-            }
             TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _order_columns[i].get(), column));
 
             // Upgrade BinaryColumn to LargeBinaryColumn if it exceeds 4GB

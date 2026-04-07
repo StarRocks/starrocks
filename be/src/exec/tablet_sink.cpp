@@ -39,7 +39,6 @@
 #include <sstream>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "agent/utils.h"
 #include "base/simd/simd.h"
 #include "base/uid_util.h"
@@ -52,6 +51,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/tracer.h"
 #include "exec/pipeline/query_context.h"

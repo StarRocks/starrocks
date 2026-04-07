@@ -19,7 +19,7 @@
 #include <variant>
 
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"

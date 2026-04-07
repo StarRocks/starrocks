@@ -33,7 +33,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -804,7 +804,7 @@ public class SyncPartitionUtils {
                 baseTableVersionMap.keySet().removeIf(partitionName -> {
                     try {
                         boolean isListPartition = mv.getPartitionInfo().isListPartition();
-                        Set<String> partitionNames = PartitionUtil.getMVPartitionName(baseTable, partitionColumn,
+                        Set<String> partitionNames = MVPartitionCellBuilder.getMVPartitionNames(baseTable, partitionColumn,
                                 Lists.newArrayList(partitionName), isListPartition, expr);
                         return partitionNames != null && partitionNames.size() == 1 &&
                                 Lists.newArrayList(partitionNames).get(0).equals(mvPartitionName);

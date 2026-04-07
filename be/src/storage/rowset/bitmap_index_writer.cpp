@@ -54,7 +54,7 @@
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -253,7 +253,7 @@ struct BitmapIndexTraits<Slice> {
 template <LogicalType field_type>
 class BitmapIndexWriterImpl : public BitmapIndexWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
     using UnorderedMemoryIndexType = typename BitmapIndexTraits<CppType>::UnorderedMemoryIndexType;
 
     explicit BitmapIndexWriterImpl(TypeInfoPtr type_info, int32_t gram_num)

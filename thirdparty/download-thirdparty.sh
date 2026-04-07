@@ -513,6 +513,7 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-parquet-map-key.patch
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-use-zstd-1.5.7.patch
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-flight-types-clang.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-thrift.patch
         touch $PATCHED_MARK
     fi
     cd -

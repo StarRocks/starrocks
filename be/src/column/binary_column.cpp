@@ -65,33 +65,62 @@ void BinaryColumnBase<T>::append(const Slice& str) {
 }
 
 template <typename T>
-void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
-    DCHECK(offset + count <= src.size());
-    const auto& b = down_cast<const BinaryColumnBase<T>&>(src);
+template <typename SrcOffset>
+void BinaryColumnBase<T>::_append_binary_impl(const BinaryColumnBase<SrcOffset>& src, size_t offset, size_t count) {
+    static_assert(sizeof(SrcOffset) <= sizeof(Offset));
+    const auto& src_offsets = src.get_offset();
+    const uint8_t* src_base = src.raw_bytes();
+    auto& dst_bytes = get_bytes();
+    dst_bytes.insert(dst_bytes.end(), src_base + src_offsets[offset], src_base + src_offsets[offset + count]);
 
-    auto& bytes = get_bytes();
-    const uint8_t* src_base = b._data_base();
-    const uint8_t* p = src_base + b._offsets[offset];
-    const uint8_t* e = src_base + b._offsets[offset + count];
-    bytes.insert(bytes.end(), p, e);
-
-    // `new_offsets[i] = offsets[(num_prev_offsets + i - 1) + 1]` is the end offset of the new i-th string.
-    // new_offsets[i] = new_offsets[i - 1] + (b._offsets[offset + i + 1] - b._offsets[offset + i])
-    //    = b._offsets[offset + i + 1] + (new_offsets[i - 1] - b._offsets[offset + i])
-    //    = b._offsets[offset + i + 1] + delta
-    // where `delta` is always the difference between the start offset of the num_prev_offsets-th destination string
-    // and the start offset of the offset-th source string.
     const size_t num_prev_offsets = _offsets.size();
     _offsets.resize(num_prev_offsets + count);
     auto* new_offsets = _offsets.data() + num_prev_offsets;
-    strings::memcpy_inlined(new_offsets, b._offsets.data() + offset + 1, count * sizeof(Offset));
 
-    const auto delta = _offsets[num_prev_offsets - 1] - b._offsets[offset];
-    for (size_t i = 0; i < count; i++) {
-        new_offsets[i] += delta;
+    // new_offsets[i] = src_offsets[offset + i + 1] + delta
+    // where delta = dst_last_offset - src_offsets[offset]
+    if constexpr (std::is_same_v<T, SrcOffset>) {
+        // Same offset width: bulk-copy then adjust.
+        strings::memcpy_inlined(new_offsets, src_offsets.data() + offset + 1, count * sizeof(Offset));
+        const auto delta = _offsets[num_prev_offsets - 1] - src_offsets[offset];
+        for (size_t i = 0; i < count; i++) {
+            new_offsets[i] += delta;
+        }
+    } else {
+        // Different offset width (uint32_t -> uint64_t): convert element by element.
+        const auto delta =
+                static_cast<Offset>(_offsets[num_prev_offsets - 1]) - static_cast<Offset>(src_offsets[offset]);
+        for (size_t i = 0; i < count; i++) {
+            new_offsets[i] = static_cast<Offset>(src_offsets[offset + 1 + i]) + delta;
+        }
     }
 
     invalidate_slice_cache();
+}
+
+template <typename T>
+void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
+    DCHECK(offset + count <= src.size());
+
+    // Same offset type.
+    const bool src_is_same_type = std::is_same_v<T, uint32_t> ? src.is_binary() : src.is_large_binary();
+    if (src_is_same_type) {
+        _append_binary_impl(down_cast<const BinaryColumnBase<T>&>(src), offset, count);
+        return;
+    }
+
+    // Cross-type path: only LargeBinaryColumn can append from BinaryColumn, not the reverse.
+    if constexpr (std::is_same_v<T, uint64_t>) {
+        if (src.is_binary()) {
+            _append_binary_impl(down_cast<const BinaryColumn&>(src), offset, count);
+            return;
+        }
+    }
+
+    bool dst_is_large = std::is_same_v<T, uint64_t>;
+    bool src_is_large_binary = src.is_large_binary();
+    CHECK(false) << "BinaryColumnBase::append: incompatible column type"
+                 << " dst_is_large=" << dst_is_large << " src_is_large_binary=" << src_is_large_binary;
 }
 
 template <typename T>

@@ -30,7 +30,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 #include "types/datum.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 

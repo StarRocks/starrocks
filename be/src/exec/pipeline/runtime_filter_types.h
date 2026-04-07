@@ -22,11 +22,11 @@
 #include "common/object_pool.h"
 #include "common/statusor.h"
 #include "exec/pipeline/schedule/observer.h"
+#include "exec/runtime_filter/runtime_filter_descriptor.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exprs/expr_context.h"
 #include "exprs/predicate.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/runtime_filter/runtime_filter_descriptor.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 
 namespace starrocks::pipeline {
 

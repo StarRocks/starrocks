@@ -102,7 +102,7 @@ Status AggStateData::output_result(size_t chunk_size, const Columns& group_by_co
                                           agg_group_data[i] + _agg_state_offset);
         }
 
-        uint8_t* is_sync_data = is_sync_col->mutable_raw_data();
+        const auto& is_sync_data = is_sync_col->immutable_data();
         // if need sync, query data from detail table.
         for (size_t i = 0; i < chunk_size; i++) {
             if (!is_sync_data[i]) {

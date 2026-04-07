@@ -15,11 +15,17 @@
 package com.starrocks.alter;
 
 import com.starrocks.common.Config;
+import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,10 +57,20 @@ public class AlterHandlerEditLogTest {
     }
 
     @Test
-    public void testClearExpireFinishedOrCancelledAlterJobsV2NormalCase() throws Exception {
+    public void testClearExpireFinishedOrCancelledAlterJobsV2NormalCase(@Mocked ClusterSnapshotMgr clusterSnapshotMgr)
+            throws Exception {
+        mockSharedNothingMode();
+        mockClusterSnapshotMgr(clusterSnapshotMgr);
+        new Expectations() {
+            {
+                clusterSnapshotMgr.isDeletionSafeToExecute(anyLong);
+                times = 0;
+            }
+        };
+
         // 1. Create expired finished alter job
         long oldFinishedTime = System.currentTimeMillis() - (Config.history_job_keep_max_second + 100) * 1000L;
-        MockAlterJobV2 expiredJob = new MockAlterJobV2(JOB_ID_1, AlterJobV2.JobType.SCHEMA_CHANGE, 
+        MockAlterJobV2 expiredJob = new MockAlterJobV2(JOB_ID_1, AlterJobV2.JobType.SCHEMA_CHANGE,
                 DB_ID, TABLE_ID, "test_table", 10000L);
         expiredJob.setJobState(AlterJobV2.JobState.FINISHED);
         expiredJob.setFinishedTimeMs(oldFinishedTime);
@@ -114,7 +130,29 @@ public class AlterHandlerEditLogTest {
     }
 
     @Test
+    public void testClearExpireFinishedOrCancelledAlterJobsV2SharedDataModeWaitsForSafeDeletion()
+            throws Exception {
+        ClusterSnapshotMgr clusterSnapshotMgr = mockClusterSnapshotMgr(false);
+        mockSharedDataMode();
+
+        long oldFinishedTime = System.currentTimeMillis() - (Config.history_job_keep_max_second + 100) * 1000L;
+        MockAlterJobV2 expiredJob = new MockAlterJobV2(JOB_ID_1, AlterJobV2.JobType.SCHEMA_CHANGE,
+                DB_ID, TABLE_ID, "test_table", 10000L);
+        expiredJob.setJobState(AlterJobV2.JobState.FINISHED);
+        expiredJob.setFinishedTimeMs(oldFinishedTime);
+        schemaChangeHandler.addAlterJobV2(expiredJob);
+
+        schemaChangeHandler.clearExpireFinishedOrCancelledAlterJobsV2();
+
+        Assertions.assertEquals(1, schemaChangeHandler.getAlterJobsV2().size());
+        Assertions.assertTrue(schemaChangeHandler.getAlterJobsV2().containsKey(JOB_ID_1));
+        org.mockito.Mockito.verify(clusterSnapshotMgr).isDeletionSafeToExecute(oldFinishedTime);
+    }
+
+    @Test
     public void testClearExpireFinishedOrCancelledAlterJobsV2EditLogException() throws Exception {
+        mockSharedNothingMode();
+
         // 1. Create expired finished alter job
         long oldFinishedTime = System.currentTimeMillis() - (Config.history_job_keep_max_second + 100) * 1000L;
         MockAlterJobV2 expiredJob = new MockAlterJobV2(JOB_ID_1, AlterJobV2.JobType.SCHEMA_CHANGE,
@@ -140,6 +178,51 @@ public class AlterHandlerEditLogTest {
         // 4. Verify job is still present (not removed due to exception)
         Assertions.assertEquals(1, schemaChangeHandler.getAlterJobsV2().size());
         Assertions.assertTrue(schemaChangeHandler.getAlterJobsV2().containsKey(JOB_ID_1));
+    }
+
+    private static void mockSharedNothingMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return false;
+            }
+
+            @Mock
+            public boolean isSharedNothingMode() {
+                return true;
+            }
+        };
+    }
+
+    private static void mockSharedDataMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+
+            @Mock
+            public boolean isSharedNothingMode() {
+                return false;
+            }
+        };
+    }
+
+    private static void mockClusterSnapshotMgr(ClusterSnapshotMgr clusterSnapshotMgr) {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return clusterSnapshotMgr;
+            }
+        };
+    }
+
+    private static ClusterSnapshotMgr mockClusterSnapshotMgr(boolean deletionSafe) {
+        ClusterSnapshotMgr clusterSnapshotMgr = spy(new ClusterSnapshotMgr());
+        org.mockito.Mockito.doReturn(deletionSafe).when(clusterSnapshotMgr)
+                .isDeletionSafeToExecute(org.mockito.ArgumentMatchers.anyLong());
+        mockClusterSnapshotMgr(clusterSnapshotMgr);
+        return clusterSnapshotMgr;
     }
 
     // Mock AlterJobV2 for testing
@@ -199,4 +282,3 @@ public class AlterHandlerEditLogTest {
         }
     }
 }
-

@@ -17,7 +17,7 @@
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "connector/deletion_vector/deletion_vector.h"

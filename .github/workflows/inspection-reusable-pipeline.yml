@@ -115,7 +115,7 @@ jobs:
 
       - name: Deploy SR
         id: deploy_sr
-        if: always() && steps.apply_resource.outcome == 'success'
+        if: "!cancelled() && steps.apply_resource.outcome == 'success'"
         run: |
           cd ci-tool && source lib/init.sh
           echo "##### Package(BE): ${BE_OUTPUT_TAR}" >> $GITHUB_STEP_SUMMARY
@@ -170,7 +170,7 @@ jobs:
 
       - name: Publish SQL-Tester Report
         uses: ./.actions/nose-report-action
-        if: always() && steps.prepare-tools.outcome == 'success'
+        if: "!cancelled() && steps.prepare-tools.outcome == 'success'"
         with:
           check_name: SQL-Tester Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }} ${{ env.SYSTEM_TEST_MODE }})
           fail_on_failure: true
@@ -201,7 +201,7 @@ jobs:
     needs:
       - deploy
       - SQL-Tester
-    if: always() && needs.deploy.result == 'success'
+    if: "!cancelled() && needs.deploy.result == 'success'"
     env:
       FE_NODE: ${{ needs.deploy.outputs.fe }}
     steps:
@@ -225,7 +225,7 @@ jobs:
     needs:
       - deploy
       - SQL-Tester
-    if: always() && needs.deploy.result == 'success'
+    if: "!cancelled() && needs.deploy.result == 'success'"
     timeout-minutes: 20
     env:
       FE_NODE: ${{ needs.deploy.outputs.fe }}
@@ -256,7 +256,7 @@ jobs:
     needs:
       - restart-fe
       - restart-be
-    if: always() && inputs.INCLUDE_ADMIT == 'true' && inputs.BUILD_TYPE == 'Release' && needs.restart-be.result == 'success' && needs.restart-fe.result == 'success'
+    if: "!cancelled() && inputs.INCLUDE_ADMIT == 'true' && inputs.BUILD_TYPE == 'Release' && needs.restart-be.result == 'success' && needs.restart-fe.result == 'success'"
     timeout-minutes: 40
     env:
       FE_NODE: ${{ needs.restart-be.outputs.FE_NODE }}
@@ -295,7 +295,7 @@ jobs:
 
       - name: Publish Admit Report
         uses: ./.actions/nose-report-action
-        if: always() && steps.prepare-tools.outcome == 'success'
+        if: "!cancelled() && steps.prepare-tools.outcome == 'success'"
         with:
           check_name: Admit Report (${{ env.BUILD_TYPE }} ${{ env.LINUX_DISTRO }} ${{ env.SYSTEM_TEST_MODE }})
           fail_on_failure: true

@@ -34,7 +34,7 @@
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "formats/parquet/schema.h"

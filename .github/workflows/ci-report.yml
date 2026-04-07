@@ -600,6 +600,7 @@ jobs:
       WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
       FEISHU_APP_ID: ${{ secrets.FEISHU_APP_ID }}
       FEISHU_APP_SECRET: ${{ secrets.FEISHU_APP_SECRET }}
+      SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
       PR_NUMBER: ${{ needs.INFO.outputs.PR_NUMBER }}
     steps:
       - name: CLEAN

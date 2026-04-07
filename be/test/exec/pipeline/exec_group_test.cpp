@@ -41,6 +41,7 @@ public:
     void submit(DriverRawPtr driver) override { (void)_tp->submit(std::make_shared<GroupTaskRunner>(_group)); }
     void cancel(DriverRawPtr driver) override {}
     void close() override { _tp->shutdown(); }
+    void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) override {}
 
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override {}

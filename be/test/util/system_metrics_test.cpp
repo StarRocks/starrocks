@@ -37,6 +37,8 @@
 #include <gtest/gtest.h>
 #include <libgen.h>
 
+#include <thread>
+
 #include "base/concurrency/stopwatch.hpp"
 #include "base/metrics.h"
 #include "util/logging.h"
@@ -273,6 +275,53 @@ TEST_F(SystemMetricsTest, no_proc_file) {
         ASSERT_TRUE(bytes_read != nullptr);
         ASSERT_STREQ("0", bytes_read->to_string().c_str());
     }
+}
+
+TEST_F(SystemMetricsTest, concurrent_update) {
+    const std::string dir_path = "./be/test/util";
+    std::string stat_path(dir_path);
+    stat_path += "/test_data/stat_normal";
+    k_ut_stat_path = stat_path.c_str();
+    std::string diskstats_path(dir_path);
+    diskstats_path += "/test_data/diskstats_normal";
+    k_ut_diskstats_path = diskstats_path.c_str();
+    std::string net_dev_path(dir_path);
+    net_dev_path += "/test_data/net_dev_normal";
+    k_ut_net_dev_path = net_dev_path.c_str();
+    std::string fd_path(dir_path);
+    fd_path += "/test_data/fd_file_nr";
+    k_ut_fd_path = fd_path.c_str();
+    std::string net_snmp_path(dir_path);
+    net_snmp_path += "/test_data/net_snmp_normal";
+    k_ut_net_snmp_path = net_snmp_path.c_str();
+
+    MetricRegistry registry("test");
+    std::set<std::string> disk_devices;
+    disk_devices.emplace("sda");
+    std::vector<std::string> network_interfaces;
+    network_interfaces.emplace_back("xgbe0");
+
+    SystemMetrics metrics;
+    metrics.install(&registry, disk_devices, network_interfaces);
+
+    // Metrics should be zero before any update.
+    Metric* cpu_user = registry.get_metric("cpu", MetricLabels().add("mode", "user"));
+    ASSERT_TRUE(cpu_user != nullptr);
+    ASSERT_STREQ("0", cpu_user->to_string().c_str());
+
+    // Deterministically cover the try_lock early-return path:
+    // hold _update_mutex so that update() fails to acquire it and returns immediately.
+    {
+        std::lock_guard hold(metrics._update_mutex);
+        metrics.update(); // try_lock fails → early return
+    }
+
+    // Metrics should still be zero because update() returned early.
+    ASSERT_STREQ("0", cpu_user->to_string().c_str());
+
+    // After releasing the mutex, update() should succeed and populate metrics.
+    metrics.update();
+    ASSERT_STRNE("0", cpu_user->to_string().c_str());
 }
 
 } // namespace starrocks

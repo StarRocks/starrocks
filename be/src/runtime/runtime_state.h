@@ -52,6 +52,7 @@
 #include "common/logging.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -59,7 +60,6 @@ namespace starrocks {
 class DescriptorTbl;
 class ObjectPool;
 class Status;
-class ExecEnv;
 class Expr;
 class DateTimeValue;
 class MemPool;
@@ -70,6 +70,7 @@ class LoadErrorHub;
 class RowDescriptor;
 class RuntimeProfile;
 class RuntimeFilterPort;
+class RuntimeFilterRegistry;
 class QueryStatistics;
 class QueryStatisticsRecvr;
 class FragmentDictState;
@@ -94,7 +95,15 @@ public:
     RuntimeState(const RuntimeState&) = delete;
     // for ut only
     RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
+    // for ut only
+    RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
+
+    RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                 const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                 ExecEnv* exec_env);
 
     RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
                  const TQueryGlobals& query_globals, ExecEnv* exec_env);
@@ -102,6 +111,7 @@ public:
     // RuntimeState for executing expr in fe-support.
     explicit RuntimeState(const TQueryGlobals& query_globals);
 
+    RuntimeState(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env);
     explicit RuntimeState(ExecEnv* exec_env);
 
     // Empty d'tor to avoid issues with std::unique_ptr.
@@ -139,6 +149,7 @@ public:
     const std::string& last_query_id() const { return _last_query_id; }
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
     ExecEnv* exec_env() { return _exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
@@ -151,6 +162,10 @@ public:
     RuntimeFilterPort* runtime_filter_port() {
         DCHECK(_runtime_filter_port != nullptr);
         return _runtime_filter_port;
+    }
+    RuntimeFilterRegistry* runtime_filter_registry() {
+        DCHECK(_runtime_filter_registry != nullptr);
+        return _runtime_filter_registry;
     }
     const std::atomic<bool>& cancelled_ref() const { return _is_cancelled; }
 
@@ -335,6 +350,33 @@ public:
     bool enable_full_sort_use_german_string() const {
         return _query_options.__isset.enable_full_sort_use_german_string &&
                _query_options.enable_full_sort_use_german_string;
+    }
+
+    bool http_request_ssl_verification_required() const {
+        return _query_options.__isset.http_request_ssl_verification_required &&
+               _query_options.http_request_ssl_verification_required;
+    }
+
+    int32_t http_request_security_level() const {
+        return _query_options.__isset.http_request_security_level ? _query_options.http_request_security_level
+                                                                  : 3; // default: RESTRICTED
+    }
+
+    const std::string& http_request_ip_allowlist() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_ip_allowlist ? _query_options.http_request_ip_allowlist : empty;
+    }
+
+    const std::string& http_request_host_allowlist_regexp() const {
+        static const std::string empty;
+        return _query_options.__isset.http_request_host_allowlist_regexp
+                       ? _query_options.http_request_host_allowlist_regexp
+                       : empty;
+    }
+
+    bool http_request_allow_private_in_allowlist() const {
+        return _query_options.__isset.http_request_allow_private_in_allowlist &&
+               _query_options.http_request_allow_private_in_allowlist;
     }
 
     int32_t spill_mem_table_size() const {
@@ -551,7 +593,7 @@ private:
 
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-               const TQueryGlobals& query_globals, ExecEnv* exec_env);
+               const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -582,6 +624,7 @@ private:
     TUniqueId _query_id;
     TUniqueId _fragment_instance_id;
     TQueryOptions _query_options;
+    const QueryExecutionServices* _query_execution_services = nullptr;
     ExecEnv* _exec_env = nullptr;
 
     // MemTracker that is shared by all fragment instances running on this host.
@@ -663,6 +706,7 @@ private:
     std::vector<TSinkCommitInfo> _sink_commit_infos;
 
     RuntimeFilterPort* _runtime_filter_port = nullptr;
+    RuntimeFilterRegistry* _runtime_filter_registry = nullptr;
 
     FragmentDictState* _fragment_dict_state = nullptr;
 

@@ -59,10 +59,11 @@ namespace starrocks {
 // for ut only
 RuntimeState::RuntimeState() : _obj_pool(new ObjectPool()) {}
 
-// for ut only
 RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-                           const TQueryGlobals& query_globals, ExecEnv* exec_env)
-        : _obj_pool(new ObjectPool()),
+                           const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services,
+                           ExecEnv* exec_env)
+        : _exec_env(exec_env),
+          _obj_pool(new ObjectPool()),
           _is_cancelled(false),
           _per_fragment_instance_idx(0),
           _num_rows_load_total_from_source(0),
@@ -74,12 +75,20 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
-    _init(fragment_instance_id, query_options, query_globals, exec_env);
+    _init(fragment_instance_id, query_options, query_globals, query_execution_services);
 }
 
+// for ut only
+RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
+                           const TQueryGlobals& query_globals, ExecEnv* exec_env)
+        : RuntimeState(fragment_instance_id, query_options, query_globals,
+                       static_cast<const QueryExecutionServices*>(nullptr), exec_env) {}
+
 RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
-                           const TQueryOptions& query_options, const TQueryGlobals& query_globals, ExecEnv* exec_env)
+                           const TQueryOptions& query_options, const TQueryGlobals& query_globals,
+                           const QueryExecutionServices* query_execution_services, ExecEnv* exec_env)
         : _query_id(query_id),
+          _exec_env(exec_env),
           _obj_pool(new ObjectPool()),
           _per_fragment_instance_idx(0),
           _num_rows_load_total_from_source(0),
@@ -91,8 +100,13 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _num_print_error_rows(0) {
     _profile = std::make_shared<RuntimeProfile>("Fragment " + print_id(fragment_instance_id));
     _load_channel_profile = std::make_shared<RuntimeProfile>("LoadChannel");
-    _init(fragment_instance_id, query_options, query_globals, exec_env);
+    _init(fragment_instance_id, query_options, query_globals, query_execution_services);
 }
+
+RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id,
+                           const TQueryOptions& query_options, const TQueryGlobals& query_globals, ExecEnv* exec_env)
+        : RuntimeState(query_id, fragment_instance_id, query_options, query_globals,
+                       static_cast<const QueryExecutionServices*>(nullptr), exec_env) {}
 
 RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
         : _obj_pool(new ObjectPool()), _is_cancelled(false), _per_fragment_instance_idx(0) {
@@ -121,13 +135,17 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
     TimezoneUtils::find_cctz_time_zone(_timezone, _timezone_obj);
 }
 
-RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
+RuntimeState::RuntimeState(const QueryExecutionServices* query_execution_services, ExecEnv* exec_env)
+        : _query_execution_services(query_execution_services), _exec_env(exec_env) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _load_channel_profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     _timezone = TimezoneUtils::default_time_zone;
     _timestamp_us = 0;
 }
+
+RuntimeState::RuntimeState(ExecEnv* exec_env)
+        : RuntimeState(static_cast<const QueryExecutionServices*>(nullptr), exec_env) {}
 
 RuntimeState::~RuntimeState() {
     // close error log file
@@ -147,7 +165,7 @@ void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) {
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
-                         const TQueryGlobals& query_globals, ExecEnv* exec_env) {
+                         const TQueryGlobals& query_globals, const QueryExecutionServices* query_execution_services) {
     _fragment_instance_id = fragment_instance_id;
     _query_options = query_options;
     if (_query_options.__isset.spill_options) {
@@ -177,7 +195,7 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     }
     TimezoneUtils::find_cctz_time_zone(_timezone, _timezone_obj);
 
-    _exec_env = exec_env;
+    _query_execution_services = query_execution_services;
 
     if (_query_options.max_errors <= 0) {
         // TODO: fix linker error and uncomment this

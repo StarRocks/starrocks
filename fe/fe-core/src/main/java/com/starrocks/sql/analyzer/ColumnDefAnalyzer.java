@@ -111,6 +111,16 @@ public class ColumnDefAnalyzer {
             throw new AnalysisException("charset name " + charsetName + " is not supported yet in column definition");
         }
 
+        // Materialize the documented default 1MB length only for explicit SQL column
+        // definitions on OLAP tables. Derived columns (CTAS/MV/internal) and agg-state
+        // columns must keep their original VARBINARY semantics.
+        if (isOlap && columnDef.isExplicitSqlType() && aggStateDesc == null && typeDef.getType().isScalarType()) {
+            ScalarType scalarType = (ScalarType) typeDef.getType();
+            if (scalarType.getPrimitiveType() == PrimitiveType.VARBINARY && scalarType.getLength() < 0) {
+                typeDef.setType(TypeFactory.createVarbinary(TypeFactory.getOlapMaxVarcharLength()));
+            }
+        }
+
         if (aggregateType == AggregateType.SUM) {
             // For the decimal type we extend to decimal128 to avoid overflow
             typeDef.setType(extendedPrecision(typeDef.getType(), Config.enable_legacy_compatibility_for_replication));

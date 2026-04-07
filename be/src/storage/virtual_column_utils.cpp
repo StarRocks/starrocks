@@ -17,8 +17,8 @@
 #include <memory>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "column/column.h"
+#include "common/system/master_info.h"
 #include "gen_cpp/PlanNodes_constants.h"
 #include "runtime/descriptors.h"
 #include "storage/rowset/default_value_column_iterator.h"

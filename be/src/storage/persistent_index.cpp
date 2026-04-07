@@ -29,6 +29,7 @@
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -3529,9 +3530,12 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                     if (pkc->is_binary()) {
                         st = insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), values.data(), false);
                     } else {
+                        // TODO: Refactor the code to remove tmp slice array.
                         std::vector<Slice> keys;
                         TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
-                        const auto* fkeys = pkc->continuous_data();
+                        RawBytesVisitor visitor;
+                        RETURN_IF_ERROR(pkc->accept(&visitor));
+                        const auto* fkeys = visitor.result();
                         for (size_t i = 0; i < pkc->size(); ++i) {
                             keys.emplace_back(fkeys, _key_size);
                             fkeys += _key_size;

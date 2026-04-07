@@ -20,7 +20,7 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/Opcodes_types.h"
@@ -34,7 +34,7 @@
 #include "types/decimalv3.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 class Roaring;
 
@@ -54,7 +54,7 @@ namespace starrocks {
 
 template <LogicalType ftype>
 struct PredicateCmpTypeForField {
-    using ValueType = typename CppTypeTraits<ftype>::CppType;
+    using ValueType = StorageCppType<ftype>;
 };
 
 template <>

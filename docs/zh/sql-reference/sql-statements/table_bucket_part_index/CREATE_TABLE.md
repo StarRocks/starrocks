@@ -331,7 +331,7 @@ key_type(k1[,k2 ...])
 
 ### 基于范围的分布
 
-从 v4.1 版本开始，StarRocks 支持 **基于范围的分布语义**（默认禁用），该功能由 FE 配置项 `enable_range_distribution` 控制。数据将根据键列的数据范围进行排序。
+从 v4.1 起，StarRocks 引入了**基于范围的分布语义**（默认关闭），通过 FE 配置项 `enable_range_distribution` 控制。启用后，数据会按照键列的取值范围进行有序划分，每个 Tablet 存储一个连续范围内的数据。
 
 基于范围的分布语义与默认语义在以下方面有所不同：
 - 如果显式指定了键类型（AGGREGATE KEY/UNIQUE KEY/PRIMARY KEY/DUPLICATE KEY），且未指定 DISTRIBUTED BY 子句，则数据默认按范围分布。

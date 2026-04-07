@@ -21,6 +21,7 @@
 
 #include "base/simd/byte_stream_split.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "common/config_exec_fwd.h"
@@ -270,10 +271,9 @@ struct DecoderChecker<Slice, is_dictionary> {
                 st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const auto* check = (const Slice*)column->data_column()->raw_data();
-                for (auto value : values) {
-                    ASSERT_EQ(value, *check);
-                    check++;
+                const auto& checks = GetContainer<TYPE_VARCHAR>::get_data(column.get());
+                for (size_t i = 0; i < values.size(); i++) {
+                    ASSERT_EQ(values[i], checks[i]);
                 }
 
                 if (!is_dictionary) {
@@ -296,9 +296,9 @@ struct DecoderChecker<Slice, is_dictionary> {
                 st = decoder->next_batch(remain_values, ColumnContentType::VALUE, column.get());
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                const auto* check = (const Slice*)column->data_column()->raw_data();
+                const auto& checks = GetContainer<TYPE_VARCHAR>::get_data(column.get());
                 for (size_t i = 0; i < remain_values; i++) {
-                    EXPECT_EQ(values[values_to_skip + i], check[i]);
+                    EXPECT_EQ(values[values_to_skip + i], checks[i]);
                 }
 
                 if (!is_dictionary) {

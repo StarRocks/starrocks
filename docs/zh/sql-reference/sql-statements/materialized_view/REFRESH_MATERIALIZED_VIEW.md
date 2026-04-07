@@ -36,6 +36,7 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 > **注意**
 >
 > 刷新基于外部数据目录（External Catalog）创建的异步物化视图时，StarRocks 会刷新所有分区。
+> `refresh_mode = AUTO` 的物化视图不支持在 `REFRESH MATERIALIZED VIEW` 中指定分区，请改为刷新整个物化视图。
 
 ## 监控
 

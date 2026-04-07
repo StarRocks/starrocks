@@ -18,11 +18,11 @@
 #include <mutex>
 
 #include "agent/agent_server.h"
-#include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_rowset_fwd.h"
+#include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_starlet.h"
