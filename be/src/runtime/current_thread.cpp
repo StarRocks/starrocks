@@ -26,7 +26,7 @@ namespace {
 // offsetof(CurrentThread, ...) triggers -Winvalid-offsetof. Compute offsets
 // from the live TLS object instead.
 template <typename Member>
-size_t tls_member_offset(Member CurrentThread::* member) {
+size_t tls_member_offset(Member CurrentThread::*member) {
     const auto& current_thread = CurrentThread::current();
     const auto* base = reinterpret_cast<const uint8_t*>(&current_thread);
     const auto* field = reinterpret_cast<const uint8_t*>(&(current_thread.*member));
