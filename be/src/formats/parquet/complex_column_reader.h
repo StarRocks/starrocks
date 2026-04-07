@@ -389,6 +389,10 @@ public:
     // The returned descriptor reflects the shredded leaf's physical typed_value encoding,
     // not the virtual slot's target type.
     const TypeDescriptor* typed_value_read_type_for_path(const VariantPath& path) const;
+    // Variant shredding only allows data skipping on typed_value statistics when the paired
+    // fallback value column is null for the entire row group. If null_count is absent,
+    // conservatively return false.
+    bool fallback_values_all_null_in_row_group_for_path(const VariantPath& path, uint64_t rg_num_rows) const;
 
 private:
     VariantTopLevelReaders _top_level;
@@ -443,9 +447,9 @@ public:
                                           const uint64_t rg_num_rows) const override;
 
 private:
-    Status _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
-                                        const ColumnReader** leaf_reader,
-                                        std::vector<const ColumnPredicate*>* rewritten_predicates) const;
+    StatusOr<bool> _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
+                                                uint64_t rg_num_rows, const ColumnReader** leaf_reader,
+                                                std::vector<const ColumnPredicate*>* rewritten_predicates) const;
     const TypeDescriptor* _delegate_leaf_type() const;
     const ColumnReader* _delegate_leaf_reader() const;
 
