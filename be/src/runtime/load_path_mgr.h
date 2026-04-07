@@ -47,13 +47,11 @@
 namespace starrocks {
 
 class TUniqueId;
-class ExecEnv;
-
 // In every directory, '.trash' directory is used to save data need to delete
 // daemon thread is check no used directory to delete
 class LoadPathMgr final : public BaseLoadPathMgr {
 public:
-    LoadPathMgr(ExecEnv* env);
+    explicit LoadPathMgr(std::vector<std::string> store_roots);
 
     ~LoadPathMgr() override;
 
@@ -79,9 +77,10 @@ private:
     std::future<bool>& stop_future() { return _stop_future; }
     static void* cleaner(void* param);
 
-    ExecEnv* _exec_env;
     std::mutex _lock;
+    std::vector<std::string> _store_roots;
     std::vector<std::string> _path_vec;
+    std::string _rejected_record_dir;
     std::promise<bool> _stop;
     std::future<bool> _stop_future;
     int _idx{0};
