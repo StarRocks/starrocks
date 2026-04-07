@@ -79,8 +79,8 @@ public:
     // generate and replace file names to adapt for target storage
     StatusOr<std::shared_ptr<TabletMetadataPB>> convert_and_build_new_tablet_meta(
             const TabletMetadataPtr& src_tablet_meta, const TabletMetadataPtr& target_tablet_meta,
-            int64_t src_tablet_id, int64_t target_tablet_id, TTransactionId txn_id, int64_t data_version,
-            const std::string& src_data_dir, std::unordered_map<std::string, size_t>& segment_name_to_size_map,
+            int64_t src_tablet_id, int64_t target_tablet_id, TTransactionId txn_id, const std::string& src_data_dir,
+            std::unordered_map<std::string, size_t>& segment_name_to_size_map,
             std::map<std::string, std::string>& file_locations,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map);
 

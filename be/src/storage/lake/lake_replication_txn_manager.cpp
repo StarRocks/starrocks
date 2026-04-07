@@ -231,8 +231,8 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
     ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
                      convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
-                                                       target_tablet_id, txn_id, data_version, src_data_dir,
-                                                       segment_name_to_size_map, file_locations, filename_map));
+                                                       target_tablet_id, txn_id, src_data_dir, segment_name_to_size_map,
+                                                       file_locations, filename_map));
     // calc column unique id to adapt for fast schema change
     if (!src_tablet_meta->has_schema()) {
         LOG(WARNING) << "Failed to get source schema, source tablet: " << src_tablet_id
@@ -665,19 +665,19 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
 
 StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_and_build_new_tablet_meta(
         const TabletMetadataPtr& src_tablet_meta, const TabletMetadataPtr& target_tablet_meta, int64_t src_tablet_id,
-        int64_t target_tablet_id, TTransactionId txn_id, int64_t data_version, const std::string& src_data_dir,
+        int64_t target_tablet_id, TTransactionId txn_id, const std::string& src_data_dir,
         std::unordered_map<std::string, size_t>& segment_name_to_size_map,
         std::map<std::string, std::string>& file_locations,
         std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map) {
     VLOG(3) << "Lake replicate storage task, building new tablet meta for tablet: " << target_tablet_id
-            << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id << ", data_version: " << data_version;
-    // find all files that already replicated to target storage in previous txns
-    ASSIGN_OR_RETURN(auto target_data_version_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr));
+            << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id;
+    // Build UUID map from target_tablet_meta (visible_version) instead of data_version metadata.
+    // Using visible_version ensures the UUID map reflects files that physically exist on the target cluster,
+    // avoiding false hits on files that were removed by compaction + vacuum.
     // `existed_filename_uuids` represented files that already replicated to target storage in previous txns
     // <uuid, pair<existed_filename, encryption_meta>>
     std::unordered_map<std::string, std::pair<std::string, std::string>> existed_filename_uuids;
-    RETURN_IF_ERROR(build_existed_filename_uuids_map(target_data_version_tablet_meta, existed_filename_uuids));
+    RETURN_IF_ERROR(build_existed_filename_uuids_map(target_tablet_meta, existed_filename_uuids));
 
     VLOG(3) << "Lake replicate storage task, found " << existed_filename_uuids.size() << " existed files";
     // make new metadata

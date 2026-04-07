@@ -1330,6 +1330,138 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
 }
 #endif // USE_STAROS
 
+// Test fixture for UUID map visible_version correctness.
+// Validates that convert_and_build_new_tablet_meta() builds the UUID map from
+// visible_version metadata (reflecting physically present files) rather than
+// data_version metadata (which may reference vacuumed files).
+class UUIDMapVisibleVersionTest : public testing::Test {
+public:
+    static MutableTabletMetadataPtr create_metadata(int64_t tablet_id, int64_t version) {
+        auto meta = std::make_shared<TabletMetadata>();
+        meta->set_id(tablet_id);
+        meta->set_version(version);
+        auto* schema = meta->mutable_schema();
+        schema->set_id(tablet_id);
+        schema->set_num_short_key_columns(1);
+        schema->set_keys_type(KeysType::DUP_KEYS);
+        auto* col = schema->add_column();
+        col->set_unique_id(0);
+        col->set_name("c0");
+        col->set_type("INT");
+        col->set_is_key(true);
+        col->set_is_nullable(false);
+        return meta;
+    }
+
+    static void add_rowset_with_segments(TabletMetadata* meta, int32_t rowset_id,
+                                         const std::vector<std::string>& segment_names,
+                                         const std::vector<size_t>& segment_sizes) {
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(rowset_id);
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(10);
+        rowset->set_data_size(1024);
+        for (size_t i = 0; i < segment_names.size(); ++i) {
+            rowset->add_segments(segment_names[i]);
+            rowset->add_segment_size(i < segment_sizes.size() ? segment_sizes[i] : 512);
+        }
+    }
+};
+
+// Scenario: Target cluster compaction vacuumed files referenced by data_version metadata.
+// UUID map must be built from visible_version (which no longer references vacuumed files),
+// so that source segments are correctly copied instead of being skipped.
+TEST_F(UUIDMapVisibleVersionTest, test_uuid_map_uses_visible_version_not_data_version) {
+    const int64_t src_tablet_id = 10001;
+    const int64_t target_tablet_id = 20001;
+    const TTransactionId txn_id = 99999;
+    const std::string src_data_dir = "/src/data";
+
+    const std::string UUID_A = "aaaaaaaa-bbbb-cccc-dddd-000000000001";
+    const std::string UUID_C = "cccccccc-dddd-eeee-ffff-000000000003";
+    const std::string UUID_D = "dddddddd-eeee-ffff-0000-000000000004";
+
+    // Source metadata: has segments with UUID_A and UUID_D
+    auto src_meta = create_metadata(src_tablet_id, 15);
+    std::string src_seg_a = fmt::format("{:016x}_{}.dat", 1, UUID_A);
+    std::string src_seg_d = fmt::format("{:016x}_{}.dat", 2, UUID_D);
+    add_rowset_with_segments(src_meta.get(), 1, {src_seg_a}, {512});
+    add_rowset_with_segments(src_meta.get(), 2, {src_seg_d}, {512});
+
+    // Target visible_version metadata: after compaction, only has UUID_C (new segment).
+    // UUID_A was in old rowset that got compacted + vacuumed.
+    auto target_visible_meta = create_metadata(target_tablet_id, 3);
+    std::string target_seg_c = fmt::format("{:016x}_{}.dat", 50, UUID_C);
+    add_rowset_with_segments(target_visible_meta.get(), 10, {target_seg_c}, {1024});
+
+    LakeReplicationTxnManager mgr(nullptr);
+    std::unordered_map<std::string, size_t> segment_name_to_size_map;
+    std::map<std::string, std::string> file_locations;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+
+    // Call convert_and_build_new_tablet_meta with target_visible_meta (visible_version).
+    // UUID_A is NOT in visible_version metadata -> should trigger file copy, not skip.
+    auto result = mgr.convert_and_build_new_tablet_meta(src_meta, target_visible_meta, src_tablet_id, target_tablet_id,
+                                                        txn_id, src_data_dir, segment_name_to_size_map, file_locations,
+                                                        filename_map);
+    ASSERT_OK(result.status());
+
+    // Both source segments (UUID_A and UUID_D) should be in file_locations (need to be copied)
+    // because neither UUID exists in the visible_version metadata.
+    EXPECT_EQ(2, file_locations.size());
+    // Verify that UUID_A file was NOT skipped (the bug would have skipped it)
+    bool found_uuid_a = false;
+    for (const auto& [src_path, _] : file_locations) {
+        if (src_path.find(UUID_A) != std::string::npos) {
+            found_uuid_a = true;
+        }
+    }
+    EXPECT_TRUE(found_uuid_a) << "UUID_A segment should be copied, not skipped";
+}
+
+// Positive case: files present in visible_version metadata should be correctly reused.
+TEST_F(UUIDMapVisibleVersionTest, test_uuid_map_reuses_existing_files_from_visible_version) {
+    const int64_t src_tablet_id = 10002;
+    const int64_t target_tablet_id = 20002;
+    const TTransactionId txn_id = 88888;
+    const std::string src_data_dir = "/src/data";
+
+    const std::string UUID_A = "aaaaaaaa-bbbb-cccc-dddd-000000000001";
+    const std::string UUID_B = "bbbbbbbb-cccc-dddd-eeee-000000000002";
+
+    // Source metadata: has segments with UUID_A and UUID_B
+    auto src_meta = create_metadata(src_tablet_id, 10);
+    std::string src_seg_a = fmt::format("{:016x}_{}.dat", 1, UUID_A);
+    std::string src_seg_b = fmt::format("{:016x}_{}.dat", 2, UUID_B);
+    add_rowset_with_segments(src_meta.get(), 1, {src_seg_a, src_seg_b}, {512, 512});
+
+    // Target visible_version metadata: has the same UUID_A (from previous replication, still exists)
+    auto target_visible_meta = create_metadata(target_tablet_id, 2);
+    std::string target_seg_a = fmt::format("{:016x}_{}.dat", 50, UUID_A);
+    add_rowset_with_segments(target_visible_meta.get(), 5, {target_seg_a}, {512});
+
+    LakeReplicationTxnManager mgr(nullptr);
+    std::unordered_map<std::string, size_t> segment_name_to_size_map;
+    std::map<std::string, std::string> file_locations;
+    std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+
+    auto result = mgr.convert_and_build_new_tablet_meta(src_meta, target_visible_meta, src_tablet_id, target_tablet_id,
+                                                        txn_id, src_data_dir, segment_name_to_size_map, file_locations,
+                                                        filename_map);
+    ASSERT_OK(result.status());
+
+    // UUID_A exists in visible_version metadata -> should be reused (not copied)
+    // UUID_B does NOT exist -> should be copied
+    EXPECT_EQ(1, file_locations.size());
+    // file_locations should contain UUID_B (needs copy), not UUID_A (reused)
+    bool found_uuid_b = false;
+    for (const auto& [src_path, _] : file_locations) {
+        EXPECT_TRUE(src_path.find(UUID_B) != std::string::npos) << "Only UUID_B should need copying";
+        found_uuid_b = true;
+    }
+    EXPECT_TRUE(found_uuid_b) << "UUID_B segment should be in file_locations for copying";
+}
+
 INSTANTIATE_TEST_SUITE_P(SharedDataReplicationTxnManagerTest, SharedDataReplicationTxnManagerTest,
                          testing::Values(KeysType::DUP_KEYS, KeysType::AGG_KEYS, KeysType::PRIMARY_KEYS));
 

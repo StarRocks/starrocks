@@ -77,7 +77,7 @@ TxnLogPB build_full_lake_replication_log(int64_t tablet_id, int64_t txn_id,
 
 } // namespace
 
-TEST(TxnLogApplierLakeReplicationTest, FullReplicationSkipsCompactionInputsWhenSegmentOverlaps) {
+TEST(TxnLogApplierLakeReplicationTest, FullReplicationSkipsCompactionInputsWhenFilesOverlap) {
     constexpr int64_t kTabletId = 902001;
     Tablet tablet(ExecEnv::GetInstance()->lake_tablet_manager(), kTabletId);
     auto metadata = new_non_pk_metadata(kTabletId);
