@@ -147,8 +147,7 @@ PARALLEL_TEST(WorkStealingQueueTest, test_multithread_correctness) {
 
     // Expected sum: each worker enqueues values [0, kItemsPerWorker).
     // Total sum = kNumWorkers * kItemsPerWorker * (kItemsPerWorker - 1) / 2
-    const int64_t expected_sum =
-            static_cast<int64_t>(kNumWorkers) * kItemsPerWorker * (kItemsPerWorker - 1) / 2;
+    const int64_t expected_sum = static_cast<int64_t>(kNumWorkers) * kItemsPerWorker * (kItemsPerWorker - 1) / 2;
     const int64_t expected_count = static_cast<int64_t>(kNumWorkers) * kItemsPerWorker;
 
     // Producer threads.

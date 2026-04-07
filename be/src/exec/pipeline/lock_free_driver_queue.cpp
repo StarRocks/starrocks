@@ -77,9 +77,8 @@ bool LockFreeDriverQueue::try_take(DriverRawPtr& driver, int worker_id) {
     for (int j = 0; j < QUEUE_SIZE; ++j) {
         int i = (start + j) % QUEUE_SIZE;
         if (!(bitmap & (1u << i))) continue;
-        double weighted_time =
-                static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
-                _level_stats[i].factor;
+        double weighted_time = static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
+                               _level_stats[i].factor;
         if (weighted_time < min_time) {
             min_time = weighted_time;
             best_level = i;
@@ -120,9 +119,8 @@ bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
     double min_time = std::numeric_limits<double>::max();
     for (int i = 0; i < QUEUE_SIZE; ++i) {
         if (!(bitmap & (1u << i))) continue;
-        double weighted_time =
-                static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
-                _level_stats[i].factor;
+        double weighted_time = static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
+                               _level_stats[i].factor;
         if (weighted_time < min_time) {
             min_time = weighted_time;
             best_level = i;
@@ -167,6 +165,5 @@ int LockFreeDriverQueue::_compute_driver_level(DriverRawPtr driver) const {
     }
     return QUEUE_SIZE - 1;
 }
-
 
 } // namespace starrocks::pipeline

@@ -98,7 +98,7 @@ static void BM_LockFreeDriverQueue_SustainedMixed(benchmark::State& state) {
                     DriverRawPtr driver = nullptr;
                     if (queue.try_take(driver, t)) {
                         int64_t cpu_cost = ((i % FAIL_SIMULATION_INTERVAL) == 0) ? CPU_COST_SIMULATION_NS
-                                                                                  : (CPU_COST_SIMULATION_NS / 10);
+                                                                                 : (CPU_COST_SIMULATION_NS / 10);
                         driver->driver_acct().update_last_time_spent(cpu_cost);
                         queue.update_statistics(static_cast<int>(driver->get_driver_queue_level()), cpu_cost);
                         queue.put_back(driver, t);
@@ -159,7 +159,7 @@ static void BM_QuerySharedDriverQueue_SustainedMixed(benchmark::State& state) {
                     if (result.ok() && result.value() != nullptr) {
                         auto* driver = result.value();
                         int64_t cpu_cost = ((i % FAIL_SIMULATION_INTERVAL) == 0) ? CPU_COST_SIMULATION_NS
-                                                                                  : (CPU_COST_SIMULATION_NS / 10);
+                                                                                 : (CPU_COST_SIMULATION_NS / 10);
                         driver->driver_acct().update_last_time_spent(cpu_cost);
                         queue.update_statistics(driver);
                         queue.put_back(driver);
@@ -225,7 +225,8 @@ static void BM_LockFreeDriverQueue_EnqueueOnly(benchmark::State& state) {
 
         state.PauseTiming();
         DriverRawPtr drain = nullptr;
-        while (queue.try_take(drain)) {}
+        while (queue.try_take(drain)) {
+        }
         state.ResumeTiming();
     }
 

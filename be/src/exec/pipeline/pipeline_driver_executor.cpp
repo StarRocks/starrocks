@@ -41,8 +41,8 @@ namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_failed_status);
 DEFINE_FAIL_POINT(report_exec_state_failed_status);
 
-static std::unique_ptr<DriverQueue> create_driver_queue(bool enable_resource_group,
-                                                        DriverQueueMetrics* queue_metrics, int num_workers) {
+static std::unique_ptr<DriverQueue> create_driver_queue(bool enable_resource_group, DriverQueueMetrics* queue_metrics,
+                                                        int num_workers) {
     if (enable_resource_group && config::enable_lock_free_queue) {
         return std::make_unique<LockFreeDriverQueueAdapter>(queue_metrics, num_workers);
     } else if (enable_resource_group) {
@@ -57,7 +57,7 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                                            PipelineExecutorMetrics* metrics)
         : Base("pip_exec_" + name),
           _driver_queue(create_driver_queue(enable_resource_group, metrics->get_driver_queue_metrics(),
-                                           static_cast<int>(thread_pool->max_threads()))),
+                                            static_cast<int>(thread_pool->max_threads()))),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(
                   new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),

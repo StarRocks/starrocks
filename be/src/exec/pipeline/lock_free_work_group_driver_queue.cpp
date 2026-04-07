@@ -132,8 +132,7 @@ LockFreeWorkGroupDriverQueue::CandidateList LockFreeWorkGroupDriverQueue::_pick_
     }
 
     // Sort by vruntime ascending (min first).
-    std::sort(candidates.begin(), candidates.end(),
-              [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
     return candidates;
 }

@@ -40,9 +40,7 @@ public:
 
     size_t size() const override { return _impl.size(); }
 
-    void update_statistics(ScanTask& task, int64_t runtime_ns) override {
-        _impl.update_statistics(task, runtime_ns);
-    }
+    void update_statistics(ScanTask& task, int64_t runtime_ns) override { _impl.update_statistics(task, runtime_ns); }
 
     bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override {
         // TODO: Implement vruntime-based yield check for lock-free path.

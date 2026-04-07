@@ -15,11 +15,11 @@
 
 #include <utility>
 
+#include "common/config.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_metrics.h"
-#include "common/config.h"
 #include "exec/workgroup/lock_free_scan_task_queue_adapter.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
@@ -117,8 +117,7 @@ Status PipelineExecutorSet::start() {
     _scan_executor = std::make_unique<ScanExecutor>(
             std::move(scan_thread_pool),
             config::enable_lock_free_queue
-                    ? std::unique_ptr<ScanTaskQueue>(
-                              std::make_unique<LockFreeScanTaskQueueAdapter>(num_scan_threads()))
+                    ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeScanTaskQueueAdapter>(num_scan_threads()))
                     : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::OLAP),
             _conf.metrics->get_scan_executor_metrics());
     _scan_executor->initialize(num_scan_threads());

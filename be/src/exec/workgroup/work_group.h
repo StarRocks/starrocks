@@ -72,7 +72,9 @@ public:
     ///     mark_last_runtime_ns();           // Move last to curr.
     int64_t growth_runtime_ns() const { return _curr_unadjusted_runtime_ns - _last_unadjusted_runtime_ns; }
     /// Update curr runtime to the latest runtime.
-    void mark_curr_runtime_ns() { _curr_unadjusted_runtime_ns = _unadjusted_runtime_ns.load(std::memory_order_relaxed); }
+    void mark_curr_runtime_ns() {
+        _curr_unadjusted_runtime_ns = _unadjusted_runtime_ns.load(std::memory_order_relaxed);
+    }
     /// Update last runtime to the curr runtime.
     void mark_last_runtime_ns() { _last_unadjusted_runtime_ns = _curr_unadjusted_runtime_ns; }
 

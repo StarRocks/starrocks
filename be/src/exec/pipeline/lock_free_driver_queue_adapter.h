@@ -43,9 +43,7 @@ public:
         }
     }
 
-    void put_back_from_executor(const DriverRawPtr driver) override {
-        put_back(driver);
-    }
+    void put_back_from_executor(const DriverRawPtr driver) override { put_back(driver); }
 
     // Extended version with worker_id for executor threads.
     void put_back_from_executor(const DriverRawPtr driver, int worker_id) {

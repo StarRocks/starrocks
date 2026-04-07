@@ -70,8 +70,7 @@ public:
     void enqueue(T item, int level, int worker_id) {
         DCHECK(level >= 0 && level < NUM_LEVELS);
         DCHECK(worker_id >= 0 && worker_id < _num_workers);
-        _levels[level].queue.enqueue(_producer_tokens[worker_id * NUM_LEVELS + level],
-                                     std::move(item));
+        _levels[level].queue.enqueue(_producer_tokens[worker_id * NUM_LEVELS + level], std::move(item));
     }
 
     // Enqueue with implicit producer (for external threads).
@@ -86,8 +85,7 @@ public:
     bool try_dequeue(int level, T& item, int worker_id) {
         DCHECK(level >= 0 && level < NUM_LEVELS);
         DCHECK(worker_id >= 0 && worker_id < _num_workers);
-        return _levels[level].queue.try_dequeue(
-                _consumer_tokens[worker_id * NUM_LEVELS + level], item);
+        return _levels[level].queue.try_dequeue(_consumer_tokens[worker_id * NUM_LEVELS + level], item);
     }
 
     // Dequeue without token (for external threads or when worker_id unavailable).
@@ -123,8 +121,8 @@ private:
 
     int _num_workers;
     LevelQueue _levels[NUM_LEVELS];
-    std::vector<ProducerToken> _producer_tokens;  // flat: [worker_id * NUM_LEVELS + level]
-    std::vector<ConsumerToken> _consumer_tokens;  // flat: [worker_id * NUM_LEVELS + level]
+    std::vector<ProducerToken> _producer_tokens; // flat: [worker_id * NUM_LEVELS + level]
+    std::vector<ConsumerToken> _consumer_tokens; // flat: [worker_id * NUM_LEVELS + level]
 };
 
 } // namespace starrocks::pipeline
