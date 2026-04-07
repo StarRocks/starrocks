@@ -20,6 +20,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.util.PropertyUtil;
 
 import java.util.Map;
+import java.util.Optional;
 
 import static org.apache.iceberg.TableProperties.MANIFEST_TARGET_SIZE_BYTES_DEFAULT;
 
@@ -48,6 +49,14 @@ public class IcebergCatalogProperties {
     public static final String ICEBERG_AUTO_CLEANUP_INTERVAL_HOURS = "iceberg_auto_cleanup_interval_hours";
     public static final String ICEBERG_AUTO_OPTIMIZE_INTERVAL_HOURS = "iceberg_auto_optimize_interval_hours";
 
+    public static final String ICEBERG_MAX_SNAPSHOT_AGE_MS = "history.expire.max-snapshot-age-ms";
+    public static final String ICEBERG_MIN_SNAPSHOTS_TO_KEEP = "history.expire.min-snapshots-to-keep";
+    public static final String ICEBERG_MANIFEST_TARGET_SIZE_BYTES = "commit.manifest.target-size-bytes";
+
+    public static final long AUTO_MAINTENANCE_DEFAULT_MAX_SNAPSHOT_AGE_MS = 5L * 24 * 60 * 60 * 1000;
+    public static final int AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP = 10;
+    public static final long AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES = 8L * 1024 * 1024;
+
     // internal config
     public static final String REFRESH_ICEBERG_MANIFEST_MIN_LENGTH = "refresh_iceberg_manifest_min_length";
     public static final String ICEBERG_LOCAL_PLANNING_MAX_SLOT_BYTES = "iceberg_local_planning_max_slot_bytes";
@@ -75,6 +84,9 @@ public class IcebergCatalogProperties {
     private boolean enableAutoMaintenance;
     private int icebergAutoCleanupIntervalHours;
     private int icebergAutoOptimizeIntervalHours;
+    private Optional<Long> maxSnapshotAgeMs;
+    private Optional<Integer> minSnapshotsToKeep;
+    private Optional<Long> manifestTargetSizeBytes;
 
     public IcebergCatalogProperties(Map<String, String> catalogProperties) {
         this.properties = catalogProperties;
@@ -96,6 +108,43 @@ public class IcebergCatalogProperties {
                 properties, ICEBERG_AUTO_CLEANUP_INTERVAL_HOURS, 24);
         this.icebergAutoOptimizeIntervalHours = PropertyUtil.propertyAsInt(
                 properties, ICEBERG_AUTO_OPTIMIZE_INTERVAL_HOURS, 3);
+        initMaintenanceTableProperties();
+    }
+
+    private void initMaintenanceTableProperties() {
+        boolean hasMaxAge = properties.containsKey(ICEBERG_MAX_SNAPSHOT_AGE_MS);
+        boolean hasMinSnapshots = properties.containsKey(ICEBERG_MIN_SNAPSHOTS_TO_KEEP);
+        boolean hasManifestSize = properties.containsKey(ICEBERG_MANIFEST_TARGET_SIZE_BYTES);
+
+        if (hasMaxAge) {
+            this.maxSnapshotAgeMs = Optional.of(
+                    PropertyUtil.propertyAsLong(properties, ICEBERG_MAX_SNAPSHOT_AGE_MS,
+                            AUTO_MAINTENANCE_DEFAULT_MAX_SNAPSHOT_AGE_MS));
+        } else if (enableAutoMaintenance) {
+            this.maxSnapshotAgeMs = Optional.of(AUTO_MAINTENANCE_DEFAULT_MAX_SNAPSHOT_AGE_MS);
+        } else {
+            this.maxSnapshotAgeMs = Optional.empty();
+        }
+
+        if (hasMinSnapshots) {
+            this.minSnapshotsToKeep = Optional.of(
+                    PropertyUtil.propertyAsInt(properties, ICEBERG_MIN_SNAPSHOTS_TO_KEEP,
+                            AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP));
+        } else if (enableAutoMaintenance) {
+            this.minSnapshotsToKeep = Optional.of(AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP);
+        } else {
+            this.minSnapshotsToKeep = Optional.empty();
+        }
+
+        if (hasManifestSize) {
+            this.manifestTargetSizeBytes = Optional.of(
+                    PropertyUtil.propertyAsLong(properties, ICEBERG_MANIFEST_TARGET_SIZE_BYTES,
+                            AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES));
+        } else if (enableAutoMaintenance) {
+            this.manifestTargetSizeBytes = Optional.of(AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES);
+        } else {
+            this.manifestTargetSizeBytes = Optional.empty();
+        }
     }
 
     private void initCatalogType() {
@@ -231,5 +280,17 @@ public class IcebergCatalogProperties {
 
     public int getIcebergAutoOptimizeIntervalHours() {
         return icebergAutoOptimizeIntervalHours;
+    }
+
+    public Optional<Long> getMaxSnapshotAgeMs() {
+        return maxSnapshotAgeMs;
+    }
+
+    public Optional<Integer> getMinSnapshotsToKeep() {
+        return minSnapshotsToKeep;
+    }
+
+    public Optional<Long> getManifestTargetSizeBytes() {
+        return manifestTargetSizeBytes;
     }
 }

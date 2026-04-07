@@ -137,7 +137,6 @@ public class IcebergConnector implements Connector {
             }
             this.icebergNativeCatalog = nativeCatalog;
 
-            // Only register for maintenance on leader FE to avoid duplicate maintenance across nodes.
             int cleanupHours = icebergCatalogProperties.getIcebergAutoCleanupIntervalHours();
             int rewriteHours = icebergCatalogProperties.getIcebergAutoOptimizeIntervalHours();
             if (!isResourceMappingCatalog(catalogName) && icebergCatalogProperties.isEnableAutoMaintenance()

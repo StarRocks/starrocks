@@ -50,3 +50,72 @@ PROPERTIES (
 show create catalog `iceberg_auto_maintenance_${uuid0}`;
 
 drop catalog `iceberg_auto_maintenance_${uuid0}`;
+
+-- governance-related Iceberg table properties on catalog (explicit values)
+create external catalog iceberg_auto_maintenance_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_auto_maintenance" = "true",
+    "history.expire.max-snapshot-age-ms" = "172800000",
+    "history.expire.min-snapshots-to-keep" = "20",
+    "commit.manifest.target-size-bytes" = "16777216"
+);
+
+show create catalog `iceberg_auto_maintenance_${uuid0}`;
+
+create database iceberg_auto_maintenance_${uuid0}.iceberg_maint_explicit_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_auto_maintenance${uuid0}/iceberg_maint_explicit_${uuid0}"
+);
+
+create table iceberg_auto_maintenance_${uuid0}.iceberg_maint_explicit_${uuid0}.maint_explicit_tbl_${uuid0} (
+  id bigint,
+  data string
+)
+properties (
+"file_format"="parquet"
+);
+
+function: assert_query_contains("show create table iceberg_auto_maintenance_${uuid0}.iceberg_maint_explicit_${uuid0}.maint_explicit_tbl_${uuid0}", "history.expire.max-snapshot-age-ms", "172800000", "history.expire.min-snapshots-to-keep", "20", "commit.manifest.target-size-bytes", "16777216")
+
+drop table iceberg_auto_maintenance_${uuid0}.iceberg_maint_explicit_${uuid0}.maint_explicit_tbl_${uuid0} force;
+
+drop database iceberg_auto_maintenance_${uuid0}.iceberg_maint_explicit_${uuid0};
+
+drop catalog `iceberg_auto_maintenance_${uuid0}`;
+
+-- create table inherits catalog defaults when auto maintenance is enabled (5d / 10 / 8mb)
+create external catalog iceberg_auto_maintenance_${uuid0}
+PROPERTIES (
+    "type"="iceberg",
+    "iceberg.catalog.type"="hive",
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_auto_maintenance" = "true"
+);
+
+create database iceberg_auto_maintenance_${uuid0}.iceberg_maint_inherit_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_auto_maintenance${uuid0}/iceberg_maint_inherit_${uuid0}"
+);
+
+create table iceberg_auto_maintenance_${uuid0}.iceberg_maint_inherit_${uuid0}.maint_inherit_tbl_${uuid0} (
+  id bigint,
+  data string
+)
+properties (
+"file_format"="parquet"
+);
+
+function: assert_query_contains("show create table iceberg_auto_maintenance_${uuid0}.iceberg_maint_inherit_${uuid0}.maint_inherit_tbl_${uuid0}", "history.expire.max-snapshot-age-ms", "432000000", "history.expire.min-snapshots-to-keep", "10", "commit.manifest.target-size-bytes", "8388608")
+
+drop table iceberg_auto_maintenance_${uuid0}.iceberg_maint_inherit_${uuid0}.maint_inherit_tbl_${uuid0} force;
+
+drop database iceberg_auto_maintenance_${uuid0}.iceberg_maint_inherit_${uuid0};
+
+drop catalog `iceberg_auto_maintenance_${uuid0}`;

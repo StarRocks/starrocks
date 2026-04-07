@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnBuilder;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
@@ -81,6 +82,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnPosition;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -158,6 +160,7 @@ import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -180,11 +183,19 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.AUTO_MAINTENANCE_DEFAULT_MAX_SNAPSHOT_AGE_MS;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_DISTRIBUTED_PLAN_LOAD_DATA_FILE_COLUMN_STATISTICS_WITH_EQ_DELETE;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ENABLE_ICEBERG_AUTO_MAINTENANCE;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_MANIFEST_TARGET_SIZE_BYTES;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_MAX_SNAPSHOT_AGE_MS;
+import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_MIN_SNAPSHOTS_TO_KEEP;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
@@ -3247,5 +3258,97 @@ public class IcebergMetadataTest extends TableTestBase {
             tableScanUtilMock.verify(() -> TableScanUtil.splitFiles(Mockito.any(), Mockito.eq(128L)),
                     Mockito.times(1));
         }
+    }
+
+    private CreateTableStmt buildIcebergCreateTableStmt(String dbName, String tableName,
+                                                        Map<String, String> properties) {
+        CreateTableStmt stmt = new CreateTableStmt(
+                false,
+                false,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME, dbName, tableName)),
+                        null, NodePosition.ZERO),
+                Lists.newArrayList(
+                        new ColumnDef("c1", new TypeDef(TypeFactory.createType(PrimitiveType.INT)))),
+                "iceberg",
+                null,
+                null,
+                null,
+                properties == null ? new HashMap<>() : properties,
+                new HashMap<>(),
+                null);
+        List<Column> columns = stmt.getColumnDefs().stream()
+                .map(def -> ColumnBuilder.buildGeneratedColumn(null, def))
+                .collect(Collectors.toList());
+        stmt.setColumns(columns);
+        return stmt;
+    }
+
+    @Test
+    public void testCreateTableInjectsCatalogMaintenanceDefaultsWhenAutoMaintenanceEnabled() throws DdlException {
+        Map<String, String> config = new HashMap<>(DEFAULT_CONFIG);
+        config.put(ENABLE_ICEBERG_AUTO_MAINTENANCE, "true");
+        IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(config);
+
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
+        Mockito.when(icebergCatalog.createTable(
+                Mockito.eq(connectContext),
+                Mockito.eq("db"),
+                Mockito.eq("tbl"),
+                Mockito.any(Schema.class),
+                Mockito.any(PartitionSpec.class),
+                Mockito.isNull(),
+                Mockito.isNull(),
+                propsCaptor.capture())).thenReturn(true);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), catalogProps);
+
+        CreateTableStmt stmt = buildIcebergCreateTableStmt("db", "tbl", new HashMap<>());
+        Assertions.assertTrue(metadata.createTable(connectContext, stmt));
+
+        Map<String, String> passed = propsCaptor.getValue();
+        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MAX_SNAPSHOT_AGE_MS),
+                passed.get(ICEBERG_MAX_SNAPSHOT_AGE_MS));
+        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP),
+                passed.get(ICEBERG_MIN_SNAPSHOTS_TO_KEEP));
+        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES),
+                passed.get(ICEBERG_MANIFEST_TARGET_SIZE_BYTES));
+    }
+
+    @Test
+    public void testCreateTableKeepsTableLevelMaintenancePropertyOverrides() throws DdlException {
+        Map<String, String> config = new HashMap<>(DEFAULT_CONFIG);
+        config.put(ENABLE_ICEBERG_AUTO_MAINTENANCE, "true");
+        IcebergCatalogProperties catalogProps = new IcebergCatalogProperties(config);
+
+        IcebergCatalog icebergCatalog = Mockito.mock(IcebergCatalog.class);
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<Map<String, String>> propsCaptor = ArgumentCaptor.forClass(Map.class);
+        Mockito.when(icebergCatalog.createTable(
+                Mockito.eq(connectContext),
+                Mockito.eq("db"),
+                Mockito.eq("tbl"),
+                Mockito.any(Schema.class),
+                Mockito.any(PartitionSpec.class),
+                Mockito.isNull(),
+                Mockito.isNull(),
+                propsCaptor.capture())).thenReturn(true);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), catalogProps);
+
+        Map<String, String> tableProps = new HashMap<>();
+        tableProps.put(ICEBERG_MAX_SNAPSHOT_AGE_MS, "999999");
+        CreateTableStmt stmt = buildIcebergCreateTableStmt("db", "tbl", tableProps);
+        Assertions.assertTrue(metadata.createTable(connectContext, stmt));
+
+        Map<String, String> passed = propsCaptor.getValue();
+        Assertions.assertEquals("999999", passed.get(ICEBERG_MAX_SNAPSHOT_AGE_MS));
+        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MIN_SNAPSHOTS_TO_KEEP),
+                passed.get(ICEBERG_MIN_SNAPSHOTS_TO_KEEP));
+        Assertions.assertEquals(String.valueOf(AUTO_MAINTENANCE_DEFAULT_MANIFEST_TARGET_SIZE_BYTES),
+                passed.get(ICEBERG_MANIFEST_TARGET_SIZE_BYTES));
     }
 }

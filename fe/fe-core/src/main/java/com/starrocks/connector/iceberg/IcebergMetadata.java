@@ -341,11 +341,21 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (comment != null && !comment.isEmpty()) {
             properties.put(COMMENT, comment);
         }
+        injectCatalogMaintenanceDefaults(properties);
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
         SortOrder sortOrder = IcebergApiConverter.toIcebergSortOrder(schema, stmt.getOrderByElements());
 
         return icebergCatalog.createTable(context, dbName, tableName, schema, partitionSpec, tableLocation,
                 sortOrder, createTableProperties);
+    }
+
+    private void injectCatalogMaintenanceDefaults(Map<String, String> properties) {
+        catalogProperties.getMaxSnapshotAgeMs().ifPresent(v -> properties.putIfAbsent(
+                IcebergCatalogProperties.ICEBERG_MAX_SNAPSHOT_AGE_MS, String.valueOf(v)));
+        catalogProperties.getMinSnapshotsToKeep().ifPresent(v -> properties.putIfAbsent(
+                IcebergCatalogProperties.ICEBERG_MIN_SNAPSHOTS_TO_KEEP, String.valueOf(v)));
+        catalogProperties.getManifestTargetSizeBytes().ifPresent(v -> properties.putIfAbsent(
+                IcebergCatalogProperties.ICEBERG_MANIFEST_TARGET_SIZE_BYTES, String.valueOf(v)));
     }
 
     @Override
