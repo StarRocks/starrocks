@@ -118,7 +118,8 @@ void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescri
             binary_column->set_is_binary_type(true);
         } else {
             DCHECK(data_column->is_large_binary());
-            auto* large_binary_column = const_cast<LargeBinaryColumn*>(down_cast<const LargeBinaryColumn*>(data_column));
+            auto* large_binary_column =
+                    const_cast<LargeBinaryColumn*>(down_cast<const LargeBinaryColumn*>(data_column));
             large_binary_column->set_is_binary_type(true);
         }
         break;
