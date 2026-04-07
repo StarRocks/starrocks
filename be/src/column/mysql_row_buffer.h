@@ -43,15 +43,21 @@
 namespace starrocks {
 
 // Options controlling how MysqlRowBuffer serializes certain types.
-// Currently only affects how binary data is encoded when it appears inside
-// a nested type (ARRAY / MAP / STRUCT).
+// Currently only affects how BINARY / VARBINARY data is serialized.
 struct MysqlRowBufferOptions {
-    enum class NestedBinaryFormat {
+    enum class BinaryEncodingFormat {
+        RAW,    // do not encode; preserve the original bytes
         HEX,    // encode as lowercase hex string, e.g. "48656c6c6f"  (default)
         BASE64, // encode as standard base64 string, e.g. "SGVsbG8="
     };
 
-    NestedBinaryFormat nested_binary_format = NestedBinaryFormat::HEX;
+    enum class BinaryEncodingLevel {
+        ALL,
+        NESTED,
+    };
+
+    BinaryEncodingFormat binary_encoding_format = BinaryEncodingFormat::HEX;
+    BinaryEncodingLevel binary_encoding_level = BinaryEncodingLevel::NESTED;
 };
 
 // Reference:
@@ -81,10 +87,10 @@ public:
     void push_string(const char* str, size_t length, char escape_char = '"');
     void push_string(const Slice& s) { push_string(s.data, s.size); }
 
-    // Serialize raw binary data (VARBINARY).
-    // - At top level (_nesting_level == 0): length-prefixed raw bytes, same as push_string.
-    // - Inside a nested type (_nesting_level > 0): encodes the bytes according to
-    //   options().nested_binary_format (hex or base64) and wraps in double-quotes.
+    // Serialize raw binary data (BINARY / VARBINARY). Encoding behavior depends on options():
+    // - level = nested: encode only inside nested types.
+    // - level = all: encode both top-level and nested binary values.
+    // - format = raw: preserve the original bytes and do not hex/base64 encode.
     void push_binary(const char* data, size_t length);
 
     template <typename T>

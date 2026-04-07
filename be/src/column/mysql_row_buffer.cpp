@@ -339,29 +339,21 @@ char* MysqlRowBuffer::_escape(char* dst, const char* src, size_t length, char es
 }
 
 void MysqlRowBuffer::push_binary(const char* data, size_t length) {
-    if (_nesting_level == 0) {
-        // Top-level: length-prefixed raw bytes, identical to the current VARBINARY behavior.
-        _push_string_normal(data, length);
-        return;
-    }
-
-    // Inside a nested type (ARRAY / MAP / STRUCT): encode to a printable string
-    // and wrap in double-quotes so the JSON-like output stays valid.
+    const bool should_encode =
+            (_options.binary_encoding_level == MysqlRowBufferOptions::BinaryEncodingLevel::ALL) || (_nesting_level > 0);
     std::string encoded;
-    if (_options.nested_binary_format == MysqlRowBufferOptions::NestedBinaryFormat::BASE64) {
-        strings::Base64Escape(reinterpret_cast<const unsigned char*>(data), static_cast<int>(length), &encoded, true);
-    } else {
-        // Default: HEX
-        encoded = strings::b2a_hex(data, static_cast<int>(length));
+    if (should_encode && _options.binary_encoding_format != MysqlRowBufferOptions::BinaryEncodingFormat::RAW) {
+        if (_options.binary_encoding_format == MysqlRowBufferOptions::BinaryEncodingFormat::BASE64) {
+            strings::Base64Escape(reinterpret_cast<const unsigned char*>(data), static_cast<int>(length), &encoded,
+                                  true);
+        } else {
+            DCHECK(_options.binary_encoding_format == MysqlRowBufferOptions::BinaryEncodingFormat::HEX);
+            encoded = strings::b2a_hex(data, static_cast<int>(length));
+        }
+        data = encoded.data();
+        length = encoded.size();
     }
-
-    char* pos = _resize_extra(encoded.size() + 2);
-    *pos++ = '"';
-    strings::memcpy_inlined(pos, encoded.data(), encoded.size());
-    pos += encoded.size();
-    *pos++ = '"';
-    DCHECK_EQ(_data.data() + _data.size(), pos);
-    _data.resize(pos - _data.data());
+    push_string(data, length);
 }
 
 void MysqlRowBuffer::_push_string_normal(const char* str, size_t length) {
