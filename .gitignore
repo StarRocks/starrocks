@@ -107,6 +107,7 @@ CMakeLists.txt
 .clangd
 .cursor/
 .worktrees/
+handbook/plans/local/
 
 
 !build-mac/CMakeLists.txt

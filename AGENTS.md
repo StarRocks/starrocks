@@ -4,7 +4,7 @@ Agent entrypoint for this repository. Start with the nearest nested `AGENTS.md`;
 
 ## Read Order
 
-1. Read [`handbook/index.md`](./handbook/index.md) for repo topology, architecture entrypoints, and active engineering plans.
+1. Read [`handbook/index.md`](./handbook/index.md) for repo topology, architecture entrypoints, and active engineering plans. If `handbook/plans/local/index.md` exists, treat it as a checkout-local extension to the tracked plan set after reading [`handbook/plans/index.md`](./handbook/plans/index.md).
 2. Read the nearest nested `AGENTS.md`.
 3. For Backend work, read [`handbook/domains/backend.md`](./handbook/domains/backend.md) and [`be/AGENTS.md`](./be/AGENTS.md).
 4. For Frontend work, read [`handbook/domains/frontend.md`](./handbook/domains/frontend.md) and [`fe/AGENTS.md`](./fe/AGENTS.md).

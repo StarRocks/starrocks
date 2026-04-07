@@ -8,4 +8,4 @@ This handbook is the internal system of record for contributor and agent-facing 
 - [Domains](domains/index.md): subsystem maps, commands, guardrails, and current gaps.
 - [Policies](policies/index.md): repo operating rules for handbook usage and agent change flow.
 - [Quality](quality/index.md): harness maturity reporting and current gaps by domain.
-- [Plans](plans/index.md): active execution plans, templates, and completed-plan conventions.
+- [Plans](plans/index.md): active execution plans, local-only plan conventions, templates, and completed-plan conventions.
