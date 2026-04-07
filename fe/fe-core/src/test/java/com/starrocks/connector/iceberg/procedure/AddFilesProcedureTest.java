@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.VarcharType;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -31,11 +32,16 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.types.Types;
+import org.apache.orc.ColumnStatistics;
+import org.apache.orc.OrcFile;
+import org.apache.orc.Reader;
+import org.apache.orc.TypeDescription;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -185,7 +191,7 @@ public class AddFilesProcedureTest {
                 () -> procedure.execute(context, args));
 
         // The exception should be about Hive table access, not "not implemented"
-        assertTrue(exception.getMessage().contains("Failed to access source table") || 
+        assertTrue(exception.getMessage().contains("Failed to access source table") ||
                    exception.getMessage().contains("not found") ||
                    exception.getMessage().contains("not a Hive table"));
     }
@@ -300,6 +306,94 @@ public class AddFilesProcedureTest {
             assertFalse(exception.getMessage().contains("Unsupported file format"),
                     "Format " + format + " should be supported");
         }
+    }
+
+    @Test
+    public void testExtractOrcMetrics(@Mocked Table table,
+                                      @Mocked IcebergHiveCatalog catalog,
+                                      @Mocked Reader orcReader) throws Exception {
+        AddFilesProcedure procedure = AddFilesProcedure.getInstance();
+        IcebergTableProcedureContext context =
+                new IcebergTableProcedureContext(catalog, table, null, null, HDFS_ENVIRONMENT, null, null);
+
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "id", Types.IntegerType.get()),
+                Types.NestedField.optional(2, "name", Types.StringType.get())
+        );
+
+        FileStatus fileStatus = new FileStatus(2048L, false, 1, 0L, 0L, new Path("/tmp/data.orc"));
+
+        TypeDescription orcSchema = TypeDescription.createStruct()
+                .addField("id", TypeDescription.createInt())
+                .addField("name", TypeDescription.createString());
+
+
+        long totalRows = 100L;
+
+        // index 0: root struct statistics (should not be mapped to any column)
+        ColumnStatistics rootStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(rootStats.getNumberOfValues()).thenReturn(totalRows);
+        Mockito.when(rootStats.hasNull()).thenReturn(false);
+
+        // index 1: "id" column statistics, 90 non-null values, has nulls
+        ColumnStatistics idStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(idStats.getNumberOfValues()).thenReturn(90L);
+        Mockito.when(idStats.hasNull()).thenReturn(true);
+
+        // index 2: "name" column statistics, 80 non-null values, has nulls
+        ColumnStatistics nameStats = Mockito.mock(ColumnStatistics.class);
+        Mockito.when(nameStats.getNumberOfValues()).thenReturn(80L);
+        Mockito.when(nameStats.hasNull()).thenReturn(true);
+
+        ColumnStatistics[] allStats = new ColumnStatistics[] {rootStats, idStats, nameStats};
+
+        new Expectations() {
+            {
+                table.schema();
+                result = schema;
+
+                orcReader.getNumberOfRows();
+                result = totalRows;
+
+                orcReader.getSchema();
+                result = orcSchema;
+
+                orcReader.getStatistics();
+                result = allStats;
+            }
+        };
+
+        new MockUp<OrcFile>() {
+            @Mock
+            public Reader createReader(Path path, OrcFile.ReaderOptions opts) {
+                return orcReader;
+            }
+        };
+
+        java.lang.reflect.Method method = AddFilesProcedure.class.getDeclaredMethod("extractOrcMetrics",
+                IcebergTableProcedureContext.class, Table.class, FileStatus.class);
+        method.setAccessible(true);
+        Metrics metrics = (Metrics) method.invoke(procedure, context, table, fileStatus);
+
+        assertEquals(totalRows, metrics.recordCount());
+
+
+        assertNotNull(metrics.valueCounts());
+        assertTrue(metrics.valueCounts().containsKey(1));
+        assertEquals(90L, metrics.valueCounts().get(1));
+
+        assertTrue(metrics.valueCounts().containsKey(2));
+        assertEquals(80L, metrics.valueCounts().get(2));
+
+        assertNotNull(metrics.nullValueCounts());
+        assertTrue(metrics.nullValueCounts().containsKey(1));
+        assertEquals(10L, metrics.nullValueCounts().get(1));
+
+        assertTrue(metrics.nullValueCounts().containsKey(2));
+        assertEquals(20L, metrics.nullValueCounts().get(2));
+
+        // Only 2 columns should have valueCounts, rootStats should not be mapped to any column
+        assertEquals(2, metrics.valueCounts().size());
     }
 
     private IcebergTableProcedureContext createMockContext(@Mocked Table table, @Mocked IcebergHiveCatalog catalog) {
