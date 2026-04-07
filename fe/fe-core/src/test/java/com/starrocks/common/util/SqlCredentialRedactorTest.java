@@ -46,11 +46,13 @@ public class SqlCredentialRedactorTest {
                 "        \"aws.s3.secret_key\" = \"SOURCE_SECRET\"\n" +
                 ")";
         String redacted = SqlCredentialRedactor.redact(sql);
-        Assertions.assertFalse(redacted.contains("AKIA_INSERT_SOURCE"),
-                "FILES source access key should be redacted");
-        Assertions.assertFalse(redacted.contains("SOURCE_SECRET"),
-                "FILES source secret key should be redacted");
-        Assertions.assertTrue(redacted.contains("***"), "Should contain redacted marker");
+        String expected = "INSERT INTO t0 SELECT * FROM FILES(\n" +
+                "        \"path\" = \"s3://bucket/data.parquet\",\n" +
+                "        \"format\" = \"parquet\",\n" +
+                "        \"aws.s3.access_key\" = ***,\n" +
+                "        \"aws.s3.secret_key\" = ***\n" +
+                ")";
+        Assertions.assertEquals(expected, redacted);
     }
 
     @Test

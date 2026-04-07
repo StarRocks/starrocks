@@ -17,13 +17,16 @@ package com.starrocks.qe;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.load.DeleteMgr;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DescriptorTable;
@@ -43,6 +46,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -289,6 +293,27 @@ public class StmtExecutorTest {
         String redacted = executor.getRedactedOriginStmtInString();
         Assertions.assertFalse(redacted.contains("RETRY_SECRET"));
         Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testBuildTopLevelProfileWithNeedEncryptStatement() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+                return "default_warehouse";
+            }
+        };
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "CREATE USER 'u1' IDENTIFIED BY 'secret'", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
+        RuntimeProfile summaryProfile = profile.getChild("Summary");
+        String sqlInProfile = summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(sqlInProfile);
+        Assertions.assertFalse(sqlInProfile.contains("secret"),
+                "Plain text password should not appear in profile");
     }
 
     @Test
@@ -1365,5 +1390,206 @@ public class StmtExecutorTest {
 
         Deencapsulation.setField(executor, "catalogTypesInvolved", Sets.newHashSet("hive", "hudi"));
         Assertions.assertEquals(Sets.newHashSet("hive", "hudi"), executor.getCatalogTypesInvolved());
+    }
+
+    @Test
+    public void testExplainTracePathLogsRedactedSqlOnPlanFailure() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"TRACE_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        stmt.setIsTrace("TRACE", "");
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR, "mock explain trace plan failure");
+            }
+        };
+
+        executor.execute();
+        String redacted = executor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(redacted.contains("TRACE_SECRET"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testRetryPathExecutesRedactedLogOnQueryFailure(
+            @Mocked DefaultCoordinator coordinator) throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        try {
+            Config.max_query_retry_time = 2;
+
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+
+            StatementBase stmt = SqlParser.parseSingleStatement(
+                    "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                            "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt,
+                                            ConnectContext ignoredCtx) {
+                    return buildMinimalExecPlan(1);
+                }
+            };
+
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createQueryScheduler(
+                        ConnectContext context, List<PlanFragment> fragments,
+                        List<ScanNode> scanNodes, TDescriptorTable descTable,
+                        ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void execWithQueryDeployExecutor(ConnectContext ctx)
+                        throws Exception {
+                    throw new RuntimeException("mock query execution failure");
+                }
+            };
+
+            new MockUp<ExecuteExceptionHandler>() {
+                @Mock
+                public static void handle(Exception e,
+                                          ExecuteExceptionHandler.RetryContext ctx) {
+                }
+            };
+
+            executor.execute();
+            Assertions.assertTrue(ctx.getState().isError());
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    @Test
+    public void testDeleteHandlerQueryStateExceptionLogsRedactedSql() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+
+        DeleteStmt deleteStmt = (DeleteStmt) SqlParser.parseSingleStatement(
+                "DELETE FROM t0 WHERE k1 = 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, deleteStmt);
+
+        new MockUp<DeleteMgr>() {
+            @Mock
+            public void process(DeleteStmt stmt) throws QueryStateException {
+                throw new QueryStateException(MysqlStateType.ERR, "mock delete failure");
+            }
+        };
+
+        ExecPlan execPlan = buildMinimalExecPlan(1);
+        executor.handleDMLStmt(execPlan, deleteStmt);
+        Assertions.assertTrue(ctx.getState().isError());
+    }
+
+    @Test
+    public void testDmlCoordCrashLogsRedactedSql(@Mocked DefaultCoordinator coordinator) throws Exception {
+        boolean oldLogConfig = Config.log_plan_cancelled_by_crash_be;
+        try {
+            Config.log_plan_cancelled_by_crash_be = true;
+
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+
+            InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                    "INSERT INTO t0 SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                            "\"aws.s3.secret_key\"=\"CRASH_SECRET\")",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            Table targetTable = new Table(Table.TableType.HIVE);
+            new MockUp<InsertStmt>() {
+                @Mock
+                public Table getTargetTable() {
+                    return targetTable;
+                }
+            };
+
+            ExecPlan execPlan = buildMinimalExecPlan(1);
+
+            new MockUp<DefaultCoordinator.Factory>() {
+                @Mock
+                public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                                List<ScanNode> scanNodes,
+                                                                TDescriptorTable descTable, ExecPlan plan) {
+                    return coordinator;
+                }
+            };
+
+            new MockUp<DefaultCoordinator>() {
+                @Mock
+                public void setLoadJobType(com.starrocks.thrift.TLoadJobType loadJobType) {
+                }
+
+                @Mock
+                public void setLoadJobId(Long jobId) {
+                }
+
+                @Mock
+                public void exec() {
+                }
+
+                @Mock
+                public boolean join(int timeoutSecond) {
+                    return true;
+                }
+
+                @Mock
+                public boolean isDone() {
+                    return false;
+                }
+
+                @Mock
+                public boolean checkBackendState() {
+                    return false;
+                }
+
+                @Mock
+                public void cancel(String msg) {
+                }
+
+                @Mock
+                public void setTopProfileSupplier(
+                        java.util.function.Supplier<RuntimeProfile> topProfileSupplier) {
+                }
+
+                @Mock
+                public void setExecPlan(ExecPlan execPlan) {
+                }
+            };
+
+            new MockUp<ErrorReport>() {
+                @Mock
+                public void reportNoAliveBackendException(com.starrocks.common.ErrorCode errorCode)
+                        throws NoAliveBackendException {
+                    throw new NoAliveBackendException("mock backend crash");
+                }
+            };
+
+            Assertions.assertThrows(Exception.class, () -> executor.handleDMLStmt(execPlan, stmt));
+        } finally {
+            Config.log_plan_cancelled_by_crash_be = oldLogConfig;
+        }
     }
 }
