@@ -160,8 +160,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
 }
 
 // including the final status when execution finishes.
-Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
-                                             const TNetworkAddress& fe_addr) {
+Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, const TNetworkAddress& fe_addr) {
     TReportExecStatusResult res;
     Status rpc_status;
 
@@ -245,8 +244,7 @@ TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryCon
 }
 
 // including the final status when execution finishes.
-Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
-                                       const TNetworkAddress& fe_addr) {
+Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, const TNetworkAddress& fe_addr) {
     Status fe_status;
     TMVReportEpochResponse res;
     Status rpc_status;

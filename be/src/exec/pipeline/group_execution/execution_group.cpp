@@ -74,7 +74,8 @@ size_t ExecutionGroup::total_active_driver_size() {
 
 void ExecutionGroup::prepare_active_drivers_parallel(RuntimeState* state,
                                                      std::shared_ptr<DriverPrepareSyncContext> sync_ctx) {
-    auto pipeline_prepare_pool = state->exec_env()->pipeline_prepare_pool();
+    auto* query_execution_services = state->query_execution_services();
+    auto pipeline_prepare_pool = query_execution_services->execution->pipeline_prepare_pool;
 
     for_each_active_driver(_pipelines, [&](const DriverPtr& driver) {
         // since prepare is async, we must hold the runtime state ptr

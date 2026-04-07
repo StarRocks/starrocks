@@ -410,7 +410,8 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
         return _submit_streaming_load_scanner(scanner, blockable);
     }
 
-    auto* thread_pool = runtime_state()->exec_env()->thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    auto* thread_pool = query_execution_services->execution->thread_pool;
     int delta = static_cast<int>(!scanner->keep_priority());
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
 
@@ -437,7 +438,8 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
 #ifdef BE_TEST
     _use_stream_load_thread_pool = true;
 #endif
-    ThreadPool* thread_pool = runtime_state()->exec_env()->streaming_load_thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    ThreadPool* thread_pool = query_execution_services->execution->streaming_load_thread_pool;
     _running_threads.fetch_add(1, std::memory_order_release);
     // Assume the thread pool is large enough, so there is no need to set the priority
     Status status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });

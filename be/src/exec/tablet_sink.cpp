@@ -154,8 +154,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     }
     _enable_automatic_partition = _vectorized_partition->enable_automatic_partition();
     if (_enable_automatic_partition) {
-        _automatic_partition_token =
-                state->exec_env()->automatic_partition_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        auto* query_execution_services = state->query_execution_services();
+        _automatic_partition_token = query_execution_services->execution->automatic_partition_pool->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
     }
     // init _colocate_mv_index: Only use colocate mv when both FE/BE's config are set true.
     if (table_sink.__isset.enable_colocate_mv_index) {

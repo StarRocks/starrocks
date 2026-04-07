@@ -52,8 +52,7 @@ public:
 
     size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) override { return 0; }
 
-    void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx,
-                      std::vector<FragmentContext*> fragment_ctxs) override {}
+    void report_epoch(QueryContext* query_ctx, std::vector<FragmentContext*> fragment_ctxs) override {}
 
     size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const override { return 0; }
 

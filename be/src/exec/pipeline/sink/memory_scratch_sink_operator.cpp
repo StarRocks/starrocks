@@ -135,7 +135,8 @@ Status MemoryScratchSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(convert_to_arrow_schema(_row_desc, _id_to_col_name, &_arrow_schema, _output_expr_ctxs));
 
     TUniqueId fragment_instance_id = state->fragment_instance_id();
-    state->exec_env()->result_queue_mgr()->create_queue(fragment_instance_id, &_queue);
+    auto* query_execution_services = state->query_execution_services();
+    query_execution_services->runtime->result_queue_mgr->create_queue(fragment_instance_id, &_queue);
     return Status::OK();
 }
 

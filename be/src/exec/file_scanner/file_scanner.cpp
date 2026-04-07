@@ -292,7 +292,8 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
         break;
     }
     case TFileType::FILE_STREAM: {
-        auto pipe = _state->exec_env()->load_stream_mgr()->get(range_desc.load_id);
+        auto* query_execution_services = _state->query_execution_services();
+        auto pipe = query_execution_services->runtime->load_stream_mgr->get(range_desc.load_id);
         if (pipe == nullptr) {
             std::stringstream ss("Invalid or outdated load id ");
             range_desc.load_id.printTo(ss);

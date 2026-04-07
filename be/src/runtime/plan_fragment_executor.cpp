@@ -67,8 +67,6 @@ namespace starrocks {
 namespace {
 
 const RuntimeServices& runtime_services(const QueryExecutionServices* query_execution_services) {
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->runtime != nullptr);
     return *query_execution_services->runtime;
 }
 

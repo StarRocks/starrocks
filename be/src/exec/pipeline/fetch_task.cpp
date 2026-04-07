@@ -186,7 +186,8 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
     DLOG(INFO) << "[GLM] send fetch request, source_id: " << source_id << ", " << (void*)processor.get()
                << ", unit: " << unit_debug_string;
     _ctx->send_ts = MonotonicNanos();
-    auto stub = state->exec_env()->brpc_stub_cache()->get_stub(node_info->host, node_info->brpc_port);
+    auto* query_execution_services = state->query_execution_services();
+    auto stub = query_execution_services->rpc->brpc_stub_cache->get_stub(node_info->host, node_info->brpc_port);
     if (stub == nullptr) {
         auto msg = fmt::format("Connect {}:{} failed.", node_info->host, node_info->brpc_port);
         LOG(WARNING) << msg;
@@ -200,7 +201,8 @@ Status FetchTask::_submit_remote_task(RuntimeState* state) {
 }
 
 void LookUpCloseTask::submit(RuntimeState* state) {
-    auto stub = state->exec_env()->brpc_stub_cache()->get_stub(_host, _port);
+    auto* query_execution_services = state->query_execution_services();
+    auto stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_host, _port);
     if (stub == nullptr) {
         auto msg = fmt::format("Connect {}:{} failed.", _host, _port);
         LOG(WARNING) << msg;

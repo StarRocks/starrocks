@@ -367,15 +367,14 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
         GlobalEnv::GetInstance()->process_mem_tracker()->consume(delta);
     }
 
-    auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto instance_id = fragment_ctx->fragment_instance_id();
     auto query_id = fragment_ctx->query_id();
 
-    auto report_task = [params, exec_env, fe_addr, instance_id, query_id]() {
+    auto report_task = [params, fe_addr, instance_id, query_id]() {
         int retry_times = 0;
         int max_retry_times = config::report_exec_rpc_request_retry_num;
         while (retry_times++ < max_retry_times) {
-            auto status = ExecStateReporter::report_exec_status(*params, exec_env, fe_addr);
+            auto status = ExecStateReporter::report_exec_status(*params, fe_addr);
 
             FAIL_POINT_TRIGGER_EXECUTE(report_exec_state_failed_status, {
                 if (status.ok()) {
@@ -433,11 +432,10 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
         return;
     }
 
-    auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
     auto report_task = [=]() {
-        auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
+        auto status = AuditStatisticsReporter::report_audit_statistics(params, fe_addr);
         if (!status.ok()) {
             if (status.is_not_found()) {
                 LOG(INFO) << "[Driver] Fail to report audit statistics due to query not found: fragment_instance_id="
@@ -474,11 +472,10 @@ void GlobalDriverExecutor::report_audit_statistics_on_failure(QueryContext* quer
         return;
     }
 
-    auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
     auto report_task = [=]() {
-        auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
+        auto status = AuditStatisticsReporter::report_audit_statistics(params, fe_addr);
         if (!status.ok()) {
             if (status.is_not_found()) {
                 LOG(INFO) << "[Driver] Fail to report audit statistics due to query not found: fragment_instance_id="
@@ -512,15 +509,14 @@ void GlobalDriverExecutor::_finalize_epoch(DriverRawPtr driver, RuntimeState* ru
     stream_driver->epoch_finalize(runtime_state, state);
 }
 
-void GlobalDriverExecutor::report_epoch(ExecEnv* exec_env, QueryContext* query_ctx,
-                                        std::vector<FragmentContext*> fragment_ctxs) {
+void GlobalDriverExecutor::report_epoch(QueryContext* query_ctx, std::vector<FragmentContext*> fragment_ctxs) {
     DCHECK_LT(0, fragment_ctxs.size());
     auto params = ExecStateReporter::create_report_epoch_params(query_ctx, fragment_ctxs);
     // TODO(lism): Check all fragment_ctx's fe_addr are the same.
     auto fe_addr = fragment_ctxs[0]->fe_addr();
     auto query_id = query_ctx->query_id();
     auto report_task = [=]() {
-        auto status = ExecStateReporter::report_epoch(params, exec_env, fe_addr);
+        auto status = ExecStateReporter::report_epoch(params, fe_addr);
         if (!status.ok()) {
             if (status.is_not_found()) {
                 LOG(INFO) << "[Driver] Fail to report epoch exec state due to query not found: query_id="
