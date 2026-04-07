@@ -1237,8 +1237,7 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
 }
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                               MemTracker* mem_tracker,
-                                                               RuntimeProfile* parent_profile,
+                                                               MemTracker* mem_tracker, RuntimeProfile* parent_profile,
                                                                BrpcStubCache* brpc_stub_cache) {
     return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile, brpc_stub_cache);
 }

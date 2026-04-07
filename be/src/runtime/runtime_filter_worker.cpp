@@ -932,9 +932,9 @@ static inline void receive_total_runtime_filter_pipeline(const RuntimeServices* 
         // we conservatively consider that global rf arrives in advance, so cache it for later use.
         if (!fragment_ctx) {
             runtime_services->runtime_filter_cache->put_if_absent(query_id, params.filter_id(), shared_rf);
-            runtime_services->runtime_filter_cache->add_rf_event(
-                    {params.query_id(), params.filter_id(), BackendOptions::get_localhost(),
-                     "PUT_TOTAL_RF_IN_CACHE_FRAGMENT_INSTANCE_NOT_READY"});
+            runtime_services->runtime_filter_cache->add_rf_event({params.query_id(), params.filter_id(),
+                                                                  BackendOptions::get_localhost(),
+                                                                  "PUT_TOTAL_RF_IN_CACHE_FRAGMENT_INSTANCE_NOT_READY"});
         }
         // race condition exists among rf caching, FragmentContext's registration and OperatorFactory's preparation
         fragment_ctx = query_ctx->fragment_mgr()->get(finst_id);
@@ -1133,8 +1133,8 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_passthrough(
                 finst_id->set_lo(id.lo);
             }
             _runtime_services->runtime_filter_cache->add_rf_event({request.query_id(), request.filter_id(),
-                                                                    dest.address.hostname,
-                                                                    "DELIVER_BROADCAST_RF_PASSTHROUGH"});
+                                                                   dest.address.hostname,
+                                                                   "DELIVER_BROADCAST_RF_PASSTHROUGH"});
 
             rpc_closures.push_back(new RuntimeFilterRpcClosure());
             auto* closure = rpc_closures.back();
@@ -1245,8 +1245,8 @@ void RuntimeFilterWorker::execute() {
             }
             RuntimeFilterMerger& merger = it->second;
             _runtime_services->runtime_filter_cache->add_rf_event({ev.transmit_rf_request.query_id(),
-                                                                    ev.transmit_rf_request.skew_shuffle_filter_id(),
-                                                                    "", "RECEIVE_SKEW_JOIN_BROADCAST_RF"});
+                                                                   ev.transmit_rf_request.skew_shuffle_filter_id(), "",
+                                                                   "RECEIVE_SKEW_JOIN_BROADCAST_RF"});
             merger.store_skew_broadcast_join_runtime_filter(ev.transmit_rf_request);
             break;
         }

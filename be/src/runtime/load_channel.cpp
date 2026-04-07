@@ -68,7 +68,8 @@ namespace starrocks {
 
 LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, DiagnoseDaemon* diagnose_daemon,
                          BrpcStubCache* brpc_stub_cache, const UniqueId& load_id, int64_t txn_id,
-                         const std::string& txn_trace_parent, int64_t timeout_s, std::unique_ptr<MemTracker> mem_tracker)
+                         const std::string& txn_trace_parent, int64_t timeout_s,
+                         std::unique_ptr<MemTracker> mem_tracker)
         : _load_mgr(mgr),
           _lake_tablet_mgr(lake_tablet_mgr),
           _diagnose_daemon(diagnose_daemon),
