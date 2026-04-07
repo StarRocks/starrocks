@@ -52,7 +52,6 @@ src/storage/lake/metacache.cpp
 src/storage/lake/rowset.cpp
 src/storage/lake/tablet_reader.cpp
 src/storage/lake/transactions.cpp
-src/storage/lake/txn_log_applier.cpp
 src/storage/lake/update_manager.cpp
 src/storage/lake/vacuum.cpp
 src/storage/lake/vertical_compaction_task.cpp
