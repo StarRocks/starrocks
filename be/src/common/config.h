@@ -1994,5 +1994,5 @@ CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 // When enabled, replaces mutex-based QuerySharedDriverQueue/WorkGroupDriverQueue and
 // PriorityScanTaskQueue/WorkGroupScanTaskQueue with ConcurrentQueue-based lock-free
 // implementations for better multi-core scalability.
-CONF_mBool(enable_lock_free_queue, "false");
+CONF_Bool(enable_lock_free_queue, "true");
 } // namespace starrocks::config

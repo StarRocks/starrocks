@@ -28,29 +28,40 @@ public:
 
     void close() override { _impl.close(); }
 
-    void put_back(const DriverRawPtr driver) override { _impl.put_back(driver); }
+    void put_back(const DriverRawPtr driver) override {
+        DCHECK(!driver->is_in_ready());
+        driver->set_in_ready(true);
+        driver->set_in_queue(this);
+        driver->update_peak_driver_queue_size_counter(_impl.size());
+        _impl.put_back(driver);
+        _metrics->driver_queue_len.increment(1);
+    }
 
     void put_back(const std::vector<DriverRawPtr>& drivers) override {
         for (auto* d : drivers) {
-            _impl.put_back(d);
+            put_back(d);
         }
     }
 
     void put_back_from_executor(const DriverRawPtr driver) override {
-        // In the lock-free path, worker_id is not available through this interface.
-        // Use the no-token path. For full performance, callers should be updated
-        // to pass worker_id directly (done in the executor thread via the new overload).
-        _impl.put_back(driver);
+        put_back(driver);
     }
 
     // Extended version with worker_id for executor threads.
     void put_back_from_executor(const DriverRawPtr driver, int worker_id) {
+        DCHECK(!driver->is_in_ready());
+        driver->set_in_ready(true);
+        driver->set_in_queue(this);
+        driver->update_peak_driver_queue_size_counter(_impl.size());
         _impl.put_back(driver, worker_id);
+        _metrics->driver_queue_len.increment(1);
     }
 
     StatusOr<DriverRawPtr> take(const bool block) override {
         DriverRawPtr driver = nullptr;
         if (_impl.take(driver, block)) {
+            driver->set_in_ready(false);
+            _metrics->driver_queue_len.increment(-1);
             return driver;
         }
         if (block) {
