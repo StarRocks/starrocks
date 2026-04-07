@@ -1059,10 +1059,12 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                         parentKeys, parentTable.getName());
                 return false;
             }
-            // foreign keys are not null
-            // if child table has foreign key constraint in mv, we assume that the foreign key is not null
-            if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull()) &&
-                    !hasForeignKeyConstraintInMv(childTable, materializedView, childKeys)) {
+            // Foreign key columns must be NOT NULL for the inner join to be lossless.
+            // A foreign-key constraint declaration on the MV does NOT imply the columns are
+            // non-null: FK columns can still be declared NULL in the schema, and NULL values
+            // will not match any parent row in an INNER JOIN, causing rows to be silently
+            // dropped if we treat such a join as lossless.
+            if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull())) {
                 logMVRewrite(mvRewriteContext, "FKs {} are not totally not-null in child table {}",
                         childKeys, childTable.getName());
                 return false;
