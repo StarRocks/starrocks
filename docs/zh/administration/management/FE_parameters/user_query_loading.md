@@ -593,6 +593,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 每张表可以并行运行的 rollup 作业的最大数量。
 - 引入版本: -
 
+### `merge_project_cte_rewrite_max_flat_children`
+
+- 默认值: 0
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 合并两个逻辑 Project 时，只有在合并后表达式的扁平子节点数超过此阈值，且相较合并前确实增加，并且超过下层 Project 的最大复杂度时，才会将下层 Project 物化为 CTE 而非内联；否则保留现有行为。0 或负值表示禁用，保留现有行为。
+- 引入版本: -
+
 ### `max_scalar_operator_flat_children`
 
 - 默认值: 10000

@@ -54,6 +54,14 @@ public class ReplaceColumnRefRewriter {
         return result;
     }
 
+    public ScalarOperator rewriteWithoutCheck(ScalarOperator origin) {
+        if (origin == null) {
+            return null;
+        }
+
+        return origin.clone().accept(rewriter, null);
+    }
+
     public ScalarOperator rewriteWithoutClone(ScalarOperator origin) {
         if (origin == null) {
             return null;

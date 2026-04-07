@@ -20,6 +20,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class OperatorMaxFlatChildTest extends PlanTestBase {
@@ -86,4 +87,53 @@ public class OperatorMaxFlatChildTest extends PlanTestBase {
         });
     }
 
+    @Test
+    public void testMergeProjectCTEFallbackAvoidsTooComplexError() {
+        final int prevFlat = Config.max_scalar_operator_flat_children;
+        final int prevMerge = Config.merge_project_cte_rewrite_max_flat_children;
+        try {
+            String sql =
+                    "WITH cte1 AS (\n" +
+                            "  SELECT\n" +
+                            "    t1a,\n" +
+                            "    (CASE\n" +
+                            "      WHEN t1b < 10 THEN 'small'\n" +
+                            "      WHEN t1b >= 10 AND t1b < 50 THEN 'medium'\n" +
+                            "      WHEN t1b >= 50 AND t1b < 100 THEN 'large'\n" +
+                            "      WHEN t1b >= 100 AND t1b < 500 THEN 'xlarge'\n" +
+                            "      ELSE NULL\n" +
+                            "    END) AS size_label\n" +
+                            "  FROM test_all_type\n" +
+                            "),\n" +
+                            "cte2 AS (\n" +
+                            "  SELECT\n" +
+                            "    t1a,\n" +
+                            "    (CASE\n" +
+                            "      WHEN size_label = 'small' AND t1a = 'X1' THEN concat(t1a, '_s')\n" +
+                            "      WHEN size_label = 'medium' AND t1a = 'X1' THEN concat(t1a, '_m')\n" +
+                            "      WHEN size_label = 'large' AND t1a = 'X1' THEN concat(t1a, '_l')\n" +
+                            "      WHEN size_label = 'xlarge' AND t1a = 'X1' THEN concat(t1a, '_x')\n" +
+                            "      ELSE NULL\n" +
+                            "    END) AS category\n" +
+                            "  FROM cte1\n" +
+                            ")\n" +
+                            "SELECT t1a, category FROM cte2";
+
+            // Individual CASE WHEN expressions have ~20 flat children each (passes 50).
+            // Merging two levels inlines the inner into the outer, creating ~120+ flat children (exceeds 50).
+            Config.max_scalar_operator_flat_children = 50;
+            Config.merge_project_cte_rewrite_max_flat_children = 0;
+
+            // Without CTE fallback, the merge causes the expression to exceed max_scalar_operator_flat_children
+            assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+
+            // With CTE fallback enabled, the lower project is materialized as a CTE instead of inlining
+            Config.merge_project_cte_rewrite_max_flat_children = 30;
+            String plan = assertDoesNotThrow(() -> getFragmentPlan(sql));
+            assertContains(plan, "MultiCastDataSinks");
+        } finally {
+            Config.max_scalar_operator_flat_children = prevFlat;
+            Config.merge_project_cte_rewrite_max_flat_children = prevMerge;
+        }
+    }
 }

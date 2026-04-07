@@ -593,6 +593,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: The maximum number of rollup jobs can run in parallel for a table.
 - Introduced in: -
 
+### `merge_project_cte_rewrite_max_flat_children`
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: When merging two logical projects, the lower project is materialized as a CTE instead of inlining only when a merged expression's flat children count exceeds this threshold, actually increases compared to before the merge, and exceeds the maximum complexity of the lower project; otherwise, existing behavior is preserved. 0 or negative means disabled and existing behavior is preserved.
+- Introduced in: -
+
 ### `max_scalar_operator_flat_children`
 
 - Default：10000

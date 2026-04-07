@@ -2236,6 +2236,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "scalar operator maximum number of flat children.")
     public static int max_scalar_operator_flat_children = 10000;
 
+    @ConfField(mutable = true, comment = "When merging two logical projects, the lower project is materialized as a "
+            + "CTE instead of inlining only when a merged expression's flat children count exceeds this threshold, "
+            + "actually increases compared to before the merge, and exceeds the maximum complexity of the lower "
+            + "project; otherwise, existing behavior is preserved. 0 or negative disables this behavior.")
+    public static int merge_project_cte_rewrite_max_flat_children = 0;
+
     @ConfField(mutable = true)
     public static int minmax_n_max_size = 10000;
 

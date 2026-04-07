@@ -593,6 +593,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：テーブルに対して並行して実行できるロールアップジョブの最大数。
 - 導入時期：-
 
+### `merge_project_cte_rewrite_max_flat_children`
+
+- Default：0
+- Type：Int
+- Unit：-
+- 変更可能：Yes
+- Description：2つの論理プロジェクトをマージする際、マージ後の式のフラット子ノード数がこの閾値を超えると、下位プロジェクトのインライン化ではなくCTE実体化を検討します。実際にCTE化されるのは、閾値超過に加えて、マージによって複雑度が増加し、かつ下位 Project 側の最大複雑度も上回るなど、実装上の追加条件を満たす場合です。0または負の値は無効を意味し、既存の動作が維持されます。
+- 導入時期：-
+
 ### `max_scalar_operator_flat_children`
 
 - Default：10000

@@ -15,10 +15,15 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -27,12 +32,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class MergeTwoProjectRuleTest {
 
@@ -143,5 +153,94 @@ public class MergeTwoProjectRuleTest {
         // And the original b -> ASSERT_TRUE(a) mapping from the lower project must be preserved per rule
         assertInstanceOf(CallOperator.class, resMap.get(b));
         assertEquals(com.starrocks.catalog.FunctionSet.ASSERT_TRUE, ((CallOperator) resMap.get(b)).getFnName());
+    }
+
+    @Test
+    public void testCTEFallbackWhenMergedExpressionExceedsBottomComplexity() {
+        final int prev = Config.merge_project_cte_rewrite_max_flat_children;
+        try {
+            Config.merge_project_cte_rewrite_max_flat_children = 5;
+
+            ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+            ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+            ColumnRefOperator x = new ColumnRefOperator(3, IntegerType.INT, "x", true);
+
+            // Bottom: b -> complex_func(a,a,a) → 4 flat children
+            // Top: x -> wrap_func(b,b,b) → after merge 1+3*4 = 13 > maxBottom(4) → CTE
+            Map<ColumnRefOperator, ScalarOperator> bottomMap = Maps.newHashMap();
+            bottomMap.put(b, makeCall("complex_func", a, 3));
+            Map<ColumnRefOperator, ScalarOperator> topMap = Maps.newHashMap();
+            topMap.put(x, makeCall("wrap_func", b, 3));
+
+            OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
+            List<OptExpression> out =
+                    new MergeTwoProjectRule().transform(makeTwoProjectTree(topMap, bottomMap), context);
+
+            assertEquals(1, out.size());
+            OptExpression result = out.get(0);
+
+            // Root: CTEAnchor -> [CTEProduce -> Project, Project -> CTEConsume]
+            assertInstanceOf(LogicalCTEAnchorOperator.class, result.getOp());
+            int cteId = ((LogicalCTEAnchorOperator) result.getOp()).getCteId();
+
+            assertEquals(2, result.getInputs().size());
+            assertInstanceOf(LogicalCTEProduceOperator.class, result.inputAt(0).getOp());
+            assertEquals(cteId, ((LogicalCTEProduceOperator) result.inputAt(0).getOp()).getCteId());
+            assertInstanceOf(LogicalProjectOperator.class, result.inputAt(0).inputAt(0).getOp());
+
+            OptExpression topProjectExpr = result.inputAt(1);
+            LogicalProjectOperator rewrittenProject =
+                    assertInstanceOf(LogicalProjectOperator.class, topProjectExpr.getOp());
+            assertTrue(rewrittenProject.getColumnRefMap().containsKey(x));
+            assertInstanceOf(CallOperator.class, rewrittenProject.getColumnRefMap().get(x));
+
+            LogicalCTEConsumeOperator consume =
+                    assertInstanceOf(LogicalCTEConsumeOperator.class, topProjectExpr.inputAt(0).getOp());
+            assertEquals(cteId, consume.getCteId());
+            assertTrue(consume.getCteOutputColumnRefMap().values().contains(b));
+        } finally {
+            Config.merge_project_cte_rewrite_max_flat_children = prev;
+        }
+    }
+
+    @ParameterizedTest(name = "maxMergeProjectFlatChildren={0}")
+    @ValueSource(ints = {5, 100, 0})
+    public void mergesNormallyWhenBelowThresholdOrConfigDisabled(int maxMergeProjectFlatChildren) {
+        // Identity top over complex bottom: merged expression doesn't exceed bottom's max
+        // flat children (threshold=5) or the threshold itself (100), or feature is disabled (0).
+        final int prev = Config.merge_project_cte_rewrite_max_flat_children;
+        try {
+            Config.merge_project_cte_rewrite_max_flat_children = maxMergeProjectFlatChildren;
+
+            ColumnRefOperator a = new ColumnRefOperator(1, IntegerType.INT, "a", true);
+            ColumnRefOperator b = new ColumnRefOperator(2, IntegerType.INT, "b", true);
+            ColumnRefOperator x = new ColumnRefOperator(3, IntegerType.INT, "x", true);
+
+            Map<ColumnRefOperator, ScalarOperator> bottomMap = Maps.newHashMap();
+            bottomMap.put(b, makeCall("complex_func", a, 10));
+            Map<ColumnRefOperator, ScalarOperator> topMap = Maps.newHashMap();
+            topMap.put(x, b);
+
+            List<OptExpression> out = new MergeTwoProjectRule()
+                    .transform(makeTwoProjectTree(topMap, bottomMap), OptimizerFactory.mockContext(new ColumnRefFactory()));
+
+            assertEquals(1, out.size());
+            LogicalProjectOperator result = assertInstanceOf(LogicalProjectOperator.class, out.get(0).getOp());
+            CallOperator merged = assertInstanceOf(CallOperator.class, result.getColumnRefMap().get(x));
+            assertEquals("complex_func", merged.getFnName());
+        } finally {
+            Config.merge_project_cte_rewrite_max_flat_children = prev;
+        }
+    }
+
+    private static CallOperator makeCall(String name, ScalarOperator arg, int repeatCount) {
+        return new CallOperator(name, IntegerType.INT, new ArrayList<>(Collections.nCopies(repeatCount, arg)));
+    }
+
+    private static OptExpression makeTwoProjectTree(Map<ColumnRefOperator, ScalarOperator> topMap,
+                                                    Map<ColumnRefOperator, ScalarOperator> bottomMap) {
+        OptExpression top = new OptExpression(new LogicalProjectOperator(topMap, -1));
+        top.getInputs().add(OptExpression.create(new LogicalProjectOperator(bottomMap, -1)));
+        return top;
     }
 }
