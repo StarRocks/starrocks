@@ -28,12 +28,14 @@
 #include "column/variant_builder.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
+#include "common/object_pool.h"
 #include "exprs/literal.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
+#include "types/type_info.h"
 #include "types/variant_value.h"
 
 namespace starrocks::parquet {
@@ -72,6 +74,34 @@ const ShreddedFieldNode* find_shredded_field_node_for_path(const std::vector<Shr
         }
     }
     return found_node;
+}
+
+Status rewrite_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates,
+                                   const TypeDescriptor& target_type_desc, ObjectPool* pool,
+                                   std::vector<const ColumnPredicate*>* rewritten_predicates) {
+    DCHECK(pool != nullptr);
+    DCHECK(rewritten_predicates != nullptr);
+
+    TypeInfoPtr target_type_info = get_type_info(target_type_desc);
+    if (target_type_info == nullptr) {
+        return Status::NotSupported(
+                strings::Substitute("unsupported delegate leaf type: $0", target_type_desc.debug_string()));
+    }
+
+    rewritten_predicates->reserve(predicates.size());
+    for (const ColumnPredicate* predicate : predicates) {
+        if (predicate == nullptr) {
+            return Status::InvalidArgument("predicate should not be null");
+        }
+
+        const ColumnPredicate* rewritten = nullptr;
+        RETURN_IF_ERROR(predicate->convert_to(&rewritten, target_type_info, pool));
+        if (rewritten == nullptr) {
+            return Status::InternalError("predicate convert_to returned null");
+        }
+        rewritten_predicates->emplace_back(rewritten);
+    }
+    return Status::OK();
 }
 
 } // namespace
@@ -1869,27 +1899,81 @@ const TypeDescriptor* VariantColumnReader::typed_value_read_type_for_path(const 
 
 const TypeDescriptor* VariantVirtualZoneMapReader::_delegate_leaf_type() const {
     if (_source == nullptr) return nullptr;
-    const TypeDescriptor* leaf_type = _source->typed_value_read_type_for_path(_leaf_path);
-    if (leaf_type == nullptr) return nullptr;
-    // TODO(variant): if the virtual slot type and shredded leaf type are compatible but
-    // not identical, convert predicates to the leaf type before delegating instead of
-    // conservatively disabling index pushdown here.
-    if (*leaf_type != _virtual_slot_type) return nullptr;
-    return leaf_type;
+    return _source->typed_value_read_type_for_path(_leaf_path);
 }
 
-bool VariantVirtualZoneMapReader::_can_delegate_filters(const std::vector<const ColumnPredicate*>& predicates) const {
-    const TypeDescriptor* leaf_type = _delegate_leaf_type();
-    if (leaf_type == nullptr) return false;
-    return std::ranges::all_of(predicates, [&](const ColumnPredicate* pred) {
-        return pred != nullptr && pred->type_info() != nullptr && pred->type_info()->type() == leaf_type->type;
-    });
-}
-
-const ColumnReader* VariantVirtualZoneMapReader::_delegate_leaf_reader(
-        const std::vector<const ColumnPredicate*>& predicates) const {
-    if (!_can_delegate_filters(predicates) || _source == nullptr) return nullptr;
+const ColumnReader* VariantVirtualZoneMapReader::_delegate_leaf_reader() const {
+    if (_source == nullptr) return nullptr;
     return _source->typed_value_reader_for_path(_leaf_path);
+}
+
+Status VariantVirtualZoneMapReader::_prepare_delegate_predicates(
+        const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool, const ColumnReader** leaf_reader,
+        std::vector<const ColumnPredicate*>* rewritten_predicates) const {
+    DCHECK(pool != nullptr);
+    DCHECK(leaf_reader != nullptr);
+    DCHECK(rewritten_predicates != nullptr);
+
+    *leaf_reader = _delegate_leaf_reader();
+    const TypeDescriptor* leaf_type = _delegate_leaf_type();
+    if (*leaf_reader == nullptr || leaf_type == nullptr) {
+        return Status::NotFound("variant virtual leaf reader is not available");
+    }
+
+    // TODO(variant): remove virtual-slot/leaf duality by materializing rewritten predicates
+    // once during planning instead of per filter invocation.
+    Status st = rewrite_delegate_predicates(predicates, *leaf_type, pool, rewritten_predicates);
+    if (!st.ok()) {
+        return st.clone_and_prepend(strings::Substitute("slot type $0 cannot delegate to leaf type $1",
+                                                        _virtual_slot_type.debug_string(), leaf_type->debug_string()));
+    }
+    return Status::OK();
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::row_group_zone_map_filter(
+        const std::vector<const ColumnPredicate*>& predicates, CompoundNodeType pred_relation,
+        const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    Status st = _prepare_delegate_predicates(predicates, &pool, &leaf, &rewritten_predicates);
+    if (!st.ok()) {
+        LOG(WARNING) << "skip variant virtual zone-map pushdown: " << st.to_string();
+        return false;
+    }
+    return leaf->row_group_zone_map_filter(rewritten_predicates, pred_relation, rg_first_row, rg_num_rows);
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::page_index_zone_map_filter(
+        const std::vector<const ColumnPredicate*>& predicates, SparseRange<uint64_t>* row_ranges,
+        CompoundNodeType pred_relation, const uint64_t rg_first_row, const uint64_t rg_num_rows) {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    Status st = _prepare_delegate_predicates(predicates, &pool, &leaf, &rewritten_predicates);
+    if (!st.ok()) {
+        LOG(WARNING) << "skip variant virtual page-index pushdown: " << st.to_string();
+        return false;
+    }
+
+    // page_index_zone_map_filter is non-const in the base class; cast is safe because the
+    // underlying object is non-const (it's a reader owned by VariantColumnReader).
+    return const_cast<ColumnReader*>(leaf)->page_index_zone_map_filter(rewritten_predicates, row_ranges, pred_relation,
+                                                                       rg_first_row, rg_num_rows);
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::row_group_bloom_filter(
+        const std::vector<const ColumnPredicate*>& predicates, CompoundNodeType pred_relation,
+        const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    Status st = _prepare_delegate_predicates(predicates, &pool, &leaf, &rewritten_predicates);
+    if (!st.ok()) {
+        LOG(WARNING) << "skip variant virtual bloom-filter pushdown: " << st.to_string();
+        return false;
+    }
+    return leaf->row_group_bloom_filter(rewritten_predicates, pred_relation, rg_first_row, rg_num_rows);
 }
 
 } // namespace starrocks::parquet

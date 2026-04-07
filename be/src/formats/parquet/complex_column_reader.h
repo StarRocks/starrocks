@@ -429,38 +429,25 @@ public:
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                             const uint64_t rg_num_rows) const override {
-        const ColumnReader* leaf = _delegate_leaf_reader(predicates);
-        if (leaf == nullptr) return false;
-        return leaf->row_group_zone_map_filter(predicates, pred_relation, rg_first_row, rg_num_rows);
-    }
+                                             const uint64_t rg_num_rows) const override;
 
     StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
-                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
-        const ColumnReader* leaf = _delegate_leaf_reader(predicates);
-        if (leaf == nullptr) return false;
-        // page_index_zone_map_filter is non-const in the base class; cast is safe because
-        // the underlying object is non-const (it's a reader owned by VariantColumnReader).
-        return const_cast<ColumnReader*>(leaf)->page_index_zone_map_filter(predicates, row_ranges, pred_relation,
-                                                                           rg_first_row, rg_num_rows);
-    }
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
 
     // Delegates bloom-filter evaluation to the shredded typed_value leaf reader.
     // Only equality predicates reach this path; range predicates use zone map instead.
     // Returns false (= don't skip) when the leaf is not shredded or has no bloom filter.
     StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                           CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                          const uint64_t rg_num_rows) const override {
-        const ColumnReader* leaf = _delegate_leaf_reader(predicates);
-        if (leaf == nullptr) return false;
-        return leaf->row_group_bloom_filter(predicates, pred_relation, rg_first_row, rg_num_rows);
-    }
+                                          const uint64_t rg_num_rows) const override;
 
 private:
+    Status _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
+                                        const ColumnReader** leaf_reader,
+                                        std::vector<const ColumnPredicate*>* rewritten_predicates) const;
     const TypeDescriptor* _delegate_leaf_type() const;
-    bool _can_delegate_filters(const std::vector<const ColumnPredicate*>& predicates) const;
-    const ColumnReader* _delegate_leaf_reader(const std::vector<const ColumnPredicate*>& predicates) const;
+    const ColumnReader* _delegate_leaf_reader() const;
 
     VariantColumnReader* _source;
     VariantPath _leaf_path;

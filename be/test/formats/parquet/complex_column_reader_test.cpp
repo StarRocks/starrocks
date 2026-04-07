@@ -93,6 +93,26 @@ ColumnPtr make_null_bigint_column() {
     return col;
 }
 
+class FailingConvertPredicate final : public ColumnPredicate {
+public:
+    explicit FailingConvertPredicate(const TypeInfoPtr& type_info) : ColumnPredicate(type_info, 0) {}
+
+    Status evaluate(const Column*, uint8_t*, uint16_t, uint16_t) const override {
+        return Status::NotSupported("test only");
+    }
+    Status evaluate_and(const Column*, uint8_t*, uint16_t, uint16_t) const override {
+        return Status::NotSupported("test only");
+    }
+    Status evaluate_or(const Column*, uint8_t*, uint16_t, uint16_t) const override {
+        return Status::NotSupported("test only");
+    }
+    bool can_vectorized() const override { return true; }
+    PredicateType type() const override { return PredicateType::kGT; }
+    Status convert_to(const ColumnPredicate**, const TypeInfoPtr&, ObjectPool*) const override {
+        return Status::NotSupported("failing test predicate");
+    }
+};
+
 } // namespace
 
 // ─── existing test ──────────────────────────────────────────────────────────
@@ -695,7 +715,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderDoesNotFilterWhenPredicateInStatRange) {
     EXPECT_FALSE(result.value()); // row group should NOT be filtered
 }
 
-TEST(VariantZoneMapTest, ZoneMapReaderTypeMismatchSkipsAllIndexPushdown) {
+TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
     auto file_meta = make_minimal_file_meta();
     ASSERT_NE(file_meta, nullptr);
 
@@ -715,7 +735,7 @@ TEST(VariantZoneMapTest, ZoneMapReaderTypeMismatchSkipsAllIndexPushdown) {
 
     auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(row_group_result);
-    EXPECT_FALSE(row_group_result.value());
+    EXPECT_TRUE(row_group_result.value());
 
     SparseRange<uint64_t> row_ranges;
     auto page_result = zm_reader.page_index_zone_map_filter({pred}, &row_ranges, CompoundNodeType::AND, 0, 5);
@@ -724,6 +744,37 @@ TEST(VariantZoneMapTest, ZoneMapReaderTypeMismatchSkipsAllIndexPushdown) {
     EXPECT_TRUE(row_ranges.empty());
 
     auto bloom_result = zm_reader.row_group_bloom_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(bloom_result);
+    EXPECT_FALSE(bloom_result.value());
+}
+
+TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts, /*stats_on_age_chunk=*/true));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
+    ASSERT_OK(path);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+
+    FailingConvertPredicate pred(get_type_info(LogicalType::TYPE_BIGINT));
+
+    auto row_group_result = zm_reader.row_group_zone_map_filter({&pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(row_group_result);
+    EXPECT_FALSE(row_group_result.value());
+
+    SparseRange<uint64_t> row_ranges;
+    auto page_result = zm_reader.page_index_zone_map_filter({&pred}, &row_ranges, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(page_result);
+    EXPECT_FALSE(page_result.value());
+    EXPECT_TRUE(row_ranges.empty());
+
+    auto bloom_result = zm_reader.row_group_bloom_filter({&pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(bloom_result);
     EXPECT_FALSE(bloom_result.value());
 }
