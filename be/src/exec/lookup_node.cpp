@@ -65,7 +65,8 @@ StatusOr<pipeline::OpFactories> LookUpNode::decompose_to_pipeline(pipeline::Pipe
         tuple_ids.emplace_back(tuple_id);
     }
     auto state = runtime_state();
-    auto dispatch_mgr = state->exec_env()->lookup_dispatcher_mgr();
+    auto* query_execution_services = state->query_execution_services();
+    auto dispatch_mgr = query_execution_services->runtime->lookup_dispatcher_mgr;
     auto dispatcher = dispatch_mgr->create_dispatcher(state->query_id(), id(), tuple_ids, _num_peer_fetchers);
 
     int32_t max_io_tasks = context->degree_of_parallelism();

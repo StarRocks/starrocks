@@ -414,7 +414,8 @@ void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
         if (desc->is_local() || desc->runtime_filter(-1) != nullptr) {
             continue;
         }
-        auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+        auto* query_execution_services = state->query_execution_services();
+        auto grf = query_execution_services->runtime->runtime_filter_cache->get(state->query_id(), filter_id);
         ExecEnv::GetInstance()->runtime_filter_cache()->add_rf_event(
                 {state->query_id(), filter_id, BackendOptions::get_localhost(),
                  strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1", this->_plan_node_id,

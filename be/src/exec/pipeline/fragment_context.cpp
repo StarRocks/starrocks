@@ -47,6 +47,23 @@
 
 namespace starrocks::pipeline {
 
+namespace {
+
+const QueryExecutionServices& query_execution_services(const RuntimeState* state) {
+    DCHECK(state != nullptr);
+    return *state->query_execution_services();
+}
+
+const ExecutionEnv& execution_services(const RuntimeState* state) {
+    return *query_execution_services(state).execution;
+}
+
+const RuntimeServices& runtime_services(const RuntimeState* state) {
+    return *query_execution_services(state).runtime;
+}
+
+} // namespace
+
 // RAII guard for pass-through chunk buffer lifecycle.
 class PassThroughChunkBufferGuard {
 public:
@@ -159,7 +176,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
         //
         std::shared_ptr<Runnable> runnable;
         runnable = std::make_shared<RpcRunnable>(fe_addr, res, params);
-        (void)state->exec_env()->streaming_load_thread_pool()->submit(runnable);
+        (void)execution_services(state).streaming_load_thread_pool->submit(runnable);
     }
 
     destroy_pass_through_chunk_buffer();
@@ -262,9 +279,10 @@ void FragmentContext::set_final_status(const Status& status) {
                 LOG(WARNING) << cancel_msg;
             }
 
-            const auto* executors = _workgroup != nullptr
-                                            ? _workgroup->executors()
-                                            : _runtime_state->exec_env()->workgroup_manager()->shared_executors();
+            const auto* executors =
+                    _workgroup != nullptr
+                            ? _workgroup->executors()
+                            : execution_services(_runtime_state.get()).workgroup_manager->shared_executors();
             auto* executor = executors->driver_executor();
             iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }
@@ -323,7 +341,8 @@ void FragmentContext::cancel(const Status& status, bool cancelled_by_fe) {
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(_query_id, _fragment_instance_id);
+        runtime_services(_runtime_state.get())
+                .profile_report_worker->unregister_pipeline_load(_query_id, _fragment_instance_id);
     }
 }
 
@@ -357,8 +376,8 @@ Status FragmentContextManager::register_ctx(const TUniqueId& fragment_id, Fragme
     if (query_options.query_type == TQueryType::LOAD && (query_options.load_job_type == TLoadJobType::BROKER ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
                                                          query_options.load_job_type == TLoadJobType::INSERT_VALUES)) {
-        RETURN_IF_ERROR(ExecEnv::GetInstance()->profile_report_worker()->register_pipeline_load(
-                fragment_ctx->query_id(), fragment_id));
+        RETURN_IF_ERROR(runtime_services(fragment_ctx->runtime_state())
+                                .profile_report_worker->register_pipeline_load(fragment_ctx->query_id(), fragment_id));
     }
     _fragment_contexts.emplace(fragment_id, std::move(fragment_ctx));
     return Status::OK();
@@ -386,8 +405,8 @@ void FragmentContextManager::unregister(const TUniqueId& fragment_id) {
              query_options.load_job_type == TLoadJobType::INSERT_QUERY ||
              query_options.load_job_type == TLoadJobType::INSERT_VALUES) &&
             !it->second->runtime_state()->is_cancelled()) {
-            ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(it->second->query_id(),
-                                                                                      fragment_id);
+            runtime_services(it->second->runtime_state())
+                    .profile_report_worker->unregister_pipeline_load(it->second->query_id(), fragment_id);
         }
         _fragment_contexts.erase(it);
     }
@@ -401,7 +420,7 @@ void FragmentContextManager::cancel(const Status& status) {
 }
 void FragmentContext::prepare_pass_through_chunk_buffer() {
     _pass_through_chunk_buffer_guard =
-            std::make_unique<PassThroughChunkBufferGuard>(_runtime_state->exec_env()->stream_mgr(), _query_id);
+            std::make_unique<PassThroughChunkBufferGuard>(runtime_services(_runtime_state.get()).stream_mgr, _query_id);
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
     _pass_through_chunk_buffer_guard.reset();
@@ -512,7 +531,7 @@ Status FragmentContext::prepare_active_drivers() {
         total_active_driver_size += group->total_active_driver_size();
     }
 
-    auto pipeline_prepare_pool = runtime_state()->exec_env()->pipeline_prepare_pool();
+    auto pipeline_prepare_pool = execution_services(runtime_state()).pipeline_prepare_pool;
     // if prepare all drivers parallelly of this fragment will make queue too full, do not prepare parallelly
     if (!config::enable_pipeline_driver_parallel_prepare ||
         pipeline_prepare_pool->get_queue_size() + total_active_driver_size >=
@@ -566,9 +585,9 @@ void FragmentContext::_close_stream_load_contexts() {
     for (const auto& context : _stream_load_contexts) {
         context->body_sink->cancel(Status::Cancelled("Close the stream load pipe"));
         if (context->enable_batch_write) {
-            _runtime_state->exec_env()->batch_write_mgr()->unregister_stream_load_pipe(context);
+            runtime_services(_runtime_state.get()).batch_write_mgr->unregister_stream_load_pipe(context);
         } else {
-            _runtime_state->exec_env()->stream_context_mgr()->remove_channel_context(context);
+            runtime_services(_runtime_state.get()).stream_context_mgr->remove_channel_context(context);
         }
     }
 }

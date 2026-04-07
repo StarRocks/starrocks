@@ -45,6 +45,19 @@
 
 namespace starrocks {
 
+namespace {
+
+const QueryExecutionServices& query_execution_services(RuntimeState* state) {
+    DCHECK(state != nullptr);
+    return *state->query_execution_services();
+}
+
+const RuntimeServices& runtime_services(RuntimeState* state) {
+    return *query_execution_services(state).runtime;
+}
+
+} // namespace
+
 // Using a query-level mem_tracker beyond QueryContext's lifetime may access already destructed parent mem_tracker.
 // mem_trackers has a hierarchy: process->query_pool->resource_group->query, so when resource_group is dropped or
 // altered, resource_group-level mem_tracker would be destructed, such a dangling query-level mem_tracker would cause
@@ -188,11 +201,11 @@ void RuntimeFilterPort::publish_runtime_filters(const std::list<RuntimeFilterBui
                     std::min_element(rf_desc->broadcast_grf_senders().begin(), rf_desc->broadcast_grf_senders().end(),
                                      [](const auto& a, const auto& b) { return a.lo < b.lo; });
             if (passthrough_delivery || *sender_id == state->fragment_instance_id()) {
-                state->exec_env()->runtime_filter_worker()->send_broadcast_runtime_filter(
+                runtime_services(state).runtime_filter_worker->send_broadcast_runtime_filter(
                         std::move(params), rf_desc->broadcast_grf_destinations(), timeout_ms, rpc_http_min_size);
             }
         } else {
-            state->exec_env()->runtime_filter_worker()->send_part_runtime_filter(
+            runtime_services(state).runtime_filter_worker->send_part_runtime_filter(
                     std::move(params), rf_desc->merge_nodes(), timeout_ms, rpc_http_min_size, EventType::SEND_PART_RF);
         }
     }
@@ -239,9 +252,9 @@ void RuntimeFilterPort::publish_skew_broadcast_join_key_columns(RuntimeFilterBui
     RETURN_IF(!actual_size.status().ok(), (void)nullptr);
     rf_data->resize(actual_size.value());
     *(params.mutable_columntype()) = type_desc.to_protobuf();
-    state->exec_env()->runtime_filter_worker()->send_part_runtime_filter(std::move(params), rf_desc->merge_nodes(),
-                                                                         timeout_ms, rpc_http_min_size,
-                                                                         EventType::SEND_SKEW_JOIN_BROADCAST_RF);
+    runtime_services(state).runtime_filter_worker->send_part_runtime_filter(std::move(params), rf_desc->merge_nodes(),
+                                                                            timeout_ms, rpc_http_min_size,
+                                                                            EventType::SEND_SKEW_JOIN_BROADCAST_RF);
 }
 
 void RuntimeFilterPort::prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
@@ -272,7 +285,7 @@ void RuntimeFilterPort::publish_local_colocate_filters(std::list<RuntimeFilterBu
 }
 
 void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const RuntimeFilter* rf) {
-    _state->exec_env()->runtime_filter_cache()->add_rf_event({
+    runtime_services(_state).runtime_filter_cache->add_rf_event({
             _state->query_id(),
             filter_id,
             "",
