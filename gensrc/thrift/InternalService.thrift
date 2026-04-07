@@ -380,7 +380,6 @@ struct TQueryOptions {
 
   210: optional bool enable_global_late_materialization;
   211: optional bool enable_schedule_log;
-  212: optional bool enable_inline_agg_state;
 
   // http_request function SSL settings
   212: optional bool http_request_ssl_verification_required = true;
@@ -391,6 +390,8 @@ struct TQueryOptions {
   215: optional string http_request_host_allowlist_regexp = "";
   216: optional bool http_request_allow_private_in_allowlist = false;
   217: optional bool enable_cache_udaf = false;
+
+  218: optional bool enable_inline_agg_state;
 }
 
 // A scan range plus the parameters needed to execute that scan.
