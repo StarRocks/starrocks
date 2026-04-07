@@ -245,8 +245,6 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = MAX_UNKNOWN_STRING_META_LENGTH, flag = VariableMgr.GLOBAL)
     private static int maxUnknownStringMetaLength = 64;
 
-<<<<<<< HEAD
-=======
     @VariableMgr.VarAttr(name = ENABLE_REDUCE_CAST_VARCHAR_LENGTH_INHERITANCE, flag = VariableMgr.GLOBAL)
     private static boolean enableReduceCastVarcharLengthInheritance = false;
 
@@ -255,7 +253,7 @@ public final class GlobalVariable {
 
     @VariableMgr.VarAttr(name = ETL_EXEC_ENABLE_QUEUE_ALL_WORKLOADS, flag = VariableMgr.GLOBAL)
     public static boolean enableEtlExecQueueAllWorkloads = true;
->>>>>>> 3f0e07721e ([BugFix] preserve varchar length after reduce cast (#70269))
+
     @VariableMgr.VarAttr(name = CNGROUP_RESOURCE_USAGE_FRESH_RATIO)
     private static double cngroupResourceUsageFreshRatio = 0.5;
 
