@@ -46,7 +46,6 @@
 #include "base/url_coding.h"
 #include "base/utility/mysql_global.h"
 #include "common/logging.h"
-#include "exprs/base64.h"
 #include "gutil/strings/escaping.h"
 #include "gutil/strings/fastmem.h"
 
@@ -350,10 +349,7 @@ void MysqlRowBuffer::push_binary(const char* data, size_t length) {
     // and wrap in double-quotes so the JSON-like output stays valid.
     std::string encoded;
     if (_options.nested_binary_format == MysqlRowBufferOptions::NestedBinaryFormat::BASE64) {
-        encoded.resize(((length + 2) / 3) * 4);
-        const auto encoded_len = base64_encode2(reinterpret_cast<const unsigned char*>(data), length,
-                                                reinterpret_cast<unsigned char*>(encoded.data()));
-        encoded.resize(encoded_len);
+        strings::Base64Escape(reinterpret_cast<const unsigned char*>(data), static_cast<int>(length), &encoded, true);
     } else {
         // Default: HEX
         encoded = strings::b2a_hex(data, static_cast<int>(length));
