@@ -57,10 +57,10 @@ public:
 private:
     void _set_wg_in_queue(const ScanTask& task) {
         if (task.workgroup) {
-            auto* entity = const_cast<WorkGroupScanSchedEntity*>(
-                    _impl.sched_entity_type() == ScanSchedEntityType::CONNECTOR
-                            ? task.workgroup->connector_scan_sched_entity()
-                            : task.workgroup->scan_sched_entity());
+            auto* entity =
+                    const_cast<WorkGroupScanSchedEntity*>(_impl.sched_entity_type() == ScanSchedEntityType::CONNECTOR
+                                                                  ? task.workgroup->connector_scan_sched_entity()
+                                                                  : task.workgroup->scan_sched_entity());
             entity->set_in_queue(this);
         }
     }
