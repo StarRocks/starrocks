@@ -5,7 +5,6 @@ src/agent/publish_version.cpp
 src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
 src/cache/peer_cache_engine.cpp
-src/connector/lake_connector.cpp
 src/connector/partition_chunk_writer.cpp
 src/exec/arrow_flight_batch_reader.cpp
 src/exec/dictionary_cache_writer.cpp
@@ -58,7 +57,6 @@ src/storage/lake/txn_log_applier.cpp
 src/storage/lake/update_manager.cpp
 src/storage/lake/vacuum.cpp
 src/storage/lake/vertical_compaction_task.cpp
-src/storage/lake_meta_reader.cpp
 src/storage/load_chunk_spiller.cpp
 src/storage/load_spill_block_manager.cpp
 src/storage/metadata_util.cpp

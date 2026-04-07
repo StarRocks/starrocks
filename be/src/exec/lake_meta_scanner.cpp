@@ -17,10 +17,24 @@
 #include "base/testutil/sync_point.h"
 #include "exec/lake_meta_scan_node.h"
 #include "gen_cpp/tablet_schema.pb.h"
+#include "runtime/exec_env.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
+
+namespace {
+
+lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
+    if (const auto* services = state->query_execution_services(); services != nullptr && services->lake != nullptr) {
+        return services->lake->lake_tablet_manager;
+    }
+    auto* exec_env = state->exec_env();
+    return exec_env != nullptr ? exec_env->lake_tablet_manager() : nullptr;
+}
+
+} // namespace
 
 LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent) : _parent(parent) {}
 
@@ -40,6 +54,7 @@ Status LakeMetaScanner::_real_init() {
     reader_params.tablet_id = _tablet_id;
     reader_params.version = Version(0, _version);
     reader_params.runtime_state = _runtime_state;
+    reader_params.tablet_manager = lake_tablet_manager(_runtime_state);
     reader_params.chunk_size = _runtime_state->chunk_size();
     reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     reader_params.desc_tbl = &_parent->_desc_tbl;

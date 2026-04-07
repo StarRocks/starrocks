@@ -23,18 +23,20 @@
 
 namespace starrocks {
 
+namespace lake {
+class Rowset;
+class TabletManager;
+class VersionedTablet;
+} // namespace lake
+
 struct LakeMetaReaderParams : MetaReaderParams {
     LakeMetaReaderParams() = default;
+    lake::TabletManager* tablet_manager = nullptr;
     // The key of the schema used for reading. no value for legacy compatibility.
     std::optional<TableSchemaKeyPB> schema_key;
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
     size_t next_uniq_id;
 };
-
-namespace lake {
-class Rowset;
-class VersionedTablet;
-} // namespace lake
 
 // MetaReader will implements
 // 1. read meta info from segment footer
