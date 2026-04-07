@@ -491,8 +491,10 @@ public class SkewJoinV2Test extends PlanTestBase {
             try {
                 String sql = "select v2, v5 from t0 left join[shuffle] t1 on v1 = v4";
                 String plan = getVerboseExplain(sql);
-                assertCContains(plan, "SplitCastDataSink:\n" +
+                assertCContains(plan, "Input Partition: RANDOM\n" +
+                        "  SplitCastDataSink:\n" +
                         "  OutPut Partition: HASH_PARTITIONED: 1: v1\n" +
+<<<<<<< HEAD
                         "  OutPut Exchange Id: 02\n" +
                         "  Split expr: 1: v1 IS NOT NULL\n" +
                         "  OutPut Partition: RANDOM\n" +
@@ -505,6 +507,33 @@ public class SkewJoinV2Test extends PlanTestBase {
                         "  OutPut Partition: UNPARTITIONED\n" +
                         "  OutPut Exchange Id: 07\n" +
                         "  Split expr: 4: v4 IS NULL");
+=======
+                        "  OutPut Exchange Id: 01\n" +
+                        "  Split expr: [1: v1, BIGINT, true] IS NOT NULL\n" +
+                        "  OutPut Partition: RANDOM\n" +
+                        "  OutPut Exchange Id: 06\n" +
+                        "  Split expr: [1: v1, BIGINT, true] IS NULL");
+                assertCContains(plan, "|----7:Project\n" +
+                        "  |    |  output columns:\n" +
+                        "  |    |  2 <-> [2: v2, BIGINT, true]\n" +
+                        "  |    |  5 <-> NULL\n" +
+                        "  |    |  cardinality: 28000000000\n" +
+                        "  |    |  \n" +
+                        "  |    6:EXCHANGE\n" +
+                        "  |       distribution type: ROUND_ROBIN\n" +
+                        "  |       cardinality: 20000000");
+                assertContains(plan, "Input Partition: RANDOM\n" +
+                        "  OutPut Partition: HASH_PARTITIONED: 4: v4\n" +
+                        "  OutPut Exchange Id: 03\n" +
+                        "\n" +
+                        "  2:OlapScanNode\n" +
+                        "     table: t1, rollup: t1\n" +
+                        "     preAggregation: on\n" +
+                        "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                        "     tabletList=10016,10018,10020\n" +
+                        "     actualRows=0, avgRowSize=9.0\n" +
+                        "     cardinality: 20000000");
+>>>>>>> 5d0f12f1a3 ([BugFix] Avoid one-way split sink for null-skew left join rewrite (#71357))
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

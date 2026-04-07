@@ -186,9 +186,31 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             SplitProducerAndConsumer skewSideSplit = generateSplitProducerAndConsumer(skewSideChild, skewSideJoinKeyExpr,
                     nonNullSkewValues, includeNullSkew, true);
 
+<<<<<<< HEAD
             SplitProducerAndConsumer nonSkewSideSplit =
                     generateSplitProducerAndConsumer(nonSkewSideChild, nonSkewSideJoinKeyExpr,
                             nonNullSkewValues, includeNullSkew, false);
+=======
+            boolean isLeftOuterJoin = originalShuffleJoinOperator.getJoinType().isAnyLeftOuterJoin();
+            boolean skewOnLeft = skewSideChildIndex == 0;
+            // For LEFT OUTER JOIN, the left input is the preserved side. Only preserved-side NULL skew is safe to optimize.
+            boolean leftOuterJoinWithPreservedSideNullSkew = isLeftOuterJoin && skewOnLeft && includeNullSkew;
+            boolean nullOnlyLeftOuterJoinFastPath =
+                    leftOuterJoinWithPreservedSideNullSkew && nonNullSkewValues.isEmpty();
+
+            SplitProducerAndConsumer leftSplit =
+                    generateSplitProducerAndConsumer(leftChild, leftInputJoinKeyExpr, nonNullSkewValues,
+                            includeNullSkew, skewOnLeft);
+
+            SplitProducerAndConsumer rightSplit = null;
+            // NULL-only skew on the preserved side does not need a skew branch on the non-preserved side.
+            // Reusing the original right input for the shuffle join avoids creating a dangling split branch
+            // that later materializes as a one-way SplitCastDataSink.
+            if (!nullOnlyLeftOuterJoinFastPath) {
+                rightSplit = generateSplitProducerAndConsumer(rightChild, rightInputJoinKeyExpr, nonNullSkewValues,
+                        includeNullSkew, !skewOnLeft);
+            }
+>>>>>>> 5d0f12f1a3 ([BugFix] Avoid one-way split sink for null-skew left join rewrite (#71357))
 
             // keep projection for new join opt
             Projection projectionOnJoin = originalShuffleJoinOperator.getProjection();
@@ -224,9 +246,15 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             PhysicalConcatenateOperator concatenateOperator = buildConcatenateOperator(outputColumns,
                     localExchangerType, originalShuffleJoinOperator.getLimit());
 
+            OptExpression rightInputOfShuffleJoin =
+                    nullOnlyLeftOuterJoinFastPath ? rightChild : rightSplit.splitConsumerOptForShuffleJoin;
             OptExpression newShuffleJoin = OptExpression.builder().setOp(newShuffleJoinOpt).setInputs(
+<<<<<<< HEAD
                             List.of(skewSideSplit.splitConsumerOptForShuffleJoin,
                                     nonSkewSideSplit.splitConsumerOptForShuffleJoin))
+=======
+                            newArrayList(leftSplit.splitConsumerOptForShuffleJoin, rightInputOfShuffleJoin))
+>>>>>>> 5d0f12f1a3 ([BugFix] Avoid one-way split sink for null-skew left join rewrite (#71357))
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setRequiredProperties(opt.getRequiredProperties()).setCost(opt.getCost()).build();
 
@@ -275,11 +303,22 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                     .setCost(opt.getCost()).build();
 
+<<<<<<< HEAD
             OptExpression cteAnchorOptExp1 =
                     OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
                             .setInputs(List.of(nonSkewSideSplit.splitProducer, concatenateOptExp))
                             .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
+=======
+            OptExpression cteAnchorOptExp1 = concatenateOptExp;
+            if (!nullOnlyLeftOuterJoinFastPath) {
+                cteAnchorOptExp1 =
+                        OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
+                                .setInputs(newArrayList(rightSplit.splitProducer, concatenateOptExp))
+                                .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                                .setCost(opt.getCost()).build();
+            }
+>>>>>>> 5d0f12f1a3 ([BugFix] Avoid one-way split sink for null-skew left join rewrite (#71357))
 
             // if hit once, we give up rewriting the following subtree
             return OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
