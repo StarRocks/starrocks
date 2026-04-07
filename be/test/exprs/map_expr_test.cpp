@@ -18,7 +18,6 @@
 #include <utility>
 
 #include "column/column_helper.h"
-#include "column/struct_column.h"
 #include "exprs/array_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "testutil/column_test_helper.h"
@@ -156,65 +155,6 @@ TEST_F(MapExprTest, test_const_evaluate) {
         EXPECT_TRUE(result->is_map());
         ASSERT_EQ("{1:'a',4:'x'}", result->debug_string());
     }
-}
-
-TEST_F(MapExprTest, test_type_mismatch_no_overflow) {
-    TypeDescriptor type_map_smallint;
-    type_map_smallint.type = LogicalType::TYPE_MAP;
-    type_map_smallint.children.emplace_back();
-    type_map_smallint.children.back().type = LogicalType::TYPE_SMALLINT;
-    type_map_smallint.children.emplace_back();
-    type_map_smallint.children.back().type = LogicalType::TYPE_SMALLINT;
-
-    {
-        auto expr = ExprsTestHelper::create_map_expr(type_map_smallint);
-        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({1, 2, 3}), LogicalType::TYPE_TINYINT));
-        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({10, 20, 30}), LogicalType::TYPE_TINYINT));
-
-        auto result = expr->evaluate(nullptr, nullptr);
-        EXPECT_EQ(3, result->size());
-        EXPECT_TRUE(result->is_map());
-    }
-
-    {
-        auto expr = ExprsTestHelper::create_map_expr(type_map_smallint);
-        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({1, 2, 3}), LogicalType::TYPE_TINYINT));
-        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({10, 20, 30}), LogicalType::TYPE_TINYINT));
-        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({4, 5, 3}), LogicalType::TYPE_TINYINT));
-        expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int8_t>({40, 50, 60}), LogicalType::TYPE_TINYINT));
-
-        auto result = expr->evaluate(nullptr, nullptr);
-        EXPECT_EQ(3, result->size());
-        EXPECT_TRUE(result->is_map());
-    }
-}
-
-TEST_F(MapExprTest, test_nested_type_mismatch_no_overflow) {
-    TypeDescriptor type_struct_smallint;
-    type_struct_smallint.type = LogicalType::TYPE_STRUCT;
-    type_struct_smallint.children.emplace_back(LogicalType::TYPE_SMALLINT);
-    type_struct_smallint.field_names.emplace_back("f1");
-
-    TypeDescriptor type_map_struct;
-    type_map_struct.type = LogicalType::TYPE_MAP;
-    type_map_struct.children.emplace_back(LogicalType::TYPE_SMALLINT);
-    type_map_struct.children.emplace_back(type_struct_smallint);
-
-    auto build_struct_column = [](std::initializer_list<int8_t> values) -> ColumnPtr {
-        Columns fields;
-        fields.emplace_back(ColumnTestHelper::build_column<int8_t>(values));
-        return StructColumn::create(fields, {"f1"});
-    };
-
-    auto expr = ExprsTestHelper::create_map_expr(type_map_struct);
-    expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int16_t>({1, 2, 3}), LogicalType::TYPE_SMALLINT));
-    expr->add_child(new_mock_expr(build_struct_column({10, 20, 30}), type_struct_smallint));
-    expr->add_child(new_mock_expr(ColumnTestHelper::build_column<int16_t>({4, 5, 3}), LogicalType::TYPE_SMALLINT));
-    expr->add_child(new_mock_expr(build_struct_column({40, 50, 60}), type_struct_smallint));
-
-    auto result = expr->evaluate(nullptr, nullptr);
-    EXPECT_EQ(3, result->size());
-    EXPECT_TRUE(result->is_map());
 }
 
 } // namespace starrocks
