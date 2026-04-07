@@ -42,6 +42,8 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
+import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
+import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -264,6 +266,13 @@ import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.isColum
  */
 public class PlanFragmentBuilder {
     private static final Logger LOG = LogManager.getLogger(PlanFragmentBuilder.class);
+
+    private static final Set<String> TABLES_USING_EXACT_DB_MATCH = Set.of(
+            LoadsSystemTable.NAME,
+            LoadTrackingLogsSystemTable.NAME,
+            StreamLoadsSystemTable.NAME,
+            RoutineLoadJobsSystemTable.NAME
+    );
 
     public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
                                               List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory,
@@ -1823,15 +1832,19 @@ public class PlanFragmentBuilder {
                 if (predicate instanceof BinaryPredicateOperator) {
                     BinaryPredicateOperator binaryPredicateOperator = (BinaryPredicateOperator) predicate;
                     if (binaryPredicateOperator.getBinaryType() == BinaryType.EQ) {
+                        boolean escapeLike = !TABLES_USING_EXACT_DB_MATCH.contains(
+                                scanNode.getTableName().toLowerCase());
                         switch (columnRefOperator.getName()) {
                             case "TABLE_SCHEMA":
                             case "DATABASE_NAME":
-                                scanNode.setSchemaDb(
-                                        PatternMatcher.escapeLikeValue(constantOperator.getVarchar()));
+                                scanNode.setSchemaDb(escapeLike
+                                        ? PatternMatcher.escapeLikeValue(constantOperator.getVarchar())
+                                        : constantOperator.getVarchar());
                                 break;
                             case "TABLE_NAME":
-                                scanNode.setSchemaTable(
-                                        PatternMatcher.escapeLikeValue(constantOperator.getVarchar()));
+                                scanNode.setSchemaTable(escapeLike
+                                        ? PatternMatcher.escapeLikeValue(constantOperator.getVarchar())
+                                        : constantOperator.getVarchar());
                                 break;
                             case "BE_ID":
                                 scanNode.setBeId(constantOperator.getBigint());
