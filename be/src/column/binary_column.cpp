@@ -919,7 +919,7 @@ void BinaryColumnBase<T>::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, 
     T start = _offsets[idx];
     T len = _offsets[idx + 1] - start;
     const char* base = reinterpret_cast<const char*>(_data_base());
-    if (_is_varbinary) {
+    if (_is_binary_type) {
         buf->push_binary(base + start, len);
     } else {
         buf->push_string(base + start, len);
