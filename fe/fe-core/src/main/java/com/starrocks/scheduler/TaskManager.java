@@ -234,9 +234,6 @@ public class TaskManager implements MemoryTrackable {
         if (task.getType() != Constants.TaskType.PERIODICAL) {
             return false;
         }
-        if (task.getState() == Constants.TaskState.PAUSE) {
-            return true;
-        }
         TaskSchedule taskSchedule = task.getSchedule();
         // this will not happen
         if (taskSchedule == null) {
