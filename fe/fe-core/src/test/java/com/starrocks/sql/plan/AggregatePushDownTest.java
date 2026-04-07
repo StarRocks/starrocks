@@ -93,7 +93,6 @@ public class AggregatePushDownTest extends PlanTestBase {
         }
     }
 
-
     @Test
     public void testPushDownDistinctAggBelowWindow()
             throws Exception {
@@ -293,5 +292,92 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "  |  functions: [, sum[([12: sum, DECIMAL128(38,2), true]);" +
                 " args: DECIMAL128; result: DECIMAL128(38,2); args nullable: true; result nullable: true], ]");
         assertContains(plan, "2:AGGREGATE (update finalize)");
+    }
+
+    @Test
+    public void testPushDownWithNestedCaseWhenIfs() throws Exception {
+        String sql = """
+                WITH cte1 AS (
+                  SELECT
+                    t.t1d AS fk,
+                    t.t1a AS cat,
+                    CASE WHEN t.t1b = 1 THEN t.t1e ELSE t.t1f END AS cval
+                  FROM test_all_type t
+                ),
+                cte2 AS (
+                  SELECT a.cval, a.fk, a.cat
+                  FROM cte1 a
+                  LEFT JOIN t1 ON a.fk = t1.v4
+                ),
+                cte3 AS (
+                  SELECT CASE WHEN c.cat THEN c.cval ELSE NULL END gval, c.fk
+                  FROM cte2 c
+                )
+                SELECT SUM(gval)
+                FROM cte3
+                GROUP BY fk;
+                """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: sum[([21: cast, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result" +
+                " nullable: true], sum[([6: t1f, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result" +
+                " nullable: true]\n" +
+                "  |  group by: [1: t1a, VARCHAR, true], [2: t1b, SMALLINT, true], [4: t1d, BIGINT, true]\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1 <-> [1: t1a, VARCHAR, true]\n" +
+                "  |  2 <-> [2: t1b, SMALLINT, true]\n" +
+                "  |  4 <-> [4: t1d, BIGINT, true]\n" +
+                "  |  6 <-> [6: t1f, DOUBLE, true]\n" +
+                "  |  21 <-> cast([5: t1e, FLOAT, true] as DOUBLE)\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     table: test_all_type, rollup: test_all_type\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                "     tabletList=10140,10142,10144\n" +
+                "     actualRows=0, avgRowSize=6.0\n" +
+                "     cardinality: 1");
+
+    }
+
+    @Test
+    public void testRewriterSharedMutationWithCaseWhen() throws Exception {
+        // Bug: PushDownAggregateRewriter.rewriteProject() mutates shared CaseWhenOperator
+        // in-place via setThenClause(). When two aggregations (SUM + MIN) reference the same
+        // CASE WHEN column, the first aggregation's processing corrupts the CaseWhenOperator,
+        // causing the second aggregation to see pushed-down column refs instead of original columns.
+        String sql = "SELECT SUM(sub.cval), MIN(sub.cval), sub.fk " +
+                "FROM ( " +
+                "    SELECT t1d AS fk, " +
+                "           CASE WHEN t1b = 1 THEN t1e ELSE NULL END AS cval " +
+                "    FROM test_all_type " +
+                ") sub " +
+                "JOIN t0 ON sub.fk = t0.v1 " +
+                "GROUP BY sub.fk";
+        String plan = getVerboseExplain(sql);
+
+        assertContains(plan, "sum");
+        assertContains(plan, "min");
+    }
+
+    @Test
+    public void testRewriterSharedMutationWithIf() throws Exception {
+        // Bug: PushDownAggregateRewriter.rewriteProject() mutates shared CallOperator (IF)
+        // in-place via setChild(). Same root cause as the CaseWhen bug but on the IF path.
+        String sql = "SELECT SUM(sub.cval), MIN(sub.cval), sub.fk " +
+                "FROM ( " +
+                "    SELECT t1d AS fk, " +
+                "           IF(t1b = 1, t1e, NULL) AS cval " +
+                "    FROM test_all_type " +
+                ") sub " +
+                "JOIN t0 ON sub.fk = t0.v1 " +
+                "GROUP BY sub.fk";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "sum");
+        assertContains(plan, "min");
     }
 }
