@@ -56,9 +56,9 @@
 namespace starrocks {
 
 // Recursively walk a column tree and mark every BinaryColumn that corresponds
-// to a VARBINARY field so that put_mysql_row_buffer can encode its bytes
+// to a BINARY / VARBINARY field so that put_mysql_row_buffer can encode its bytes
 // correctly when the column is serialised inside a nested type.
-static void mark_varbinary_columns(const ColumnPtr& col, const TypeDescriptor& type) {
+static void mark_binary_columns(const ColumnPtr& col, const TypeDescriptor& type) {
     // Unwrap ConstColumn and NullableColumn to reach the actual data column.
     const Column* data_col = col.get();
     if (data_col->is_constant()) {
@@ -69,28 +69,29 @@ static void mark_varbinary_columns(const ColumnPtr& col, const TypeDescriptor& t
     }
 
     switch (type.type) {
+    case TYPE_BINARY:
     case TYPE_VARBINARY: {
-        // The underlying storage is always BinaryColumn for VARBINARY.
+        // Both BINARY and VARBINARY use BinaryColumn as their underlying storage.
         auto* bin = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_col));
-        bin->set_is_varbinary(true);
+        bin->set_is_binary_type(true);
         break;
     }
     case TYPE_STRUCT: {
         const auto* struct_col = down_cast<const StructColumn*>(data_col);
         for (size_t i = 0; i < type.children.size(); ++i) {
-            mark_varbinary_columns(struct_col->get_column_by_idx(i), type.children[i]);
+            mark_binary_columns(struct_col->get_column_by_idx(i), type.children[i]);
         }
         break;
     }
     case TYPE_ARRAY: {
         const auto* arr_col = down_cast<const ArrayColumn*>(data_col);
-        mark_varbinary_columns(arr_col->elements_column(), type.children[0]);
+        mark_binary_columns(arr_col->elements_column(), type.children[0]);
         break;
     }
     case TYPE_MAP: {
         const auto* map_col = down_cast<const MapColumn*>(data_col);
-        mark_varbinary_columns(map_col->keys_column(), type.children[0]);
-        mark_varbinary_columns(map_col->values_column(), type.children[1]);
+        mark_binary_columns(map_col->keys_column(), type.children[0]);
+        mark_binary_columns(map_col->values_column(), type.children[1]);
         break;
     }
     default:
@@ -170,7 +171,7 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
                          : column;
         // Mark BinaryColumns that carry VARBINARY data so that push_binary is
         // used when they appear inside nested types (ARRAY / MAP / STRUCT).
-        mark_varbinary_columns(column, _output_expr_ctxs[i]->root()->type());
+        mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
         result_columns.emplace_back(std::move(column));
     }
 
@@ -213,7 +214,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
                          : column;
-        mark_varbinary_columns(column, _output_expr_ctxs[i]->root()->type());
+        mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
         result_columns.emplace_back(std::move(column));
     }
 
