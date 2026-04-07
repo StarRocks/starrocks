@@ -44,6 +44,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "common/statusor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/MasterService_types.h"
@@ -51,13 +52,12 @@
 #include "storage/base_tablet.h"
 #include "storage/data_dir.h"
 #include "storage/olap_define.h"
+#include "storage/olap_tuple.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet_meta.h"
-#include "storage/tuple.h"
 #include "storage/utils.h"
 #include "storage/version_graph.h"
 #include "util/once.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -85,11 +85,12 @@ public:
 
     Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
 
+    Tablet() = delete;
     Tablet(const Tablet&) = delete;
     const Tablet& operator=(const Tablet&) = delete;
 
     // for ut
-    Tablet();
+    Tablet(KeysType keys_type);
 
     ~Tablet() override;
 
@@ -117,14 +118,13 @@ public:
 
     bool belonged_to_cloud_native() const override { return false; }
 
-    // propreties encapsulated in TabletSchema
-    KeysType keys_type() const;
+    // properties encapsulated in TabletSchema
+    KeysType keys_type() const { return _keys_type; }
     size_t num_columns_with_max_version() const;
     size_t num_key_columns_with_max_version() const;
     size_t num_rows_per_row_block_with_max_version() const;
     size_t next_unique_id() const;
     size_t field_index_with_max_version(const string& field_name) const;
-    size_t field_index(const string& field_name, const string& extra_column_name) const;
     std::string schema_debug_string() const;
     std::string debug_string() const;
     bool enable_shortcut_compaction() const;
@@ -215,6 +215,7 @@ public:
     // Same as max_continuous_version_from_beginning, only return end version, using a more efficient implementation
     int64_t max_continuous_version() const;
     int64_t max_readable_version() const;
+    int64_t min_readable_version() const;
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
@@ -483,6 +484,9 @@ private:
 
     std::atomic<bool> _is_dropping{false};
     std::atomic<bool> _update_schema_running{false};
+    // The KeysType of a Tablet cannot be changed after creation. It is retrieved from the TabletSchema,
+    // and the redundant storage is designed to avoid unnecessary locking and reduce performance overhead.
+    KeysType _keys_type;
 };
 
 inline bool Tablet::init_succeeded() {
@@ -509,10 +513,6 @@ inline void Tablet::set_cumulative_layer_point(int64_t new_point) {
     _cumulative_point = new_point;
 }
 
-inline KeysType Tablet::keys_type() const {
-    return tablet_schema()->keys_type();
-}
-
 inline size_t Tablet::num_columns_with_max_version() const {
     return tablet_schema()->num_columns();
 }
@@ -531,10 +531,6 @@ inline size_t Tablet::next_unique_id() const {
 
 inline size_t Tablet::field_index_with_max_version(const string& field_name) const {
     return tablet_schema()->field_index(field_name);
-}
-
-inline size_t Tablet::field_index(const string& field_name, const string& extra_column_name) const {
-    return tablet_schema()->field_index(field_name, extra_column_name);
 }
 
 inline bool Tablet::enable_shortcut_compaction() const {

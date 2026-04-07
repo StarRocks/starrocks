@@ -46,14 +46,21 @@
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"
 #include "agent/task_worker_pool.h"
+#include "base/brpc/brpc.h"
+#include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
+#include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
 #include "column/stream_chunk.h"
-#include "common/closure_guard.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
+#include "common/util/thrift_util.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
@@ -70,28 +77,23 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/closure_guard.h"
 #include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/load_channel_mgr.h"
+#include "runtime/lookup_stream_mgr.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
-#include "runtime/types.h"
-#include "service/brpc.h"
 #include "storage/dictionary_cache_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/txn_manager.h"
+#include "types/type_descriptor.h"
 #include "util/arrow/row_batch.h"
-#include "util/failpoint/fail_point.h"
-#include "util/hash_util.hpp"
-#include "util/stopwatch.hpp"
-#include "util/thrift_util.h"
-#include "util/time.h"
 #include "util/time_guard.h"
-#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -395,12 +397,13 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-        submitted = _exec_env->pipeline_prepare_pool()->try_offer([ms, i, fragment_executors, t_batch_requests, this] {
-            auto& unique_requests = t_batch_requests->unique_param_per_instance;
-            auto& req = unique_requests[i];
-            auto& fragment_executor = fragment_executors->at(i);
-            ms->set_value(fragment_executor.prepare(_exec_env, req, req));
-        });
+        submitted = _exec_env->pipeline_prepare_pool()->try_offer(
+                [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env] {
+                    auto& unique_requests = t_batch_requests->unique_param_per_instance;
+                    auto& req = unique_requests[i];
+                    auto& fragment_executor = fragment_executors->at(i);
+                    ms->set_value(fragment_executor.prepare(exec_env, req, req));
+                });
         if (!submitted) {
             failed_idx = i;
             break;
@@ -830,7 +833,7 @@ void PInternalServiceImplBase<T>::trigger_profile_report(google::protobuf::RpcCo
             return;
         }
         pipeline::DriverExecutor* driver_executor = fragment_ctx->workgroup()->executors()->driver_executor();
-        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false, true);
+        driver_executor->report_exec_state(query_ctx.get(), fragment_ctx.get(), Status::OK(), false);
     }
 }
 
@@ -1537,7 +1540,23 @@ void PInternalServiceImplBase<T>::lookup(google::protobuf::RpcController* cntl_b
         return;
     }
     auto request_ctx = std::make_shared<pipeline::RemoteLookUpRequestContext>(cntl, req, response, done);
-    st = _exec_env->lookup_dispatcher_mgr()->lookup(std::move(request_ctx));
+    st = _exec_env->lookup_dispatcher_mgr()->lookup(request_ctx);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::lookup_close(google::protobuf::RpcController* cntl_base,
+                                               const PLookUpCloseRequest* request, PLookUpCloseResponse* response,
+                                               google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    if (!request->has_query_id()) {
+        Status::InvalidArgument("missing query_id in lookup_close request").to_protobuf(response->mutable_status());
+        return;
+    }
+    TUniqueId query_id;
+    query_id.hi = request->query_id().hi();
+    query_id.lo = request->query_id().lo();
+    auto st = _exec_env->lookup_dispatcher_mgr()->lookup_close(query_id, request->lookup_node_id());
+    st.to_protobuf(response->mutable_status());
 }
 
 template class PInternalServiceImplBase<PInternalService>;

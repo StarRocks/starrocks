@@ -293,6 +293,7 @@ struct TQueryOptions {
 
   104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
   105: optional bool use_column_pool = true; // Deprecated
+  117: optional bool error_for_division_by_zero = false;
   // Deprecated
   106: optional bool enable_agg_spill_preaggregation;
   107: optional i64 global_runtime_filter_build_max_size;
@@ -360,6 +361,8 @@ struct TQueryOptions {
   // 0: fnv_hash (default, for backward compatibility)
   // 1: xxh3_hash (faster)
   201: optional i32 exchange_hash_function_version = 0;
+   // whether enable predicate column late materialization
+  202: optional bool enable_predicate_col_late_materialize;
   
   210: optional bool enable_global_late_materialization;
   211: optional bool enable_schedule_log;
@@ -428,6 +431,9 @@ struct TPlanFragmentExecParams {
   // Debug options: perform some action in a particular phase of a particular node
   74: optional list<TExecDebugOption> exec_debug_options
 
+  // used for global lazy materialization
+  75: optional map<Types.TPlanNodeId, i32> per_look_up_num_fetchers
+  76: optional map<Types.TPlanNodeId, Descriptors.TNodesInfo> per_fetch_target_nodes
 }
 
 // Global query parameters assigned by the coordinator.

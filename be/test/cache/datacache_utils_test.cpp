@@ -14,13 +14,14 @@
 
 #include "cache/datacache_utils.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <filesystem>
 
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/DataCache_types.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 class DataCacheUtilsTest : public ::testing::Test {};

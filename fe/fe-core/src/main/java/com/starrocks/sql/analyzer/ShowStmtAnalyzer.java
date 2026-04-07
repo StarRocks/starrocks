@@ -29,6 +29,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.proc.ExternalTableProcDir;
 import com.starrocks.common.proc.TableProcDir;
@@ -75,6 +76,7 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowTemporaryTableStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
@@ -82,7 +84,6 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.LikePredicate;
-import com.starrocks.sql.ast.expression.Predicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
@@ -111,6 +112,7 @@ public class ShowStmtAnalyzer {
         private static final Logger LOGGER = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
 
         public void analyze(ShowStmt statement, ConnectContext session) {
+            analyzeShowPredicateClause(statement, session);
             analyzeShowPredicate(statement);
             visit(statement, session);
         }
@@ -155,10 +157,7 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowColumnStatement(ShowColumnStmt node, ConnectContext context) {
-            node.init();
-            String db = node.getTableName().getDb();
-            db = getDatabaseName(db, context);
-            node.getTableName().setDb(db);
+            node.setTableRef(AnalyzerUtils.normalizedTableRef(node.getTableRef(), context));
             return null;
         }
 
@@ -208,10 +207,10 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowCreateTableStatement(ShowCreateTableStmt node, ConnectContext context) {
-            if (node.getTbl() == null) {
+            if (node.getTableRef() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
             }
-            node.getTbl().normalization(context);
+            node.setTableRef(AnalyzerUtils.normalizedTableRef(node.getTableRef(), context));
             return null;
         }
 
@@ -291,13 +290,7 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowIndexStatement(ShowIndexStmt node, ConnectContext context) {
-            node.init();
-            String db = node.getTableName().getDb();
-            db = getDatabaseName(db, context);
-            node.getTableName().setDb(db);
-            if (Strings.isNullOrEmpty(node.getTableName().getCatalog())) {
-                node.getTableName().setCatalog(context.getCurrentCatalog());
-            }
+            node.setTableRef(AnalyzerUtils.normalizedTableRef(node.getTableRef(), context));
             return null;
         }
 
@@ -341,11 +334,15 @@ public class ShowStmtAnalyzer {
                 return null;
             }
 
-            node.getDbTableName().normalization(context);
-            TableName tableName = node.getDbTableName();
-            String catalogName = tableName.getCatalog();
-            String dbName = tableName.getDb();
-            String tbl = tableName.getTbl();
+            TableRef tableRef = node.getTableRef();
+            if (tableRef == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_NO_TABLES_USED);
+            }
+            tableRef = AnalyzerUtils.normalizedTableRef(tableRef, context);
+            node.setTableRef(tableRef);
+            String catalogName = tableRef.getCatalogName();
+            String dbName = tableRef.getDbName();
+            String tbl = tableRef.getTableName();
             if (catalogName == null) {
                 catalogName = context.getCurrentCatalog();
             }
@@ -392,7 +389,8 @@ public class ShowStmtAnalyzer {
             try {
                 Table table = null;
                 try {
-                    table = MetaUtils.getSessionAwareTable(context, db, node.getDbTableName());
+                    TableName tableName = new TableName(node.getCatalogName(), node.getDb(), node.getTableName());
+                    table = MetaUtils.getSessionAwareTable(context, db, tableName);
                 } catch (Exception e) {
                     // if table is not found, may be is statement "desc materialized-view-name",
                     // ignore this exception.
@@ -405,8 +403,11 @@ public class ShowStmtAnalyzer {
                             for (MaterializedIndexMeta mvMeta : olapTable.getVisibleIndexMetas()) {
                                 if (olapTable.getIndexNameByMetaId(mvMeta.getIndexMetaId())
                                         .equalsIgnoreCase(node.getTableName())) {
-                                    List<Column> columns = olapTable.getIndexIdToSchema().get(mvMeta.getIndexMetaId());
+                                    List<Column> columns = olapTable.getSchemaByIndexMetaId(mvMeta.getIndexMetaId());
                                     for (Column column : columns) {
+                                        if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                                            continue;
+                                        }
                                         // Extra string (aggregation and bloom filter)
                                         List<String> extras = Lists.newArrayList();
                                         if (column.getAggregationType() != null &&
@@ -458,26 +459,28 @@ public class ShowStmtAnalyzer {
                         node.setOlapTable(true);
                         OlapTable olapTable = (OlapTable) table;
                         Set<String> bfColumns = olapTable.getBfColumnNames();
-                        Map<Long, List<Column>> indexIdToSchema = olapTable.getIndexIdToSchema();
+                        Map<Long, List<Column>> indexMetaIdToSchema = olapTable.getIndexMetaIdToSchema();
 
                         // indices order
                         List<Long> indices = Lists.newArrayList();
                         indices.add(olapTable.getBaseIndexMetaId());
-                        for (Long indexId : indexIdToSchema.keySet()) {
-                            if (indexId != olapTable.getBaseIndexMetaId()) {
-                                indices.add(indexId);
+                        for (Long indexMetaId : indexMetaIdToSchema.keySet()) {
+                            if (indexMetaId != olapTable.getBaseIndexMetaId()) {
+                                indices.add(indexMetaId);
                             }
                         }
 
                         // add all indices
                         for (int i = 0; i < indices.size(); ++i) {
-                            long indexId = indices.get(i);
-                            List<Column> columns = indexIdToSchema.get(indexId);
-                            String indexName = olapTable.getIndexNameByMetaId(indexId);
-                            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                            long indexMetaId = indices.get(i);
+                            List<Column> columns = indexMetaIdToSchema.get(indexMetaId);
+                            String indexName = olapTable.getIndexNameByMetaId(indexMetaId);
+                            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
                             for (int j = 0; j < columns.size(); ++j) {
                                 Column column = columns.get(j);
-
+                                if (column.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                                    continue;
+                                }
                                 // Extra string (aggregation and bloom filter)
                                 List<String> extras = Lists.newArrayList();
                                 if (column.getAggregationType() != null &&
@@ -549,8 +552,8 @@ public class ShowStmtAnalyzer {
         }
 
         private void analyzeShowPredicate(ShowStmt showStmt) {
-            Predicate predicate = showStmt.getPredicate();
-            if (predicate == null) {
+            Expr predicate = showStmt.getPredicate();
+            if (!showStmt.isSelfPredicate() || predicate == null) {
                 return;
             }
 
@@ -578,29 +581,68 @@ public class ShowStmtAnalyzer {
             }
         }
 
+        private void analyzeShowPredicateClause(ShowStmt showStmt, ConnectContext context) {
+            Expr predicate = showStmt.getPredicate();
+            if (showStmt.isSelfPredicate() || predicate == null) {
+                return;
+            }
+
+            // check where columns
+            ShowResultMetaFactory factory = new ShowResultMetaFactory();
+            ShowResultSetMetaData meta = factory.getMetadata(showStmt);
+            ExpressionAnalyzer.analyzeExpressionResolveSlot(showStmt.getPredicate(), context, slotRef -> {
+                int index = meta.getColumnIdx(slotRef.getColumnName().toLowerCase());
+                slotRef.setType(meta.getColumn(index).getType());
+            });
+
+            // check order by columns
+            List<OrderByElement> orderByElements = showStmt.getOrderByElements();
+            if (!showStmt.isSelfOrderBy() && orderByElements != null) {
+                List<OrderByPair> orderByPairs = new ArrayList<>();
+                for (OrderByElement orderByElement : orderByElements) {
+                    if (!(orderByElement.getExpr() instanceof SlotRef)) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Show stmt only support order by column");
+                    }
+                    SlotRef slotRef = (SlotRef) orderByElement.getExpr();
+                    int index = meta.getColumnIdx(slotRef.getColumnName().toLowerCase());
+                    orderByPairs.add(new OrderByPair(index, orderByElement.getIsAsc()));
+                }
+                showStmt.setOrderByPairs(orderByPairs);
+            }
+            // check limit
+            if (!showStmt.isSelfLimit() && showStmt.getLimitElement() != null) {
+                if (!showStmt.getLimitElement().getLimitExpr().isConstant()) {
+                    throw new SemanticException("Limit expr must be constant");
+                }
+                if (!showStmt.getLimitElement().getOffsetExpr().isConstant()) {
+                    throw new SemanticException("Offset expr must be constant");
+                }
+            }
+        }
+
+
         @Override
         public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
-            TableName tbl = statement.getTbl();
-            tbl.normalization(context);
-            String dbName = statement.getDbName();
-            dbName = getDatabaseName(dbName, context);
-            statement.setDbName(dbName);
+            TableRef tableRef = AnalyzerUtils.normalizedTableRef(statement.getTableRef(), context);
+            statement.setTableRef(tableRef);
+            String catalogName = tableRef.getCatalogName();
+            String dbName = tableRef.getDbName();
             final Map<String, Expr> filterMap = statement.getFilterMap();
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, tbl.getCatalog(), dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
 
-            final String tableName = statement.getTableName();
+            final String tableName = tableRef.getTableName();
             final boolean isTempPartition = statement.isTempPartition();
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 Table table =
-                        MetaUtils.getSessionAwareTable(context, db, new TableName(tbl.getCatalog(), dbName, tableName));
+                        MetaUtils.getSessionAwareTable(context, db, new TableName(catalogName, dbName, tableName));
                 if (!(table instanceof OlapTable) && !(table instanceof PaimonTable)) {
                     throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP/Paimon table");
                 }
@@ -617,7 +659,7 @@ public class ShowStmtAnalyzer {
                     }
                 } else if (table instanceof PaimonTable) {
                     stringBuilder.append("/catalog/");
-                    stringBuilder.append(tbl.getCatalog());
+                    stringBuilder.append(catalogName);
                     stringBuilder.append("/").append(dbName);
                     stringBuilder.append("/").append(tableName);
                     stringBuilder.append("/partitions");

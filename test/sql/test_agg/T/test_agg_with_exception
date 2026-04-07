@@ -27,3 +27,8 @@ admin enable failpoint 'aggregate_build_hash_map_bad_alloc';
 [UC]select count(*) from t0 group by c0 limit 10;
 admin disable failpoint 'aggregate_build_hash_map_bad_alloc';
 
+CLEANUP {
+  admin disable failpoint 'agg_hash_set_bad_alloc';
+  admin disable failpoint 'aggregate_build_hash_map_bad_alloc';
+} END CLEANUP
+

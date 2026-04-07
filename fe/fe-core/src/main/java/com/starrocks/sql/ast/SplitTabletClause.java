@@ -28,11 +28,11 @@ public class SplitTabletClause extends AlterTableClause {
 
     private final Map<String, String> properties;
 
-    private long tabletReshardSplitSize;
+    private long tabletReshardTargetSize;
 
     public SplitTabletClause() {
         this(null, null, null);
-        this.tabletReshardSplitSize = Config.tablet_reshard_split_size;
+        this.tabletReshardTargetSize = Config.tablet_reshard_target_size;
     }
 
     public SplitTabletClause(
@@ -65,25 +65,27 @@ public class SplitTabletClause extends AlterTableClause {
         return properties;
     }
 
-    public long getTabletReshardSplitSize() {
-        return tabletReshardSplitSize;
+    public long getTabletReshardTargetSize() {
+        return tabletReshardTargetSize;
     }
 
-    public void setTabletReshardSplitSize(long tabletReshardSplitSize) {
-        this.tabletReshardSplitSize = tabletReshardSplitSize;
+    public void setTabletReshardTargetSize(long tabletReshardTargetSize) {
+        this.tabletReshardTargetSize = tabletReshardTargetSize;
     }
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("SPLIT TABLET\n");
         if (partitionNames != null) {
+            sb.append("SPLIT TABLET ");
             sb.append(partitionNames.toString());
             sb.append('\n');
-        }
-        if (tabletList != null) {
+        } else if (tabletList != null) {
+            sb.append("SPLIT ");
             sb.append(tabletList.toString());
             sb.append('\n');
+        } else {
+            sb.append("SPLIT TABLET\n");
         }
         if (properties != null && !properties.isEmpty()) {
             sb.append("PROPERTIES (\n").append(new PrintableMap<>(properties, "=", true, true)).append(")");

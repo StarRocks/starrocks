@@ -19,8 +19,9 @@
 #include <future>
 #include <thread>
 
+#include "base/testutil/assert.h"
 #include "column/fixed_length_column.h"
-#include "testutil/assert.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

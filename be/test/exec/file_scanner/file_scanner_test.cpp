@@ -18,10 +18,10 @@
 
 #include <limits>
 
+#include "base/testutil/assert.h"
 #include "common/status.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

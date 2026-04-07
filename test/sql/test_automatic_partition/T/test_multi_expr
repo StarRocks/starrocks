@@ -100,7 +100,7 @@ insert into multi_level_expr_par_tbl(k1,k2,k3) values('2020-01-01','2020-01-01',
 insert into multi_level_expr_par_tbl select * from multi_level_expr_par_tbl;
 select * from multi_level_expr_par_tbl;
 
--- name: test_ctas_from_normal_table
+-- name: test_ctas_from_normal_table @native
 CREATE TABLE base_tbl_unix_ts (c1 bigint, c2 string, c3 date);
 insert into base_tbl_unix_ts values(1592841600, 'beijing', '2020-06-23');
 CREATE TABLE multi_level_expr_par_tbl_1 primary KEY(c1) PARTITION BY from_unixtime(c1) DISTRIBUTED BY HASH(c1) BUCKETS 3 as select * from base_tbl_unix_ts;

@@ -16,20 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/parallel_test.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks {
-
-TypeDescriptor map_type(LogicalType key, LogicalType value) {
-    TypeDescriptor type_creator;
-    type_creator.type = LogicalType::TYPE_MAP;
-    type_creator.children.emplace_back(key);
-    type_creator.children.emplace_back(value);
-    return type_creator;
-}
 
 PARALLEL_TEST(MapFunctionsTest, test_map) {
     TypeDescriptor input_keys_type;

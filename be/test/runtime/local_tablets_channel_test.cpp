@@ -17,10 +17,17 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include "base/brpc/reusable_closure.h"
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/id_generator.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
+#include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "common/runtime_profile.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
@@ -30,11 +37,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_schema.h"
-#include "testutil/assert.h"
-#include "testutil/id_generator.h"
-#include "util/failpoint/fail_point.h"
-#include "util/reusable_closure.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -63,7 +65,7 @@ protected:
 
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
-        _load_channel_mgr = std::make_unique<LoadChannelMgr>();
+        _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr);
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
         _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), nullptr, _load_id, _txn_id, string(),
                                                       1000, std::move(load_mem_tracker));

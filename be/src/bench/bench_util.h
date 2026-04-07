@@ -120,7 +120,7 @@ public:
     static MutableColumnPtr create_random_string_column(int num_rows, int min_length) {
         std::vector<string> elements = create_random_string(num_rows, min_length, 60);
         TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
-        auto column = ColumnHelper::create_column(type_desc, false)->as_mutable_ptr();
+        auto column = ColumnHelper::create_column(type_desc, false);
         for (auto& x : elements) {
             column->append_datum(Datum(Slice(x)));
         }

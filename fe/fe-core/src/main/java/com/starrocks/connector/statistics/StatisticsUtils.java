@@ -88,34 +88,36 @@ public class StatisticsUtils {
 
     public static ConnectorTableColumnStats estimateColumnStatistics(Table table, String columnName,
                                                                      ConnectorTableColumnStats connectorTableColumnStats) {
-        Triple<String, Database, Table> tableIdentifier = getTableTripleByUUID(new ConnectContext(), table.getUUID());
-        ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
-                getExternalTableBasicStatsMeta(tableIdentifier.getLeft(), tableIdentifier.getMiddle().getFullName(),
-                        tableIdentifier.getRight().getName());
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+            Triple<String, Database, Table> tableIdentifier = getTableTripleByUUID(scope.getContext(), table.getUUID());
+            ExternalBasicStatsMeta externalBasicStatsMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().
+                    getExternalTableBasicStatsMeta(tableIdentifier.getLeft(), tableIdentifier.getMiddle().getFullName(),
+                            tableIdentifier.getRight().getName());
 
-        if (externalBasicStatsMeta == null) {
-            return connectorTableColumnStats;
+            if (externalBasicStatsMeta == null) {
+                return connectorTableColumnStats;
+            }
+
+            Map<String, ColumnStatsMeta> columnStatsMetaMap = externalBasicStatsMeta.getColumnStatsMetaMap();
+            if (!columnStatsMetaMap.containsKey(columnName)) {
+                return connectorTableColumnStats;
+            }
+
+            ColumnStatsMeta columnStatsMeta = columnStatsMetaMap.get(columnName);
+            if (columnStatsMeta.getType() == StatsConstants.AnalyzeType.FULL) {
+                return connectorTableColumnStats;
+            }
+
+            // the column statistics analyze type is sample , we need to estimate the table level column statistics
+            int sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
+            int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
+
+            double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
+            long totalRowCount = (long) avgPartitionRowCount * totalPartitionSize;
+
+            return new ConnectorTableColumnStats(connectorTableColumnStats.getColumnStatistic(),
+                    totalRowCount, connectorTableColumnStats.getUpdateTime());
         }
-
-        Map<String, ColumnStatsMeta> columnStatsMetaMap = externalBasicStatsMeta.getColumnStatsMetaMap();
-        if (!columnStatsMetaMap.containsKey(columnName)) {
-            return connectorTableColumnStats;
-        }
-
-        ColumnStatsMeta columnStatsMeta = columnStatsMetaMap.get(columnName);
-        if (columnStatsMeta.getType() == StatsConstants.AnalyzeType.FULL) {
-            return connectorTableColumnStats;
-        }
-
-        // the column statistics analyze type is sample , we need to estimate the table level column statistics
-        int sampledPartitionSize = columnStatsMeta.getSampledPartitionsHashValue().size();
-        int totalPartitionSize = columnStatsMeta.getAllPartitionSize();
-
-        double avgPartitionRowCount = connectorTableColumnStats.getRowCount() * 1.0 / sampledPartitionSize;
-        long totalRowCount = (long) avgPartitionRowCount * totalPartitionSize;
-
-        return new ConnectorTableColumnStats(connectorTableColumnStats.getColumnStatistic(),
-                totalRowCount, connectorTableColumnStats.getUpdateTime());
     }
 
 }

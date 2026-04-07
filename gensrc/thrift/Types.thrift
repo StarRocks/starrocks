@@ -35,6 +35,7 @@
 namespace cpp starrocks
 namespace java com.starrocks.thrift
 
+include "CloudConfiguration.thrift"
 
 typedef i64 TTimestamp
 typedef i32 TPlanNodeId
@@ -392,6 +393,7 @@ struct TFunction {
   34: optional bool isolated
   35: optional string input_type
   36: optional string content
+  37: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
 enum TLoadJobState {
@@ -434,7 +436,9 @@ enum TTableType {
     ICEBERG_SNAPSHOTS_TABLE,
     ICEBERG_MANIFESTS_TABLE,
     ICEBERG_FILES_TABLE,
-    ICEBERG_PARTITIONS_TABLE
+    ICEBERG_PARTITIONS_TABLE,
+    BENCHMARK_TABLE,
+    ICEBERG_PROPERTIES_TABLE
 }
 
 enum TKeysType {
@@ -442,6 +446,12 @@ enum TKeysType {
     DUP_KEYS,
     UNIQUE_KEYS,
     AGG_KEYS
+}
+
+enum TPrimaryKeyEncodingType {
+    PK_ENCODING_TYPE_NONE = 0,
+    PK_ENCODING_TYPE_V1 = 1,
+    PK_ENCODING_TYPE_V2 = 2
 }
 
 enum TPriority {
@@ -578,6 +588,12 @@ struct TIcebergColumnStats {
     6: optional map<i32, binary> upper_bounds;
 }
 
+enum TIcebergFileContent {
+    DATA,
+    POSITION_DELETES,
+    EQUALITY_DELETES,
+}
+
 struct TIcebergDataFile {
     1: optional string path
     2: optional string format
@@ -587,6 +603,8 @@ struct TIcebergDataFile {
     6: optional list<i64> split_offsets;
     7: optional TIcebergColumnStats column_stats;
     8: optional string partition_null_fingerprint;
+    9: optional TIcebergFileContent file_content;
+    10: optional string referenced_data_file;
 }
 
 struct THiveFileInfo {
@@ -631,10 +649,17 @@ struct TParquetOptions {
     4: optional string version
 }
 
+enum TVariantType {
+    NORMAL_VALUE = 0,
+    NULL_VALUE = 1,
+    MINIMUM = 2,
+    MAXIMUM = 3,
+}
+
 struct TVariant {
     1: optional TTypeDesc type
-    2: optional i64 int_value
-    3: optional string string_value
+    2: optional string value
+    3: optional TVariantType variant_type
 }
 
 struct TTuple {

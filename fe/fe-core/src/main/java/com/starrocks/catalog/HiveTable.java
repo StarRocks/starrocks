@@ -46,11 +46,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.HiveUtils;
+import com.starrocks.connector.hive.Partition;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.planner.expression.ExprToThrift;
@@ -67,6 +67,7 @@ import com.starrocks.thrift.TTableType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -261,8 +262,8 @@ public class HiveTable extends Table {
     }
 
     public void modifyTableSchema(String dbName, String tableName, HiveTable updatedTable) {
-        ImmutableList.Builder<Column> fullSchemaTemp = ImmutableList.builder();
-        ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
+        ImmutableList.Builder<Column> fullSchemaTempBuilder = ImmutableList.builder();
+        ImmutableList.Builder<String> dataColumnNamesTempBuilder = ImmutableList.builder();
 
         updatedTable.nameToColumn.forEach((colName, column) -> {
             Column baseColumn = nameToColumn.get(colName);
@@ -271,31 +272,41 @@ public class HiveTable extends Table {
             }
         });
 
-        fullSchemaTemp.addAll(updatedTable.fullSchema);
-        dataColumnNamesTemp.addAll(updatedTable.dataColumnNames);
+        fullSchemaTempBuilder.addAll(updatedTable.fullSchema);
+        dataColumnNamesTempBuilder.addAll(updatedTable.dataColumnNames);
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }
+        ImmutableList<Column> fullSchemaTemp = fullSchemaTempBuilder.build();
+        ImmutableList<String> dataColumnNamesTemp = dataColumnNamesTempBuilder.build();
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            this.fullSchema.clear();
-            this.nameToColumn.clear();
-            this.dataColumnNames.clear();
-
-            this.fullSchema.addAll(fullSchemaTemp.build());
-            updateSchemaIndex();
-            this.dataColumnNames.addAll(dataColumnNamesTemp.build());
-
             if (GlobalStateMgr.getCurrentState().isLeader()) {
-                ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog(dbName, tableName, fullSchema);
-                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
+                ModifyTableColumnOperationLog log =
+                        new ModifyTableColumnOperationLog(dbName, tableName, new ArrayList<>(fullSchemaTemp));
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log, wal -> {
+                    modifyTableSchemaInternal(fullSchemaTemp, dataColumnNamesTemp);
+                });
+            } else {
+                modifyTableSchemaInternal(fullSchemaTemp, dataColumnNamesTemp);
             }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
+    }
+
+    protected void modifyTableSchemaInternal(ImmutableList<Column> newFullSchema,
+                                           ImmutableList<String> newDataColumnNames) {
+        this.fullSchema.clear();
+        this.nameToColumn.clear();
+        this.dataColumnNames.clear();
+
+        this.fullSchema.addAll(newFullSchema);
+        updateSchemaIndex();
+        this.dataColumnNames.addAll(newDataColumnNames);
     }
 
     @Override
@@ -331,10 +342,18 @@ public class HiveTable extends Table {
         for (ReferencedPartitionInfo partition : partitions) {
             partitionNames.add(PartitionUtil.toHivePartitionName(getPartitionColumnNames(), partition.getKey()));
         }
-        List<PartitionInfo> hivePartitions;
+        List<Partition> hivePartitions;
         try {
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                    .getPartitions(this.getCatalogName(), this, partitionNames);
+                    .getPartitions(this.getCatalogName(), this, partitionNames)
+                    .stream()
+                    .map(partitionInfo -> {
+                        Preconditions.checkState(partitionInfo instanceof Partition,
+                                "partition info for hive table %s is not a hive partition: %s",
+                                name, partitionInfo.getClass());
+                        return (Partition) partitionInfo;
+                    })
+                    .collect(Collectors.toList());
         } catch (StarRocksConnectorException e) {
             LOG.warn("table {} gets partition info failed.", name, e);
             return null;
@@ -553,5 +572,11 @@ public class HiveTable extends Table {
                     tableLocation, comment, createTime, partitionColNames, dataColNames, properties, serdeProperties,
                     storageFormat, hiveTableType);
         }
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.CREATE, TableOperation.INSERT, TableOperation.DROP,
+                TableOperation.ALTER, TableOperation.CREATE_TABLE_LIKE);
     }
 }

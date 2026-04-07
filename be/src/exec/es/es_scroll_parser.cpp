@@ -16,14 +16,14 @@
 
 #include <fmt/format.h>
 
+#include "base/time/timezone_utils.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/timestamp_value.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -128,8 +128,7 @@ static Status get_int_value(const rapidjson::Value& col, LogicalType type, void*
     return Status::OK();
 }
 
-ScrollParser::ScrollParser(bool doc_value_mode)
-        : _tuple_desc(nullptr), _doc_value_context(nullptr), _size(0), _cur_line(0), _temp_writer(_scratch_buffer) {}
+ScrollParser::ScrollParser(bool doc_value_mode) : _temp_writer(_scratch_buffer) {}
 
 Status ScrollParser::parse(const std::string& scroll_result, bool exactly_once) {
     _size = 0;

@@ -31,6 +31,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.catalog.VirtualColumnRegistry;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -132,15 +133,18 @@ public class StatisticUtils {
         context.getSessionVariable().setEnablePlanSerializeConcurrently(false);
         // set the max task num of connector io tasks per scan operator to collectStatsIoTasksPerConnectorOperator,
         // default value is 4, avoid generate too many chunk source for collect stats in BE
-        context.getSessionVariable().setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
+        context.getSessionVariable()
+                .setConnectorIoTasksPerScanOperator(Config.collect_stats_io_tasks_per_connector_operator);
         context.getSessionVariable().setEnableSPMRewrite(false);
         context.getSessionVariable().setSingleNodeExecPlan(false);
+        context.getSessionVariable().setEnablePredicateColLateMaterialize(false);
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getBackgroundWarehouse();
         context.setCurrentWarehouse(warehouse.getName());
 
         context.setStatisticsContext(true);
+        context.setOnlyReadIcebergCache(true);
         context.setDatabase(StatsConstants.STATISTICS_DB_NAME);
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -195,7 +199,8 @@ public class StatisticUtils {
 
         for (String dbName : COLLECT_DATABASES_BLACKLIST) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
-            if (null != db && null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
+            if (null != db &&
+                    null != GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId)) {
                 return true;
             }
         }
@@ -234,9 +239,9 @@ public class StatisticUtils {
 
             // check replicate miss
             for (Partition partition : table.getPartitions()) {
-                if (partition.getDefaultPhysicalPartition().getBaseIndex().getTablets().stream()
+                if (partition.getDefaultPhysicalPartition().getLatestBaseIndex().getTablets().stream()
                         .anyMatch(t -> ((LocalTablet) t).getNormalReplicaBackendIds().isEmpty())) {
-                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas", 
+                    LOG.warn("Statistics table {} partition {} has tablets without normal replicas",
                             tableName, partition.getName());
                     return false;
                 }
@@ -248,7 +253,7 @@ public class StatisticUtils {
     public static LocalDateTime getTableLastUpdateTime(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
             long maxTime = table.getPartitions().stream().flatMap(p -> p.getSubPartitions().stream()).map(
-                        PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
+                    PhysicalPartition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
             return LocalDateTime.ofInstant(Instant.ofEpochMilli(maxTime), Clock.systemDefaultZone().getZone());
         } else {
             try {
@@ -427,7 +432,7 @@ public class StatisticUtils {
                     new ColumnDef("db_id", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("column_names", new TypeDef(columnNameType)),
-                    new ColumnDef("ndv",  new TypeDef(IntegerType.BIGINT)),
+                    new ColumnDef("ndv", new TypeDef(IntegerType.BIGINT)),
                     new ColumnDef("update_time", new TypeDef(DateType.DATETIME))
             );
         } else {
@@ -481,6 +486,14 @@ public class StatisticUtils {
             // disable stats collection for auto generated columns, see SelectAnalyzer#analyzeSelect
             if (column.isGeneratedColumn() && column.getName()
                     .startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                continue;
+            }
+            // skip hidden columns
+            if (column.isHidden()) {
+                continue;
+            }
+            // skip virtual columns (e.g. _tablet_id_), they are not real stored columns
+            if (VirtualColumnRegistry.isVirtualColumn(column.getName())) {
                 continue;
             }
             // generated column doesn't support cross DB use

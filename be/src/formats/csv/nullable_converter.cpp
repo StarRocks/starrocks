@@ -20,7 +20,7 @@
 
 namespace starrocks::csv {
 
-Status NullableConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status NullableConverter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                        const Options& options) const {
     if (column.is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(&column);
@@ -36,7 +36,7 @@ Status NullableConverter::write_string(OutputStream* os, const Column& column, s
     }
 }
 
-Status NullableConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status NullableConverter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                               const Options& options) const {
     if (column.is_nullable()) {
         auto nullable_column = down_cast<const NullableColumn*>(&column);
@@ -58,7 +58,7 @@ bool NullableConverter::read_string_for_adaptive_null_column(Column* column, Sli
     if (s == "\\N") {
         return nullable_column->append_nulls(1);
     }
-    auto* data = nullable_column->mutable_begin_append_not_default_value();
+    auto* data = nullable_column->begin_append_not_default_value();
     if (_base_converter->read_string(data, s, options)) {
         nullable_column->finish_append_one_not_default_value();
         return true;

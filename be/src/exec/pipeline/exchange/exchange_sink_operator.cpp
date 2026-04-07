@@ -21,11 +21,13 @@
 #include <random>
 #include <utility>
 
-#include "common/config.h"
-#include "exec/partition/bucket_aware_partition.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_network_fwd.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
+#include "runtime/bucket_aware_partition.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -662,6 +664,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
 
 void ExchangeSinkOperator::_calc_hash_values_and_bucket_ids() {
     std::vector<const Column*> partitions_columns;
+    partitions_columns.reserve(_partitions_columns.size());
     for (size_t i = 0; i < _partitions_columns.size(); i++) {
         partitions_columns.emplace_back(_partitions_columns[i].get());
     }
@@ -742,17 +745,23 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     const size_t serialized_size = dst->uncompressed_size();
     COUNTER_UPDATE(_serialized_bytes_counter, serialized_size * num_receivers);
 
-    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(serialized_size)) {
-        return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
-                                                         _compress_codec->max_input_size()));
-    }
-
-    // try compress the ChunkPB data
     bool use_compression = true;
-    if (_compress_strategy) {
+    // TODO: Better split the large chunk to smaller size and then compress.
+    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(serialized_size)) {
+        if (config::enable_rpc_compress_overflow_skip) {
+            LOG(WARNING) << "Serialized size " << serialized_size << " exceeds compression codec max input size "
+                         << _compress_codec->max_input_size() << ", skipping compression";
+            use_compression = false;
+        } else {
+            return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
+                                                             _compress_codec->max_input_size()));
+        }
+    } else if (_compress_strategy) {
+        // try compress the ChunkPB data
         use_compression = _compress_strategy->decide();
     }
-    if (_compress_codec != nullptr && serialized_size > 0 && use_compression) {
+
+    if (use_compression && _compress_codec != nullptr && serialized_size > 0) {
         ScopedTimer<MonotonicStopWatch> _timer(_compress_timer);
 
         if (use_compression_pool(_compress_codec->type())) {
@@ -859,15 +868,15 @@ Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
-        RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
-        RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(_partition_expr_ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(_partition_expr_ctxs, state));
     }
     return Status::OK();
 }
 
 void ExchangeSinkOperatorFactory::close(RuntimeState* state) {
     _buffer.reset();
-    Expr::close(_partition_expr_ctxs, state);
+    ExprExecutor::close(_partition_expr_ctxs, state);
     OperatorFactory::close(state);
 }
 

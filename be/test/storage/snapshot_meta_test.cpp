@@ -18,8 +18,8 @@
 
 #include <filesystem>
 
+#include "base/utility/defer_op.h"
 #include "fs/fs.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

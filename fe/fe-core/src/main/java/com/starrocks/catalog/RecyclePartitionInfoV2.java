@@ -41,10 +41,12 @@ public class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
     }
 
     @Override
-    void recover(OlapTable table) throws DdlException {
-        RecyclePartitionInfo.recoverRangePartition(table, this);
+    public void checkRecoverable(OlapTable table) throws DdlException {
+        checkRecoverableForRangePartition(table);
     }
 
-
-
+    @Override
+    public void recover(OlapTable table) {
+        recoverRangePartition(table);
+    }
 }

@@ -16,6 +16,7 @@ package com.starrocks.task;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -29,8 +30,6 @@ import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.ThreadUtil;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.journal.LeaderTransferException;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -100,7 +99,7 @@ public class TabletTaskExecutor {
             List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partitions.subList(i, endIndex),
                     computeResource, option);
             int partitionCount = endIndex - i;
-            int indexCountPerPartition = partitions.get(i).getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size();
+            int indexCountPerPartition = partitions.get(i).getLatestMaterializedIndices(IndexExtState.VISIBLE).size();
             int timeout = Config.tablet_create_timeout_second * countMaxTasksPerBackend(tasks);
             // Compatible with older versions, `Config.max_create_table_timeout_second` is the timeout time for a single index.
             // Here we assume that all partitions have the same number of indexes.
@@ -130,7 +129,7 @@ public class TabletTaskExecutor {
         long start = System.currentTimeMillis();
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(
-                partition -> partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
+                partition -> partition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size()).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
         long maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
         if (option.isEnableTabletCreationOptimization()) {
@@ -216,10 +215,10 @@ public class TabletTaskExecutor {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) physicalPartition.storageReplicaCount());
         // TabletCreationOptimization must ensure that the schemas of all tablets under a partition are consistent. 
         // If multiple indexes exist in the partition, disable TabletCreationOptimization.
-        if (physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
+        if (physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE).size() > 1) {
             option.setEnableTabletCreationOptimization(false);
         }
-        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+        for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, physicalPartition, index, computeResource, option));
         }
         return tasks;
@@ -236,7 +235,7 @@ public class TabletTaskExecutor {
         boolean isCloudNativeTable = table.isCloudNativeTableOrMaterializedView();
         boolean createSchemaFile = true;
         List<CreateReplicaTask> tasks = new ArrayList<>((int) index.getReplicaCount());
-        MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
+        MaterializedIndexMeta indexMeta = table.getIndexMetaByMetaId(index.getMetaId());
         TTabletType tabletType = isCloudNativeTable ? TTabletType.TABLET_TYPE_LAKE : TTabletType.TABLET_TYPE_DISK;
         TStorageMedium storageMedium =
                 table.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
@@ -253,6 +252,7 @@ public class TabletTaskExecutor {
                 .setBloomFilterColumnNames(table.getBfColumnIds())
                 .setBloomFilterFpp(table.getBfFpp())
                 .addColumns(indexMeta.getSchema())
+                .setPrimaryKeyEncodingType(table.getPrimaryKeyEncodingType())
                 .build().toTabletSchema();
 
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -291,6 +291,7 @@ public class TabletTaskExecutor {
                         .setEnableTabletCreationOptimization(option.isEnableTabletCreationOptimization())
                         .setGtid(option.getGtid())
                         .setCompactionStrategy(table.getCompactionStrategy())
+                        .setRange(table.isRangeDistribution() ? tablet.getRange() : null)
                         .build();
                 tasks.add(task);
                 createSchemaFile = false;
@@ -374,15 +375,6 @@ public class TabletTaskExecutor {
             long timeLeft = timeout;
             final long waitInterval = 1;
             while (timeLeft > 0) {
-                // fast fail for leader transfer
-                if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                    LOG.warn("leader transferred during creating tablets");
-                    if (ConnectContext.get() != null) {
-                        ConnectContext.get().setIsLeaderTransferred(true);
-                    }
-                    throw new LeaderTransferException();
-                }
-
                 if (countDownLatch.await(waitInterval, TimeUnit.SECONDS)) {
                     if (!countDownLatch.getStatus().ok()) {
                         String errMsg = "fail to create tablet: " + countDownLatch.getStatus().getErrorMsg();
@@ -454,10 +446,9 @@ public class TabletTaskExecutor {
         for (Partition partition : olapTable.getAllPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 List<MaterializedIndex> allIndices = physicalPartition
-                        .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                        .getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
-                    long indexId = materializedIndex.getId();
-                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(indexId);
+                    int schemaHash = olapTable.getSchemaHashByIndexMetaId(materializedIndex.getMetaId());
                     for (Tablet tablet : materializedIndex.getTablets()) {
                         long tabletId = tablet.getId();
                         List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();

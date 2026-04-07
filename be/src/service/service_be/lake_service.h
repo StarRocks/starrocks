@@ -15,7 +15,6 @@
 #pragma once
 #include <span>
 
-#ifndef __APPLE__
 #include "common/status.h"
 #include "gen_cpp/lake_service.pb.h"
 
@@ -99,6 +98,10 @@ public:
                           const ::starrocks::AbortCompactionRequest* request,
                           ::starrocks::AbortCompactionResponse* response, ::google::protobuf::Closure* done) override;
 
+    void drop_tablet_cache(::google::protobuf::RpcController* controller,
+                           const ::starrocks::DropTabletCacheRequest* request,
+                           ::starrocks::DropTabletCacheResponse* response, ::google::protobuf::Closure* done) override;
+
     void vacuum(::google::protobuf::RpcController* controller, const ::starrocks::VacuumRequest* request,
                 ::starrocks::VacuumResponse* response, ::google::protobuf::Closure* done) override;
 
@@ -136,4 +139,3 @@ private:
 std::string get_txn_ids_string(const PublishVersionRequest* request);
 
 } // namespace starrocks
-#endif // __APPLE__

@@ -16,12 +16,12 @@
 
 #include <memory>
 
+#include "base/string/slice.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
-#include "io/input_stream.h"
-#include "util/runtime_profile.h"
-#include "util/slice.h"
+#include "io/core/input_stream.h"
 
 namespace starrocks::spill {
 
@@ -116,6 +116,10 @@ struct AcquireBlockOptions {
     BlockAffinityGroup affinity_group = kDefaultBlockAffinityGroup;
     // force to use remote block
     bool force_remote = false;
+    // When true, the container will not attempt to delete the parent directory (e.g. query_id dir)
+    // in its destructor. This is used by LoadSpillBlockManager which defers parent path cleanup
+    // to its own destructor via clear_parent_path(), ensuring all spill files are removed first.
+    bool skip_parent_path_deletion = false;
 };
 
 // BlockManager is used to manage the life cycle of the Block.

@@ -19,6 +19,7 @@
 #include <memory>
 #include <sstream>
 
+#include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/array_view_column.h"
 #include "column/chunk.h"
@@ -33,7 +34,6 @@
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
 #include "runtime/user_function_cache.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
@@ -106,7 +106,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
     // 1. evaluate outer common expressions
     for (const auto& [slot_id, expr] : _outer_common_exprs) {
         ASSIGN_OR_RETURN(auto col, context->evaluate(expr, tmp_chunk.get()));
-        tmp_chunk->append_column(col, slot_id);
+        tmp_chunk->append_column(std::move(col), slot_id);
     }
     auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
     std::vector<SlotId> capture_slot_ids;
@@ -175,7 +175,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         }
     }
     DCHECK(aligned_offsets != nullptr);
-    auto& aligned_offsets_data = UInt32Column::static_pointer_cast(aligned_offsets->as_mutable_ptr())->get_data();
+    auto& aligned_offsets_data =
+            ColumnHelper::as_raw_column<UInt32Column>(aligned_offsets->as_mutable_raw_ptr())->get_data();
 
     // 4. prepare capture columns
     for (auto slot_id : capture_slot_ids) {
@@ -227,8 +228,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], cur_chunk.get()));
             tmp_col->check_or_die();
             // if result is a const column, we should unpack it first and make it to be the elements column of array column
-            column = ColumnHelper::unpack_and_duplicate_const_column(tmp_col->size(), std::move(tmp_col));
-            column = ColumnHelper::align_return_type(std::move(column), type().children[0], column->size(), true);
+            size_t num_rows = tmp_col->size();
+            column = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], num_rows, true);
         } else {
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
@@ -247,7 +248,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], tmp_chunk->num_rows(),
                                                           true);
                 if (column == nullptr) {
-                    column = tmp_col->as_mutable_ptr();
+                    column = std::move(*tmp_col).mutate();
                 } else {
                     column->append(*tmp_col);
                 }
@@ -267,11 +268,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         new_aligned_offsets->append(0);
         new_aligned_offsets->append(data_column->size());
         aligned_offsets = std::move(new_aligned_offsets);
-        auto array_column = ArrayColumn::create(data_column->as_mutable_ptr(), aligned_offsets);
+        auto array_column = ArrayColumn::create(std::move(*data_column).mutate(), aligned_offsets);
         array_column->check_or_die();
         ColumnPtr result_column = array_column;
         if (result_null_column != nullptr) {
-            result_column = NullableColumn::create(std::move(array_column), std::move(result_null_column));
+            result_column = NullableColumn::create(std::move(array_column), result_null_column);
             result_column->check_or_die();
         }
         result_column = ConstColumn::create(result_column, chunk->num_rows());
@@ -282,7 +283,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 ArrayColumn::create(std::move(column), ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone()));
         array_column->check_or_die();
         if (result_null_column != nullptr) {
-            return NullableColumn::create(std::move(array_column), std::move(result_null_column));
+            return NullableColumn::create(std::move(array_column), result_null_column);
         }
         return array_column;
     }
@@ -381,7 +382,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
         array_col->check_or_die();
         if (result_null_column) {
-            auto result_null_mut = NullColumn::static_pointer_cast(std::move(result_null_column)->as_mutable_ptr());
+            auto result_null_mut = NullColumn::static_pointer_cast(std::move(*result_null_column).mutate());
             result_null_mut->resize(1);
             auto result = ConstColumn::create(NullableColumn::create(std::move(array_col), std::move(result_null_mut)),
                                               chunk->num_rows());
@@ -441,6 +442,15 @@ int ArrayMapExpr::get_slot_ids(std::vector<SlotId>* slot_ids) const {
         num += (expr->get_slot_ids(slot_ids));
     }
     return num;
+}
+
+Status ArrayMapExpr::do_for_each_child(const std::function<Status(Expr*)>& callback) {
+    RETURN_IF_ERROR(Expr::do_for_each_child(callback));
+
+    for (const auto& [slot_id, expr] : _outer_common_exprs) {
+        RETURN_IF_ERROR(callback(expr));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks

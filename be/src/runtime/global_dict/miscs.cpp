@@ -16,9 +16,9 @@
 
 #include <vector>
 
+#include "base/string/slice.h"
 #include "column/binary_column.h"
 #include "column/nullable_column.h"
-#include "util/slice.h"
 
 namespace starrocks {
 

@@ -19,13 +19,14 @@
 #include <algorithm>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
+#include "common/config_exec_fwd.h"
 #include "glog/logging.h"
 #include "orc/OrcFile.hh"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -96,7 +97,11 @@ public:
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
         ScannerCounter* counter_ptr = counter != nullptr ? counter : _counter;
-        return std::make_unique<ORCScanner>(_runtime_state.get(), _profile, *broker_scan_range, counter_ptr);
+        auto scanner = std::make_unique<ORCScanner>(_runtime_state.get(), _profile, *broker_scan_range, counter_ptr);
+        EXPECT_EQ("orc", scanner->file_format());
+        // scan_type is not set in TBrokerScanRangeParams, default to LOAD
+        EXPECT_EQ("load", scanner->scan_type());
+        return scanner;
     }
 
     std::string data_file_path(const std::string& file_name) const {
@@ -214,6 +219,7 @@ TEST_F(ORCScannerTest, implicit_cast) {
     EXPECT_EQ(2, chunk->num_rows());
     EXPECT_EQ("['11', '2020-01-01']", chunk->debug_row(0));
     EXPECT_EQ("['11', '2020-01-02']", chunk->debug_row(1));
+    EXPECT_EQ(ranges.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 Status ORCScannerTest::_init_multi_stripe_context(MultiStripeContext* ctx) {

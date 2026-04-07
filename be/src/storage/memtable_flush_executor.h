@@ -38,11 +38,11 @@
 #include <memory>
 #include <vector>
 
+#include "base/concurrency/spinlock.h"
 #include "common/status.h"
+#include "common/thread/threadpool.h"
 #include "storage/memtable.h"
 #include "storage/olap_define.h"
-#include "util/spinlock.h"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -54,10 +54,10 @@ class MemTable;
 // the statistic of a certain flush handler.
 // use atomic because it may be updated by multi threads
 struct FlushStatistic {
-    int64_t flush_count = 0;
-    int64_t cur_flush_count = 0;
+    std::atomic<int64_t> flush_count = 0;
+    std::atomic<int64_t> cur_flush_count = 0;
     std::atomic<int64_t> queueing_memtable_num = 0;
-    int64_t pending_time_ns = 0;
+    std::atomic<int64_t> pending_time_ns = 0;
     MemtableStats memtable_stats;
 };
 
@@ -88,6 +88,14 @@ public:
     // wait all tasks in token to be completed.
     Status wait();
 
+    // Wait for all tasks in token to be completed with timeout support.
+    // This method is useful for memory-pressure-aware waiting where the caller
+    // needs to periodically check memory status while waiting for flush completion.
+    // @param timeout_ms: Maximum time to wait in milliseconds
+    // @return StatusOr<bool>: Returns true if all tasks completed, false if timeout.
+    //         Returns error Status if any flush task failed.
+    StatusOr<bool> wait_for(int64_t timeout_ms);
+
     // get flush operations' statistics
     const FlushStatistic& get_stats() const { return _stats; }
 
@@ -110,7 +118,7 @@ public:
 private:
     friend class MemtableFlushTask;
 
-    void _flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos, int64_t* flush_data_size);
+    void _flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos, int64_t* flush_data_size, int64_t slot_idx);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 
@@ -120,6 +128,11 @@ private:
     Status _status;
 
     FlushStatistic _stats;
+
+    // Auto-incrementing slot index for tracking flush task submission order.
+    // Each submitted flush task gets a unique slot_idx, which is passed to the
+    // memtable flush to preserve ordering information for parallel flush scenarios.
+    int64_t _slot_idx = 0;
 };
 
 // MemTableFlushExecutor is responsible for flushing memtables to disk.

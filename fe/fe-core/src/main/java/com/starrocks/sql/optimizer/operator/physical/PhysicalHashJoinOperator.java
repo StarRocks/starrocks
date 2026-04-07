@@ -30,6 +30,10 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
     private ScalarOperator skewColumn;
     private List<ScalarOperator> skewValues;
     private Optional<PhysicalHashJoinOperator> skewJoinFriend = Optional.empty();
+
+    // Only meaningful for skew join: 0=left child, 1=right child, -1=unknown/not skew join.
+    // TODO(stephen): Support runtime filters for right-skew joins safely.
+    private int skewSideChildIndex = -1;
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
@@ -83,6 +87,14 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
 
     public void setSkewJoinFriend(PhysicalHashJoinOperator skewJoinFriend) {
         this.skewJoinFriend = Optional.ofNullable(skewJoinFriend);
+    }
+
+    public int getSkewSideChildIndex() {
+        return skewSideChildIndex;
+    }
+
+    public void setSkewSideChildIndex(int skewSideChildIndex) {
+        this.skewSideChildIndex = skewSideChildIndex;
     }
 
     @Override

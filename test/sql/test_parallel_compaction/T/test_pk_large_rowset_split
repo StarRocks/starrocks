@@ -1,0 +1,89 @@
+-- name: test_pk_large_rowset_split_basic @cloud @sequential
+-- Test PK table large rowset split feature
+
+create database test_pk_large_rowset_split_${uuid0};
+use test_pk_large_rowset_split_${uuid0};
+
+-- Save original configs
+[UC]orig_max_rowset_size=SELECT VALUE from information_schema.be_configs where name='lake_compaction_max_rowset_size' limit 1;
+[UC]orig_max_bytes_per_subtask=SELECT VALUE from information_schema.be_configs where name='lake_compaction_max_bytes_per_subtask' limit 1;
+[UC]orig_write_buffer_size=SELECT VALUE from information_schema.be_configs where name='write_buffer_size' limit 1;
+[UC]orig_enable_load_spill=SELECT VALUE from information_schema.be_configs where name='enable_load_spill' limit 1;
+
+-- Disable global compaction FIRST to prevent background compaction
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "0");
+
+-- Set write config for multiple segments
+UPDATE information_schema.be_configs SET VALUE = 'false' WHERE name = 'enable_load_spill';
+UPDATE information_schema.be_configs SET VALUE = '1048576' WHERE name = 'write_buffer_size';
+
+SELECT sleep(2);
+
+-- Create PK table with VARCHAR column (harder to compress) and parallel compaction enabled
+CREATE TABLE `pk_large_split` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(500),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "4"
+);
+
+-- Single INSERT with random string data (harder to compress)
+INSERT INTO pk_large_split SELECT generate_series, generate_series, CONCAT(MD5(CAST(generate_series AS STRING)), MD5(CAST(generate_series*2 AS STRING)), MD5(CAST(generate_series*3 AS STRING)), MD5(CAST(generate_series*4 AS STRING)), MD5(CAST(generate_series*5 AS STRING)), MD5(CAST(generate_series*6 AS STRING)), MD5(CAST(generate_series*7 AS STRING)), MD5(CAST(generate_series*8 AS STRING)), MD5(CAST(generate_series*9 AS STRING)), MD5(CAST(generate_series*10 AS STRING))), generate_series * 10 FROM TABLE(generate_series(1, 50000));
+
+SELECT sleep(1);
+
+-- Check before compaction: should have 1 rowset with multiple segments
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
+SELECT NUM_SEGMENT >= 4 as has_enough_segments FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
+[UC]seg_before=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
+[UC]version_before=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
+[UC]data_size=SELECT DATA_SIZE FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
+
+SELECT COUNT(*) FROM pk_large_split;
+
+-- Set compaction thresholds for large rowset split:
+-- data_size ~= 15MB, 13 segments, each segment ~= 1.15MB
+-- lake_compaction_max_rowset_size = 2MB so each segment < 2MB (passes min_input_segment_check)
+-- min_size = 2 * 2MB = 4MB, data_size 15MB >= 4MB (passes _is_large_rowset_for_split)
+-- lake_compaction_max_bytes_per_subtask = 3MB so data_size > 3MB (passes _is_large_rowset_for_split)
+UPDATE information_schema.be_configs SET VALUE = '2097152' WHERE name = 'lake_compaction_max_rowset_size';
+UPDATE information_schema.be_configs SET VALUE = '3145728' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+SELECT sleep(2);
+
+-- Re-enable compaction and trigger
+ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
+[UC]ALTER TABLE pk_large_split COMPACT;
+
+SELECT sleep(30);
+
+-- Show compaction status
+[UC]SHOW PROC '/compactions';
+
+-- Check after compaction
+[UC]version_after=SELECT MAX_VERSION FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
+SELECT ${version_after} > ${version_before} as compaction_happened;
+
+-- Parallel compaction produces multiple rowsets (one per subtask)
+-- Check NUM_ROWSET > 1 indicates parallel compaction was triggered
+[UC]rowset_after=SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
+SELECT ${rowset_after} > 1 as parallel_compaction_triggered;
+
+[UC]seg_after=SELECT NUM_SEGMENT FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_split' AND c.TABLE_SCHEMA = 'test_pk_large_rowset_split_${uuid0}';
+SELECT ${seg_after} < ${seg_before} as segments_reduced;
+
+SELECT COUNT(*) FROM pk_large_split;
+SELECT k1, k2, LENGTH(v1), v2 FROM pk_large_split WHERE k1 IN (1, 10000, 20000, 30000, 40000, 50000) ORDER BY k1;
+
+-- Restore configs
+UPDATE information_schema.be_configs SET VALUE = '${orig_max_rowset_size}' WHERE name = 'lake_compaction_max_rowset_size';
+UPDATE information_schema.be_configs SET VALUE = '${orig_max_bytes_per_subtask}' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+UPDATE information_schema.be_configs SET VALUE = '${orig_write_buffer_size}' WHERE name = 'write_buffer_size';
+UPDATE information_schema.be_configs SET VALUE = '${orig_enable_load_spill}' WHERE name = 'enable_load_spill';
+
+DROP DATABASE test_pk_large_rowset_split_${uuid0} FORCE;

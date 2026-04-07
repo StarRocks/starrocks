@@ -69,6 +69,7 @@ from lib.connection_base_lib import BaseConnectionLib
 from lib.github_issue import GitHubApi
 from lib.mysql_lib import MysqlLib
 from lib.mysql_prepared_stmt_lib import MysqlPreparedStmtLib
+from lib.mysql_stmt_metadata_lib import MySQLStmtMetadataClient
 from lib.trino_lib import TrinoLib
 from lib.spark_lib import SparkLib
 from lib.hive_lib import HiveLib
@@ -164,6 +165,7 @@ class StarrocksSQLApiLib(object):
         self.starrocks_sql_lib = MysqlLib()
         self.mysql_lib = self.starrocks_sql_lib
         self.mysql_prepared_stmt_lib = MysqlPreparedStmtLib()
+        self.mysql_stmt_metadata_client_class = MySQLStmtMetadataClient
         self.trino_lib = TrinoLib()
         self.spark_lib = SparkLib()
         self.hive_lib = HiveLib()
@@ -1760,6 +1762,34 @@ class StarrocksSQLApiLib(object):
             row_count == 0, f"wait db transaction finish error, timeout {timeout_sec}s, row_count={row_count}"
         )
 
+    def get_running_transaction_count(self, db_name):
+        """
+        Get the number of running transactions in the specified database.
+        :param db_name: database name
+        :return: row count as string (for safe variable substitution in sql test framework)
+        """
+        sql = f"show proc '/transactions/{db_name}/running'"
+        result = self.execute_sql(sql, True)
+        tools.assert_true(result["status"], f"Failed to execute SQL: {result}")
+        row_count = len(result["result"]) if "result" in result and result["result"] is not None else 0
+        return str(row_count)
+
+    def get_single_running_transaction_label(self, db_name):
+        """
+        Get the label of the single running transaction in the specified database.
+        Assert there is exactly one running transaction.
+        :param db_name: database name
+        :return: label string
+        """
+        sql = f"show proc '/transactions/{db_name}/running'"
+        result = self.execute_sql(sql, True)
+        tools.assert_true(result["status"], f"Failed to execute SQL: {result}")
+        tools.assert_true("result" in result, f"Unexpected SQL result: {result}")
+        tools.assert_equal(1, len(result["result"]), f"Expected exactly 1 running transaction, got {len(result['result'])}")
+        row = result["result"][0]
+        tools.assert_true(len(row) > 1, f"Unexpected show proc row format: {row}")
+        return str(row[1])
+
     def get_table_state(self, db_name, table_name):
         """
         Get table state by executing show proc '/dbs/{db_name}' and finding the row by table_name
@@ -2142,6 +2172,53 @@ class StarrocksSQLApiLib(object):
         plan = str(res)
         tools.assert_true(plan.find(mv_name) > 0, "assert mv %s is not found in plan: %s" % (mv_name, plan))
 
+    def check_mv_to_refresh_contains(self, mv_name, *expects) -> bool:
+        """
+        assert mv_name to refresh contains expects
+        """
+        return self._check_mv_to_refresh_partition_membership(mv_name, expects, should_contain=True)
+
+    def check_mv_to_refresh_not_contains(self, mv_name, *expects) -> bool:
+        """
+        assert mv_name to refresh does not contain expects
+        """
+        return self._check_mv_to_refresh_partition_membership(mv_name, expects, should_contain=False)
+
+    def _check_mv_to_refresh_partition_membership(self, mv_name, expects, should_contain) -> bool:
+        sql = f"select inspect_mv_refresh_info('{mv_name}')"
+        res = self.retry_execute_sql(sql, True)
+        if not res["status"]:
+            print(res)
+            return False
+        tools.assert_true(res["status"])
+        json_payload = res["result"]
+        if isinstance(json_payload, (tuple, list)):
+            # inspect_mv_refresh_info typically returns one row and one column.
+            if len(json_payload) == 0:
+                return False
+            first_row = json_payload[0]
+            if isinstance(first_row, (tuple, list)):
+                if len(first_row) == 0:
+                    return False
+                json_payload = first_row[0]
+            else:
+                json_payload = first_row
+        tools.assert_true(isinstance(json_payload, (str, bytes, bytearray)),
+                          "assert mv %s inspect result should be json string, but got: %s" % (mv_name, type(json_payload)))
+        json_result = json.loads(json_payload)
+        mv_to_refresh_partitions = json_result.get("mvToRefreshPartitions")
+        expect_no_refresh = should_contain and (len(expects) == 0 or (len(expects) == 1 and expects[0] == ""))
+        if expect_no_refresh:
+            tools.assert_true(mv_to_refresh_partitions is None or len(mv_to_refresh_partitions) == 0, "assert mv %s mvToRefreshPartitions is not empty, but expect to no refresh: %s" % (mv_name, json_result))
+            return True
+        if should_contain:
+            tools.assert_true(all(partition in mv_to_refresh_partitions for partition in expects),
+                              "assert mv %s expected partitions not all found in mvToRefreshPartitions: %s" % (mv_name, json_result))
+        else:
+            tools.assert_true(all(partition not in expects for partition in mv_to_refresh_partitions),
+                              "assert mv %s mvToRefreshPartitions should not be in plan: %s" % (mv_name, json_result))
+        return True
+
     def check_hit_materialized_view(self, query, *expects):
         """
         assert mv_name is hit in query
@@ -2283,7 +2360,7 @@ class StarrocksSQLApiLib(object):
         sleep_time = 0
         while True:
             res = self.execute_sql(
-                "SHOW ALTER TABLE %s ORDER BY CreateTime DESC LIMIT 1" % alter_type,
+                "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
                 True,
             )
             if (not res["status"]) or len(res["result"]) <= 0:
@@ -2375,7 +2452,23 @@ class StarrocksSQLApiLib(object):
             if str(res["result"]).find("Decode") > 0:
                 return ""
             time.sleep(1)
-
+    
+    def wait_plan_contains(self, query, *expects):
+        """
+        wait plan contains 
+        """
+        timeout = 60
+        interval = 1
+        for _ in range(timeout):
+            res = self.execute_sql("explain " + query, True)
+            print (res)
+            plan_string = "\n".join(" ".join(map(str, item)) for item in res["result"])
+            if all(expect in plan_string for expect in expects):
+                return
+            time.sleep(interval)
+        
+        tools.assert_true(False, "acquire dictionary timeout for 60s")
+        
     def try_collect_dict_N_times(self, column_name, table_name, N):
         """
         try to collect dictionary for N times
@@ -3038,6 +3131,23 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+    def assert_query_contains_times(self, query, expect, expected_times: int):
+        """
+        Assert query result contains `expect` exactly `expected_times` times.
+
+        This is useful for validating trace outputs, e.g. making sure a specific optimizer phase
+        runs only once.
+        """
+        res = self.execute_sql(query, True)
+        haystack = str(res["result"])
+        actual_times = haystack.count(str(expect))
+        tools.assert_true(
+            actual_times == int(expected_times),
+            "assert expect {} appears {} times (expected {}), result: {}".format(
+                expect, actual_times, expected_times, res["result"]
+            ),
+        )
+
     def assert_query_error_contains(self, query, *expects):
         """
         assert error message contains expect string
@@ -3142,6 +3252,70 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         finally:
             cursor.close()
             conn.close()
+
+    def assert_prepare_execute_varchar_metadata(self, db, query, expected_prepare_len, expected_execute_len=None,
+                                                session_vars=None):
+        client = self.mysql_stmt_metadata_client_class(
+            host=self.mysql_host,
+            port=int(self.mysql_port),
+            user=self.mysql_user,
+            password=self.mysql_password,
+            database=db,
+        )
+        client.connect()
+        try:
+            for assignment in session_vars or []:
+                client.query(f"SET {assignment}")
+            statement_id, num_params, prepare_columns = client.prepare(query)
+            execute_columns = client.execute_and_fetch_metadata(statement_id, num_params)
+            client.close_statement(statement_id)
+        finally:
+            client.close()
+        tools.assert_true(prepare_columns, "prepared statement returns no prepare metadata columns")
+        tools.assert_true(execute_columns, "prepared statement returns no execute metadata columns")
+
+        prepare_column = prepare_columns[0]
+        execute_column = execute_columns[0]
+        if expected_execute_len is None:
+            expected_execute_len = expected_prepare_len
+
+        summary = (
+            "prepare[%s raw=%s normalized=%s charset=%s; expected_prepare=%s] "
+            "execute[%s raw=%s normalized=%s charset=%s; expected_execute=%s]"
+            % (
+                prepare_column.type_name,
+                prepare_column.column_length,
+                prepare_column.normalized_length,
+                prepare_column.charset,
+                int(expected_prepare_len),
+                execute_column.type_name,
+                execute_column.column_length,
+                execute_column.normalized_length,
+                execute_column.charset,
+                int(expected_execute_len),
+            )
+        )
+        self_print("[PREPARE_EXECUTE_VARCHAR_METADATA] %s" % summary)
+        log.info("[PREPARE_EXECUTE_VARCHAR_METADATA] sql=%s %s" % (query, summary))
+
+        tools.assert_equal(
+            int(expected_prepare_len),
+            prepare_column.normalized_length,
+            "prepare metadata length mismatch, sql=%s, expected_prepare_len=%s, expected_execute_len=%s, "
+            "prepare_type=%s, prepare_len=%s(raw=%s), execute_type=%s, execute_len=%s(raw=%s)"
+            % (query, int(expected_prepare_len), int(expected_execute_len),
+               prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
+               execute_column.type_name, execute_column.normalized_length, execute_column.column_length),
+        )
+        tools.assert_equal(
+            int(expected_execute_len),
+            execute_column.normalized_length,
+            "execute metadata length mismatch, sql=%s, expected_prepare_len=%s, expected_execute_len=%s, "
+            "prepare_type=%s, prepare_len=%s(raw=%s), execute_type=%s, execute_len=%s(raw=%s)"
+            % (query, int(expected_prepare_len), int(expected_execute_len),
+               prepare_column.type_name, prepare_column.normalized_length, prepare_column.column_length,
+               execute_column.type_name, execute_column.normalized_length, execute_column.column_length),
+        )
 
     def execute_prepared_sql(self, sql, params):
         return self.mysql_prepared_stmt_lib.execute_prepared(sql, params)
@@ -3582,3 +3756,19 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         return {
             "success": True
         }
+
+    def set_first_tablet_id(self, table_name, partition_name=None):
+        """
+        Get the first tablet ID for a table (optionally from a specific partition)
+        and store it as self.tablet_id for use in subsequent SQL with ${tablet_id}
+        """
+        if partition_name:
+            sql = f"SHOW TABLETS FROM {table_name} PARTITION ({partition_name}) LIMIT 1"
+        else:
+            sql = f"SHOW TABLETS FROM {table_name} LIMIT 1"
+        result = self.execute_sql(sql, True)
+        if result and result.get("result") and len(result["result"]) > 0:
+            self.tablet_id = str(result["result"][0][0])  # First column is TabletId
+            log.info(f"Set tablet_id = {self.tablet_id}")
+        else:
+            raise Exception(f"Failed to get tablet ID for table {table_name}")

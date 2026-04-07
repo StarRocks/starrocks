@@ -29,7 +29,7 @@ From v3.2 onwards, FILES() further supports complex data types including `ARRAY`
 
 ## `FILES()` for loading
 
-From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function `FILES()`. It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT.md), load the data rows into an existing table using [`INSERT`](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md). From v3.3.4, you can also view the schema of a data file using `FILES()` with [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md).
+From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function `FILES()`. It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT/SELECT.md), load the data rows into an existing table using [`INSERT`](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md). From v3.3.4, you can also view the schema of a data file using `FILES()` with [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md).
 
 ### Syntax
 
@@ -47,7 +47,7 @@ The URI used to access the files.
 
 You can specify a path or a file. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` to load a data file named `20210411` from the path `/user/data/tablename` on the HDFS server.
 
-You can also specify this parameter as the save path of multiple data files by using wildcards `?`, `*`, `[]`, `{}`, or `^`. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` or `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` to load the data files from all partitions or only `202104` partitions in the path `/user/data/tablename` on the HDFS server.
+You can also specify this parameter as the save path of multiple data files by using wildcards `?`, `*`, `[]`, or `^`. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` or `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` to load the data files from all partitions or only `202104` partitions in the path `/user/data/tablename` on the HDFS server.
 
 :::note
 
@@ -168,7 +168,7 @@ Example for the CSV format:
 "format"="csv",
 "csv.column_separator"="\\t",
 "csv.enclose"='"',
-"csv.skip_header"="1",
+"csv.skip_header"="1",  -- for loading only
 "csv.escape"="\\"
 ```
 
@@ -193,7 +193,7 @@ If a field value contains an `enclose`-specified character, you can use the same
 
 ###### `csv.skip_header`
 
-Specifies the number of header rows to skip in the CSV-formatted data. Type: `INTEGER`. Default value: `0`.
+Specifies the number of header rows to skip in the CSV-formatted data. Type: `INTEGER`. Default value: `0`. This property is only supported for data loading.
 
 In some CSV-formatted data files, a number of header rows are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip these header rows. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
 
@@ -218,6 +218,7 @@ You can configure the sampling rule using the following parameters:
 
 - `auto_detect_sample_files`: the number of random data files to sample in each batch. By default, the first and last files are selected. Range: `[0, + ∞]`. Default: `2`.
 - `auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: `[0, + ∞]`. Default: `500`.
+- `auto_detect_types`: (valid for CSV only) - whether to guess the data types of sampled columns, or just assume String. `{true | false}`. Default: `true`.
 
 After the sampling, StarRocks unionizes the columns from all the data files according to these rules:
 
@@ -227,6 +228,7 @@ After the sampling, StarRocks unionizes the columns from all the data files acco
   - Integer columns together with `FLOAT` type columns will be unionized as the DECIMAL type.
   - String types are used for unionizing other types.
 - Generally, the `STRING` type can be used to unionize all data types.
+- If type auto-detection is turned off, all columns will return as `STRING`
 
 You can refer to Example 5.
 

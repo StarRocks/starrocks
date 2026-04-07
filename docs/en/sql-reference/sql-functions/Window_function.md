@@ -50,7 +50,9 @@ RANGE BETWEEN [ { m | UNBOUNDED } PRECEDING | CURRENT ROW] [ AND [CURRENT ROW | 
 ```
 
 :::note
-**ARRAY_AGG() window frame limitation:** When using ARRAY_AGG() as a window function, only RANGE frames are supported. ROWS frames are NOT supported. For example:
+**ARRAY_AGG() window frame limitation:**
+
+When using ARRAY_AGG() as a window function, only RANGE frames are supported. ROWS frames are NOT supported. For example:
 
 ```SQL
 -- Supported: RANGE frame
@@ -106,10 +108,20 @@ Calculates the average value of a field in a given window. This function ignores
 **Syntax:**
 
 ```SQL
-AVG(expr) [OVER (*analytic_clause*)]
+AVG([DISTINCT] expr) [OVER (*analytic_clause*)]
 ```
 
-**Examples:**
+`DISTINCT` is supported from StarRocks v4.0. When specified, AVG() calculates the average of only distinct values in the window.
+
+:::note
+**Window frame limitation:**
+
+When using AVG(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported.
+:::
+
+**Examples**
+
+**Example 1: Basic usage**
 
 The following example uses stock data as an example.
 
@@ -164,6 +176,68 @@ Output:
 
 For example, `12.87500000` in the first row is the average value of closing prices on "2014-10-02" (`12.86`), its previous day "2014-10-01" (null), and its following day "2014-10-03" (`12.89`).
 
+**Example 2: Using AVG(DISTINCT) over overall window**
+
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+Calculate the average of distinct scores across all rows:
+
+```SQL
+SELECT id, subject, score,
+    AVG(DISTINCT score) OVER () AS distinct_avg
+FROM test_scores;
+```
+
+Output:
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_avg|
++----+---------+-------+-------------+
+|  1 | math    |    80 |       85.00 |
+|  2 | math    |    85 |       85.00 |
+|  3 | math    |    80 |       85.00 |
+|  4 | english |    90 |       85.00 |
+|  5 | english |    85 |       85.00 |
+|  6 | english |    90 |       85.00 |
++----+---------+-------+-------------+
+```
+
+The distinct average is 85.00 (`(80 + 85 + 90) / 3`).
+
+**Example 3: Using AVG(DISTINCT) over framed window with RANGE frame**
+
+This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+
+Calculate the average of distinct scores within each subject partition using a RANGE frame:
+
+```SQL
+SELECT id, subject, score,
+    AVG(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_avg
+FROM test_scores;
+```
+
+Output:
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_avg|
++----+---------+-------+-------------+
+|  1 | math    |    80 |       80.00 |
+|  3 | math    |    80 |       80.00 |
+|  2 | math    |    85 |       82.50 |
+|  5 | english |    85 |       85.00 |
+|  4 | english |    90 |       87.50 |
+|  6 | english |    90 |       87.50 |
++----+---------+-------+-------------+
+```
+
+For each row, the function calculates the average of distinct scores from the beginning of the partition up to and including the current row's score value.
+
 ### ARRAY_AGG()
 
 Aggregates values (including NULL values) in a window into an array. You can use the optional `ORDER BY` clause to sort the elements within the array.
@@ -171,7 +245,9 @@ Aggregates values (including NULL values) in a window into an array. You can use
 This function is supported from v3.4.
 
 :::tip
-**Important limitation:** ARRAY_AGG() as a window function **only supports RANGE window frames**. ROWS window frames are NOT supported. If no window frame is specified, the default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used.
+**Window frame limitation:**
+
+ARRAY_AGG() as a window function only supports RANGE window frames. ROWS window frames are NOT supported. If no window frame is specified, the default `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` is used.
 :::
 
 **Syntax:**
@@ -197,11 +273,11 @@ Returns an ARRAY containing all values in the window.
 - When `DISTINCT` is specified, duplicate values are removed from the array.
 - When `ORDER BY` is specified within ARRAY_AGG(), the elements in the resulting array are sorted accordingly.
 
-**Examples:**
+**Examples**
 
-This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+These examples use the data in the [Sample table](#window-function-sample-table) `scores`.
 
-**Example 1: Basic ARRAY_AGG() over window**
+**Example 1: Basic usage**
 
 Collect all scores within each subject partition:
 
@@ -385,10 +461,30 @@ Calculates the total number of rows that meet the specified conditions in a give
 **Syntax:**
 
 ```SQL
-COUNT(expr) [OVER (analytic_clause)]
+COUNT([DISTINCT] expr) [OVER (analytic_clause)]
 ```
 
-**Examples:**
+`DISTINCT` is supported from StarRocks v4.0. When specified, COUNT() counts only distinct values in the window.
+
+:::note
+**Window frame limitation:**
+
+When using COUNT(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported. For example:
+
+```SQL
+-- Supported: RANGE frame
+count(distinct col) OVER (PARTITION BY x ORDER BY y RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+
+-- NOT Supported: ROWS frame (will cause error)
+count(distinct col) OVER (PARTITION BY x ORDER BY y ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING)
+```
+:::
+
+**Examples**
+
+These examples use the data in the [Sample table](#window-function-sample-table) `scores`.
+
+**Example 1: Basic usage**
 
 Count the occurrence of math scores that are greater than 90 from the current row to the first row in the math partition. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -412,6 +508,80 @@ from scores where subject in ('math') and score > 90;
 +------+-------+---------+-------+-------------+
 ```
 
+**Example 2: Using COUNT(DISTINCT) over overall window**
+
+Count distinct scores across all rows:
+
+```SQL
+CREATE TABLE test_scores (
+    id INT,
+    subject VARCHAR(20),
+    score INT
+) DISTRIBUTED BY HASH(id);
+
+INSERT INTO test_scores VALUES
+    (1, 'math', 80),
+    (2, 'math', 85),
+    (3, 'math', 80),
+    (4, 'english', 90),
+    (5, 'english', 85),
+    (6, 'english', 90);
+```
+
+```SQL
+SELECT id, subject, score,
+    COUNT(DISTINCT score) OVER () AS distinct_count
+FROM test_scores;
+```
+
+Output:
+
+```plaintext
++----+---------+-------+---------------+
+| id | subject | score | distinct_count|
++----+---------+-------+---------------+
+|  1 | math    |    80 |             4 |
+|  2 | math    |    85 |             4 |
+|  3 | math    |    80 |             4 |
+|  4 | english |    90 |             4 |
+|  5 | english |    85 |             4 |
+|  6 | english |    90 |             4 |
++----+---------+-------+---------------+
+```
+
+The distinct count is 4 (values: 80, 85, 90, and NULL if any).
+
+**Example 3: Using COUNT(DISTINCT) over framed window with RANGE frame**
+
+Count distinct scores within each subject partition using a RANGE frame:
+
+```SQL
+SELECT id, subject, score,
+    COUNT(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_count
+FROM test_scores;
+```
+
+Output:
+
+```plaintext
++----+---------+-------+---------------+
+| id | subject | score | distinct_count|
++----+---------+-------+---------------+
+|  1 | math    |    80 |             1 |
+|  3 | math    |    80 |             1 |
+|  2 | math    |    85 |             2 |
+|  5 | english |    85 |             1 |
+|  4 | english |    90 |             2 |
+|  6 | english |    90 |             2 |
++----+---------+-------+---------------+
+```
+
+For each row, the function counts distinct scores from the beginning of the partition up to and including the current row's score value.
+
 ### CUME_DIST()
 
 The CUME_DIST() function calculates the cumulative distribution of a value within a partition or window, indicating its relative position as a percentage in the partition. It is often used to calculate the distribution of highest or lowest values in a group.
@@ -434,7 +604,7 @@ CUME_DIST() OVER (partition_by_clause order_by_clause)
 
 CUME_DIST() contains NULL values and treats them as the lowest values.
 
-**Examples:**
+**Examples**
 
 The following example shows the cumulative distribution of each score within each `subject` group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -484,7 +654,7 @@ The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RA
 DENSE_RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 The following example shows the ranking of math scores (sorted in descending order). This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -525,7 +695,11 @@ FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [windo
 
 `IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the first value in the filtered result is NULL. If you specify IGNORE NULLS, the first non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
-**Examples:**
+ARRAY types are supported from StarRocks v3.5. You can use FIRST_VALUE() with ARRAY columns to get the first array value in the window.
+
+**Examples**
+
+**Example 1: Basic usage**
 
 Return the first `score` value for each member in each group (descending order), grouping by `subject`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -564,6 +738,48 @@ from scores;
 +------+-------+---------+-------+-------+
 ```
 
+**Example 2: Using FIRST_VALUE() with ARRAY types**
+
+Create a table with ARRAY columns:
+
+```SQL
+CREATE TABLE test_array_value (
+    col_1 INT,
+    arr1 ARRAY<INT>
+) DISTRIBUTED BY HASH(col_1);
+
+INSERT INTO test_array_value (col_1, arr1) VALUES
+    (1, [1, 11]),
+    (2, [2, 22]),
+    (3, [3, 33]),
+    (4, NULL),
+    (5, [5, 55]);
+```
+
+Query data using FIRST_VALUE() with ARRAY types:
+
+```SQL
+SELECT col_1, arr1, 
+    FIRST_VALUE(arr1) OVER (ORDER BY col_1) AS first_array
+FROM test_array_value;
+```
+
+Output:
+
+```plaintext
++-------+--------+------------+
+| col_1 | arr1   | first_array|
++-------+--------+------------+
+|     1 | [1,11] | [1,11]     |
+|     2 | [2,22] | [1,11]     |
+|     3 | [3,33] | [1,11]     |
+|     4 | NULL   | [1,11]     |
+|     5 | [5,55] | [1,11]     |
++-------+--------+------------+
+```
+
+The first array value `[1,11]` is returned for all rows in the window.
+
 ### LAST_VALUE()
 
 LAST_VALUE() returns the **last** value of the window range. It is the opposite of FIRST_VALUE().
@@ -578,7 +794,11 @@ LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window
 
 By default, LAST_VALUE() calculates `rows between unbounded preceding and current row`, which compares the current row with all its preceding rows. If you want to show only one value for each partition, use `rows between unbounded preceding and unbounded following` after ORDER BY.
 
-**Examples:**
+ARRAY types are supported from StarRocks v3.5. You can use LAST_VALUE() with ARRAY columns to get the last array value in the window.
+
+**Examples**
+
+**Example 1: Basic usage**
 
 Returns the last `score` for each member in the group (descending order), grouping by `subject`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -618,6 +838,35 @@ from scores;
 +------+-------+---------+-------+------+
 ```
 
+**Example 2: Using LAST_VALUE() with ARRAY types**
+
+Use the same table from FIRST_VALUE() Example 2:
+
+```SQL
+SELECT col_1, arr1, 
+    LAST_VALUE(arr1) OVER (
+        ORDER BY col_1 
+        ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+    ) AS last_array
+FROM test_array_value;
+```
+
+Output:
+
+```plaintext
++-------+--------+-----------+
+| col_1 | arr1   | last_array|
++-------+--------+-----------+
+|     1 | [1,11] | [5,55]    |
+|     2 | [2,22] | [5,55]    |
+|     3 | [3,33] | [5,55]    |
+|     4 | NULL   | [5,55]    |
+|     5 | [5,55] | [5,55]    |
++-------+--------+-----------+
+```
+
+The last array value `[5,55]` is returned for all rows in the window.
+
 ### LAG()
 
 Returns the value of the row that lags the current row by `offset` rows. This function is often used to compare values between rows and filter data.
@@ -628,6 +877,7 @@ Returns the value of the row that lags the current row by `offset` rows. This fu
 - String: CHAR, VARCHAR
 - Date: DATE, DATETIME
 - BITMAP and HLL are supported from StarRocks v2.5.
+- ARRAY types are supported from StarRocks v3.5.
 
 **Syntax:**
 
@@ -642,6 +892,8 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 - `offset`: the offset. It must be a **positive integer**. If this parameter is not specified, 1 is the default.
 - `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`, since version 4.0, default no longer has to be a constant—it can be a column name.
 - `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
+
+**Examples**
 
 **Example 1: IGNORE NULLS is not specified**
 
@@ -745,6 +997,50 @@ As you can see, for rows 1 and 2 there are not two non-NULL values when scanning
 
 All other rows behave the same as in Example 1.
 
+**Example 4: Using LAG() with ARRAY types**
+
+Create a table with ARRAY columns:
+
+```SQL
+CREATE TABLE test_array_value (
+    col_1 INT,
+    arr1 ARRAY<INT>,
+    arr2 ARRAY<INT> NOT NULL
+) DISTRIBUTED BY HASH(col_1);
+
+INSERT INTO test_array_value (col_1, arr1, arr2) VALUES
+    (1, [1, 11], [101, 111]),
+    (2, [2, 22], [102, 112]),
+    (3, [3, 33], [103, 113]),
+    (4, NULL,    [104, 114]),
+    (5, [5, 55], [105, 115]),
+    (6, [6, 66], [106, 116]);
+```
+
+Query data using LAG() with ARRAY types:
+
+```SQL
+SELECT col_1, arr1, LAG(arr1, 2, arr2) OVER (ORDER BY col_1) AS lag_result 
+FROM test_array_value;
+```
+
+Output:
+
+```plaintext
++-------+--------+-------------+
+| col_1 | arr1   | lag_result  |
++-------+--------+-------------+
+|     1 | [1,11] | [101,111]   |
+|     2 | [2,22] | [102,112]   |
+|     3 | [3,33] | [1,11]      |
+|     4 | NULL   | [2,22]      |
+|     5 | [5,55] | [3,33]      |
+|     6 | [6,66] | NULL        |
++-------+--------+-------------+
+```
+
+For the first two rows, no previous two rows exist, so the default value from `arr2` is returned.
+
 ### LEAD()
 
 Returns the value of the row that leads the current row by `offset` rows. This function is often used to compare values between rows and filter data.
@@ -764,6 +1060,8 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 - `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
 - `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`, since version 4.0, default no longer has to be a constant—it can be a column name.
 - `IGNORE NULLS` is supported from v3.0. It is used to determine whether NULL values of `expr` are included in the result. By default, NULL values are included when `offset` rows are counted, which means NULL is returned if the value of the destination row is NULL. See Example 1. If you specify IGNORE NULLS, NULL values are ignored when `offset` rows are counted and the system continues to search for `offset` non-null values. If `offset` non-null values cannot be found, NULL or `default` (if specified) is returned. See Example 2.
+
+**Examples**
 
 **Example 1: IGNORE NULLS is not specified**
 
@@ -867,6 +1165,32 @@ As you can see, for rows 9 and 10 there are not two non-NULL values when scannin
 
 All other rows behave the same as in Example 1.
 
+**Example 4: Using LEAD() with ARRAY types**
+
+Use the same table from LAG() Example 4:
+
+```SQL
+SELECT col_1, arr1, LEAD(arr1, 2, arr2) OVER (ORDER BY col_1) AS lead_result 
+FROM test_array_value;
+```
+
+Output:
+
+```plaintext
++-------+--------+-------------+
+| col_1 | arr1   | lead_result |
++-------+--------+-------------+
+|     1 | [1,11] | [3,33]      |
+|     2 | [2,22] | NULL        |
+|     3 | [3,33] | [5,55]      |
+|     4 | NULL   | [6,66]      |
+|     5 | [5,55] | [105,115]   |
+|     6 | [6,66] | [106,116]   |
++-------+--------+-------------+
+```
+
+For the last two rows, no subsequent two rows exist, so the default value from `arr2` is returned.
+
 ### MAX()
 
 Returns the maximum value of the specified rows in the current window.
@@ -877,7 +1201,7 @@ Returns the maximum value of the specified rows in the current window.
 MAX(expr) [OVER (analytic_clause)]
 ```
 
-**Examples:**
+**Examples**
 
 Calculate the maximum value of rows from the first row to the row after the current row. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -945,7 +1269,7 @@ Returns the minimum value of the specified rows in the current window.
 MIN(expr) [OVER (analytic_clause)]
 ```
 
-**Examples:**
+**Examples**
 
 Calculate the lowest score among all rows for the math subject. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1010,7 +1334,7 @@ Window clause is not allowed in NTILE() function.
 
 NTILE() function returns BIGINT type of data.
 
-**Examples:**
+**Examples**
 
 The following example divides all rows in the partition into two buckets. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1074,9 +1398,11 @@ The return values range from 0 to 1. This function is useful for percentile calc
 PERCENT_RANK() OVER (partition_by_clause order_by_clause)
 ```
 
-**This function must be used with ORDER BY to sort partition rows into the desired order.**
+:::note
+PERCENT_RANK() must be used with ORDER BY to sort partition rows into the desired order.
+:::
 
-**Examples:**
+**Examples**
 
 The following example shows the relative rank of each `score` within the group of `math`. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1113,7 +1439,7 @@ The RANK() function is used to represent rankings. Unlike DENSE_RANK(), RANK() w
 RANK() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 Ranking math scores in the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1151,7 +1477,7 @@ Returns a continuously increasing integer starting from 1 for each row of a Part
 ROW_NUMBER() OVER(partition_by_clause order_by_clause)
 ```
 
-**Examples:**
+**Examples**
 
 Rank math scores in the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1222,7 +1548,7 @@ QUALIFY <window_function>
 
 `<window_function>`: The `QUALIFY` clause can only be followed by a window function, including ROW_NUMBER(), RANK(), and DENSE_RANK().
 
-**Examples:**
+**Examples**
 
 ```SQL
 -- Create a table.
@@ -1251,7 +1577,7 @@ select * from sales_record order by city_id;
 +---------+--------+-------+
 ```
 
-Example 1: Obtain records whose row number is greater than 1 from the table.
+**Example 1: Obtain records whose row number is greater than 1 from the table**
 
 ```SQL
 SELECT city_id, item, sales
@@ -1266,7 +1592,9 @@ QUALIFY row_number() OVER (ORDER BY city_id) > 1;
 +---------+--------+-------+
 ```
 
-Example 2: Obtain records whose row number is 1 from each partition of the table. The table is divided into two partitions by `item` and the first row in each partition is returned.
+**Example 2: Obtain records whose row number is 1 from each partition of the table**
+
+The table is divided into two partitions by `item` and the first row in each partition is returned.
 
 ```SQL
 SELECT city_id, item, sales
@@ -1320,12 +1648,24 @@ Calculates the sum of specified rows.
 **Syntax:**
 
 ```SQL
-SUM(expr) [OVER (analytic_clause)]
+SUM([DISTINCT] expr) [OVER (analytic_clause)]
 ```
 
-**Examples:**
+`DISTINCT` is supported from StarRocks v4.0. When specified, SUM() sums only distinct values in the window.
 
-Group data by `subject` and calculate the sum of scores of all rows within the group. This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
+:::note
+**Window frame limitation:**
+
+When using SUM(DISTINCT) as a window function, only RANGE frames are supported. ROWS frames are NOT supported.
+:::
+
+**Examples**
+
+These examples use the data in the [Sample table](#window-function-sample-table) `scores`.
+
+**Example 1: Basic usage**
+
+Group data by `subject` and calculate the sum of scores of all rows within the group.
 
 ```SQL
 select *,
@@ -1363,6 +1703,64 @@ from scores;
 +------+-------+---------+-------+------+
 ```
 
+**Example 2: Using SUM(DISTINCT) over overall window**
+
+Sum distinct scores across all rows:
+
+```SQL
+SELECT id, subject, score,
+    SUM(DISTINCT score) OVER () AS distinct_sum
+FROM test_scores;
+```
+
+Output:
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_sum|
++----+---------+-------+-------------+
+|  1 | math    |    80 |          255|
+|  2 | math    |    85 |          255|
+|  3 | math    |    80 |          255|
+|  4 | english |    90 |          255|
+|  5 | english |    85 |          255|
+|  6 | english |    90 |          255|
++----+---------+-------+-------------+
+```
+
+The distinct sum is 255 (80 + 85 + 90).
+
+**Example 3: Using SUM(DISTINCT) over framed window with RANGE frame**
+
+Sum distinct scores within each subject partition using a RANGE frame:
+
+```SQL
+SELECT id, subject, score,
+    SUM(DISTINCT score) OVER (
+        PARTITION BY subject 
+        ORDER BY score 
+        RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+    ) AS distinct_sum
+FROM test_scores;
+```
+
+Output:
+
+```plaintext
++----+---------+-------+-------------+
+| id | subject | score | distinct_sum|
++----+---------+-------+-------------+
+|  1 | math    |    80 |           80|
+|  3 | math    |    80 |           80|
+|  2 | math    |    85 |          165|
+|  5 | english |    85 |           85|
+|  4 | english |    90 |          175|
+|  6 | english |    90 |          175|
++----+---------+-------+-------------+
+```
+
+For each row, the function sums distinct scores from the beginning of the partition up to and including the current row's score value.
+
 ### VARIANCE, VAR_POP, VARIANCE_POP
 
 Returns the population variance of an expression. VAR_POP and VARIANCE_POP are aliases of VARIANCE. These functions can be used as window functions since v2.5.10.
@@ -1381,7 +1779,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1423,7 +1821,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1463,7 +1861,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1503,7 +1901,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1561,7 +1959,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1617,7 +2015,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 
@@ -1657,7 +2055,7 @@ From 2.5.13, 3.0.7, 3.1.4 onwards, this window function supports the ORDER BY an
 
 If `expr` is a table column, it must evaluate to TINYINT, SMALLINT, INT, BIGINT, LARGEINT, FLOAT, DOUBLE, or DECIMAL.
 
-**Examples:**
+**Examples**
 
 This example uses the data in the [Sample table](#window-function-sample-table) `scores`.
 

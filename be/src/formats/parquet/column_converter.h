@@ -17,15 +17,15 @@
 #include <memory>
 #include <string>
 
+#include "base/bit/bit_util.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "exprs/function_context.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "runtime/types.h"
-#include "util/bit_util.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 class Column;

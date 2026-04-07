@@ -144,6 +144,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
     @BeforeAll
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
+        Config.enable_virtual_columns = false;
 
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
@@ -223,7 +224,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             Assertions.assertTrue(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
-            mvTableName = createMaterializedViewStatement.getTableName();
+            mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
             Assertions.assertTrue(mvTableName != null);
 
             createAndRefreshMv(sql);
@@ -244,7 +245,7 @@ public abstract class MVTestBase extends StarRocksTestBase {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         Assertions.assertTrue(stmt instanceof CreateMaterializedViewStatement);
         CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
-        TableName mvTableName = createMaterializedViewStatement.getTableName();
+        TableName mvTableName = com.starrocks.catalog.TableName.fromTableRef(createMaterializedViewStatement.getTableRef());
         Assertions.assertTrue(mvTableName != null);
         String dbName = Strings.isNullOrEmpty(mvTableName.getDb()) ? DB_NAME : mvTableName.getDb();
         String mvName = mvTableName.getTbl();
@@ -867,13 +868,38 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     protected MaterializedView createMaterializedViewWithRefreshMode(String query,
                                                                      String refreshMode) throws Exception {
-        String ddl = String.format("CREATE MATERIALIZED VIEW `test_mv1` " +
-                "REFRESH DEFERRED MANUAL\n" +
-                "PROPERTIES (\n" +
-                "\"refresh_mode\" = \"%s\"" +
-                ")\n" +
-                "AS %s;", refreshMode, query);
-        starRocksAssert.withMaterializedView(ddl);
+        return createMaterializedViewWithRefreshMode(query, refreshMode, null, null);
+    }
+
+    /**
+     * Create a materialized view with the given refresh mode, optional partition clause, and extra properties.
+     *
+     * @param query          the AS query for the MV
+     * @param refreshMode    refresh mode: "incremental", "auto", "pct", etc.
+     * @param partitionBy    partition clause content, e.g. "`date`". null for non-partitioned MV.
+     * @param extraProperties extra properties map, e.g. {"partition_refresh_number": "1"}. null if none.
+     */
+    protected MaterializedView createMaterializedViewWithRefreshMode(
+            String query,
+            String refreshMode,
+            String partitionBy,
+            Map<String, String> extraProperties) throws Exception {
+        StringBuilder ddl = new StringBuilder();
+        ddl.append("CREATE MATERIALIZED VIEW `test_mv1` ");
+        if (partitionBy != null) {
+            ddl.append("PARTITION BY (").append(partitionBy).append(") ");
+        }
+        ddl.append("REFRESH DEFERRED MANUAL\n");
+        ddl.append("PROPERTIES (\n");
+        ddl.append("\"refresh_mode\" = \"").append(refreshMode).append("\"");
+        if (extraProperties != null) {
+            for (Map.Entry<String, String> entry : extraProperties.entrySet()) {
+                ddl.append(",\n\"").append(entry.getKey()).append("\" = \"").append(entry.getValue()).append("\"");
+            }
+        }
+        ddl.append("\n)\n");
+        ddl.append("AS ").append(query).append(";");
+        starRocksAssert.withMaterializedView(ddl.toString());
         return getMv("test_mv1");
     }
 }

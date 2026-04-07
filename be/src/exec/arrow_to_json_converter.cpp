@@ -26,7 +26,7 @@
 #include "common/statusor.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 

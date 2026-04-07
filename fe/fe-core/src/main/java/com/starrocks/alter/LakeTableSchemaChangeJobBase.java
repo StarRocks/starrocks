@@ -53,6 +53,12 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         super(jobType);
     }
 
+    protected LakeTableSchemaChangeJobBase(LakeTableSchemaChangeJobBase job) {
+        super(job);
+        this.watershedTxnId = job.watershedTxnId;
+        this.watershedGtid = job.watershedGtid;
+    }
+
     @Nullable
     protected ReadLockedDatabase getReadLockedDatabase(long dbId) {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -161,8 +167,4 @@ public abstract class LakeTableSchemaChangeJobBase extends AlterJobV2 {
         AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
     }
-
-
-
-
 }

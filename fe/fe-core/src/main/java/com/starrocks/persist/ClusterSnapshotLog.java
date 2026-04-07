@@ -19,24 +19,38 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 
 public class ClusterSnapshotLog implements Writable {
-    public enum ClusterSnapshotLogType { NONE, AUTOMATED_SNAPSHOT_ON, AUTOMATED_SNAPSHOT_OFF, UPDATE_SNAPSHOT_JOB }
+    public enum ClusterSnapshotLogType {
+        NONE,
+        AUTOMATED_SNAPSHOT_ON,
+        AUTOMATED_SNAPSHOT_OFF,
+        AUTOMATED_SNAPSHOT_INTERVAL,
+        UPDATE_SNAPSHOT_JOB
+    }
     @SerializedName(value = "type")
     private ClusterSnapshotLogType type = ClusterSnapshotLogType.NONE;
     @SerializedName(value = "storageVolumeName")
     private String storageVolumeName = "";
+    @SerializedName(value = "automatedSnapshotIntervalSeconds")
+    private long automatedSnapshotIntervalSeconds = 0;
     // For UPDATE_SNAPSHOT_JOB
     @SerializedName(value = "snapshotJob")
     private ClusterSnapshotJob snapshotJob = null;
 
     public ClusterSnapshotLog() {}
 
-    public void setAutomatedSnapshotOn(String storageVolumeName) {
+    public void setAutomatedSnapshotOn(String storageVolumeName, long intervalSeconds) {
         this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_ON;
         this.storageVolumeName = storageVolumeName;
+        this.automatedSnapshotIntervalSeconds = intervalSeconds;
     }
 
     public void setAutomatedSnapshotOff() {
         this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_OFF;
+    }
+
+    public void setAutomatedSnapshotInterval(long intervalSeconds) {
+        this.type = ClusterSnapshotLogType.AUTOMATED_SNAPSHOT_INTERVAL;
+        this.automatedSnapshotIntervalSeconds = intervalSeconds;
     }
 
     public void setSnapshotJob(ClusterSnapshotJob job) {
@@ -50,6 +64,10 @@ public class ClusterSnapshotLog implements Writable {
 
     public String getStorageVolumeName() {
         return this.storageVolumeName;
+    }
+
+    public long getAutomatedSnapshotIntervalSeconds() {
+        return automatedSnapshotIntervalSeconds;
     }
 
     public ClusterSnapshotJob getSnapshotJob() {

@@ -36,8 +36,10 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/schedule/observer.h"
@@ -46,8 +48,6 @@
 #include "runtime/descriptors.h"
 #include "runtime/local_pass_through_buffer.h"
 #include "runtime/query_statistics.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
 
 namespace google::protobuf {
 class Closure;

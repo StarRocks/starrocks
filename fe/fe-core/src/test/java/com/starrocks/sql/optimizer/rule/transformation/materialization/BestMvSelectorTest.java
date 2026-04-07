@@ -354,6 +354,45 @@ public class BestMvSelectorTest extends MVTestBase {
     }
 
     @Test
+    public void testCalcDistScoreWithTabletPruning() throws Exception {
+        // Test calcDistScore method with tablet pruning consideration
+        OptExpression queryPlan = createMockQueryPlan();
+        List<OptExpression> mvExpressions = Lists.newArrayList();
+        
+        BestMvSelector selector = new BestMvSelector(mvExpressions, optimizerContext, queryPlan, rule);
+        
+        // Test calcDistScore method
+        Method calcDistScoreMethod = BestMvSelector.class.getDeclaredMethod(
+                "calcDistScore", Table.class, Set.class, Set.class);
+        calcDistScoreMethod.setAccessible(true);
+        
+        // distEqCols: columns from grouping keys, join keys, distinct columns
+        Set<String> distEqCols = Sets.newHashSet("k1");
+        // equivalenceColumns: columns from query filter predicates (for tablet pruning)
+        Set<String> equivalenceColumns = Sets.newHashSet("k1", "k2");
+        
+        // Test with test table (distributed by k1)
+        int score = (Integer) calcDistScoreMethod.invoke(selector, testTable, distEqCols, equivalenceColumns);
+        // Should have a positive score since k1 is in both distEqCols and equivalenceColumns
+        // and test table is hash distributed
+        Assertions.assertTrue(score >= 0);
+        
+        // Test with null table
+        score = (Integer) calcDistScoreMethod.invoke(selector, null, distEqCols, equivalenceColumns);
+        Assertions.assertEquals(0, score);
+        
+        // Test tablet pruning: when filter column matches distribution key
+        Set<String> filterOnDistKey = Sets.newHashSet("k1");  // query filters on k1
+        Set<String> emptyDistEqCols = Sets.newHashSet();  // no grouping/join keys
+        
+        int tabletPruningScore = (Integer) calcDistScoreMethod.invoke(
+                selector, testTable, emptyDistEqCols, filterOnDistKey);
+        // Should have positive score for tablet pruning benefit even without colocation
+        Assertions.assertTrue(tabletPruningScore > 0, 
+                "Tablet pruning score should be positive when filter matches distribution key");
+    }
+
+    @Test
     public void testSelectBestWithEmptyContexts() {
         // Test selectBest when contexts list is empty
         OptExpression queryPlan = createMockQueryPlan();
@@ -611,7 +650,7 @@ public class BestMvSelectorTest extends MVTestBase {
                 "\"colocate_with\" = \"colocate_group_1\"" +
                 ");");
         starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_order_by_v1 " +
-                "DISTRIBUTED BY RANDOM buckets 3 " +
+                "DISTRIBUTED BY hash (v1) buckets 3 " +
                 "order by (v1) " +
                 "REFRESH MANUAL " +
                 "as\n" +
@@ -858,6 +897,62 @@ public class BestMvSelectorTest extends MVTestBase {
             String query = "select a.v1, b.v3 from t0 a join t1 b on a.v2=b.v2;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertContains(plan, "mv_order_by_v1", "mv_order_by_v2");
+        }
+    }
+
+    /**
+     * Test that when a query filters on a specific column, the CBO should prefer the MV
+     * whose distribution key matches the filter column for better tablet pruning.
+     * This addresses the issue where two MVs with identical definitions but different
+     * distribution keys are created on the same base table.
+     */
+    @Test
+    public void testChooseBestMvWithTabletPruning() throws Exception {
+        // Create base table
+        starRocksAssert.withTable("CREATE TABLE `ad_fact` (\n" +
+                "  `advertiser_id` bigint NULL,\n" +
+                "  `campaign_id` bigint NULL,\n" +
+                "  `impressions` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`advertiser_id`)\n" +
+                "DISTRIBUTED BY HASH(`advertiser_id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        // Create MV distributed by advertiser_id
+        starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_ad_fact_advertiser " +
+                "DISTRIBUTED BY HASH(advertiser_id) buckets 3 " +
+                "REFRESH MANUAL " +
+                "as\n" +
+                "select advertiser_id, campaign_id, sum(impressions) from ad_fact group by advertiser_id, campaign_id;");
+
+        // Create MV distributed by campaign_id (same definition, different dist key)
+        starRocksAssert.withMaterializedView("create MATERIALIZED VIEW if not exists mv_ad_fact_campaign " +
+                "DISTRIBUTED BY HASH(campaign_id) buckets 3 " +
+                "REFRESH MANUAL " +
+                "as\n" +
+                "select advertiser_id, campaign_id, sum(impressions) from ad_fact group by advertiser_id, campaign_id;");
+
+        cluster.runSql("test", "refresh materialized view mv_ad_fact_advertiser with sync mode");
+        cluster.runSql("test", "refresh materialized view mv_ad_fact_campaign with sync mode");
+
+        // Query filters on campaign_id - should prefer mv_ad_fact_campaign for better tablet pruning
+        {
+            String query = "select advertiser_id, campaign_id, sum(impressions) from ad_fact " +
+                    "where campaign_id = 1 group by advertiser_id, campaign_id;";
+            String plan = getFragmentPlan(query);
+            // Should choose the MV with campaign_id as distribution key for tablet pruning benefit
+            PlanTestBase.assertContains(plan, "mv_ad_fact_campaign");
+        }
+
+        // Query filters on advertiser_id - should prefer mv_ad_fact_advertiser for better tablet pruning
+        {
+            String query = "select advertiser_id, campaign_id, sum(impressions) from ad_fact " +
+                    "where advertiser_id = 1 group by advertiser_id, campaign_id;";
+            String plan = getFragmentPlan(query);
+            // Should choose the MV with advertiser_id as distribution key for tablet pruning benefit
+            PlanTestBase.assertContains(plan, "mv_ad_fact_advertiser");
         }
     }
 }

@@ -18,13 +18,13 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 
+#include "base/brpc/reusable_closure.h"
+#include "base/concurrency/bthread_shared_mutex.h"
+#include "base/concurrency/countdown_latch.h"
 #include "common/compiler_util.h"
+#include "common/system/backend_options.h"
 #include "runtime/tablets_channel.h"
-#include "service/backend_options.h"
 #include "storage/async_delta_writer.h"
-#include "util/bthreads/bthread_shared_mutex.h"
-#include "util/countdown_latch.h"
-#include "util/reusable_closure.h"
 
 namespace brpc {
 class Controller;
@@ -59,7 +59,7 @@ public:
     void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) const;
 
-    void cancel() override;
+    void cancel(const std::string& reason) override;
 
     void abort() override;
 
@@ -235,7 +235,7 @@ private:
     TupleDescriptor* _tuple_desc = nullptr;
 
     std::vector<Sender> _senders;
-    size_t _max_sliding_window_size = config::max_load_dop * 3;
+    size_t _max_sliding_window_size = 0;
 
     mutable bthread::Mutex _partitions_ids_lock;
     std::unordered_set<int64_t> _partition_ids;

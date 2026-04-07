@@ -71,6 +71,7 @@ struct TTabletInfo {
 struct TTabletVersionPair {
     1: optional Types.TTabletId tablet_id
     2: optional Types.TVersion version
+    3: optional Types.TVersion min_readable_version
 }
 
 struct TFinishTaskRequest {

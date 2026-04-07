@@ -6,4 +6,6 @@ displayed_sidebar: docs
 
 import DocCardList from '@theme/DocCardList';
 
+> Tip: If a BI tool relies on the string max length in query metadata and that length is smaller than actual values (causing empty returns), set the global variable `max_unknown_string_meta_length` (1~1,048,576, default 64) to a higher value so string columns return that length in metadata.
+
 <DocCardList />

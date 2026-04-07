@@ -18,6 +18,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -25,15 +26,14 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/type_traits.h"
-#include "util/defer_op.h"
 
 #define APPLY_FOR_NUMBERIC_TYPE(M) \
     M(TYPE_BOOLEAN)                \
@@ -116,7 +116,7 @@ private:
 
 Status JavaArrayConverter::do_visit(const BinaryColumn& column) {
     size_t num_rows = column.size();
-    auto bytes = byte_buffer(column.get_bytes());
+    auto bytes = byte_buffer(column.get_immutable_bytes());
     auto offsets = byte_buffer(column.get_offset());
     const auto& method_map = _helper.method_map();
     if (auto iter = method_map.find(JNIPrimTypeId<Slice>::id); iter != method_map.end()) {
@@ -256,7 +256,7 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
             LOCAL_REF_GUARD(local_obj);
             RETURN_IF_ERROR(list_stub.add(local_obj));
         }
-        auto res = jvalue{.l = std::move(object)};
+        auto res = jvalue{.l = object};
         object = nullptr;
         return res;
     }
@@ -540,7 +540,8 @@ Status JavaDataTypeConverter::convert_to_boxed_array(FunctionContext* ctx, const
     JNIEnv* env = helper.getEnv();
     for (int i = 0; i < num_cols; ++i) {
         jobject arg = nullptr;
-        if (columns[i]->only_null()) {
+        if (columns[i]->only_null() ||
+            (columns[i]->is_nullable() && down_cast<const NullableColumn*>(columns[i])->null_count() == num_rows)) {
             arg = helper.create_array(num_rows);
         } else if (columns[i]->is_constant()) {
             auto* data_column = down_cast<const ConstColumn*>(columns[i])->data_column_raw_ptr();

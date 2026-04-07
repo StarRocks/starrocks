@@ -20,8 +20,8 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "numeric_column.h"
-#include "runtime/types.h"
 #include "simdjson.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

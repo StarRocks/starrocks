@@ -14,13 +14,13 @@
 
 #include <algorithm>
 
+#include "base/string/utf8.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/string_functions.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 

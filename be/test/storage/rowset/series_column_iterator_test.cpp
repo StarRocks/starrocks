@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/fixed_length_column.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

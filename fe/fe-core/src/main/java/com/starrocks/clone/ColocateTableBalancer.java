@@ -363,10 +363,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     group2ColocateRelocationInfo.put(gid,
                             new ColocateRelocationInfo(!unavailableBeIdsInGroup.isEmpty(),
                                     colocateIndex.getBackendsPerBucketSeq(gid), Maps.newHashMap()));
-                    colocateIndex.addBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
                     ColocatePersistInfo info =
                             ColocatePersistInfo.createForBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
-                    globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                    globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info, wal -> {
+                        colocateIndex.addBackendsPerBucketSeq(gid, balancedBackendsPerBucketSeq);
+                    });
                     colocateIndex.markGroupUnstable(groupId, true);
                     LOG.info("balance colocate per group , group id {}, " +
                                     "now backends per bucket sequence is: {}, " +
@@ -669,10 +670,11 @@ public class ColocateTableBalancer extends FrontendDaemon {
             toChangeGroups.add(entry.getKey());
             List<List<Long>> oldBackendsPerBucketSeq = colocateIndex.getBackendsPerBucketSeq(entry.getKey());
             for (GroupId groupId : toChangeGroups) {
-                colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
-                globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info, wal -> {
+                    colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
+                });
                 colocateIndex.markGroupUnstable(groupId, true);
                 LOG.info("overall colocate balance for group {}, now backends per bucket sequence is: {}, " +
                                 "bucket sequence before balance: {}",
@@ -794,7 +796,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                     long visibleVersion = physicalPartition.getVisibleVersion();
                     // Here we only get VISIBLE indexes. All other indexes are not queryable.
                     // So it does not matter if tablets of other indexes are not matched.
-                    for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                    for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
                         Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
                                 backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
 

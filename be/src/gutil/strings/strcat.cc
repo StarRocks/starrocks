@@ -2,13 +2,12 @@
 
 #include "gutil/strings/strcat.h"
 
-#include <common/logging.h>
-
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 
+#include "gutil/logging.h"
 #include "gutil/stl_util.h"
 
 AlphaNum gEmptyAlphaNum("");

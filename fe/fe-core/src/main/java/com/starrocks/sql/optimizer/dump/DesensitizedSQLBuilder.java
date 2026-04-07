@@ -120,7 +120,8 @@ public class DesensitizedSQLBuilder {
                 || table.getType() == Table.TableType.BROKER || table.getType() == Table.TableType.HIVE
                 || table.getType() == Table.TableType.HUDI || table.getType() == Table.TableType.ICEBERG
                 || table.getType() == Table.TableType.JDBC
-                || table.getType() == Table.TableType.FILE) {
+                || table.getType() == Table.TableType.FILE
+                || table.getType() == Table.TableType.BENCHMARK) {
             tableDef = visitor.desensitizeExternalTableDef(pair.first, table);
         } else if (table instanceof OlapTable) {
             tableDef = visitor.desensitizeOlapTableDef(pair.first, (OlapTable) pair.second);
@@ -248,6 +249,11 @@ public class DesensitizedSQLBuilder {
                         .append(")");
             }
             sqlBuilder.append(" AS (").append(visit(relation.getCteQueryStatement())).append(") ");
+            if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
+                sqlBuilder.append("[materialized] ");
+            } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
+                sqlBuilder.append("[not_materialized] ");
+            }
             return sqlBuilder.toString();
         }
 
@@ -663,7 +669,7 @@ public class DesensitizedSQLBuilder {
             sb.append(desensitizeDistributionInfo(olapTable.getIdToColumn(), distributionInfo));
 
             // order by
-            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexMetaId());
+            MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (index.getSortKeyIdxes() != null) {
                 sb.append("\nORDER BY(");
                 List<String> sortKeysColumnNames = Lists.newArrayList();

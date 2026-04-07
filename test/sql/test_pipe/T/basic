@@ -14,7 +14,12 @@ shell: ossutil64 cp --force ./sql/test_pipe/data/col_not_null.parquet oss://${os
 -- load data
 create table t1 
 properties('replication_num' = '1')
-as select * from files('path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet', 'format'='parquet');
+as select * from files(
+    'path' = 'oss://${oss_bucket}/test_pipe/${uuid0}/col_not_null.parquet',
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
+    'format'='parquet');
 desc t1;
 select count(*) from t1;
 

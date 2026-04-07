@@ -14,13 +14,13 @@
 
 #include <algorithm>
 
+#include "base/string/utf8.h"
+#include "base/string/volnitsky.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/string_functions.h"
-#include "runtime/Volnitsky.h"
-#include "util/utf8.h"
 
 namespace starrocks {
 
@@ -68,13 +68,13 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
         auto start_pos_null = ColumnHelper::as_column<NullableColumn>(start_pos_expansion);
         start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_null->data_column());
 
-        res_null = start_pos_null->null_column();
+        res_null = NullColumn::static_pointer_cast(start_pos_null->null_column()->clone());
     } else if (haystack_ptr->is_nullable() && !start_pos_expansion->is_nullable()) {
         auto haystack_null = ColumnHelper::as_column<NullableColumn>(haystack_ptr);
         haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_null->data_column());
 
         start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_expansion);
-        res_null = haystack_null->null_column();
+        res_null = NullColumn::static_pointer_cast(haystack_null->null_column()->clone());
     } else {
         haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_ptr);
         start_pos = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(start_pos_expansion);
@@ -111,7 +111,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
 
     const char* begin = haystack->get_slice(0).data;
     const char* pos = begin;
-    const char* end = pos + haystack->get_bytes().size();
+    const char* end = pos + haystack->get_immutable_bytes().size();
 
     /// Current index in the array of strings.
     size_t i = 0;

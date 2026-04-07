@@ -14,6 +14,9 @@
 
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 
+#include "base/debug/trace.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "serde/column_array_serde.h"
@@ -30,9 +33,7 @@
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
 #include "storage/sstable/options.h"
-#include "storage/sstable/sstable_predicate.h"
 #include "storage/sstable/table_builder.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -40,7 +41,6 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     const std::string& key = iter_ptr->key().to_string();
     const std::string& value = iter_ptr->value().to_string();
     uint64_t max_rss_rowid = iter_ptr->max_rss_rowid();
-    const auto& predicate = iter_ptr->predicate();
 
     IndexValuesWithVerPB index_value_ver;
     if (!index_value_ver.ParseFromString(value)) {
@@ -62,23 +62,15 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
             index_value_ver.mutable_values(i)->set_rssid(iter_ptr->shared_rssid());
         }
     }
-
-    /*
-     * Do not distinguish between base compaction and cumulative compaction here.
-     * Currently we use predicate after tablet split and make predicate available
-     * for both base compaction and cumulative compaction is useful and will not
-     * cause any problem.
-     *
-     * But if caller for another purpose to use this predicate here, should pay attention
-     * if it is only used for base compaction or cumulative compaction.
-    */
-    if (predicate != nullptr) {
-        uint8_t selection = 0;
-        RETURN_IF_ERROR(_predicate_evaluator.evaluate_with_cache(predicate, key, &selection));
-        if (!selection) {
-            // If the key is not hit, we skip it.
-            return Status::OK();
+    if (iter_ptr->rssid_offset() != 0) {
+        const int32_t rssid_offset = iter_ptr->rssid_offset();
+        for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
+            const int64_t rssid = static_cast<int64_t>(index_value_ver.values(i).rssid()) + rssid_offset;
+            index_value_ver.mutable_values(i)->set_rssid(static_cast<uint32_t>(rssid));
         }
+        const uint64_t low = max_rss_rowid & 0xffffffffULL;
+        const int64_t high = static_cast<int64_t>(max_rss_rowid >> 32) + rssid_offset;
+        max_rss_rowid = (static_cast<uint64_t>(high) << 32) | low;
     }
 
     auto version = index_value_ver.values(0).version();

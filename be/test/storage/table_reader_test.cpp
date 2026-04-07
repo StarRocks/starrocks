@@ -20,6 +20,7 @@
 #include <iostream>
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/strings/substitute.h"
@@ -36,7 +37,6 @@
 #include "storage/tablet_manager.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

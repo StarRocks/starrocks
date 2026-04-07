@@ -16,7 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 
@@ -27,6 +27,8 @@ namespace starrocks {
 
 class FunctionHelper {
 public:
+    static MutableColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
+
     /**
      * if ptr is NullableColumn, return data column
      * else return ptr

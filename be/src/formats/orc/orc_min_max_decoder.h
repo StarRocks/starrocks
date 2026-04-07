@@ -21,11 +21,10 @@
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "exprs/runtime_filter_bank.h"
 #include "formats/orc/orc_mapping.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "runtime/descriptors.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

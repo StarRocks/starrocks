@@ -18,7 +18,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 
 import java.util.List;
 
-public abstract class ConnectorScanRangeSource {
+public abstract class ConnectorScanRangeSource implements AutoCloseable {
     RemoteFilesSampleStrategy strategy = new RemoteFilesSampleStrategy();
 
     protected abstract List<TScanRangeLocations> getSourceOutputs(int maxSize);
@@ -42,5 +42,10 @@ public abstract class ConnectorScanRangeSource {
 
     public void setSampleStrategy(RemoteFilesSampleStrategy strategy) {
         this.strategy = strategy;
+    }
+
+    @Override
+    public void close() throws Exception {
+        // default no-op
     }
 }

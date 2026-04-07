@@ -20,6 +20,7 @@
 #include "butil/time.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "storage/olap_define.h"
 
 namespace starrocks {
 
@@ -65,7 +66,7 @@ TEST_F(StringFunctionConcatTest, concatNormalTest) {
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ("test" + std::to_string(k) + "hello" + std::to_string(k), v->get_data()[k].to_string());
+        ASSERT_EQ("test" + std::to_string(k) + "hello" + std::to_string(k), v->get_slice(k).to_string());
     }
 }
 
@@ -102,7 +103,7 @@ TEST_F(StringFunctionConcatTest, concatConstTest) {
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ("test" + std::to_string(k) + "_abcd_1234_道可道,非常道", v->get_data()[k].to_string());
+        ASSERT_EQ("test" + std::to_string(k) + "_abcd_1234_道可道,非常道", v->get_slice(k).to_string());
     }
 }
 
@@ -139,7 +140,7 @@ TEST_F(StringFunctionConcatTest, concatNullTest) {
         if (k % 2 == 0) {
             ASSERT_TRUE(nv->is_null(k));
         } else {
-            ASSERT_EQ("test" + std::to_string(k) + "hello" + std::to_string(k), v->get_data()[k].to_string());
+            ASSERT_EQ("test" + std::to_string(k) + "hello" + std::to_string(k), v->get_slice(k).to_string());
         }
     }
 }
@@ -176,9 +177,9 @@ TEST_F(StringFunctionConcatTest, concatWsTest) {
 
     for (int j = 0; j < 20; ++j) {
         if (j % 2) {
-            ASSERT_EQ("a|" + std::to_string(j), v->get_data()[j].to_string());
+            ASSERT_EQ("a|" + std::to_string(j), v->get_slice(j).to_string());
         } else {
-            ASSERT_EQ("a|" + std::to_string(j) + "|b", v->get_data()[j].to_string());
+            ASSERT_EQ("a|" + std::to_string(j) + "|b", v->get_slice(j).to_string());
         }
     }
 }
@@ -215,9 +216,9 @@ TEST_F(StringFunctionConcatTest, concatWs1Test) {
 
     for (int j = 0; j < 20; ++j) {
         if (j % 2) {
-            ASSERT_EQ("a-----" + std::to_string(j), v->get_data()[j].to_string());
+            ASSERT_EQ("a-----" + std::to_string(j), v->get_slice(j).to_string());
         } else {
-            ASSERT_EQ("a-----" + std::to_string(j) + "-----b", v->get_data()[j].to_string());
+            ASSERT_EQ("a-----" + std::to_string(j) + "-----b", v->get_slice(j).to_string());
         }
     }
 }

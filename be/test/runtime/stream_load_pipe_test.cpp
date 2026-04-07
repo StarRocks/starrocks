@@ -40,9 +40,9 @@
 #include <memory>
 #include <thread>
 
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "util/monotime.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "base/time/monotime.h"
 
 namespace starrocks {
 

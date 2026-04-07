@@ -18,6 +18,8 @@
 
 #include <memory>
 
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
 #include "fs/fs_util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -30,8 +32,6 @@
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
-#include "testutil/assert.h"
-#include "util/failpoint/fail_point.h"
 
 using namespace std;
 
@@ -68,7 +68,7 @@ public:
         auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
-        for (long key : keys) {
+        for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
             cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));

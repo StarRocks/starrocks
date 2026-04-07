@@ -19,8 +19,11 @@
 #include <functional>
 #include <iostream>
 
+#include "base/testutil/assert.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
 #include "common/logging.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -36,7 +39,6 @@
 #include "storage/rowset/segment_writer.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -48,7 +50,7 @@ using std::vector;
 class SegmentRewriterTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _fs = FileSystem::CreateSharedFromString("posix://").value();
+        _fs = FileSystemFactory::CreateSharedFromString("posix://").value();
         ASSERT_OK(_fs->create_dir_recursive(kSegmentDir));
     }
 

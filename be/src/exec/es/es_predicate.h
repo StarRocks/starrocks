@@ -38,6 +38,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/time/timezone_utils.h"
 #include "cctz/time_zone.h"
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
@@ -46,7 +47,6 @@
 #include "runtime/descriptors.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 

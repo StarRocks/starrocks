@@ -16,7 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "testutil/parallel_test.h"
+#include "base/testutil/parallel_test.h"
+#include "common/config_storage_fwd.h"
 
 namespace starrocks {
 

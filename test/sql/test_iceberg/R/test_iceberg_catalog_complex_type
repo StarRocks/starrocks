@@ -35,7 +35,7 @@ select array_filter(x->x.`user` = 'official', name)[1].family from ice_cat_${uui
 -- result:
 Glover433
 -- !result
-function: assert_explain_verbose_contains("select array_filter(x->x.`user` = 'official', name)[1].family from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0}", "Pruned type: 1 <-> [ARRAY<struct<user varchar(1073741824), family varchar(1073741824), given array<varchar(1073741824)>, prefix array<varchar(1073741824)>, suffix array<varchar(1073741824)>>>]")
+function: assert_explain_verbose_contains("select array_filter(x->x.`user` = 'official', name)[1].family from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0}", "Pruned type: 1 <-> [ARRAY<struct<`user` varchar(1073741824), `family` varchar(1073741824), `given` array<varchar(1073741824)>, `prefix` array<varchar(1073741824)>, `suffix` array<varchar(1073741824)>>>]")
 -- result:
 None
 -- !result

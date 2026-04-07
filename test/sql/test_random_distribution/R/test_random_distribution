@@ -244,7 +244,7 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
--- name: test_partition_random_distribution
+-- name: test_partition_random_distribution @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0"));
 -- result:
 -- !result

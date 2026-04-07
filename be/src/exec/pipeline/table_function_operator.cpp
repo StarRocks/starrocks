@@ -14,6 +14,8 @@
 
 #include "table_function_operator.h"
 
+#include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
 void TableFunctionOperator::close(RuntimeState* state) {
     if (_table_function != nullptr && _table_function_state != nullptr) {
@@ -142,7 +144,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     for (const auto& column : output_columns) {
         RETURN_IF_ERROR(column->capacity_limit_reached());
     }
-    return _build_chunk(std::move(output_columns));
+    return _build_chunk(output_columns);
 }
 
 Status TableFunctionOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {

@@ -979,15 +979,6 @@ function: wait_alter_table_finish()
 
 insert into duplicate_table_demo_datatype_not_replicated_all_varchar values ('1974-08-20 23:13:25', 'xIjfSXnegdnZiZGQMaxo', 'syHwIOMctmDLDGCibEun', 'hIbilUEGdLbCnaZASCVL', 6299, 25361.52081, 'QuTsacRyxiIkBjEmjhNu', -11.4812925061712, True, 'QcLRdQJMhtPXojJUjkUd', 'yUeFlbzomaPDwKeaHylx', 'WqQyGEjEYpvLzfBXYUCB', '', 8, '2015-11-03 16:31:47', [2621, 5950, 13171], '{"job": "Administrator, Civil Service", "company": "Morris-Anderson", "ssn": "823-67-5554", "residence": "59688 Hanna Shoal Apt. 586\nWest Waynefort, CO 69652", "current_location": ["-64.3777465", "21.079566"], "blood_group": "O-", "website": ["http://young.biz/", "https://cobb-bell.com/", "http://www.roberts-garrison.com/", "http://jones.com/"], "username": "howardarcher", "name": "John Mccullough", "sex": "M", "address": "1361 Susan Mountain\nJasonbury, MI 85084", "mail": "lovejennifer@gmail.com", "birthdate": "1928-06-25"}', null, null);
 select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
-select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
 
 DROP VIEW test_view;
 DROP TABLE duplicate_table_demo_datatype_not_replicated_all_varchar;

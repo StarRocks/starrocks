@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -25,7 +27,6 @@
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
 #include "test_util.h"
-#include "testutil/assert.h"
 
 namespace starrocks::lake {
 
@@ -110,6 +111,41 @@ protected:
         }
         if (fileset_id != nullptr) {
             sst_pb->mutable_fileset_id()->CopyFrom(fileset_id->to_proto());
+        }
+
+        return Status::OK();
+    }
+
+    Status create_test_sstable_with_rssid(const std::string& filename, int start_key, int count, uint32_t rssid_base,
+                                          PersistentIndexSstablePB* sst_pb) {
+        sstable::Options options;
+        std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), filename);
+        ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(filepath));
+        sstable::TableBuilder builder(options, wf.get());
+
+        std::string first_key;
+        std::string last_key;
+        for (int i = 0; i < count; i++) {
+            std::string key = fmt::format("key_{:016X}", start_key + i);
+            if (i == 0) first_key = key;
+            if (i == count - 1) last_key = key;
+            IndexValuesWithVerPB index_value_pb;
+            auto* value = index_value_pb.add_values();
+            value->set_version(1);
+            value->set_rssid(rssid_base + i);
+            value->set_rowid(i);
+            builder.Add(Slice(key), Slice(index_value_pb.SerializeAsString()));
+        }
+        RETURN_IF_ERROR(builder.Finish());
+        uint64_t filesize = builder.FileSize();
+        RETURN_IF_ERROR(wf->sync());
+        RETURN_IF_ERROR(wf->close());
+
+        sst_pb->set_filename(filename);
+        sst_pb->set_filesize(filesize);
+        if (count > 0) {
+            sst_pb->mutable_range()->set_start_key(first_key);
+            sst_pb->mutable_range()->set_end_key(last_key);
         }
 
         return Status::OK();
@@ -248,6 +284,65 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_init_standalone_sstable) {
     ASSERT_EQ("standalone.sst", fileset.standalone_sstable_filename());
 }
 
+// Test that standalone sstable (no range) preserves fileset_id from metadata
+// when it already has one. This is the upgrade scenario: sstables created in
+// older versions (e.g., 3.5) have no range but get a fileset_id written by 4.1
+// during a previous publish. On reload, the fileset_id must be preserved so
+// that compaction txn logs referencing it can still match.
+TEST_F(LakePersistentIndexFilesetTest, test_standalone_sstable_preserves_existing_fileset_id) {
+    auto original_fileset_id = UniqueId::gen_uid();
+
+    // Create sstable with fileset_id but clear range (simulating upgrade from 3.5)
+    PersistentIndexSstablePB sst_pb;
+    ASSERT_OK(create_test_sstable("upgraded.sst", 0, 100, &sst_pb, &original_fileset_id));
+    sst_pb.clear_range(); // Remove range to simulate old-version sstable
+
+    ASSIGN_OR_ABORT(auto sst, open_sstable(sst_pb));
+
+    // Single-sstable init overload
+    PersistentIndexSstableFileset fileset;
+    ASSERT_OK(fileset.init(sst));
+
+    ASSERT_TRUE(fileset.is_standalone_sstable());
+    // The fileset_id must match the original, not a newly generated random one
+    ASSERT_EQ(original_fileset_id.to_string(), fileset.fileset_id().to_string());
+}
+
+TEST_F(LakePersistentIndexFilesetTest, test_standalone_sstable_preserves_existing_fileset_id_vector_init) {
+    auto original_fileset_id = UniqueId::gen_uid();
+
+    PersistentIndexSstablePB sst_pb;
+    ASSERT_OK(create_test_sstable("upgraded_vec.sst", 0, 100, &sst_pb, &original_fileset_id));
+    sst_pb.clear_range();
+
+    ASSIGN_OR_ABORT(auto sst, open_sstable(sst_pb));
+    std::vector<std::unique_ptr<PersistentIndexSstable>> sstables;
+    sstables.push_back(std::move(sst));
+
+    // Vector init overload
+    PersistentIndexSstableFileset fileset;
+    ASSERT_OK(fileset.init(sstables));
+
+    ASSERT_TRUE(fileset.is_standalone_sstable());
+    ASSERT_EQ(original_fileset_id.to_string(), fileset.fileset_id().to_string());
+}
+
+// Test that standalone sstable without fileset_id still gets a generated one
+TEST_F(LakePersistentIndexFilesetTest, test_standalone_sstable_without_fileset_id_generates_new_one) {
+    PersistentIndexSstablePB sst_pb;
+    ASSERT_OK(create_test_sstable("legacy.sst", 0, 100, &sst_pb, nullptr));
+    sst_pb.clear_range();
+
+    ASSIGN_OR_ABORT(auto sst, open_sstable(sst_pb));
+
+    PersistentIndexSstableFileset fileset;
+    ASSERT_OK(fileset.init(sst));
+
+    ASSERT_TRUE(fileset.is_standalone_sstable());
+    // Should have a valid (non-zero) generated fileset_id
+    ASSERT_NE(UniqueId(0, 0).to_string(), fileset.fileset_id().to_string());
+}
+
 TEST_F(LakePersistentIndexFilesetTest, test_fileset_multiple_standalone_error) {
     std::vector<std::unique_ptr<PersistentIndexSstable>> sstables;
 
@@ -303,7 +398,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_merge_from) {
     ASSERT_OK(create_test_sstable("test_sst_2.sst", 1000, 100, &sst_pb2, &fileset_id));
     ASSIGN_OR_ABORT(auto sst2, open_sstable(sst_pb2));
 
-    ASSERT_OK(fileset.merge_from(sst2));
+    ASSERT_TRUE(fileset.append(sst2));
 
     // Verify both sstables are stored
     PersistentIndexSstableMetaPB retrieved_pbs;
@@ -327,13 +422,11 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_merge_from_overlapping_error
     ASSERT_OK(create_test_sstable("test_sst_2.sst", 50, 100, &sst_pb2, &fileset_id));
     ASSIGN_OR_ABORT(auto sst2, open_sstable(sst_pb2));
 
-    auto st = fileset.merge_from(sst2);
-    ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.is_internal_error());
+    ASSERT_FALSE(fileset.append(sst2));
 }
 
 // Note: can_append() method has been removed from the API
-// Validation is now done in merge_from() which returns error on overlap
+// Validation is now done in append() which returns error on overlap
 
 TEST_F(LakePersistentIndexFilesetTest, test_fileset_multi_get_single_sstable) {
     auto fileset_id = UniqueId::gen_uid();
@@ -455,6 +548,33 @@ TEST_F(LakePersistentIndexFilesetTest, test_fileset_multi_get_partial_match) {
     }
 }
 
+TEST_F(LakePersistentIndexFilesetTest, test_multi_get_rssid_offset) {
+    PersistentIndexSstablePB sst_pb;
+    ASSERT_OK(create_test_sstable_with_rssid("test_sst_offset.sst", 0, 3, 10, &sst_pb));
+    sst_pb.set_rssid_offset(7);
+
+    ASSIGN_OR_ABORT(auto sst, open_sstable(sst_pb));
+
+    std::vector<std::string> key_strs;
+    std::vector<Slice> keys;
+    KeyIndexSet key_indexes;
+    for (int i = 0; i < 3; ++i) {
+        key_strs.emplace_back(fmt::format("key_{:016X}", i));
+        keys.emplace_back(key_strs.back());
+        key_indexes.insert(i);
+    }
+
+    std::vector<IndexValue> values(keys.size(), IndexValue(NullIndexValue));
+    KeyIndexSet found_key_indexes;
+    ASSERT_OK(sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found_key_indexes));
+    ASSERT_EQ(key_indexes.size(), found_key_indexes.size());
+
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(values[i].get_rssid(), 10U + static_cast<uint32_t>(i) + 7U);
+        EXPECT_EQ(values[i].get_rowid(), static_cast<uint32_t>(i));
+    }
+}
+
 TEST_F(LakePersistentIndexFilesetTest, test_fileset_memory_usage) {
     auto fileset_id = UniqueId::gen_uid();
     std::vector<std::unique_ptr<PersistentIndexSstable>> sstables;
@@ -539,7 +659,8 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_minor_compaction)
         ASSERT_OK(index->init(_tablet_metadata));
         index->prepare(EditVersion(1, 0), 0);
         ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
-        ASSERT_OK(index->minor_compact());
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
 
         // Commit to metadata
         Tablet tablet(_tablet_mgr.get(), tablet_id);
@@ -569,7 +690,6 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_minor_compaction)
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
-/*
 TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_major_compaction) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
@@ -602,7 +722,8 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_major_compaction)
             index->prepare(EditVersion(m, 0), 0);
             std::vector<IndexValue> old_values(N);
             ASSERT_OK(index->upsert(N, all_key_slices[m].data(), all_values[m].data(), old_values.data()));
-            ASSERT_OK(index->minor_compact());
+            ASSERT_OK(index->flush_memtable(true));
+            ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
         }
 
         // Commit to metadata
@@ -655,7 +776,7 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_reload_after_major_compaction)
     }
 
     config::l0_max_mem_usage = l0_max_mem_usage;
-}*/
+}
 
 TEST_F(LakePersistentIndexFilesetTest, test_index_multiple_reload_cycles) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
@@ -688,7 +809,8 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_multiple_reload_cycles) {
 
             std::vector<IndexValue> old_values(N);
             ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), old_values.data()));
-            ASSERT_OK(index->minor_compact());
+            ASSERT_OK(index->flush_memtable(true));
+            ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
 
             Tablet tablet(_tablet_mgr.get(), tablet_id);
             auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
@@ -745,7 +867,8 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_upsert_and_reload) {
         ASSERT_OK(index->init(_tablet_metadata));
         index->prepare(EditVersion(1, 0), 0);
         ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
-        ASSERT_OK(index->minor_compact());
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
 
         Tablet tablet(_tablet_mgr.get(), tablet_id);
         auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
@@ -770,7 +893,8 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_upsert_and_reload) {
 
         std::vector<IndexValue> old_values(N);
         ASSERT_OK(index->upsert(N, key_slices.data(), new_values.data(), old_values.data()));
-        ASSERT_OK(index->minor_compact());
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
 
         Tablet tablet(_tablet_mgr.get(), tablet_id);
         auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
@@ -822,7 +946,8 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_concurrent_read_after_reload) 
         ASSERT_OK(index->init(_tablet_metadata));
         index->prepare(EditVersion(1, 0), 0);
         ASSERT_OK(index->insert(N, key_slices.data(), values.data(), 0));
-        ASSERT_OK(index->minor_compact());
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(60 * 1000 * 1000)); // Wait up to 60s
 
         Tablet tablet(_tablet_mgr.get(), tablet_id);
         auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();

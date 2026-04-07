@@ -872,8 +872,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        super.afterVisible(txnState, txnOperated);
+    public void afterVisible(TransactionState txnState) {
+        super.afterVisible(txnState);
         // Update lag time metrics when Kafka transaction becomes visible
         if (Config.enable_routine_load_lag_time_metrics) {
             updateLagTimeMetricsFromProgress();

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/combinator/agg_state_combinator.h"
@@ -30,7 +32,7 @@ struct AggStateMergeState {};
 class AggStateMerge final : public AggStateCombinator<AggStateMergeState, AggStateMerge> {
 public:
     AggStateMerge(AggStateDesc agg_state_desc, const AggregateFunction* function)
-            : AggStateCombinator(agg_state_desc, function) {
+            : AggStateCombinator(std::move(agg_state_desc), function) {
         DCHECK(_function != nullptr);
     }
 
@@ -57,7 +59,7 @@ public:
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& srcs, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
         DCHECK_EQ(1, srcs.size());
-        dst = srcs[0]->clone();
+        dst = std::move(*(srcs[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,

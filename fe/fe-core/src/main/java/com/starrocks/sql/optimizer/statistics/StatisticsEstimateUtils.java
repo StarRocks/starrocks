@@ -67,16 +67,31 @@ public class StatisticsEstimateUtils {
     }
 
     public static Statistics adjustStatisticsByRowCount(Statistics statistics, double rowCount) {
-        // Do not compute predicate statistics if column statistics is unknown or table row count may inaccurate
-        if (statistics.getColumnStatistics().values().stream().anyMatch(ColumnStatistic::isUnknown) ||
-                statistics.isTableRowCountMayInaccurate()) {
+        if (statistics.isTableRowCountMayInaccurate()) {
             return statistics;
         }
-        Statistics.Builder builder = Statistics.buildFrom(statistics);
-        builder.setOutputRowCount(rowCount);
-        // use row count to adjust column statistics distinct values
-        double distinctValues = Math.max(1, rowCount);
-        statistics.getColumnStatistics().forEach((column, columnStatistic) -> {
+        for (ColumnStatistic cs : statistics.getColumnStatistics().values()) {
+            if (cs.isUnknown()) {
+                return statistics;
+            }
+        }
+
+        Statistics updated = statistics.withOutputRowCount(rowCount);
+        double distinctValues = Math.max(1, updated.getOutputRowCount());
+        boolean needAdjust = false;
+        for (ColumnStatistic cs : updated.getColumnStatistics().values()) {
+            if (cs.getDistinctValuesCount() > distinctValues) {
+                needAdjust = true;
+                break;
+            }
+        }
+        if (!needAdjust) {
+            return updated;
+        }
+
+        Statistics.Builder builder = Statistics.buildFrom(updated);
+        builder.setOutputRowCount(updated.getOutputRowCount());
+        updated.getColumnStatistics().forEach((column, columnStatistic) -> {
             if (columnStatistic.getDistinctValuesCount() > distinctValues) {
                 builder.addColumnStatistic(column,
                         ColumnStatistic.buildFrom(columnStatistic).setDistinctValuesCount(distinctValues).build());

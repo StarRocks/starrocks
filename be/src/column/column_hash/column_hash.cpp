@@ -17,7 +17,10 @@
 #include <cstring>
 #include <string>
 #include <type_traits>
+#include <typeindex>
 
+#include "base/hash/hash_util.hpp"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
@@ -29,8 +32,7 @@
 #include "column/object_column.h"
 #include "column/struct_column.h"
 #include "common/status.h"
-#include "runtime/time_types.h"
-#include "util/hash_util.hpp"
+#include "types/time_types.h"
 
 namespace starrocks {
 
@@ -233,7 +235,7 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& column) {
         const auto& offsets = column.get_offset();
-        const auto& bytes = column.get_bytes();
+        const auto& bytes = column.get_immutable_bytes();
         const auto column_size = column.size();
         _selector.for_each([&](uint32_t idx) {
             // Skip out-of-bounds indices (preserve hash seed)
@@ -383,6 +385,11 @@ public:
     }
 
     Status do_visit(const VariantColumn& column) { return Status::NotSupported("VariantColumn is not supported"); }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("AdaptiveNullableColumn is not supported");
+    }
 
     template <typename ObjectType>
     Status do_visit(const ObjectColumn<ObjectType>& column) {

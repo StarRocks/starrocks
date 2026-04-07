@@ -512,5 +512,77 @@ public class SetStmtTest {
         }
     }
 
-    
+    @Test
+    public void testConnectorSinkSortScope() {
+        // Test valid values
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CONNECTOR_SINK_SORT_SCOPE,
+                    new StringLiteral("none"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("none", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CONNECTOR_SINK_SORT_SCOPE,
+                    new StringLiteral("file"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("file", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CONNECTOR_SINK_SORT_SCOPE,
+                    new StringLiteral("host"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("host", setVar.getResolvedExpression().getStringValue());
+        }
+
+        // Test case insensitivity
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CONNECTOR_SINK_SORT_SCOPE,
+                    new StringLiteral("NONE"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("NONE", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CONNECTOR_SINK_SORT_SCOPE,
+                    new StringLiteral("FILE"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("FILE", setVar.getResolvedExpression().getStringValue());
+        }
+
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CONNECTOR_SINK_SORT_SCOPE,
+                    new StringLiteral("HOST"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+            Assertions.assertEquals("HOST", setVar.getResolvedExpression().getStringValue());
+        }
+
+        // Test invalid value "hos" (typo)
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CONNECTOR_SINK_SORT_SCOPE,
+                    new StringLiteral("hos"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for invalid value 'hos'");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Unsupported connector_sink_sort_scope: hos"));
+                assertThat(e.getMessage(), containsString("valid values are: none, file, host"));
+            }
+        }
+
+        // Test invalid value "invalid"
+        {
+            SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.CONNECTOR_SINK_SORT_SCOPE,
+                    new StringLiteral("invalid"));
+            try {
+                SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                Assertions.fail("should fail for invalid value 'invalid'");
+            } catch (SemanticException e) {
+                assertThat(e.getMessage(), containsString("Unsupported connector_sink_sort_scope: invalid"));
+            }
+        }
+    }
+
+
 }

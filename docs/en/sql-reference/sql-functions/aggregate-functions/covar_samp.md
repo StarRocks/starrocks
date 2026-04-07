@@ -26,10 +26,6 @@ Returns a DOUBLE value. The formula is as follows, where `n` represents the row 
 
 ![covar_samp formula](../../../_assets/covar_samp_formula.png)
 
-<!--$$
-\frac{\sum_{i=1}^{n} (x_i - \bar{x})(y_i - \bar{y})}{n-1}
-$$-->
-
 ## Usage notes
 
 - A data row is counted only when the two columns in this row are non-null values. Otherwise, this data row is eliminated from the result.

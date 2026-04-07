@@ -1,0 +1,277 @@
+name: Translation Status Check
+on:
+  workflow_run:
+    workflows: 
+      - "CI DOC Checker"
+    types: [completed]
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write 
+      contents: read       
+      actions: read # Required to read the job status of the triggering workflow
+    steps:
+      - name: Verify Linting Passed
+        id: check_lint
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            // Query the jobs of the CI DOC Checker run
+            const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            });
+            
+            // Look for the exact name of your linting job
+            const lintJob = jobsData.jobs.find(j => j.name === 'markdownlint');
+            
+            // If the lint job doesn't exist or didn't succeed, we cancel.
+            if (!lintJob || lintJob.conclusion !== 'success') {
+              console.log("Markdownlint failed or was skipped. Canceled translation check.");
+              return 'false';
+            }
+            
+            console.log("Markdownlint succeeded! Proceeding with translation check.");
+            return 'true';
+
+      - name: Get PR Number
+        if: steps.check_lint.outputs.result == 'true'
+        id: pr_number
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: pullRequests } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              // Format as owner:branch to ensure we find PRs from external forks
+              head: context.payload.workflow_run.head_repository.owner.login + ':' + context.payload.workflow_run.head_branch,
+              state: 'open',
+            });
+            
+            if (pullRequests.length === 0) {
+              core.setFailed('No open pull request found for this workflow_run.');
+              return;
+            }
+            core.setOutput('pr_number', pullRequests[0].number);
+
+      - name: Find Existing Comment
+        if: steps.check_lint.outputs.result == 'true'
+        uses: peter-evans/find-comment@v3
+        id: findcomment
+        with:
+          issue-number: ${{ steps.pr_number.outputs.pr_number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: "### 🌎 Translation Required?"
+
+      - name: Checkout PR Code
+        if: steps.check_lint.outputs.result == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: refs/pull/${{ steps.pr_number.outputs.pr_number }}/merge
+          fetch-depth: 0
+
+      - name: Get PR Details
+        if: steps.check_lint.outputs.result == 'true'
+        id: pr_details
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = '${{ steps.pr_number.outputs.pr_number }}';
+            const { data: pr } = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+            });
+            core.setOutput('base_sha', pr.base.sha);
+
+      - name: Get Changed Files
+        if: steps.check_lint.outputs.result == 'true'
+        id: changed-files
+        uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
+        with:
+          base_sha: ${{ steps.pr_details.outputs.base_sha }}
+          json: true
+          files: |
+            docs/en/**/*.md*
+            docs/zh/**/*.md*
+            docs/ja/**/*.md*
+
+      - name: Generate Checklist Body
+        if: steps.check_lint.outputs.result == 'true'
+        id: checklist
+        uses: actions/github-script@v7
+        env:
+          HAS_COMMENT: ${{ steps.findcomment.outputs.comment-id != '' }}
+        with:
+          script: |
+            const fs = require('fs');
+            let files = [];
+            try {
+              files = JSON.parse('${{ steps.changed-files.outputs.all_changed_files }}');
+            } catch (e) { console.log("No files detected"); }
+
+            const hasComment = process.env.HAS_COMMENT === 'true';
+            const timestamp = new Date().toUTCString();
+
+            // 1. SILENT ABORT: No doc changes and no prior comment? Stay completely quiet.
+            if (files.length === 0 && !hasComment) {
+              console.log("No translatable files and no prior comment. Cancelled all actions.");
+              core.setOutput('skip_commenting', 'true');
+              core.setOutput('needs_translation', 'false');
+              return;
+            }
+            
+            // We are proceeding, so don't skip commenting
+            core.setOutput('skip_commenting', 'false');
+            let body = "### 🌎 Translation Required?\n";
+
+            // 2. SUCCESS UPDATE: No doc changes, but we DO have a comment to update.
+            if (files.length === 0) {
+              body += "\n✅ **All translation files are up to date.**\n";
+              body += "No translation actions are required for this PR.\n";
+              body += `\n> 🕒 **Last updated:** ${timestamp}`;
+              core.setOutput('body', body);
+              core.setOutput('needs_translation', 'false');
+              return;
+            }
+
+            const getValidTargets = (sourceLang) => {
+              if (sourceLang === 'en') return ['zh', 'ja'];
+              if (sourceLang === 'zh') return ['en'];
+              if (sourceLang === 'ja') return [];
+              return [];
+            };
+
+            const filesByBase = {};
+            files.forEach(file => {
+              if (!fs.existsSync(file)) return;
+              const parts = file.split('/');
+              if (parts.length < 3) return;
+              const lang = parts[1];
+              if (!['en', 'zh', 'ja'].includes(lang)) return;
+              
+              const baseName = parts.slice(2).join('/');
+              if (!filesByBase[baseName]) {
+                filesByBase[baseName] = { en: false, zh: false, ja: false, paths: {} };
+              }
+              filesByBase[baseName][lang] = true;
+              filesByBase[baseName].paths[lang] = file;
+            });
+
+            let automatedCheckboxBuffer = "";
+            let manualTranslationBuffer = "";
+            let hasAutomatedTranslations = false;
+            let hasManualTranslations = false;
+
+            Object.entries(filesByBase).forEach(([baseName, langData]) => {
+              const allLanguagesPresent = langData.en && langData.zh && langData.ja;
+              if (allLanguagesPresent) return;
+
+              ['en', 'zh', 'ja'].forEach(sourceLang => {
+                if (!langData[sourceLang]) return;
+                
+                const file = langData.paths[sourceLang];
+                const validTargets = getValidTargets(sourceLang);
+                
+                if (validTargets.length === 0) {
+                  if (sourceLang === 'ja' && !langData.en && !langData.zh) {
+                    manualTranslationBuffer += `- \`${file}\` (Japanese file - requires English or Chinese source)\n`;
+                    hasManualTranslations = true;
+                  }
+                  return;
+                }
+
+                let automatedChecklist = "";
+                let manualChecklist = "";
+
+                validTargets.forEach(lang => {
+                  if (!langData[lang]) {
+                    const status = "(New)";
+                    const canAutomate = (sourceLang === 'en' || (sourceLang === 'zh' && lang === 'en'));
+                    
+                    if (canAutomate) {
+                      automatedChecklist += `- [ ] **${lang}** for \`${file}\` ${status}\n`;
+                    } else {
+                      manualChecklist += `- **${lang}** for \`${file}\` ${status}\n`;
+                    }
+                  }
+                });
+
+                if (automatedChecklist) {
+                  hasAutomatedTranslations = true;
+                  automatedCheckboxBuffer += `#### \`${file}\`\n${automatedChecklist}\n`;
+                }
+
+                if (manualChecklist) {
+                  hasManualTranslations = true;
+                  manualTranslationBuffer += `#### \`${file}\`\n${manualChecklist}\n`;
+                }
+              });
+            });
+
+            // 3. FINAL OUTPUT LOGIC
+            if (!hasAutomatedTranslations && !hasManualTranslations) {
+              body += "\n✅ **All translation files are up to date.**\n";
+              body += "Great job! No translation actions are required for this PR.\n";
+              core.setOutput('needs_translation', 'false');
+            } else {
+              core.setOutput('needs_translation', 'true');
+              body += "Thanks for your doc contribution! The following languages are missing or outdated for your changes.\n\n";
+              
+              if (hasAutomatedTranslations) {
+                body += "## 🤖 Automated Translations\n";
+                body += "If you are fluent in any of the missing languages you can add them. If not, a maintainer can generate the translations below.\n\n";
+                body += "**Maintainer:** Check the ones you wish to generate:\n\n";
+                body += automatedCheckboxBuffer;
+                body += "---\n*Maintainers: Check boxes and reply with `/translate` to start.*\n\n";
+              }
+
+              if (hasManualTranslations) {
+                body += "## 👤 Manual Translations Required\n";
+                body += "The following translations must be done manually by a human translator:\n\n";
+                body += manualTranslationBuffer;
+              }
+            }
+
+            body += `\n\n> 🕒 **Last updated:** ${timestamp}`;
+            core.setOutput('body', body);
+
+      - name: Create or update comment
+        if: steps.check_lint.outputs.result == 'true' && steps.checklist.outputs.skip_commenting != 'true'
+        uses: peter-evans/create-or-update-comment@v5
+        with:
+          comment-id: ${{ steps.findcomment.outputs.comment-id }}
+          issue-number: ${{ steps.pr_number.outputs.pr_number }}
+          body: ${{ steps.checklist.outputs.body }}
+          edit-mode: replace
+
+      - name: Label PR
+        if: steps.check_lint.outputs.result == 'true' && steps.checklist.outputs.needs_translation == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: ${{ steps.pr_number.outputs.pr_number }},
+                labels: ['docs-maintainer']
+              });
+            } catch (error) {
+              const status = error?.status ?? error?.response?.status;
+              const message = String(error?.message ?? '').toLowerCase();
+              const hasAlreadyExistsCode = Array.isArray(error?.response?.data?.errors)
+                && error.response.data.errors.some(item => item?.code === 'already_exists');
+
+              // Ignore only idempotent duplicate-label errors; surface all other failures.
+              if (status === 422 && (message.includes('already exists') || hasAlreadyExistsCode)) {
+                core.info('docs-maintainer label already exists. Skipping.');
+                return;
+              }
+
+              throw error;
+            }

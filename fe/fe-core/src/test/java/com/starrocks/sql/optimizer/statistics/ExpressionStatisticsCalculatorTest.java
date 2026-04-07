@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
@@ -39,6 +40,8 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -634,6 +637,79 @@ public class ExpressionStatisticsCalculatorTest {
     }
 
     @Test
+    public void testCaseWhenOperatorNullFractionWithoutElse() {
+        // GIVEN
+        // CASE WHEN col = 1 THEN '1' WHEN col = 2 THEN '2' END  (no ELSE)
+        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var whenOperator1 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(1));
+        final var constantOperator1 = ConstantOperator.createChar("1");
+        final var whenOperator2 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(2));
+        final var constantOperator2 = ConstantOperator.createChar("2");
+
+        // No ELSE clause: elseClause = null
+        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(VarcharType.VARCHAR, null, null,
+                ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
+
+        // WHEN
+        final var columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator,
+                Statistics.builder().setOutputRowCount(100).build());
+
+        // THEN
+        Assertions.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
+        // The implicit ELSE NULL branch has nullsFraction=1.0, the two THEN constant branches have nullsFraction=0.0.
+        Assertions.assertEquals(1.0 / 3.0, columnStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testCaseWhenOperatorNullFractionWithElse() {
+        // GIVEN
+        // CASE WHEN col = 1 THEN '1' WHEN col = 2 THEN '2' ELSE 'others' END
+        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var whenOperator1 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(1));
+        final var constantOperator1 = ConstantOperator.createChar("1");
+        final var whenOperator2 = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(2));
+        final var constantOperator2 = ConstantOperator.createChar("2");
+
+        final var caseWhenOperator =
+                new CaseWhenOperator(VarcharType.VARCHAR, null, ConstantOperator.createChar("others", VarcharType.VARCHAR),
+                        ImmutableList.of(whenOperator1, constantOperator1, whenOperator2, constantOperator2));
+
+        // WHEN
+        final var columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator,
+                Statistics.builder().setOutputRowCount(100).build());
+
+        // THEN
+        // All 3 branches (2 THEN + 1 ELSE) are non-null constants => average nullFraction = 0.0
+        Assertions.assertEquals(0.0, columnStatistic.getNullsFraction(), 0.001);
+        Assertions.assertEquals(3, columnStatistic.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testCaseWhenOperatorExplicitElseNull() {
+        // GIVEN
+        // CASE WHEN col = 1 THEN 'x' ELSE NULL END
+        final var columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
+        final var whenOperator = new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator,
+                ConstantOperator.createInt(1));
+        final var thenOperator = ConstantOperator.createChar("x");
+
+        final var caseWhenOperator = new CaseWhenOperator(VarcharType.VARCHAR, null,
+                ConstantOperator.createNull(VarcharType.VARCHAR), ImmutableList.of(whenOperator, thenOperator));
+
+        // WHEN
+        final var columnStatistic = ExpressionStatisticCalculator.calculate(caseWhenOperator,
+                Statistics.builder().setOutputRowCount(100).build());
+
+        // THEN
+        Assertions.assertEquals(1, columnStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0.5, columnStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
     public void testFromDays() {
         ColumnRefOperator columnRefOperator = new ColumnRefOperator(1, IntegerType.INT, "", true);
         CallOperator callOperator = new CallOperator(FunctionSet.FROM_DAYS, FloatType.DOUBLE,
@@ -673,4 +749,397 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(ifStatistic.getMaxValue(), 200, 0.001);
         Assertions.assertEquals(ifStatistic.getMinValue(), -100, 0.001);
     }
+
+    @Test
+    public void testMcvPropagationForAddConst() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        // one bucket [1,3) with total 100 rows plus two MCV values
+        Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L)), Map.of("1", 20480L, "2", 10240L));
+        ColumnStatistic kStats = ColumnStatistic.builder()
+                .setMinValue(1)
+                .setMaxValue(1000)
+                .setNullsFraction(0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(1000)
+                .setHistogram(hist)
+                .build();
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(100000)
+                .addColumnStatistic(k, kStats)
+                .build();
+
+        // expr: cast(k as BIGINT) + 10
+        CastOperator cast = new CastOperator(IntegerType.BIGINT, k);
+        ConstantOperator c10 = ConstantOperator.createBigint(10);
+        CallOperator add = new CallOperator(FunctionSet.ADD, IntegerType.BIGINT, Lists.newArrayList(cast, c10));
+
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertNotNull(exprStats.getHistogram().getMCV());
+        Assertions.assertEquals(20480L, exprStats.getHistogram().getMCV().get("11"));
+        Assertions.assertEquals(10240L, exprStats.getHistogram().getMCV().get("12"));
+        Assertions.assertEquals(1, exprStats.getHistogram().getBuckets().size());
+        Assertions.assertEquals(11.0, exprStats.getHistogram().getBuckets().get(0).getLower(), 0.0001);
+        Assertions.assertEquals(13.0, exprStats.getHistogram().getBuckets().get(0).getUpper(), 0.0001);
+    }
+
+    @Test
+    public void testMcvPropagationForAddConst_commutativeShiftsBuckets() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        // one bucket [1,3) with total 100 rows plus two MCV values
+        Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L)), Map.of("1", 20480L, "2", 10240L));
+        ColumnStatistic kStats = ColumnStatistic.builder()
+                .setMinValue(1)
+                .setMaxValue(1000)
+                .setNullsFraction(0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(1000)
+                .setHistogram(hist)
+                .build();
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(100000)
+                .addColumnStatistic(k, kStats)
+                .build();
+
+        // expr: 10 + cast(k as BIGINT)
+        CastOperator cast = new CastOperator(IntegerType.BIGINT, k);
+        ConstantOperator c10 = ConstantOperator.createBigint(10);
+        CallOperator add = new CallOperator(FunctionSet.ADD, IntegerType.BIGINT, Lists.newArrayList(c10, cast));
+
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertNotNull(exprStats.getHistogram().getMCV());
+        Assertions.assertEquals(20480L, exprStats.getHistogram().getMCV().get("11"));
+        Assertions.assertEquals(10240L, exprStats.getHistogram().getMCV().get("12"));
+        Assertions.assertEquals(1, exprStats.getHistogram().getBuckets().size());
+        Assertions.assertEquals(11.0, exprStats.getHistogram().getBuckets().get(0).getLower(), 0.0001);
+        Assertions.assertEquals(13.0, exprStats.getHistogram().getBuckets().get(0).getUpper(), 0.0001);
+    }
+
+    @Test
+    public void testMcvPropagationForSubtractConst() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(new Bucket(10, 12, 100L, 0L)), Map.of("10", 10L, "11", 5L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(100)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(100).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(100)
+                        .setHistogram(hist).build())
+                .build();
+
+        CastOperator cast = new CastOperator(IntegerType.BIGINT, k);
+        ConstantOperator c10 = ConstantOperator.createBigint(10);
+        CallOperator sub = new CallOperator(FunctionSet.SUBTRACT, IntegerType.BIGINT, Lists.newArrayList(cast, c10));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(sub, stats);
+
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(10L, exprStats.getHistogram().getMCV().get("0"));
+        Assertions.assertEquals(5L, exprStats.getHistogram().getMCV().get("1"));
+        Assertions.assertEquals(0.0, exprStats.getHistogram().getBuckets().get(0).getLower(), 0.0001);
+        Assertions.assertEquals(2.0, exprStats.getHistogram().getBuckets().get(0).getUpper(), 0.0001);
+    }
+
+    @Test
+    public void testMcvPropagationForSubtractConstMinusX_doesNotShiftBuckets() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L)), Map.of("1", 7L, "2", 3L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(100)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(100).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(100)
+                        .setHistogram(hist).build())
+                .build();
+
+        CastOperator cast = new CastOperator(IntegerType.BIGINT, k);
+        ConstantOperator c10 = ConstantOperator.createBigint(10);
+        // expr: 10 - cast(k)
+        CallOperator sub = new CallOperator(FunctionSet.SUBTRACT, IntegerType.BIGINT, Lists.newArrayList(c10, cast));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(sub, stats);
+
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(7L, exprStats.getHistogram().getMCV().get("9"));
+        Assertions.assertEquals(3L, exprStats.getHistogram().getMCV().get("8"));
+        // Buckets should be transformed for const - x: [l,u) -> [c-u, c-l), reverse order for monotonic decreasing mapping.
+        Assertions.assertEquals(7.0, exprStats.getHistogram().getBuckets().get(0).getLower(), 0.0001);
+        Assertions.assertEquals(9.0, exprStats.getHistogram().getBuckets().get(0).getUpper(), 0.0001);
+    }
+
+    @Test
+    public void testMcvPropagationForUnaryNegative() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(), Map.of("1", 100L, "2", 50L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(200)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(10).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(10)
+                        .setHistogram(hist).build())
+                .build();
+
+        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, IntegerType.INT, Lists.newArrayList(k));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(neg, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(100L, exprStats.getHistogram().getMCV().get("-1"));
+        Assertions.assertEquals(50L, exprStats.getHistogram().getMCV().get("-2"));
+    }
+
+    @Test
+    public void testMcvPropagationForUnaryNegative_transformsBuckets() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L)), Map.of("1", 100L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(100)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(10).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(10)
+                        .setHistogram(hist).build())
+                .build();
+
+        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, IntegerType.INT, Lists.newArrayList(k));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(neg, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(100L, exprStats.getHistogram().getMCV().get("-1"));
+        Assertions.assertEquals(1, exprStats.getHistogram().getBuckets().size());
+        Assertions.assertEquals(-3.0, exprStats.getHistogram().getBuckets().get(0).getLower(), 0.0001);
+        Assertions.assertEquals(-1.0, exprStats.getHistogram().getBuckets().get(0).getUpper(), 0.0001);
+    }
+
+    @Test
+    public void testMcvPropagationForUnaryNegative_transformsBuckets_multiBucketCumulativeCounts() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        // two buckets with cumulative counts: [1,3) count=100, [3,5) count=250
+        Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L), new Bucket(3, 5, 250L, 0L)),
+                Map.of("1", 10L, "4", 20L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(250)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(10).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(10)
+                        .setHistogram(hist).build())
+                .build();
+
+        CallOperator neg = new CallOperator(FunctionSet.NEGATIVE, IntegerType.INT, Lists.newArrayList(k));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(neg, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(2, exprStats.getHistogram().getBuckets().size());
+        // After negation and reverse:
+        // [3,5) -> [-5,-3) should be first and keep per-bucket rows 150 => cumulative 150
+        // [1,3) -> [-3,-1) should be second and add 100 => cumulative 250
+        Bucket b0 = exprStats.getHistogram().getBuckets().get(0);
+        Bucket b1 = exprStats.getHistogram().getBuckets().get(1);
+        Assertions.assertEquals(-5.0, b0.getLower(), 0.0001);
+        Assertions.assertEquals(-3.0, b0.getUpper(), 0.0001);
+        Assertions.assertEquals(150L, b0.getCount().longValue());
+        Assertions.assertEquals(-3.0, b1.getLower(), 0.0001);
+        Assertions.assertEquals(-1.0, b1.getUpper(), 0.0001);
+        Assertions.assertEquals(250L, b1.getCount().longValue());
+    }
+
+    @Test
+    public void testMcvPropagationForUnaryAbs_collisionMerge() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(), Map.of("-1", 100L, "1", 200L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(300)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(-10).setMaxValue(10).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(20)
+                        .setHistogram(hist).build())
+                .build();
+
+        CallOperator abs = new CallOperator(FunctionSet.ABS, IntegerType.INT, Lists.newArrayList(k));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(abs, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(300L, exprStats.getHistogram().getMCV().get("1"));
+    }
+
+    @Test
+    public void testMcvPropagationForUnaryAbs_transformsBucketsWhenAllNonPositive() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(new Bucket(-3, -1, 100L, 0L)), Map.of("-2", 10L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(100)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(-10).setMaxValue(-1).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(10)
+                        .setHistogram(hist).build())
+                .build();
+
+        CallOperator abs = new CallOperator(FunctionSet.ABS, IntegerType.INT, Lists.newArrayList(k));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(abs, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(10L, exprStats.getHistogram().getMCV().get("2"));
+        Assertions.assertEquals(1, exprStats.getHistogram().getBuckets().size());
+        Assertions.assertEquals(1.0, exprStats.getHistogram().getBuckets().get(0).getLower(), 0.0001);
+        Assertions.assertEquals(3.0, exprStats.getHistogram().getBuckets().get(0).getUpper(), 0.0001);
+    }
+
+    @Test
+    public void testMcvPropagationForUnaryAbs_identityWhenAllNonNegativeBuckets() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(new Bucket(1, 3, 100L, 0L), new Bucket(3, 5, 250L, 0L)),
+                Map.of("2", 10L, "4", 20L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(250)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(10).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(10)
+                        .setHistogram(hist).build())
+                .build();
+
+        CallOperator abs = new CallOperator(FunctionSet.ABS, IntegerType.INT, Lists.newArrayList(k));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(abs, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(2, exprStats.getHistogram().getBuckets().size());
+        Bucket b0 = exprStats.getHistogram().getBuckets().get(0);
+        Bucket b1 = exprStats.getHistogram().getBuckets().get(1);
+        // identity: buckets unchanged
+        Assertions.assertEquals(1.0, b0.getLower(), 0.0001);
+        Assertions.assertEquals(3.0, b0.getUpper(), 0.0001);
+        Assertions.assertEquals(100L, b0.getCount().longValue());
+        Assertions.assertEquals(3.0, b1.getLower(), 0.0001);
+        Assertions.assertEquals(5.0, b1.getUpper(), 0.0001);
+        Assertions.assertEquals(250L, b1.getCount().longValue());
+    }
+
+    @Test
+    public void testMcvPropagationForUnaryPositive_identity() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(), Map.of("1", 10L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(10)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(1).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(1)
+                        .setHistogram(hist).build())
+                .build();
+
+        CallOperator pos = new CallOperator(FunctionSet.POSITIVE, IntegerType.INT, Lists.newArrayList(k));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(pos, stats);
+        Assertions.assertNotNull(exprStats.getHistogram());
+        Assertions.assertEquals(10L, exprStats.getHistogram().getMCV().get("1"));
+    }
+
+    @Test
+    public void testMcvPropagationFailClosedForNonIntegerType() {
+        ColumnRefOperator k = new ColumnRefOperator(1, IntegerType.INT, "k", true);
+        Histogram hist = new Histogram(List.of(), Map.of("1", 10L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(10)
+                .addColumnStatistic(k, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(1).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(1)
+                        .setHistogram(hist).build())
+                .build();
+
+        // expr type is DOUBLE => should not propagate histogram/MCV
+        CallOperator add = new CallOperator(FunctionSet.ADD, FloatType.DOUBLE,
+                Lists.newArrayList(k, ConstantOperator.createInt(1)));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
+        Assertions.assertNull(exprStats.getHistogram());
+    }
+
+    @Test
+    public void testMcvPropagationFailClosedForNoConstSide() {
+        ColumnRefOperator k1 = new ColumnRefOperator(1, IntegerType.INT, "k1", true);
+        ColumnRefOperator k2 = new ColumnRefOperator(2, IntegerType.INT, "k2", true);
+        Histogram hist = new Histogram(List.of(), Map.of("1", 10L));
+        Statistics stats = Statistics.builder()
+                .setOutputRowCount(10)
+                .addColumnStatistic(k1, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(1).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(1)
+                        .setHistogram(hist).build())
+                .addColumnStatistic(k2, ColumnStatistic.builder()
+                        .setMinValue(1).setMaxValue(1).setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(1)
+                        .build())
+                .build();
+
+        CallOperator add = new CallOperator(FunctionSet.ADD, IntegerType.BIGINT, Lists.newArrayList(k1, k2));
+        ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(add, stats);
+        Assertions.assertNull(exprStats.getHistogram());
+    }
+
+    @Test
+    public void testIsNullPredicateStatisticsWithNoNulls() {
+        // GIVEN
+        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "col", true);
+        final var colStat = ColumnStatistic.builder() //
+                .setMinValue(0) //
+                .setMaxValue(999_999) //
+                .setDistinctValuesCount(1_000_237) //
+                .setNullsFraction(0) //
+                .setAverageRowSize(8) //
+                .build();
+        final var statistics = Statistics.builder() //
+                .setOutputRowCount(1_000_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+
+        final var isNull = new IsNullPredicateOperator(false, col);
+
+        // WHEN
+        final var isNullStat = ExpressionStatisticCalculator.calculate(isNull, statistics);
+
+        // THEN
+        Assertions.assertFalse(isNullStat.isUnknown());
+        Assertions.assertEquals(0, isNullStat.getMinValue(), 0.001);
+        Assertions.assertEquals(1, isNullStat.getMaxValue(), 0.001);
+        Assertions.assertEquals(0, isNullStat.getNullsFraction(), 0.001);
+        // nullsFraction=0 → only the false branch has rows → NDV=1
+        Assertions.assertEquals(1, isNullStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(isNullStat.getHistogram());
+        Assertions.assertEquals(1_000_000L, isNullStat.getHistogram().getMCV().get("0"));
+        Assertions.assertNull(isNullStat.getHistogram().getMCV().get("1"));
+    }
+
+    @Test
+    public void testIsNullPredicateStatisticsWithNulls() {
+        // GIVEN
+        final var col = new ColumnRefOperator(1, IntegerType.BIGINT, "col", true);
+        final var colStat = ColumnStatistic.builder() //
+                .setMinValue(0) //
+                .setMaxValue(999_999) //
+                .setDistinctValuesCount(700_000) //
+                .setNullsFraction(0.3) //
+                .setAverageRowSize(8) //
+                .build();
+        final var stats = Statistics.builder() //
+                .setOutputRowCount(1_000_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+        final var isNull = new IsNullPredicateOperator(false, col);
+
+        // WHEN
+        final var isNullStat = ExpressionStatisticCalculator.calculate(isNull, stats);
+
+        // THEN
+        Assertions.assertFalse(isNullStat.isUnknown());
+        Assertions.assertEquals(2, isNullStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(isNullStat.getHistogram());
+        Assertions.assertEquals(300_000L, isNullStat.getHistogram().getMCV().get("1"));
+        Assertions.assertEquals(700_000L, isNullStat.getHistogram().getMCV().get("0"));
+    }
+
+    @Test
+    public void testIsNotNullPredicateStatisticsWithNulls() {
+        // GIVEN
+        final var col = new ColumnRefOperator(1, IntegerType.BIGINT, "col", true);
+        final var colStat = ColumnStatistic.builder() //
+                .setMinValue(0) //
+                .setMaxValue(999_999) //
+                .setDistinctValuesCount(700_000) //
+                .setNullsFraction(0.3) //
+                .setAverageRowSize(8) //
+                .build();
+        final var stats = Statistics.builder() //
+                .setOutputRowCount(1_000_000) //
+                .addColumnStatistic(col, colStat) //
+                .build();
+        final var isNotNull = new IsNullPredicateOperator(true, col);
+
+        // WHEN
+        final var isNotNullStat = ExpressionStatisticCalculator.calculate(isNotNull, stats);
+
+        // THEN
+        Assertions.assertFalse(isNotNullStat.isUnknown());
+        Assertions.assertEquals(0, isNotNullStat.getMinValue(), 0.001);
+        Assertions.assertEquals(1, isNotNullStat.getMaxValue(), 0.001);
+        Assertions.assertEquals(2, isNotNullStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertNotNull(isNotNullStat.getHistogram());
+        Assertions.assertEquals(700_000L, isNotNullStat.getHistogram().getMCV().get("1"));
+        Assertions.assertEquals(300_000L, isNotNullStat.getHistogram().getMCV().get("0"));
+    }
 }
+

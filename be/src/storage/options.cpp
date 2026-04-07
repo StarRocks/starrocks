@@ -37,13 +37,13 @@
 #include <algorithm>
 #include <filesystem>
 
-#include "common/config.h"
+#include "base/path/path_util.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/path_util.h"
 
 namespace starrocks {
 

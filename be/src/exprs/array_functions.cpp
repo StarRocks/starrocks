@@ -18,20 +18,20 @@
 #include <memory>
 #include <numeric>
 
+#include "base/container/raw_container.h"
+#include "base/phmap/phmap.h"
+#include "base/phmap/phmap_fwd_decl.h"
+#include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/column_hash.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "simd/simd.h"
-#include "util/phmap/phmap.h"
-#include "util/phmap/phmap_fwd_decl.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -60,7 +60,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
         if (arg0->has_null()) {
             // Copy null flags.
             return NullableColumn::create(std::move(col_result),
-                                          down_cast<const NullableColumn*>(arg0)->null_column()->clone());
+                                          std::move(*(down_cast<const NullableColumn*>(arg0)->null_column())).mutate());
         } else {
             return col_result;
         }
@@ -136,7 +136,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContex
     RETURN_IF_ERROR(result);
 
     if (nullable_array != nullptr) {
-        return NullableColumn::create(std::move(result.value()), nullable_array->null_column());
+        return NullableColumn::create(result.value(), nullable_array->null_column());
     }
     return result;
 }
@@ -335,7 +335,7 @@ private:
 
         // element: [1,2]; target: NULL
         if (targets->only_null() && !nullable_element) {
-            return ArrayColumn::create(array);
+            return array.clone();
         }
 
         // Expand Only-Null column.
@@ -372,7 +372,7 @@ private:
             auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
             ASSIGN_OR_RETURN(auto result, _array_remove_non_nullable(*array_col, *target))
             DCHECK_EQ(nullable->size(), result->size());
-            return NullableColumn::create(std::move(result), nullable->null_column());
+            return NullableColumn::create(result, nullable->null_column());
         }
 
         return _array_remove_non_nullable(down_cast<const ArrayColumn&>(*array), *target);
@@ -391,14 +391,14 @@ public:
             return ConstColumn::create(std::move(arr_col_h), input->size());
         } else if (col->is_nullable()) {
             auto res = col->clone();
-            auto* input = down_cast<NullableColumn*>(res->as_mutable_raw_ptr());
+            auto* input = down_cast<NullableColumn*>(res.get());
             NullColumn* null_column = input->null_column_raw_ptr();
             auto* arr_col = down_cast<ArrayColumn*>(input->data_column_raw_ptr());
             call_cum_sum(arr_col, null_column);
             return res;
         } else {
             auto res = col->clone();
-            auto* arr_col = down_cast<ArrayColumn*>(res->as_mutable_raw_ptr());
+            auto* arr_col = down_cast<ArrayColumn*>(res.get());
             call_cum_sum(arr_col, nullptr);
             return res;
         }
@@ -437,8 +437,8 @@ private:
             element_data = data_column->get_data().data();
             element_null_data = nullable_element->null_column_data().data();
         } else {
-            auto* data_column = ColumnHelper::as_raw_column<RunTimeColumnType<TYPE>>(
-                    arr_col->elements_column()->as_mutable_raw_ptr());
+            auto* data_column =
+                    ColumnHelper::as_raw_column<RunTimeColumnType<TYPE>>(arr_col->elements_column_raw_ptr());
             element_data = data_column->get_data().data();
         }
         auto& offsets = arr_col->offsets().get_data();
@@ -714,7 +714,7 @@ private:
         if (data_column->is_nullable()) {
             DCHECK_EQ(nullable_column->size(), result->size());
             if (nullable_column->has_null()) {
-                result = NullableColumn::create(std::move(result), nullable_column->null_column()->clone());
+                result = NullableColumn::create(result, nullable_column->null_column()->clone());
             }
         }
 
@@ -1053,7 +1053,7 @@ private:
 
         ASSIGN_OR_RETURN(auto result, _array_has_non_nullable(*array_col, *target_col))
         DCHECK_EQ(array_col->size(), result->size());
-        return NullableColumn::create(std::move(result), merge_nullcolum(array_nullable, target_nullable));
+        return NullableColumn::create(result, merge_nullcolum(array_nullable, target_nullable));
     }
 };
 
@@ -1236,7 +1236,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
 
     size_t chunk_size = columns[0]->size();
     ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
-    ColumnPtr dest_column = src_column->clone_empty();
+    auto dest_column = src_column->clone_empty();
 
     bool is_nullable = false;
     bool has_null = false;
@@ -1249,7 +1249,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
 
         const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[0].get());
         array_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
-        null_result = NullColumn::create(*src_nullable_column->null_column());
+        null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
     } else {
         array_column = down_cast<const ArrayColumn*>(src_column.get());
     }
@@ -1264,7 +1264,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
         if (null_result) {
             null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
         } else {
-            null_result = NullColumn::create(*src_nullable_column->null_column());
+            null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
         }
     } else {
         offset_column = down_cast<const Int64Column*>(
@@ -1283,7 +1283,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
             if (null_result) {
                 null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
             } else {
-                null_result = NullColumn::create(*src_nullable_column->null_column());
+                null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
             }
         } else {
             length_column = down_cast<const Int64Column*>(
@@ -1293,7 +1293,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
 
     ArrayColumn* dest_data_column = nullptr;
     if (columns[0]->is_nullable()) {
-        auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column->as_mutable_raw_ptr());
+        auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
         dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column->data_column_raw_ptr());
         dest_nullable_column->set_has_null(has_null);
         // Update the null column to match the computed null_result
@@ -1304,7 +1304,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_slice(FunctionContext* ctx, const Colu
             dest_null_col.get_data().assign(null_result->get_data().begin(), null_result->get_data().end());
         }
     } else {
-        dest_data_column = down_cast<ArrayColumn*>(dest_column->as_mutable_raw_ptr());
+        dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
     }
 
     if (columns.size() > 2) {
@@ -1724,11 +1724,11 @@ StatusOr<ColumnPtr> ArrayFunctions::repeat(FunctionContext* ctx, const Columns& 
     NullColumnPtr null_result = nullptr;
     if (repeat_count_column->is_nullable()) {
         const auto* nullable_repeat_count_column = down_cast<const NullableColumn*>(repeat_count_column.get());
-        null_result = NullColumn::create(*nullable_repeat_count_column->null_column());
+        null_result = NullColumn::static_pointer_cast(nullable_repeat_count_column->null_column()->clone());
     }
 
     if (null_result) {
-        return NullableColumn::create(std::move(dest_column), std::move(null_result));
+        return NullableColumn::create(dest_column, std::move(null_result));
     } else {
         return dest_column;
     }
@@ -1744,7 +1744,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
 
     bool is_nullable = false;
     bool has_null = false;
-    NullColumnPtr null_result = nullptr;
+    NullColumn::MutablePtr null_result = nullptr;
 
     // Handle array column nullability
     const ArrayColumn* array_column = nullptr;
@@ -1754,7 +1754,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
 
         const auto* src_nullable_column = down_cast<const NullableColumn*>(columns[0].get());
         array_column = down_cast<const ArrayColumn*>(src_nullable_column->data_column().get());
-        null_result = NullColumn::create(*src_nullable_column->null_column());
+        null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
     } else {
         array_column = down_cast<const ArrayColumn*>(src_column.get());
     }
@@ -1770,7 +1770,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
         if (null_result) {
             null_result = FunctionHelper::union_null_column(null_result, src_nullable_column->null_column());
         } else {
-            null_result = NullColumn::create(*src_nullable_column->null_column());
+            null_result = NullColumn::static_pointer_cast(src_nullable_column->null_column()->clone());
         }
     } else {
         count_column = down_cast<const Int32Column*>(
@@ -1780,13 +1780,13 @@ StatusOr<ColumnPtr> ArrayFunctions::array_top_n(FunctionContext* ctx, const Colu
     // Setup destination column
     ArrayColumn* dest_data_column = nullptr;
     if (is_nullable) {
-        auto dest_nullable_column = down_cast<NullableColumn*>(dest_column->as_mutable_raw_ptr());
+        auto dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
         dest_data_column = down_cast<ArrayColumn*>(dest_nullable_column->data_column_raw_ptr());
         auto& dest_null_data = dest_nullable_column->null_column_data();
-        dest_null_data = static_cast<NullColumn*>(null_result->as_mutable_raw_ptr())->get_data();
+        dest_null_data = static_cast<NullColumn*>(null_result.get())->get_data();
         dest_nullable_column->set_has_null(has_null);
     } else {
-        dest_data_column = down_cast<ArrayColumn*>(dest_column->as_mutable_raw_ptr());
+        dest_data_column = down_cast<ArrayColumn*>(dest_column.get());
     }
 
     // Get the elements column for comparison
@@ -1974,6 +1974,7 @@ StatusOr<ColumnPtr> ArrayFunctions::arrays_zip(FunctionContext* ctx, const Colum
 
     // Create result array with struct elements
     std::vector<std::string> field_names;
+    field_names.reserve(num_arrays);
     for (size_t i = 0; i < num_arrays; ++i) {
         field_names.push_back("col" + std::to_string(i + 1));
     }
@@ -2037,7 +2038,7 @@ StatusOr<ColumnPtr> ArrayFunctions::arrays_zip(FunctionContext* ctx, const Colum
     for (const auto* nullable_col : nullable_columns) {
         if (nullable_col && nullable_col->has_null()) {
             if (result_nulls == nullptr) {
-                result_nulls = NullColumn::static_pointer_cast(nullable_col->null_column()->clone());
+                result_nulls = NullColumn::static_pointer_cast(std::move(*(nullable_col->null_column())).mutate());
             } else {
                 ColumnHelper::or_two_filters(num_rows, result_nulls->get_data().data(),
                                              nullable_col->null_column()->immutable_data().data());

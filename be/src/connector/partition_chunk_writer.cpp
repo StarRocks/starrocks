@@ -14,22 +14,83 @@
 
 #include "connector/partition_chunk_writer.h"
 
+#include "base/time/monotime.h"
+#include "base/time/time.h"
 #include "column/chunk.h"
-#include "common/status.h"
+#include "common/config_exec_fwd.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/connector_sink_executor.h"
 #include "connector/sink_memory_manager.h"
 #include "exec/pipeline/fragment_context.h"
 #include "formats/file_writer.h"
+#include "fs/fs.h"
+#include "runtime/descriptors.h"
+#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
 #include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/types.h"
-#include "util/monotime.h"
 
 namespace starrocks::connector {
+
+DEFINE_FAIL_POINT(parquet_chunk_writer_init_failed);
+
+namespace {
+
+FieldPtr build_field_from_type_desc(const TypeDescriptor& type_desc, const std::string& name, int32_t id,
+                                    bool nullable) {
+    TypeInfoPtr type_info = get_type_info(type_desc);
+    DCHECK(type_info != nullptr);
+
+    if (type_desc.children.empty()) {
+        return std::make_shared<Field>(id, name, type_info, nullable);
+    }
+
+    Fields sub_fields;
+    switch (type_desc.type) {
+    case TYPE_ARRAY: {
+        const TypeDescriptor& item_type = type_desc.children[0];
+        sub_fields.push_back(build_field_from_type_desc(item_type, name + ".item", id * 10 + 1, true));
+        break;
+    }
+    case TYPE_MAP: {
+        const TypeDescriptor& key_type = type_desc.children[0];
+        const TypeDescriptor& value_type = type_desc.children[1];
+        sub_fields.push_back(build_field_from_type_desc(key_type, name + ".key", id * 10 + 1, true));
+        sub_fields.push_back(build_field_from_type_desc(value_type, name + ".value", id * 10 + 2, true));
+        break;
+    }
+    case TYPE_STRUCT: {
+        for (size_t i = 0; i < type_desc.children.size(); ++i) {
+            const TypeDescriptor& child_type = type_desc.children[i];
+            std::string child_name;
+            if (i < type_desc.field_names.size()) {
+                child_name = type_desc.field_names[i];
+            } else {
+                child_name = name + ".field" + std::to_string(i);
+            }
+            sub_fields.push_back(build_field_from_type_desc(child_type, child_name, id * 10 + 1 + i, true));
+        }
+        break;
+    }
+    default:
+        break;
+    }
+
+    auto field = std::make_shared<Field>(id, name, type_info, nullable);
+    for (auto& sub_field : sub_fields) {
+        field->add_sub_field(*sub_field);
+    }
+    return field;
+}
+
+FieldPtr build_field_from_slot_desc(const SlotDescriptor& slot) {
+    return build_field_from_type_desc(slot.type(), slot.col_name(), slot.id(), slot.is_nullable());
+}
+
+} // namespace
 
 PartitionChunkWriter::PartitionChunkWriter(std::string partition, std::vector<int8_t> partition_field_null_list,
                                            const std::shared_ptr<PartitionChunkWriterContext>& ctx)
@@ -51,21 +112,26 @@ Status PartitionChunkWriter::create_file_writer_if_needed() {
         _file_writer = std::move(new_writer_and_stream.writer);
         _out_stream = std::move(new_writer_and_stream.stream);
         RETURN_IF_ERROR(_file_writer->init());
+
+        FAIL_POINT_TRIGGER_EXECUTE(parquet_chunk_writer_init_failed,
+                                   { return Status::InternalError("Create file writer failed due to fail point"); });
         _io_poller->enqueue(_out_stream);
     }
     return Status::OK();
 }
 
-void PartitionChunkWriter::commit_file() {
+Status PartitionChunkWriter::commit_file() {
     if (!_file_writer) {
-        return;
+        return Status::OK();
     }
-    auto result = _file_writer->commit();
+    SCOPED_TIMER(_sink_profile ? _sink_profile->commit_file_timer : nullptr);
+    auto result = _file_writer->close();
     _commit_callback(result.set_extra_data(_commit_extra_data));
     _file_writer = nullptr;
     VLOG(3) << "commit to remote file, filename: " << _out_stream->filename()
             << ", size: " << result.file_statistics.file_size;
     _out_stream = nullptr;
+    return result.io_status;
 }
 
 Status BufferPartitionChunkWriter::init() {
@@ -75,15 +141,15 @@ Status BufferPartitionChunkWriter::init() {
 
 Status BufferPartitionChunkWriter::write(const ChunkPtr& chunk) {
     if (_file_writer && _file_writer->get_written_bytes() >= _max_file_size) {
-        commit_file();
+        RETURN_IF_ERROR(commit_file());
     }
     RETURN_IF_ERROR(create_file_writer_if_needed());
+    SCOPED_TIMER(_sink_profile ? _sink_profile->write_file_timer : nullptr);
     return _file_writer->write(chunk.get());
 }
 
 Status BufferPartitionChunkWriter::flush() {
-    commit_file();
-    return Status::OK();
+    return commit_file();
 }
 
 Status BufferPartitionChunkWriter::wait_flush() {
@@ -91,8 +157,7 @@ Status BufferPartitionChunkWriter::wait_flush() {
 }
 
 Status BufferPartitionChunkWriter::finish() {
-    commit_file();
-    return Status::OK();
+    return commit_file();
 }
 
 SpillPartitionChunkWriter::SpillPartitionChunkWriter(std::string partition,
@@ -116,6 +181,9 @@ SpillPartitionChunkWriter::~SpillPartitionChunkWriter() {
     }
     if (_block_merge_token) {
         _block_merge_token->shutdown();
+    }
+    if (_load_spill_block_mgr != nullptr) {
+        (void)_load_spill_block_mgr->clear_parent_path();
     }
 }
 
@@ -159,8 +227,7 @@ Status SpillPartitionChunkWriter::flush() {
     // Change to spill mode if memory is insufficent.
     if (!_spill_mode) {
         _spill_mode = true;
-        commit_file();
-        return Status::OK();
+        return commit_file();
     }
     return _spill();
 }
@@ -176,15 +243,18 @@ Status SpillPartitionChunkWriter::finish() {
         VLOG(2) << "flush to remote directly when finish, query_id: " << print_id(_fragment_context->query_id())
                 << ", writer_id: " << print_id(_writer_id);
         RETURN_IF_ERROR(_flush_to_file());
-        commit_file();
-        return Status::OK();
+        return commit_file();
     }
 
     auto cb = [this](const Status& st) {
         LOG_IF(ERROR, !st.ok()) << "fail to merge spill blocks, query_id: " << print_id(_fragment_context->query_id())
                                 << ", writer_id: " << print_id(_writer_id);
+        // Currently, should always call commit_file; otherwise the output stream can't be closed.
+        auto commit_st = commit_file();
         _handle_err(st);
-        commit_file();
+        if (st.ok()) {
+            _handle_err(commit_st);
+        }
     };
     auto merge_task = std::make_shared<MergeBlockTask>(this, _fragment_context->runtime_state()->instance_mem_tracker(),
                                                        std::move(cb));
@@ -200,23 +270,25 @@ bool SpillPartitionChunkWriter::is_finished() {
 }
 
 Status SpillPartitionChunkWriter::merge_blocks() {
+    SCOPED_TIMER(_sink_profile ? _sink_profile->merge_blocks_timer : nullptr);
     _chunk_spill_token->wait();
     auto write_func = [this](Chunk* chunk) { return _flush_chunk(chunk, false); };
     auto flush_func = [this]() {
         // Commit file after each merge function to ensure the data written to one file is ordered,
         // because data generated by different merge function may be unordered.
         if (_sort_ordering) {
-            commit_file();
+            RETURN_IF_ERROR(commit_file());
         }
         return Status::OK();
     };
-    Status st = _load_chunk_spiller->merge_write(_max_file_size, _sort_ordering != nullptr, false /* do_agg */,
-                                                 write_func, flush_func);
+    Status st = _load_chunk_spiller->merge_write(_max_file_size, _max_file_size, _sort_ordering != nullptr,
+                                                 false /* do_agg */, write_func, flush_func);
     VLOG(2) << "finish merge blocks, query_id: " << _fragment_context->query_id() << ", status: " << st.message();
     return st;
 }
 
 Status SpillPartitionChunkWriter::_sort() {
+    SCOPED_TIMER(_sink_profile ? _sink_profile->sort_timer : nullptr);
     RETURN_IF(!_result_chunk, Status::OK());
 
     auto chunk = _result_chunk->clone_empty_with_schema(0);
@@ -242,7 +314,17 @@ Status SpillPartitionChunkWriter::_spill() {
         RETURN_IF_ERROR(_sort());
     }
 
-    auto callback = [this](const ChunkPtr& chunk, const StatusOr<size_t>& res) {
+    // Record the time when the async spill task is submitted. Note that the
+    // corresponding timer below will measure the duration from this point
+    // until the callback is executed, which includes both the actual spill
+    // work and any queuing or scheduling delays in the thread pool.
+    int64_t spill_start_ns = MonotonicNanos();
+    RuntimeProfile::Counter* spill_timer = _sink_profile ? _sink_profile->spill_chunk_timer : nullptr;
+    auto callback = [this, spill_start_ns, spill_timer](const ChunkPtr& chunk, const StatusOr<size_t>& res) {
+        // Update spill timer with complete async execution time
+        if (spill_timer) {
+            COUNTER_UPDATE(spill_timer, MonotonicNanos() - spill_start_ns);
+        }
         if (!res.ok()) {
             LOG(ERROR) << "fail to spill connector partition chunk sink, write it to remote file directly. msg: "
                        << res.status().message();
@@ -260,6 +342,10 @@ Status SpillPartitionChunkWriter::_spill() {
                                                        std::move(callback));
     RETURN_IF_ERROR(_chunk_spill_token->submit(spill_task));
     _spilling_bytes_usage.fetch_add(_result_chunk->bytes_usage(), std::memory_order_relaxed);
+    if (_sink_profile) {
+        COUNTER_SET(_sink_profile->spilling_bytes_usage_peak, _spilling_bytes_usage.load(std::memory_order_relaxed));
+    }
+
     _chunk_bytes_usage = 0;
     _result_chunk.reset();
     return Status::OK();
@@ -276,7 +362,7 @@ Status SpillPartitionChunkWriter::_flush_to_file() {
         RETURN_IF_ERROR(_merge_chunks());
         RETURN_IF_ERROR(_sort());
         RETURN_IF_ERROR(_flush_chunk(_result_chunk.get(), true));
-        commit_file();
+        RETURN_IF_ERROR(commit_file());
     }
     _chunks.clear();
     _chunk_bytes_usage = 0;
@@ -307,9 +393,10 @@ Status SpillPartitionChunkWriter::_flush_chunk(Chunk* chunk, bool split) {
 
 Status SpillPartitionChunkWriter::_write_chunk(Chunk* chunk) {
     if (!_sort_ordering && _file_writer->get_written_bytes() >= _max_file_size) {
-        commit_file();
+        RETURN_IF_ERROR(commit_file());
     }
     RETURN_IF_ERROR(create_file_writer_if_needed());
+    SCOPED_TIMER(_sink_profile ? _sink_profile->write_file_timer : nullptr);
     RETURN_IF_ERROR(_file_writer->write(chunk));
     return Status::OK();
 }
@@ -357,7 +444,7 @@ Status SpillPartitionChunkWriter::_merge_chunks() {
 }
 
 bool SpillPartitionChunkWriter::_mem_insufficent() {
-    // Return false because we will triger spill by sink memory manager.
+    // Return false because we will trigger spill by sink memory manager.
     return false;
 }
 
@@ -371,7 +458,7 @@ SchemaPtr SpillPartitionChunkWriter::_make_schema() {
     Fields fields;
     fields.reserve(_tuple_desc->slots().size());
     for (auto& slot : _tuple_desc->slots()) {
-        auto field = Field::convert_from_slot_desc(*slot);
+        auto field = build_field_from_slot_desc(*slot);
         fields.push_back(field);
     }
 

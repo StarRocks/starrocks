@@ -16,10 +16,10 @@
 
 #include <vector>
 
+#include "base/simd/simd.h"
+#include "base/string/array_view.hpp"
 #include "column/vectorized_fwd.h"
 #include "glog/logging.h"
-#include "simd/simd.h"
-#include "util/array_view.hpp"
 
 namespace starrocks {
 

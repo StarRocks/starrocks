@@ -117,7 +117,7 @@ public class TransactionChecker {
                     PartitionChecker partitionChecker = new PartitionChecker(partitionId, partitionCommitInfo.getVersion(),
                             table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum()));
                     List<MaterializedIndex> allIndices =
-                            txn.getPartitionLoadedTblIndexes(tableCommitInfo.getTableId(), partition);
+                            txn.getPartitionLoadedIndexes(tableCommitInfo.getTableId(), partition);
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
                             partitionChecker.tablets.add((LocalTablet) tablet);

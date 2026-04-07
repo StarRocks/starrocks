@@ -701,6 +701,13 @@ public class PushDownAggregateCollector extends OptExpressionVisitor<Void, Aggre
         ColumnRefSet allGroupByColumns = new ColumnRefSet();
         context.groupBys.values().forEach(c -> allGroupByColumns.union(c.getUsedColumns()));
 
+        for (int colId : allGroupByColumns.getColumnIds()) {
+            ColumnRefOperator colRef = factory.getColumnRef(colId);
+            if (colRef.getType() != null && !colRef.getType().canGroupBy()) {
+                return false;
+            }
+        }
+
         ColumnRefSet allAggregateColumns = new ColumnRefSet();
         context.aggregations.values().forEach(c -> allAggregateColumns.union(c.getUsedColumns()));
 

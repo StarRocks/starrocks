@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/orlp/pdqsort.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -30,7 +32,6 @@
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "util/orlp/pdqsort.h"
 
 namespace starrocks {
 
@@ -189,7 +190,7 @@ public:
                 return lhs.inline_value.compare(rhs.inline_value);
             };
 
-            auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.get_proxy_data());
+            auto inlined = create_inline_permutation<Slice, IS_RANGES>(_permutation, column.immutable_data());
             RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp,
                                                 _range_or_ranges, _build_tie));
             restore_inline_permutation(inlined, _permutation);
@@ -221,6 +222,11 @@ public:
         DCHECK(false) << "not support object column sort_and_tie";
 
         return Status::NotSupported("not support object column sort_and_tie");
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("not support AdaptiveNullableColumn sort_and_tie");
     }
 
     Status do_visit(const JsonColumn& column) {
@@ -301,16 +307,16 @@ public:
 
         if (_need_inline_value()) {
             using ItemType = CompactChunkItem<Slice>;
-            using Container = typename BinaryColumnBase<T>::BinaryDataProxyContainer;
+            using ImmContainer = typename BinaryColumnBase<T>::ImmContainer;
 
             auto cmp = [&](const ItemType& lhs, const ItemType& rhs) -> int {
                 return lhs.inline_value.compare(rhs.inline_value);
             };
 
-            std::vector<Container> containers;
+            std::vector<ImmContainer> containers;
             for (const auto& col : _vertical_columns) {
                 const auto real = down_cast<const ColumnType*>(col.get());
-                containers.push_back(real->get_proxy_data());
+                containers.push_back(real->immutable_data());
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
@@ -465,7 +471,7 @@ private:
     }
 
     template <class T>
-    void _restore_inlined_permutation(const CompactChunkPermutation<T> inlined) {
+    void _restore_inlined_permutation(const CompactChunkPermutation<T>& inlined) {
         size_t n = std::min(inlined.size(), _pruned_limit);
         for (size_t i = 0; i < n; i++) {
             _permutation[i].chunk_index = inlined[i].chunk_index;

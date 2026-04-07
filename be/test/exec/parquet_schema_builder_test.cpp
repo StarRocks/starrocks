@@ -18,7 +18,7 @@
 
 #include "parquet/schema.h"
 #include "parquet/types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -216,8 +216,8 @@ TEST_F(ParquetSchemaBuilderTest, VariantInvalidWrongValueType) {
     ASSERT_EQ(TYPE_STRUCT, type_desc.type);
 }
 
-// Test shredded variant type (3 fields) - not yet supported
-TEST_F(ParquetSchemaBuilderTest, VariantShreddedNotSupported) {
+// Test shredded variant type (3 fields) - supported as TYPE_VARIANT.
+TEST_F(ParquetSchemaBuilderTest, VariantShreddedSupported) {
     TypeDescriptor type_desc;
     Status st;
 
@@ -231,9 +231,8 @@ TEST_F(ParquetSchemaBuilderTest, VariantShreddedNotSupported) {
     auto node = create_group_node("variant_col", ::parquet::Repetition::OPTIONAL, fields);
 
     st = get_parquet_type(node, &type_desc);
-    // Should return NotSupported status for shredded variant
-    ASSERT_FALSE(st.ok());
-    ASSERT_TRUE(st.is_not_supported());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(TYPE_VARIANT, type_desc.type);
 }
 
 // Test invalid variant - extra field

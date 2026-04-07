@@ -16,13 +16,16 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "exec/chunk_buffer_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/query_context.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
+#include "exprs/expr_executor.h"
+#include "exprs/expr_factory.h"
+#include "runtime/exec_env.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::pipeline {
 
@@ -32,13 +35,14 @@ public:
         _exec_env = ExecEnv::GetInstance();
 
         _query_context = std::make_shared<QueryContext>();
-        _query_context->set_exec_env(_exec_env);
+        _query_context->set_query_execution_services(&_exec_env->query_execution_services());
         _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         query_options.batch_size = 4096;
         TQueryGlobals query_globals;
-        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals, _exec_env);
+        _runtime_state = std::make_shared<RuntimeState>(_fragment_id, query_options, query_globals,
+                                                        &_exec_env->query_execution_services(), _exec_env);
         _runtime_state->set_query_ctx(_query_context.get());
         _runtime_state->init_instance_mem_tracker();
 
@@ -86,9 +90,9 @@ TEST_F(LocalBucketShuffleTest, test_local_bucket_shuffle) {
     t_conjuncts.emplace_back(_create_slot_ref_expr(2));
 
     std::vector<ExprContext*> partition_exprs;
-    Expr::create_expr_trees(&_object_pool, t_conjuncts, &partition_exprs, nullptr);
-    Expr::prepare(partition_exprs, _runtime_state.get());
-    Expr::open(partition_exprs, _runtime_state.get());
+    ExprFactory::create_expr_trees(&_object_pool, t_conjuncts, &partition_exprs, nullptr);
+    ExprExecutor::prepare(partition_exprs, _runtime_state.get());
+    ExprExecutor::open(partition_exprs, _runtime_state.get());
 
     TBucketProperty bucket_property = TBucketProperty();
     bucket_property.bucket_func = TBucketFunction::MURMUR3_X86_32;

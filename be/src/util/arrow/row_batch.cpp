@@ -48,16 +48,34 @@
 
 #include <memory>
 
+#include "base/utility/arrow_utils.h"
 #include "common/logging.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_context.h"
+#include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
-#include "util/arrow/utils.h"
 
 namespace starrocks {
 
 using strings::Substitute;
+
+namespace {
+
+ColumnRef* find_first_column_ref(Expr* expr) {
+    if (expr->is_slotref()) {
+        return down_cast<ColumnRef*>(expr);
+    }
+    for (Expr* child : expr->children()) {
+        if (ColumnRef* ref = find_first_column_ref(child); ref != nullptr) {
+            return ref;
+        }
+    }
+    return nullptr;
+}
+
+} // namespace
 
 Status convert_to_arrow_type(const TypeDescriptor& type, std::shared_ptr<arrow::DataType>* result) {
     switch (type.type) {
@@ -274,7 +292,7 @@ Status convert_to_arrow_schema(const RowDescriptor& row_desc,
         Expr* expr = expr_context->root();
         std::shared_ptr<arrow::Field> field;
         string col_name;
-        ColumnRef* col_ref = expr->get_column_ref();
+        ColumnRef* col_ref = find_first_column_ref(expr);
         DCHECK(col_ref != nullptr);
         int64_t slot_id = col_ref->slot_id();
         int64_t tuple_id = col_ref->tuple_id();
@@ -316,7 +334,7 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         msg << "create BufferOutputStream failure, reason: " << sink_res.status().ToString();
         return Status::InternalError(msg.str());
     }
-    std::shared_ptr<arrow::io::BufferOutputStream> sink = sink_res.ValueOrDie();
+    const auto& sink = sink_res.ValueOrDie();
     // create RecordBatch Writer
     auto writer_res = arrow::ipc::MakeStreamWriter(sink.get(), record_batch.schema());
     if (!writer_res.ok()) {
@@ -324,7 +342,7 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         msg << "open RecordBatchStreamWriter failure, reason: " << writer_res.status().ToString();
         return Status::InternalError(msg.str());
     }
-    std::shared_ptr<arrow::ipc::RecordBatchWriter> record_batch_writer = writer_res.ValueOrDie();
+    const auto& record_batch_writer = writer_res.ValueOrDie();
     // write RecordBatch to memory buffer outputstream
     a_st = record_batch_writer->WriteRecordBatch(record_batch);
     if (!a_st.ok()) {
@@ -339,7 +357,7 @@ Status serialize_record_batch(const arrow::RecordBatch& record_batch, std::strin
         msg << "allocate result buffer failure, reason: " << finish_res.status().ToString();
         return Status::InternalError(msg.str());
     }
-    std::shared_ptr<arrow::Buffer> buffer = finish_res.ValueOrDie();
+    const auto& buffer = finish_res.ValueOrDie();
     *result = buffer->ToString();
     // close the sink
     [[maybe_unused]] auto sk_close_st = sink->Close();
@@ -352,7 +370,7 @@ Status serialize_arrow_schema(std::shared_ptr<arrow::Schema>* schema, std::strin
         return Status::InternalError("serialize_arrow_schema failed");
     }
 
-    const auto record_batch = empty_arrow_record_batch.ValueOrDie();
+    const auto& record_batch = empty_arrow_record_batch.ValueOrDie();
     return serialize_record_batch(*record_batch, result);
 }
 } // namespace starrocks

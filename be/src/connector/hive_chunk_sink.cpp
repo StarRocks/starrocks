@@ -16,13 +16,15 @@
 
 #include <future>
 
+#include "base/url_coding.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
 #include "formats/orc/orc_file_writer.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "formats/utils.h"
-#include "util/url_coding.h"
+#include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -35,7 +37,7 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
                              std::move(partition_chunk_writer_factory), state, false) {}
 
 void HiveChunkSink::callback_on_commit(const CommitResult& result) {
-    _rollback_actions.push_back(std::move(result.rollback_action));
+    _rollback_actions.push_back(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
         THiveFileInfo hive_file_info;
@@ -46,6 +48,9 @@ void HiveChunkSink::callback_on_commit(const CommitResult& result) {
         TSinkCommitInfo commit_info;
         commit_info.__set_hive_file_info(hive_file_info);
         _state->add_sink_commit_info(commit_info);
+        COUNTER_UPDATE(_sink_profile->write_file_counter, 1);
+        COUNTER_UPDATE(_sink_profile->write_file_record_counter, result.file_statistics.record_count);
+        COUNTER_UPDATE(_sink_profile->write_file_bytes, result.file_statistics.file_size);
     }
 }
 
@@ -54,7 +59,7 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
     auto ctx = std::dynamic_pointer_cast<HiveChunkSinkContext>(context);
     auto runtime_state = ctx->fragment_context->runtime_state();
     std::shared_ptr<FileSystem> fs =
-            FileSystem::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value(); // must succeed
+            FileSystemFactory::CreateUniqueFromString(ctx->path, FSOptions(&ctx->cloud_conf)).value(); // must succeed
     auto data_column_evaluators = ColumnEvaluator::clone(ctx->data_column_evaluators);
     auto location_provider = std::make_shared<connector::LocationProvider>(
             ctx->path, print_id(ctx->fragment_context->query_id()), runtime_state->be_number(), driver_id,

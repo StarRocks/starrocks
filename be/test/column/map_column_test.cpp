@@ -18,13 +18,13 @@
 
 #include <cstdint>
 
+#include "base/testutil/parallel_test.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks {
 
@@ -809,13 +809,13 @@ PARALLEL_TEST(MapColumnTest, test_copy_constructor) {
     map1[(int32_t)6] = (int32_t)66;
     c0->append_datum(map1);
 
-    MapColumn c1(*c0);
+    auto c1 = MapColumn::static_pointer_cast(c0->clone());
     c0->reset_column();
-    ASSERT_EQ("{1:11,2:22,3:33}", c1.debug_item(0));
-    ASSERT_EQ("{4:44,5:55,6:66}", c1.debug_item(1));
-    ASSERT_TRUE(c1.keys_column()->use_count() == 1);
-    ASSERT_TRUE(c1.values_column()->use_count() == 1);
-    ASSERT_TRUE(c1.offsets_column()->use_count() == 1);
+    ASSERT_EQ("{1:11,2:22,3:33}", c1->debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", c1->debug_item(1));
+    ASSERT_TRUE(c1->keys_column()->use_count() == 1);
+    ASSERT_TRUE(c1->values_column()->use_count() == 1);
+    ASSERT_TRUE(c1->offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE
@@ -864,15 +864,13 @@ PARALLEL_TEST(MapColumnTest, test_copy_assignment) {
     map1[(int32_t)6] = (int32_t)66;
     c0->append_datum(map1);
 
-    MapColumn c1(NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                 NullableColumn::create(Int32Column::create(), NullColumn::create()), UInt32Column::create());
-    c1 = *c0;
+    auto c1 = MapColumn::static_pointer_cast(c0->clone());
     c0->reset_column();
-    ASSERT_EQ("{1:11,2:22,3:33}", c1.debug_item(0));
-    ASSERT_EQ("{4:44,5:55,6:66}", c1.debug_item(1));
-    ASSERT_TRUE(c1.keys_column()->use_count() == 1);
-    ASSERT_TRUE(c1.values_column()->use_count() == 1);
-    ASSERT_TRUE(c1.offsets_column()->use_count() == 1);
+    ASSERT_EQ("{1:11,2:22,3:33}", c1->debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", c1->debug_item(1));
+    ASSERT_TRUE(c1->keys_column()->use_count() == 1);
+    ASSERT_TRUE(c1->values_column()->use_count() == 1);
+    ASSERT_TRUE(c1->offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE

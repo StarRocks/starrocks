@@ -18,12 +18,19 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "common/config.h"
+#include "base/failpoint/fail_point.h"
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/runtime_profile.h"
 #include "exec/capture_version_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
+#include "exec/exec_factory.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_node.h"
+#include "exec/lookup_node.h"
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
@@ -42,15 +49,14 @@
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/result_sink.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "util/debug/query_trace.h"
-#include "util/failpoint/fail_point.h"
-#include "util/runtime_profile.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
@@ -110,7 +116,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
     ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
-    _query_ctx->set_exec_env(exec_env);
+    _query_ctx->set_query_execution_services(&exec_env->query_execution_services());
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
@@ -135,7 +141,8 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
     if (query_options.__isset.runtime_profile_report_interval) {
-        _query_ctx->set_runtime_profile_report_interval(std::max(1L, query_options.runtime_profile_report_interval));
+        _query_ctx->set_runtime_profile_report_interval(
+                std::max<int64_t>(1, query_options.runtime_profile_report_interval));
     }
 
     bool enable_query_trace = false;
@@ -220,12 +227,15 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     const auto& t_desc_tbl = request.common().desc_tbl;
     auto& wg = _wg;
 
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options,
+                                                                    query_globals,
+                                                                    &exec_env->query_execution_services(), exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
+    runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
     runtime_state->set_query_ctx(_query_ctx);
+    RuntimeStateHelper::init_runtime_filter_port(runtime_state);
 
     // Only consider the `query_mem_limit` variable
     // If query_mem_limit is <= 0, it would set to -1, which means no limit
@@ -459,8 +469,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     // Set up plan
     _fragment_ctx->move_tplan(*const_cast<TPlan*>(&fragment.plan));
-    RETURN_IF_ERROR(
-            ExecNode::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl, &_fragment_ctx->plan()));
+    RETURN_IF_ERROR(ExecFactory::create_tree(runtime_state, obj_pool, _fragment_ctx->tplan(), desc_tbl,
+                                             &_fragment_ctx->plan()));
     ExecNode* plan = _fragment_ctx->plan();
     std::unordered_set<int32_t> filter_ids;
     collect_non_broadcast_rf_ids(plan, filter_ids);
@@ -479,6 +489,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     for (auto* exch_node : exch_nodes) {
         int num_senders = FindWithDefault(params.per_exch_num_senders, exch_node->id(), 0);
         down_cast<ExchangeNode*>(exch_node)->set_num_senders(num_senders);
+    }
+
+    std::vector<ExecNode*> lookup_nodes;
+    plan->collect_nodes(TPlanNodeType::LOOKUP_NODE, &lookup_nodes);
+    for (auto* lookup_node : lookup_nodes) {
+        int num_senders = FindWithDefault(params.per_look_up_num_fetchers, lookup_node->id(), 0);
+        down_cast<LookUpNode*>(lookup_node)->set_num_fetchers(num_senders);
     }
 
     // set scan ranges
@@ -570,7 +587,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                                  scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), group_execution_scan_dop,
                                  _is_in_colocate_exec_group(scan_node->id()), enable_tablet_internal_parallel,
                                  tablet_internal_parallel_mode, enable_shared_scan));
-        morsel_queue_factory->set_has_more(has_more_morsel);
+        morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
     }
@@ -740,7 +757,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
     context.init_colocate_groups(std::move(_colocate_exec_groups));
     PipelineBuilder builder(context);
-    auto exec_ops = builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan);
+    ASSIGN_OR_RETURN(auto exec_ops, builder.decompose_exec_node_to_pipeline(*_fragment_ctx, plan));
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
@@ -821,16 +838,19 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     const auto& fragment = request.common().fragment;
     // Set up global dict
     auto* runtime_state = _fragment_ctx->runtime_state();
+    auto* fragment_dict_state = runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
     if (fragment.__isset.query_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_query_global_dict(runtime_state, fragment.query_global_dicts));
     }
 
     if (fragment.__isset.query_global_dicts && fragment.__isset.query_global_dict_exprs) {
-        RETURN_IF_ERROR(runtime_state->init_query_global_dict_exprs(fragment.query_global_dict_exprs));
+        RETURN_IF_ERROR(
+                fragment_dict_state->init_query_global_dict_exprs(runtime_state, fragment.query_global_dict_exprs));
     }
 
     if (fragment.__isset.load_global_dicts) {
-        RETURN_IF_ERROR(runtime_state->init_load_global_dict(fragment.load_global_dicts));
+        RETURN_IF_ERROR(fragment_dict_state->init_load_global_dict(runtime_state, fragment.load_global_dicts));
     }
     return Status::OK();
 }
@@ -881,8 +901,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_pipeline_driver_time = 0;
 
         int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
-        size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
+        size_t num_process_drivers = 0;
     } profiler;
+    profiler.num_process_drivers = exec_env->driver_limiter()->num_total_drivers();
 
     DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
@@ -972,6 +993,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
     bool prepare_success = false;
+    (void)exec_env;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {
             _fail_cleanup(true);
@@ -1057,7 +1079,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
         bool has_more_morsel = false;
         pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &has_more_morsel);
         RETURN_IF_ERROR(morsel_queue_factory->append_morsels(0, std::move(morsels)));
-        morsel_queue_factory->set_has_more(has_more_morsel);
+        morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
         notify_ids.insert(node_id);
 
         if (morsel_queue_factory->reach_limit()) {
@@ -1089,7 +1111,7 @@ Status FragmentExecutor::append_incremental_scan_ranges(ExecEnv* exec_env, const
                 pipeline::ScanMorsel::build_scan_morsels(node_id, scan_ranges, true, &morsels, &local_has_more);
                 RETURN_IF_ERROR(morsel_queue_factory->append_morsels(driver_seq, std::move(morsels)));
             }
-            morsel_queue_factory->set_has_more(has_more_morsel);
+            morsel_queue_factory->set_has_more_scan_ranges(has_more_morsel);
             notify_ids.insert(node_id);
 
             if (morsel_queue_factory->reach_limit()) {

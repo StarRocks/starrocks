@@ -24,6 +24,8 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
+#include "common/simdjson_util.h"
 #include "exec/json_parser.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
@@ -34,9 +36,8 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
-#include "util/runtime_profile.h"
-#include "util/simdjson_util.h"
+#include "runtime/runtime_state_helper.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -46,10 +47,11 @@ JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBr
                          ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
           _scan_range(scan_range),
-          _next_range(0),
+
           _max_chunk_size(state->chunk_size()),
-          _cur_file_reader(nullptr),
-          _cur_file_eof(true) {}
+          _cur_file_reader(nullptr) {
+    _file_format_str = "json";
+}
 
 JsonScanner::~JsonScanner() = default;
 
@@ -250,6 +252,7 @@ Status JsonScanner::_open_next_reader() {
         return st;
     }
     _next_range++;
+    ++_counter->num_files_read;
     return Status::OK();
 }
 
@@ -265,7 +268,7 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
         }
 
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[column_pos]->evaluate_checked(nullptr, src_chunk.get()));
-        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), std::move(col));
+        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), col);
         cast_chunk->append_column(std::move(col), slot->id());
     }
 
@@ -281,8 +284,8 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _strict_mode(strict_mode),
           _file(std::move(file)),
           _slot_descs(std::move(slot_descs)),
-          _type_descs(std::move(std::move(type_descs))),
-          _op_col_index(-1),
+          _type_descs(std::move(type_descs)),
+
           _range_desc(range_desc) {
     int index = 0;
     for (size_t i = 0; i < _slot_descs.size(); ++i) {
@@ -302,7 +305,11 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
 Status JsonReader::open() {
     Status st = _read_and_parse_json();
     if (!st.ok()) {
-        _append_error_msg("", st.to_string());
+        // Timeout can happen when reading from a TimeBoundedStreamLoadPipe (e.g. merge-commit).
+        // It's a retryable condition and should not be written into user-facing error logs.
+        if (!st.is_time_out()) {
+            _append_error_msg("", st.to_string());
+        }
         return st;
     }
     _empty_parser = false;
@@ -448,8 +455,8 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             if (_state->enable_log_rejected_record()) {
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
-                _state->append_rejected_record_to_file(std::string(sv.data(), sv.size()), st.to_string(),
-                                                       _file->filename());
+                RuntimeStateHelper::append_rejected_record_to_file(_state, std::string(sv.data(), sv.size()),
+                                                                   st.to_string(), _file->filename());
             }
             // Before continuing to process other rows, we need to first clean the fail parsed row.
             chunk->set_num_rows(chunk_row_num);
@@ -812,10 +819,10 @@ Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* c
 
 void JsonReader::_append_error_msg(const std::string& row, const std::string& error_msg) {
     if (_file_stream_buffer == nullptr || _file_stream_buffer->meta()->type() == ByteBufferMetaType::NONE) {
-        _state->append_error_msg_to_file(row, error_msg);
+        RuntimeStateHelper::append_error_msg_to_file(_state, row, error_msg);
     } else {
         std::string row_with_meta = fmt::format("{} [meta: {}]", row, _file_stream_buffer->meta()->to_string());
-        _state->append_error_msg_to_file(row_with_meta, error_msg);
+        RuntimeStateHelper::append_error_msg_to_file(_state, row_with_meta, error_msg);
     }
 }
 

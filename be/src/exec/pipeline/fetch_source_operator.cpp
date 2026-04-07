@@ -49,6 +49,8 @@ bool FetchSourceOperator::pending_finish() const {
 Status FetchSourceOperator::set_finishing(RuntimeState* state) {
     VLOG_ROW << "[GLM] FetchSourceOperator::set_finishing, processor: " << (void*)_processor.get() << ", "
              << (void*)this;
+    _processor->set_source_finishing();
+    down_cast<FetchSourceOperatorFactory*>(_factory)->close_processor();
     return Status::OK();
 }
 
@@ -57,8 +59,15 @@ StatusOr<ChunkPtr> FetchSourceOperator::pull_chunk(RuntimeState* state) {
 }
 
 OperatorPtr FetchSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    _processor_cnt++;
     auto processor = _processor_factory->get_or_create(driver_sequence);
     return std::make_shared<FetchSourceOperator>(this, _id, _plan_node_id, driver_sequence, std::move(processor));
+}
+
+void FetchSourceOperatorFactory::close_processor() {
+    if (--_processor_cnt == 0) {
+        _processor_factory->close_context(runtime_state());
+    }
 }
 
 } // namespace starrocks::pipeline

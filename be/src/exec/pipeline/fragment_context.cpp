@@ -21,7 +21,11 @@
 #include <mutex>
 #include <thread>
 
+#include "base/time/time.h"
+#include "base/uid_util.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -34,16 +38,34 @@
 #include "runtime/client_cache.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/logconfig.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "util/threadpool.h"
 #include "util/thrift_rpc_helper.h"
-#include "util/time.h"
-#include "util/uid_util.h"
 
 namespace starrocks::pipeline {
 
-FragmentContext::FragmentContext() : _data_sink(nullptr) {}
+// RAII guard for pass-through chunk buffer lifecycle.
+class PassThroughChunkBufferGuard {
+public:
+    PassThroughChunkBufferGuard(DataStreamMgr* stream_mgr, const TUniqueId& query_id)
+            : _stream_mgr(stream_mgr), _query_id(query_id) {
+        _stream_mgr->prepare_pass_through_chunk_buffer(_query_id);
+    }
+
+    ~PassThroughChunkBufferGuard() { _stream_mgr->destroy_pass_through_chunk_buffer(_query_id); }
+
+    PassThroughChunkBufferGuard(const PassThroughChunkBufferGuard&) = delete;
+    PassThroughChunkBufferGuard& operator=(const PassThroughChunkBufferGuard&) = delete;
+
+private:
+    DataStreamMgr* _stream_mgr;
+    TUniqueId _query_id;
+};
+
+FragmentContext::FragmentContext() : _data_sink(nullptr), _fragment_dict_state(std::make_unique<FragmentDictState>()) {}
 
 FragmentContext::~FragmentContext() {
     _close_stream_load_contexts();
@@ -52,6 +74,9 @@ FragmentContext::~FragmentContext() {
     close_all_execution_groups();
     if (_plan != nullptr) {
         _plan->close(_runtime_state.get());
+    }
+    if (_fragment_dict_state != nullptr && _runtime_state != nullptr) {
+        _fragment_dict_state->close(_runtime_state.get());
     }
     clear_pipeline_timer();
 }
@@ -104,7 +129,7 @@ void FragmentContext::count_down_execution_group(size_t val) {
 
     finish();
     auto status = final_status();
-    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+    _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, status, true);
 
     if (_report_when_finish) {
         /// TODO: report fragment finish to BE coordinator
@@ -194,7 +219,7 @@ void FragmentContext::report_exec_state_if_necessary() {
                 driver->runtime_report_action();
             }
         });
-        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+        _workgroup->executors()->driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false);
     }
 }
 
@@ -212,6 +237,18 @@ void FragmentContext::set_final_status(const Status& status) {
         bool is_timeout = detailed_message == "TimeOut";
         if (is_timeout) {
             hook_on_query_timeout(_query_id, _runtime_state->query_ctx()->get_query_expire_seconds());
+        }
+
+        const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
+        if (!_s_status.ok() && !finished_cancel) {
+            const auto* executors = _workgroup != nullptr
+                                            ? _workgroup->executors()
+                                            : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
+            auto* executor = executors->driver_executor();
+            auto* query_ctx = _runtime_state->query_ctx();
+            if (query_ctx != nullptr) {
+                executor->report_audit_statistics_on_failure(query_ctx, this);
+            }
         }
 
         if (_s_status.is_cancelled()) {
@@ -267,7 +304,7 @@ Status FragmentContext::prepare_all_pipelines() {
 }
 
 void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadContext*>& contexts) {
-    _stream_load_contexts = std::move(contexts);
+    _stream_load_contexts = contexts;
 }
 
 // Note: this function should be thread safe
@@ -363,12 +400,11 @@ void FragmentContextManager::cancel(const Status& status) {
     }
 }
 void FragmentContext::prepare_pass_through_chunk_buffer() {
-    _runtime_state->exec_env()->stream_mgr()->prepare_pass_through_chunk_buffer(_query_id);
+    _pass_through_chunk_buffer_guard =
+            std::make_unique<PassThroughChunkBufferGuard>(_runtime_state->exec_env()->stream_mgr(), _query_id);
 }
 void FragmentContext::destroy_pass_through_chunk_buffer() {
-    if (_runtime_state) {
-        _runtime_state->exec_env()->stream_mgr()->destroy_pass_through_chunk_buffer(_query_id);
-    }
+    _pass_through_chunk_buffer_guard.reset();
 }
 
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
@@ -425,7 +461,7 @@ void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val)
 }
 
 void FragmentContext::init_jit_profile() {
-    if (runtime_state() && runtime_state()->is_jit_enabled() && runtime_state()->runtime_profile()) {
+    if (runtime_state() && RuntimeStateHelper::is_jit_enabled(runtime_state()) && runtime_state()->runtime_profile()) {
         _jit_timer = ADD_TIMER(_runtime_state->runtime_profile(), "JITTotalCostTime");
         _jit_counter = ADD_COUNTER(_runtime_state->runtime_profile(), "JITCounter", TUnit::UNIT);
     }

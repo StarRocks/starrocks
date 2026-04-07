@@ -31,6 +31,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.Expr;
@@ -238,7 +239,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 Preconditions.checkArgument(refBTPartitionColumns.size() == 1);
                 // Collect the ref base table's partition range map.
                 PCellSortedSet refTablePartitionKeyMap =
-                        PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
+                        MVPartitionCellBuilder.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
                                 mvPartitionExprOpt.get());
                 if (refTablePartitionKeyMap == null) {
                     return null;

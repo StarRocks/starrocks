@@ -14,12 +14,17 @@
 
 #include <gtest/gtest.h>
 
+#include "fs/fs_factory.h"
+
 #ifdef WITH_TENANN
 #include <tenann/factory/ann_searcher_factory.h>
 #include <tenann/factory/index_factory.h>
 #endif
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
+#include "common/config_vector_index_fwd.h"
 #include "runtime/mem_pool.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
@@ -27,8 +32,6 @@
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -41,7 +44,7 @@ protected:
         srand(GetCurrentTimeMicros());
         CHECK_OK(fs::remove_all(test_vector_index_dir));
         CHECK_OK(fs::create_directories(test_vector_index_dir));
-        ASSIGN_OR_ABORT(_fs, FileSystem::CreateSharedFromString(test_vector_index_dir));
+        ASSIGN_OR_ABORT(_fs, FileSystemFactory::CreateSharedFromString(test_vector_index_dir));
     }
 
     void TearDown() override { fs::remove_all(test_vector_index_dir); }

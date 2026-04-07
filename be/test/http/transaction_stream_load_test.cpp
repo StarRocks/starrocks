@@ -22,6 +22,10 @@
 
 #include <string>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_ingest_fwd.h"
+#include "common/system/cpu_info.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_channel.h"
@@ -30,10 +34,7 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
-#include "testutil/assert.h"
-#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
-#include "util/cpu_info.h"
 
 class mg_connection;
 
@@ -67,8 +68,11 @@ public:
         k_response_str = "";
         config::streaming_load_max_mb = 1;
 
+        _pipeline_timer = std::make_unique<pipeline::PipelineTimer>();
+        ASSERT_OK(_pipeline_timer->start());
+        _env._pipeline_timer = _pipeline_timer.get();
         _env._load_stream_mgr = new LoadStreamMgr();
-        _env._brpc_stub_cache = new BrpcStubCache(&_env);
+        _env._brpc_stub_cache = new BrpcStubCache(_pipeline_timer.get());
         _env._stream_load_executor = new StreamLoadExecutor(&_env);
         _env._stream_context_mgr = new StreamContextMgr();
         _env._transaction_mgr = new TransactionMgr(&_env);
@@ -83,6 +87,8 @@ public:
         _env._stream_context_mgr = nullptr;
         delete _env._brpc_stub_cache;
         _env._brpc_stub_cache = nullptr;
+        _env._pipeline_timer = nullptr;
+        _pipeline_timer.reset();
         delete _env._load_stream_mgr;
         _env._load_stream_mgr = nullptr;
         delete _env._stream_load_executor;
@@ -96,6 +102,7 @@ public:
 protected:
     ExecEnv _env;
     evhttp_request* _evhttp_req = nullptr;
+    std::unique_ptr<pipeline::PipelineTimer> _pipeline_timer;
 };
 
 TEST_F(TransactionStreamLoadActionTest, txn_begin_no_auth) {

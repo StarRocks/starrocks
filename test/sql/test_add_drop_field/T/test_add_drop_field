@@ -105,7 +105,7 @@ drop table tab1;
 drop database test_add_drop_field_array;
 
 
--- name: test_add_drop_field_not_allowed @cloud
+-- name: test_add_drop_field_not_allowed @native
 
 create database test_add_drop_field_not_allowed;
 use test_add_drop_field_not_allowed;

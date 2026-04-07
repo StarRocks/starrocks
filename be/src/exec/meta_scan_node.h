@@ -35,7 +35,7 @@ public:
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
 protected:
-    bool _is_init;
+    bool _is_init{false};
     size_t _cursor_idx = 0;
     // params
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;

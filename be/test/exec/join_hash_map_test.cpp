@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "common/config_exec_fwd.h"
 #include "exec/join/join_hash_map.hpp"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_map_method.h"
@@ -25,7 +27,6 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -709,7 +710,7 @@ ColumnPtr JoinHashMapTest::create_int32_nullable_column(uint32_t row_count, uint
 
 void JoinHashMapTest::check_binary_column(const ColumnPtr& column, uint32_t row_count, uint32_t start_value) {
     auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(column);
-    auto& data = binary_column->get_data();
+    auto data = binary_column->immutable_data();
 
     for (uint32_t i = 0; i < row_count; i++) {
         std::string str = std::to_string(start_value + i);

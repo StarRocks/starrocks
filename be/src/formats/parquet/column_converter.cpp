@@ -25,28 +25,29 @@
 #include <utility>
 #include <vector>
 
+#include "base/bit/bit_util.h"
+#include "base/decimal_types.h"
+#include "base/time/timezone_utils.h"
+#include "base/types/int96.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "gutil/casts.h"
 #include "gutil/integral_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/time_types.h"
-#include "runtime/types.h"
 #include "storage/olap_common.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
+#include "types/time_types.h"
 #include "types/timestamp_value.h"
-#include "util/bit_util.h"
-#include "util/decimal_types.h"
-#include "util/int96.h"
-#include "util/timezone_utils.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
@@ -287,7 +288,7 @@ public:
         auto* src_column = ColumnHelper::as_raw_column<BinaryColumn>(src_nullable_column->data_column());
         auto* dst_column = ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column_raw_ptr());
 
-        const BinaryColumn::Bytes& src_data = src_column->get_bytes();
+        auto src_data = src_column->get_immutable_bytes();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
@@ -542,9 +543,9 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
     }
 
     if (need_convert && *converter == nullptr) {
-        return Status::NotSupported(
-                strings::Substitute("parquet column reader: not supported convert from parquet `$0` to `$1`",
-                                    ::tparquet::to_string(parquet_type), type_to_string(col_type)));
+        return Status::NotSupported(strings::Substitute(
+                "parquet column reader: not supported convert from parquet `$0` to `$1`, field=$2",
+                ::tparquet::to_string(parquet_type), type_to_string(col_type), field.debug_string()));
     }
 
     if (!need_convert) {
@@ -598,7 +599,7 @@ Status parquet::Int32ToDateConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
         dst_data[i]._julian = src_data[i] + date::UNIX_EPOCH_JULIAN;
@@ -622,7 +623,7 @@ Status Int32ToTimeConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
@@ -649,7 +650,7 @@ Status parquet::Int32ToDateTimeConverter::convert(const Column* src, Column* dst
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
@@ -688,7 +689,7 @@ Status Int96ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     auto fill_dst_fn = [&]<bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
@@ -789,7 +790,7 @@ Status Int64ToDateTimeConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
     auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
         for (size_t i = 0; i < size; i++) {
             dst_null_data[i] = src_null_data[i];
@@ -841,7 +842,7 @@ Status Int64ToTimeConverter::convert(const Column* src, Column* dst) {
     auto& src_null_data = src_nullable_column->null_column()->get_data();
     auto& dst_null_data = dst_nullable_column->null_column_raw_ptr()->get_data();
 
-    size_t size = src_column->size();
+    size_t size = dst_null_data.size();
 
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];

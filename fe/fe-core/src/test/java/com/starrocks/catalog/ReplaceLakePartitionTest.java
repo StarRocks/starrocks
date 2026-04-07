@@ -24,6 +24,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
@@ -92,8 +93,13 @@ public class ReplaceLakePartitionTest {
 
         new MockUp<EditLog>() {
             @Mock
-            public void logErasePartition(long partitionId) {
-                return;
+            public void logErasePartition(long partitionId, WALApplier walApplier) {
+                walApplier.apply(null);
+            }
+
+            @Mock
+            public void logEraseMultiTables(List<Long> tableIds, WALApplier walApplier) {
+                walApplier.apply(null);
             }
         };
     }

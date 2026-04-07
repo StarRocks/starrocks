@@ -4,6 +4,8 @@ sidebar_position: 120
 
 # Audit Log-based Resource Group Configuration
 
+import AuditLoaderNote from '../_assets/commonMarkdown/audit_loader_note.mdx'
+
 In StarRocks, **Resource Groups** provide an effective mechanism for resource isolation by allocating CPU, memory, and concurrency limits based on classifiers such as user identity and query type. This feature is essential for achieving efficient resource utilization in multi-tenant environments.
 
 Traditional resource group configuration often relies on empirical judgment. By analyzing historical query data from the audit log table
@@ -17,9 +19,7 @@ This approach helps:
 
 This topic provides step-by-step tutorial on how to derive appropriate resource group parameters based on workload patterns observed from audit logs.
 
-:::note
-This tutorial is based on the analysis using AuditLoader plugin, which allows you to query audit logs using SQL statements directly within your cluster. For detailed instructions to install the plugin, see [AuditLoader](../administration/management/audit_loader.md).
-:::
+<AuditLoaderNote />
 
 ## CPU Resource Allocation
 
@@ -229,6 +229,5 @@ The following example only provides guidance on creating and assign a dedicated 
 
 ## See Also
 
-- [AuditLoader](../administration/management/audit_loader.md)
 - [Resource Group](../administration/management/resource_management/resource_group.md)
 - [Query Queues](../administration/management/resource_management/query_queues.md)

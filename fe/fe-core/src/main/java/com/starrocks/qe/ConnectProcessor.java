@@ -57,6 +57,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergTimeTravelQueryAnalyzer;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -112,9 +113,11 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -214,6 +217,11 @@ public class ConnectProcessor {
     }
 
     public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics) {
+        auditAfterExec(origStmt, parsedStmt, statistics, null);
+    }
+
+    public void auditAfterExec(String origStmt, StatementBase parsedStmt, PQueryStatistics statistics,
+                               String digestFromLeader) {
         // slow query
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
@@ -240,27 +248,61 @@ public class ConnectProcessor {
                 .setPreparedStmtId(executor == null ? null : executor.getPreparedStmtId());
 
         if (ctx.getState().isQuery()) {
-            MetricRepo.COUNTER_QUERY_ALL.increase(1L);
-            ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
-            if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                // err query
-                MetricRepo.COUNTER_QUERY_ERR.increase(1L);
-                ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
-                //represent analysis err
-                if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
-                    MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
-                } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
-                    MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
-                } else {
-                    MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
+            if (ctx.getState().getErrType() != QueryState.ErrType.BLACKLISTED) {
+                MetricRepo.COUNTER_QUERY_ALL.increase(1L);
+                EnumSet<IcebergTimeTravelQueryAnalyzer.TimeTravelType> timeTravelQueryTypes =
+                        IcebergTimeTravelQueryAnalyzer.collectTimeTravelTypes(parsedStmt);
+                if (!timeTravelQueryTypes.isEmpty()) {
+                    MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.increase(1L);
+                    timeTravelQueryTypes.forEach(type ->
+                            MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric(type.getMetricLabel())
+                                    .increase(1L));
                 }
-            } else {
-                // ok query
-                MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
-                MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
-                ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
-                if (elapseMs > Config.qe_slow_log_ms) {
-                    MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
+                if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                    // err query
+                    MetricRepo.COUNTER_QUERY_ERR.increase(1L);
+                    ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
+                    //represent analysis err
+                    if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
+                        MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
+                    } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+                        MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
+                    } else {
+                        MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
+                    }
+                } else {
+                    // ok query
+                    MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
+                    MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
+                    ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
+                    if (elapseMs > Config.qe_slow_log_ms) {
+                        MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                    }
+                }
+
+                // Catalog-type metrics
+                if (executor != null) {
+                    Set<String> catalogTypes = executor.getCatalogTypesInvolved();
+                    for (String catalogType : catalogTypes) {
+                        MetricRepo.COUNTER_CATALOG_QUERY_TOTAL.getMetric(catalogType).increase(1L);
+                        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                            MetricRepo.COUNTER_CATALOG_QUERY_ERR.getMetric(catalogType).increase(1L);
+                            if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
+                                MetricRepo.COUNTER_CATALOG_QUERY_ANALYSIS_ERR.getMetric(catalogType).increase(1L);
+                            } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+                                MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT.getMetric(catalogType).increase(1L);
+                            } else {
+                                MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR.getMetric(catalogType).increase(1L);
+                            }
+                        } else {
+                            MetricRepo.COUNTER_CATALOG_QUERY_SUCCESS.getMetric(catalogType).increase(1L);
+                            MetricRepo.getOrCreateCatalogQueryLatencyHistogram(catalogType).update(elapseMs);
+                            if (elapseMs > Config.qe_slow_log_ms) {
+                                MetricRepo.COUNTER_CATALOG_SLOW_QUERY.getMetric(catalogType).increase(1L);
+                            }
+                        }
+                    }
                 }
             }
             ctx.getAuditEventBuilder().setIsQuery(true);
@@ -278,8 +320,12 @@ public class ConnectProcessor {
 
         // Build Digest and queryFeMemory for SELECT/INSERT/UPDATE/DELETE
         if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
-            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
-                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+            String digest = digestFromLeader;
+            if (digest == null && (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest())) {
+                digest = computeStatementDigest(parsedStmt);
+            }
+            if (digest != null) {
+                ctx.getAuditEventBuilder().setDigest(digest);
             }
             long threadAllocatedMemory =
                     getThreadAllocatedBytes(Thread.currentThread().getId()) - ctx.getCurrentThreadAllocatedMemory();
@@ -320,7 +366,9 @@ public class ConnectProcessor {
                             .setEnableDigest(Config.enable_sql_desensitize_in_log))
                     .orElse("this is a desensitized sql");
         } else {
-            return LogUtil.removeLineSeparator(origStmt);
+            // Always redact credentials as defense in depth - raw SQL may contain
+            // credentials that AuditEncryptionChecker does not yet recognize
+            return SqlCredentialRedactor.redact(LogUtil.removeLineSeparator(origStmt));
         }
     }
 
@@ -366,6 +414,7 @@ public class ConnectProcessor {
                 .setCatalog(ctx.getCurrentCatalog())
                 .setWarehouse(ctx.getCurrentWarehouseName())
                 .setCustomQueryId(ctx.getCustomQueryId())
+                .setCustomSessionName(ctx.getCustomSessionName())
                 .setCNGroup(ctx.getCurrentComputeResourceName());
         Tracers.register(ctx);
         // set isQuery before `forwardToLeader` to make it right for audit log.
@@ -403,11 +452,19 @@ public class ConnectProcessor {
         // TODO(cmy): when user send multi-statement, the executor is the last statement's executor.
         // We may need to find some way to resolve this.
         if (executor != null) {
-            auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            String digestFromLeader = null;
+            if (executor.getIsForwardToLeaderOrInit(false) && executor.getLeaderOpExecutor() != null) {
+                TMasterOpResult leaderResult = executor.getLeaderOpExecutor().getResult();
+                if (leaderResult != null && leaderResult.isSetSql_digest()) {
+                    digestFromLeader = leaderResult.getSql_digest();
+                }
+            }
+            auditAfterExec(originStmt, executor.getParsedStmt(),
+                          executor.getQueryStatisticsForAuditLog(), digestFromLeader);
             executor.addFinishedQueryDetail();
         } else {
             // executor can be null if we encounter analysis error.
-            auditAfterExec(originStmt, null, null);
+            auditAfterExec(originStmt, null, null, null);
         }
     }
 
@@ -519,6 +576,7 @@ public class ConnectProcessor {
             ctx.setExecutor(executor);
 
             ctx.setIsLastStmt(i == stmts.size() - 1);
+            ctx.setSingleStmt(stmts.size() == 1);
 
             //Build View SQL without Policy Rewrite
             new AstTraverser<Void, Void>() {
@@ -689,7 +747,15 @@ public class ConnectProcessor {
             }
 
             if (enableAudit) {
-                auditAfterExec(originStmt, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+                String digestFromLeader = null;
+                if (executor.getIsForwardToLeaderOrInit(false) && executor.getLeaderOpExecutor() != null) {
+                    TMasterOpResult leaderResult = executor.getLeaderOpExecutor().getResult();
+                    if (leaderResult != null && leaderResult.isSetSql_digest()) {
+                        digestFromLeader = leaderResult.getSql_digest();
+                    }
+                }
+                auditAfterExec(originStmt, executor.getParsedStmt(),
+                              executor.getQueryStatisticsForAuditLog(), digestFromLeader);
             }
         } catch (Throwable e) {
             // Catch all throwable.
@@ -839,7 +905,11 @@ public class ConnectProcessor {
         // only change lastQueryId when current command is COM_QUERY
         MysqlCommand cmd = ctx.getCommand();
         if (cmd == MysqlCommand.COM_QUERY || cmd == MysqlCommand.COM_STMT_PREPARE || cmd == MysqlCommand.COM_STMT_EXECUTE) {
-            ctx.setLastQueryId(ctx.queryId);
+            boolean skipSetLastQueryId = executor != null && 
+                    executor.getParsedStmt() instanceof com.starrocks.sql.ast.AnalyzeProfileStmt;
+            if (!skipSetLastQueryId) {
+                ctx.setLastQueryId(ctx.getQueryId());
+            }
             ctx.setQueryId(null);
         }
     }
@@ -896,6 +966,10 @@ public class ConnectProcessor {
             result.setState(ctx.getState().getStateType().toString());
             result.setErrorMsg(ctx.getState().getErrorMessage());
             return result;
+        }
+
+        if (request.isSetUser_groups()) {
+            ctx.setGroups(new HashSet<>(request.getUser_groups()));
         }
 
         if (request.isSetUser_roles()) {
@@ -1089,6 +1163,17 @@ public class ConnectProcessor {
         }
         executor.setProxy();
         executor.execute();
+
+        if (executor.getParsedStmt() != null) {
+            StatementBase parsedStmt = executor.getParsedStmt();
+            if ((Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) &&
+                    (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt)) {
+                String digest = computeStatementDigest(parsedStmt);
+                if (!digest.isEmpty()) {
+                    result.setSql_digest(digest);
+                }
+            }
+        }
 
         return executor;
     }

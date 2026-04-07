@@ -441,6 +441,16 @@ public class JoinTest extends PlanTestBase {
                 "  |  equal join conjunct: 1: v1 = 4: v1\n" +
                 "  |  other predicates: coalesce(1: v1, 4: v1) = 3");
 
+        sql = "select v1 from t0 full outer join (select 1 as v1 from t1) t1 using(v1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "coalesce(1: v1, CAST(7: expr AS BIGINT)");
+
+        sql = "select v1 from t0 full outer join (select 1 as v1 from t1) t1 using(v1) " +
+                "full outer join (select 9 as v1 from t1) t2 using(v1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "join op: FULL OUTER JOIN");
+        assertContains(plan, "coalesce(8: v1, CAST(12: expr AS BIGINT)");
+
         sql = "select v5, v6 from t1 full outer join test_using a using(v5, v6) full outer join test_using b using(v5, v6)";
         plan = getFragmentPlan(sql);
         assertContains(plan, "9:Project\n" +
@@ -2851,6 +2861,15 @@ public class JoinTest extends PlanTestBase {
                     "  RESULT SINK\n" +
                     "\n" +
                     "  0:OlapScanNode");
+
+            sql = "select v1 from t0 where v2 = 1 union select v4 from t1 where v5 = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "RESULT SINK\n" +
+                    "\n" +
+                    "  9:AGGREGATE (merge finalize)\n" +
+                    "  |  group by: 7: v1\n" +
+                    "  |  \n" +
+                    "  8:EXCHANGE");
         } finally {
             Config.run_mode = RunMode.SHARED_NOTHING.getName();
             RunMode.detectRunMode();
@@ -3441,7 +3460,8 @@ public class JoinTest extends PlanTestBase {
         assertContainsIgnoreColRefs(plan, "  0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: coalesce('cccc', CAST(1: v1 AS VARCHAR)) = '1'");
+                "     PREDICATES: " +
+                "coalesce(if(CAST(1: v1 AS VARCHAR(1048576)) = 'cccc', 'cccc', NULL), CAST(1: v1 AS VARCHAR)) = '1'");
     }
 
     @Test
@@ -3622,5 +3642,19 @@ public class JoinTest extends PlanTestBase {
                 "  |  analytic partition by: 1: v1\n" +
                 "  |  offset: 0");
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testLeftPredicate() throws Exception {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        String sql1 = "with tt as (select * from test_all_type_not_null) "
+                + "select t1.* "
+                + "from tt t1 left join "
+                + "     tt t2 on t1.t1c = t2.t1c "
+                + " and t1.t1a between t2.id_datetime and t2.id_date "
+                + "where t1.t1a>=date_add('2026-01-01',-200) and t1.t1a<=date_format(date_add('2026-01-01',0) , '%Y-%m-31');";
+
+        String plan = getFragmentPlan(sql1);
+        assertNotContains(plan, "CAST(29: id_date AS VARCHAR) >= '2025-06-15 00:00:00'");
     }
 }

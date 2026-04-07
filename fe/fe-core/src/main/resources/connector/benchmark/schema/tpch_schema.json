@@ -1,0 +1,105 @@
+{
+  "tables": [
+    {
+      "name": "part",
+      "columns": [
+        {"name": "p_partkey", "type": "int64"},
+        {"name": "p_name", "type": "string"},
+        {"name": "p_mfgr", "type": "string"},
+        {"name": "p_brand", "type": "string"},
+        {"name": "p_type", "type": "string"},
+        {"name": "p_size", "type": "int32"},
+        {"name": "p_container", "type": "string"},
+        {"name": "p_retailprice", "type": "decimal128(15, 2)"},
+        {"name": "p_comment", "type": "string"}
+      ]
+    },
+    {
+      "name": "partsupp",
+      "columns": [
+        {"name": "ps_partkey", "type": "int64"},
+        {"name": "ps_suppkey", "type": "int64"},
+        {"name": "ps_availqty", "type": "int32"},
+        {"name": "ps_supplycost", "type": "decimal128(15, 2)"},
+        {"name": "ps_comment", "type": "string"}
+      ]
+    },
+    {
+      "name": "supplier",
+      "columns": [
+        {"name": "s_suppkey", "type": "int64"},
+        {"name": "s_name", "type": "string"},
+        {"name": "s_address", "type": "string"},
+        {"name": "s_nationkey", "type": "int64"},
+        {"name": "s_phone", "type": "string"},
+        {"name": "s_acctbal", "type": "decimal128(15, 2)"},
+        {"name": "s_comment", "type": "string"}
+      ]
+    },
+    {
+      "name": "customer",
+      "columns": [
+        {"name": "c_custkey", "type": "int64"},
+        {"name": "c_name", "type": "string"},
+        {"name": "c_address", "type": "string"},
+        {"name": "c_nationkey", "type": "int64"},
+        {"name": "c_phone", "type": "string"},
+        {"name": "c_acctbal", "type": "decimal128(15, 2)"},
+        {"name": "c_mktsegment", "type": "string"},
+        {"name": "c_comment", "type": "string"}
+      ]
+    },
+    {
+      "name": "orders",
+      "columns": [
+        {"name": "o_orderkey", "type": "int64"},
+        {"name": "o_custkey", "type": "int64"},
+        {"name": "o_orderstatus", "type": "string"},
+        {"name": "o_totalprice", "type": "decimal128(15, 2)"},
+        {"name": "o_orderdate", "type": "string"},
+        {"name": "o_orderpriority", "type": "string"},
+        {"name": "o_clerk", "type": "string"},
+        {"name": "o_shippriority", "type": "int32"},
+        {"name": "o_comment", "type": "string"}
+      ]
+    },
+    {
+      "name": "lineitem",
+      "columns": [
+        {"name": "l_orderkey", "type": "int64"},
+        {"name": "l_partkey", "type": "int64"},
+        {"name": "l_suppkey", "type": "int64"},
+        {"name": "l_linenumber", "type": "int32"},
+        {"name": "l_quantity", "type": "int64"},
+        {"name": "l_extendedprice", "type": "decimal128(15, 2)"},
+        {"name": "l_discount", "type": "decimal128(4, 2)"},
+        {"name": "l_tax", "type": "decimal128(4, 2)"},
+        {"name": "l_returnflag", "type": "string"},
+        {"name": "l_linestatus", "type": "string"},
+        {"name": "l_shipdate", "type": "string"},
+        {"name": "l_commitdate", "type": "string"},
+        {"name": "l_receiptdate", "type": "string"},
+        {"name": "l_shipinstruct", "type": "string"},
+        {"name": "l_shipmode", "type": "string"},
+        {"name": "l_comment", "type": "string"}
+      ]
+    },
+    {
+      "name": "nation",
+      "columns": [
+        {"name": "n_nationkey", "type": "int64"},
+        {"name": "n_name", "type": "string"},
+        {"name": "n_regionkey", "type": "int64"},
+        {"name": "n_comment", "type": "string"}
+      ]
+    },
+    {
+      "name": "region",
+      "columns": [
+        {"name": "r_regionkey", "type": "int64"},
+        {"name": "r_name", "type": "string"},
+        {"name": "r_comment", "type": "string"}
+      ]
+    }
+  ]
+}

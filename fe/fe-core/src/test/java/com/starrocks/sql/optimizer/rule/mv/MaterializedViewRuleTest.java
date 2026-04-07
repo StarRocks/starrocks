@@ -61,7 +61,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         Assertions.assertEquals(1, plan.getScanNodes().size());
         Assertions.assertTrue(plan.getScanNodes().get(0) instanceof OlapScanNode);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
-        Long selectedIndexid = olapScanNode.getSelectedIndexId();
+        Long selectedIndexid = olapScanNode.getSelectedIndexMetaId();
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         Database database = globalStateMgr.getLocalMetastore().getDb("test");
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
@@ -84,7 +84,7 @@ public class MaterializedViewRuleTest extends PlanTestBase {
                     " from lineorder_flat_for_mv group by LO_ORDERDATE;";
         ExecPlan plan = getExecPlan(sql);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
-        Long selectedIndexid = olapScanNode.getSelectedIndexId();
+        Long selectedIndexid = olapScanNode.getSelectedIndexMetaId();
         Assertions.assertNotEquals(baseTable.getIndexMetaIdByName("lo_count_key_mv"), selectedIndexid);
     }
 

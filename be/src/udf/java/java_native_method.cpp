@@ -41,7 +41,7 @@ public:
 
     Status do_visit(const BinaryColumn& column) {
         _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_offset().data());
-        _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_bytes().data());
+        _jarr[_idx++] = reinterpret_cast<int64_t>(column.get_immutable_bytes().data());
         return Status::OK();
     }
 

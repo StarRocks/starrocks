@@ -16,17 +16,22 @@
 
 #include <gtest/gtest.h>
 
+#include "agent/agent_server.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/scoped_updater.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/config_cache_fwd.h"
+#include "common/config_lake_fwd.h"
+#include "common/system/cpu_info.h"
+#include "common/util/bthreads/executor.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
-#include "testutil/scoped_updater.h"
-#include "util/bthreads/executor.h"
 
 namespace starrocks {
 
@@ -100,6 +105,38 @@ TEST_F(UpdateConfigActionTest, test_update_transaction_publish_version_worker_co
     auto st = action.update_config("transaction_publish_version_worker_count", "8");
     CHECK_OK(st);
     ASSERT_EQ(8, ExecEnv::GetInstance()->put_aggregate_metadata_thread_pool()->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_tablet_meta_info_worker_count) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
+    ASSERT_NE(nullptr, thread_pool);
+
+    auto st = action.update_config("update_tablet_meta_info_worker_count", "4");
+    CHECK_OK(st);
+    ASSERT_EQ(4, thread_pool->max_threads());
+
+    st = action.update_config("update_tablet_meta_info_worker_count", "0");
+    CHECK_OK(st);
+    ASSERT_EQ(1, thread_pool->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto* thread_pool = ExecEnv::GetInstance()->lake_metadata_fetch_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    ASSERT_EQ(std::max(1, config::lake_metadata_fetch_thread_count), thread_pool->max_threads());
+
+    auto st = action.update_config("lake_metadata_fetch_thread_count", "8");
+    CHECK_OK(st);
+    ASSERT_EQ(8, thread_pool->max_threads());
+
+    // Verify clamped to at least 1
+    st = action.update_config("lake_metadata_fetch_thread_count", "0");
+    CHECK_OK(st);
+    ASSERT_EQ(1, thread_pool->max_threads());
 }
 
 } // namespace starrocks

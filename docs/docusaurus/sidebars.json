@@ -12,6 +12,7 @@
                 "introduction/what_is_starrocks",
                 "introduction/Architecture",
                 "introduction/Features",
+                "introduction/feature_difference",
                 "introduction/versioning",
                 "introduction/maturity"
             ]
@@ -263,12 +264,16 @@
                                 "data_source/catalog/iceberg/iceberg_timetravel",
                                 "data_source/catalog/iceberg/iceberg_meta_table",
                                 "data_source/catalog/iceberg/iceberg_rest_s3",
-                                "data_source/catalog/iceberg/iceberg_rest_security"
+                                "data_source/catalog/iceberg/iceberg_rest_security",
+                                "data_source/catalog/iceberg/DDL",
+                                "data_source/catalog/iceberg/DML",
+                                "data_source/catalog/iceberg/procedures"
                             ]
                         },
                         "data_source/catalog/hudi_catalog",
                         "data_source/catalog/deltalake_catalog",
                         "data_source/catalog/jdbc_catalog",
+                        "data_source/catalog/benchmark_catalog",
                         "data_source/catalog/elasticsearch_catalog",
                         "data_source/catalog/paimon_catalog",
                         "data_source/catalog/unified_catalog",
@@ -418,6 +423,7 @@
                         "integrations/BI_integrations/Hex",
                         "integrations/BI_integrations/Querybook",
                         "integrations/BI_integrations/QuickBI",
+                        "integrations/BI_integrations/Rill",
                         "integrations/BI_integrations/Tableau_Desktop",
                         "integrations/BI_integrations/Metabase"
                     ]
@@ -442,7 +448,19 @@
                 },
                 {
                     "type": "doc",
+                    "id": "integrations/JDBC_driver"
+                },
+                {
+                    "type": "doc",
+                    "id": "integrations/airflow"
+                },
+                {
+                    "type": "doc",
                     "id": "integrations/dbt"
+                },
+                {
+                    "type": "doc",
+                    "id": "integrations/smt/starrocks_sqlalchemy"
                 }
             ]
         },
@@ -462,8 +480,34 @@
                         "id": "administration/management/configuration"
                     },
                     "items": [
-                        "administration/management/FE_configuration",
-                        "administration/management/BE_configuration"
+                        {
+                            "type": "category",
+                            "label": "FE Configuration",
+                            "link": {
+                                "type": "doc",
+                                "id": "administration/management/FE_configuration"
+                            },
+                            "items": [
+                                "administration/management/FE_parameters/log_server_meta",
+                                "administration/management/FE_parameters/user_query_loading",
+                                "administration/management/FE_parameters/stats_storage",
+                                "administration/management/FE_parameters/shared_lake_other"
+                            ]
+                        },
+                        {
+                            "type": "category",
+                            "label": "BE Configuration",
+                            "link": {
+                                "type": "doc",
+                                "id": "administration/management/BE_configuration"
+                            },
+                            "items": [
+                                "administration/management/BE_parameters/log_server_meta",
+                                "administration/management/BE_parameters/query_loading",
+                                "administration/management/BE_parameters/stats_storage",
+                                "administration/management/BE_parameters/shared_lake_other"
+                            ]
+                        }
                 ]
                 },
                 {
@@ -475,30 +519,33 @@
                     },
                     "items": [
                         "administration/management/logs",
+                        "administration/management/proc_profile",
                         "administration/management/Scale_up_down",
                         "administration/management/BE_blacklist",
                         "administration/management/Backup_and_restore",
                         "administration/cluster_snapshot",
-                        {
-                            "type": "category",
-                            "label": "Monitor and Alert",
-                            "link": {
-                                "type": "doc",
-                                "id": "administration/management/monitoring/Monitor_and_Alert"
-                            },
-                            "items": [
-                                "administration/management/monitoring/metrics",
-                                "administration/management/monitoring/metrics-materialized_view",
-                                "administration/management/monitoring/metrics-shared-data",
-                                "administration/management/monitoring/alert"
-                            ]
-                        },
+
+                    { 
+                        "type": "category",
+                        "label": "Monitor and Alert",
+                        "link": {
+                          "type": "doc",
+                          "id": "administration/management/monitoring/Monitor_and_Alert"
+                         },
+                        "items": [
+                            {
+                              "type": "autogenerated",
+                              "dirName": "administration/management/monitoring"
+                            }
+                         ]
+                       },
                         "administration/management/audit_loader",
                         "administration/management/enable_fqdn",
                         "administration/management/timezone",
                         "administration/management/monitor_manage_big_queries",
                         "administration/management/compaction",
                         "administration/management/graceful_exit",
+                        "administration/management/extensions",
                         {
                             "type": "category",
                             "label": "Resource management",
@@ -517,7 +564,17 @@
                 "administration/Data_recovery",
                 "administration/Meta_recovery",
                 "administration/data_migration_tool",
-                "administration/http_interface",
+                {
+                    "type": "category",
+                    "label": "HTTP Interface",
+                    "link": {
+                        "type": "doc",
+                        "id": "administration/http_interface"
+                    },
+                    "items": [
+                        "administration/http_interface/query_detail"
+                    ]
+                },
                 "administration/sql_digest",
         {
             "type": "category",
@@ -582,6 +639,7 @@
                 "faq/resource_isolation_faq",
                 "faq/fe_mem_faq",
                 "faq/operation_maintenance_faq",
+                "faq/starrocks-wildfly-native-ssl-fix",
                 "faq/Others"
             ]
         },

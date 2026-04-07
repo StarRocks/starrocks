@@ -35,14 +35,8 @@ public:
     static void create(const std::shared_ptr<TabletIndex>& tablet_index, const std::string& vector_index_file_path,
                        bool is_element_nullable, std::unique_ptr<VectorIndexWriter>* res);
 
-    VectorIndexWriter(const std::shared_ptr<TabletIndex>& tablet_index, std::string vector_index_file_path,
-                      bool is_element_nullable)
-            : _tablet_index(tablet_index),
-              _vector_index_file_path(std::move(vector_index_file_path)),
-              _is_element_nullable(is_element_nullable) {
-        // Element of array column must be nullable.
-        DCHECK(_is_element_nullable);
-    }
+    VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, std::string vector_index_file_path,
+                      bool is_element_nullable);
 
     Status init();
 
@@ -61,7 +55,7 @@ private:
     std::string _vector_index_file_path;
     std::unique_ptr<VectorIndexBuilder> _index_builder;
 
-    uint32_t _start_vector_index_build_threshold = config::config_vector_index_default_build_threshold;
+    uint32_t _start_vector_index_build_threshold;
 
     // buffer data for tiny data size
     MutableColumnPtr _buffer_column;

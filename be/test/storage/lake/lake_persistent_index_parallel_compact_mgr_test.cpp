@@ -18,15 +18,19 @@
 
 #include <memory>
 
-#include "common/config.h"
+#include "base/testutil/assert.h"
+#include "column/column_helper.h"
+#include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
+#include "storage/primary_key_encoder.h"
+#include "storage/sstable/comparator.h"
 #include "storage/sstable/options.h"
 #include "storage/sstable/table_builder.h"
+#include "storage/tablet_schema.h"
 #include "test_util.h"
-#include "testutil/assert.h"
 
 namespace starrocks::lake {
 
@@ -111,6 +115,102 @@ protected:
         sst_pb->mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
 
         return Status::OK();
+    }
+
+    Status create_test_sstable_with_rssid(const std::string& filename, int start_key, int count, uint32_t rssid_base,
+                                          PersistentIndexSstablePB* sst_pb) {
+        sstable::Options options;
+        std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), filename);
+        ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(filepath));
+        sstable::TableBuilder builder(options, wf.get());
+
+        for (int i = 0; i < count; i++) {
+            std::string key = fmt::format("key_{:016X}", start_key + i);
+            IndexValuesWithVerPB val_pb;
+            auto* v = val_pb.add_values();
+            v->set_version(1);
+            v->set_rssid(rssid_base + i);
+            v->set_rowid(i);
+            builder.Add(Slice(key), val_pb.SerializeAsString());
+        }
+        RETURN_IF_ERROR(builder.Finish());
+        uint64_t filesize = builder.FileSize();
+        RETURN_IF_ERROR(wf->close());
+
+        sst_pb->set_filename(filename);
+        sst_pb->set_filesize(filesize);
+        if (count > 0) {
+            sst_pb->mutable_range()->set_start_key(builder.KeyRange().first.to_string());
+            sst_pb->mutable_range()->set_end_key(builder.KeyRange().second.to_string());
+        }
+        auto fileset_id = UniqueId::gen_uid();
+        sst_pb->mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
+
+        return Status::OK();
+    }
+
+    // Helper function to create a test sstable file using PrimaryKeyEncoder
+    Status create_test_sstable_with_pk(const std::string& filename, int start_key, int count,
+                                       PersistentIndexSstablePB* sst_pb, bool shared = false) {
+        sstable::Options options;
+        std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), filename);
+        ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(filepath));
+        sstable::TableBuilder builder(options, wf.get());
+
+        std::vector<ColumnId> pk_columns = {0};
+        auto pkey_schema = ChunkHelper::convert_schema(TabletSchema::create(_tablet_metadata->schema()), pk_columns);
+
+        for (int i = 0; i < count; i++) {
+            auto chunk = std::make_unique<Chunk>();
+            auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+            col->append_datum(Datum((int32_t)(start_key + i)));
+            chunk->append_column(std::move(col), (SlotId)0);
+
+            MutableColumnPtr pk_column;
+            const auto encoding_type = _tablet_metadata->has_range() ? PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2
+                                                                     : PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1;
+            RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, encoding_type));
+            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(), encoding_type);
+            std::string key;
+            if (pk_column->is_binary()) {
+                key = ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
+            } else {
+                key = std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            }
+
+            IndexValue val(start_key + i);
+            IndexValuesWithVerPB val_pb;
+            auto* v = val_pb.add_values();
+            v->set_version(1);
+            v->set_rssid(val.get_rssid());
+            v->set_rowid(val.get_rowid());
+            builder.Add(Slice(key), val_pb.SerializeAsString());
+        }
+        RETURN_IF_ERROR(builder.Finish());
+        uint64_t filesize = builder.FileSize();
+        RETURN_IF_ERROR(wf->close());
+
+        // Fill the sstable pb
+        sst_pb->set_filename(filename);
+        sst_pb->set_filesize(filesize);
+        if (count > 0) {
+            sst_pb->mutable_range()->set_start_key(builder.KeyRange().first.to_string());
+            sst_pb->mutable_range()->set_end_key(builder.KeyRange().second.to_string());
+        }
+        auto fileset_id = UniqueId::gen_uid();
+        sst_pb->mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
+        sst_pb->set_shared(shared);
+
+        return Status::OK();
+    }
+
+    StatusOr<std::unique_ptr<PersistentIndexSstable>> open_sstable(const PersistentIndexSstablePB& sst_pb) {
+        RandomAccessFileOptions opts;
+        std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), sst_pb.filename());
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, filepath));
+        auto sst = std::make_unique<PersistentIndexSstable>();
+        RETURN_IF_ERROR(sst->init(std::move(rf), sst_pb, nullptr, false));
+        return sst;
     }
 
     constexpr static const char* const kTestDir = "test_lake_persistent_index_parallel_compact_mgr";
@@ -364,6 +464,47 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_overlapping_sstab
     ASSERT_EQ(output_sstables[0].range().end_key(), sst2.range().end_key());
 }
 
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_apply_rssid_offset) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    PersistentIndexSstablePB sst1;
+    PersistentIndexSstablePB sst2;
+    ASSERT_OK(create_test_sstable_with_rssid("test_sst_offset_1.sst", 0, 3, 10, &sst1));
+    ASSERT_OK(create_test_sstable_with_rssid("test_sst_offset_2.sst", 0, 3, 20, &sst2));
+    sst1.set_max_rss_rowid(static_cast<uint64_t>(1) << 32);
+    sst2.set_max_rss_rowid(static_cast<uint64_t>(2) << 32);
+    sst2.set_rssid_offset(5);
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+    candidates.push_back({sst2});
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
+    ASSERT_EQ(1, output_sstables.size());
+
+    ASSIGN_OR_ABORT(auto output_sst, open_sstable(output_sstables[0]));
+    std::vector<std::string> key_strs;
+    std::vector<Slice> keys;
+    KeyIndexSet key_indexes;
+    for (int i = 0; i < 3; ++i) {
+        key_strs.emplace_back(fmt::format("key_{:016X}", i));
+        keys.emplace_back(key_strs.back());
+        key_indexes.insert(i);
+    }
+
+    std::vector<IndexValue> values(keys.size(), IndexValue(NullIndexValue));
+    KeyIndexSet found_key_indexes;
+    ASSERT_OK(output_sst->multi_get(keys.data(), key_indexes, -1, values.data(), &found_key_indexes));
+    ASSERT_EQ(key_indexes.size(), found_key_indexes.size());
+
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(values[i].get_rssid(), 20U + static_cast<uint32_t>(i) + 5U);
+        EXPECT_EQ(values[i].get_rowid(), static_cast<uint32_t>(i));
+    }
+}
+
 TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_multiple_filesets) {
     auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
     ASSERT_OK(mgr->init());
@@ -538,7 +679,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_empty_input
     ASSERT_OK(mgr->init());
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     auto fileset_id = UniqueId::gen_uid();
-    SeekRange seek_range{"", ""}; // Empty range means full range
+    SstSeekRange seek_range{"", ""}; // Empty range means full range
 
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
             input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id, seek_range);
@@ -563,7 +704,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_null_tablet
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1});
     auto fileset_id = UniqueId::gen_uid();
-    SeekRange seek_range{"", ""}; // Empty range means full range
+    SstSeekRange seek_range{"", ""}; // Empty range means full range
 
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(input_sstables, nullptr, _tablet_metadata,
                                                                          false, fileset_id, seek_range);
@@ -588,7 +729,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_single_sstable_o
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1});
     auto fileset_id = UniqueId::gen_uid();
-    SeekRange seek_range{"", ""}; // Empty range means full range
+    SstSeekRange seek_range{"", ""}; // Empty range means full range
 
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
             input_sstables, _tablet_mgr.get(), _tablet_metadata, false, fileset_id, seek_range);
@@ -619,7 +760,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_multiple_sstable
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1, sst2});
     auto fileset_id = UniqueId::gen_uid();
-    SeekRange seek_range{"", ""}; // Empty range means full range
+    SstSeekRange seek_range{"", ""}; // Empty range means full range
 
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
@@ -653,7 +794,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_overlapping
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1, sst2});
     auto fileset_id = UniqueId::gen_uid();
-    SeekRange seek_range{"", ""}; // Empty range means full range
+    SstSeekRange seek_range{"", ""}; // Empty range means full range
 
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
@@ -680,7 +821,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_merge_base_
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1, sst2});
     auto fileset_id = UniqueId::gen_uid();
-    SeekRange seek_range{"", ""}; // Empty range means full range
+    SstSeekRange seek_range{"", ""}; // Empty range means full range
 
     // Test with merge_base_level = true
     std::vector<PersistentIndexSstablePB> output;
@@ -711,7 +852,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_multiple_fileset
     input_sstables.push_back({sst1, sst2}); // Fileset 1
     input_sstables.push_back({sst3, sst4}); // Fileset 2
     auto fileset_id = UniqueId::gen_uid();
-    SeekRange seek_range{"", ""}; // Empty range means full range
+    SstSeekRange seek_range{"", ""}; // Empty range means full range
 
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
@@ -739,7 +880,7 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_task_run_with_zero_size_s
     std::vector<std::vector<PersistentIndexSstablePB>> input_sstables;
     input_sstables.push_back({sst1, sst2});
     auto fileset_id = UniqueId::gen_uid();
-    SeekRange seek_range{"", ""}; // Empty range means full range
+    SstSeekRange seek_range{"", ""}; // Empty range means full range
 
     std::vector<PersistentIndexSstablePB> output;
     auto task = std::make_shared<LakePersistentIndexParallelCompactTask>(
@@ -814,6 +955,516 @@ TEST_F(LakePersistentIndexParallelCompactMgrTest, test_concurrent_compaction_tas
     }
 
     config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
+}
+
+// ============================================================================
+// Tests for sample_keys_from_sstable
+// ============================================================================
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_small_sstable) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Create a small sstable (should be less than pk_index_sstable_sample_interval_bytes)
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_small.sst", 0, 100, &sst1));
+
+    // Verify the sstable size is small
+    ASSERT_LE(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // For small sstables, should return only the start key
+    ASSERT_EQ(sample_keys.size(), 1);
+    ASSERT_EQ(sample_keys[0], sst1.range().start_key());
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_large_sstable) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Adjust the threshold to make a smaller sstable qualify as "large"
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 10; // 10B
+    const sstable::Comparator* comparator = sstable::BytewiseComparator();
+
+    // Create a sstable that exceeds the reduced threshold
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_large.sst", 0, 1000, &sst1));
+
+    // Verify the sstable size is large relative to the adjusted threshold
+    ASSERT_GT(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // For large sstables, should return multiple sample keys based on the sampling interval.
+    // The first key is always the start_key, followed by sampled keys from the index block.
+    ASSERT_GT(sample_keys.size(), 1);
+
+    // The first sample key must be the start_key (this is the core of the bug fix)
+    ASSERT_EQ(sample_keys[0], sst1.range().start_key());
+
+    // Verify sample keys are sorted
+    for (size_t i = 1; i < sample_keys.size(); i++) {
+        ASSERT_TRUE(comparator->Compare(sample_keys[i - 1], sample_keys[i]) < 0);
+    }
+
+    // Verify the remaining sample keys are within the sstable range
+    ASSERT_TRUE(comparator->Compare(sample_keys[sample_keys.size() - 1], sst1.range().end_key()) < 0);
+
+    // Restore original config
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_from_empty_sstable) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Create an empty sstable
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_empty.sst", 0, 0, &sst1));
+
+    std::vector<std::string> sample_keys;
+    // Empty sstable has no range, so it should handle this case
+    if (sst1.has_range() && !sst1.range().start_key().empty()) {
+        ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+        ASSERT_EQ(sample_keys.size(), 1);
+    }
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_boundary_case) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Adjust the threshold to a small value for testing
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 5000; // 5KB
+
+    // Create an sstable with size close to the threshold
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_boundary.sst", 0, 100, &sst1));
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // Should return at least one sample key
+    ASSERT_GE(sample_keys.size(), 1);
+
+    if (sst1.filesize() <= config::pk_index_sstable_sample_interval_bytes) {
+        // Small sstable case: should return only start key
+        ASSERT_EQ(sample_keys.size(), 1);
+        ASSERT_EQ(sample_keys[0], sst1.range().start_key());
+    } else {
+        // Large sstable case: should return multiple sample keys
+        ASSERT_GT(sample_keys.size(), 1);
+    }
+
+    // Restore original config
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_multiple_calls_consistent) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Adjust the threshold to make a smaller sstable qualify as "large"
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 1024; // 1KB
+
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_consistent.sst", 0, 1000, &sst1));
+
+    // Call TEST_sample_keys_from_sstable multiple times and verify consistency
+    std::vector<std::string> sample_keys1;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys1));
+
+    std::vector<std::string> sample_keys2;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys2));
+
+    // The results should be consistent
+    ASSERT_EQ(sample_keys1.size(), sample_keys2.size());
+    for (size_t i = 0; i < sample_keys1.size(); i++) {
+        ASSERT_EQ(sample_keys1[i], sample_keys2[i]);
+    }
+
+    // Restore original config
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_with_different_intervals) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // Create a sstable with moderate size
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_sample_intervals.sst", 0, 1000, &sst1));
+
+    // Test with a specific interval
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 2048; // 2KB
+
+    std::vector<std::string> sample_keys_default;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys_default));
+    size_t default_sample_count = sample_keys_default.size();
+
+    // Test with smaller interval - should get more samples
+    config::pk_index_sstable_sample_interval_bytes = 1024; // 1KB
+
+    std::vector<std::string> sample_keys_smaller;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys_smaller));
+
+    // With smaller interval, should get more (or equal) sample keys
+    ASSERT_GE(sample_keys_smaller.size(), default_sample_count);
+
+    // Restore original config
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+// Verify that for large SSTs, the start_key is always included as the first
+// sample key, and no duplicate is introduced by Table::sample_keys (which now
+// starts iteration from index 1).
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_large_sstable_start_key_always_first) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 10; // Very small to ensure many samples
+
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_start_key_first.sst", 0, 2000, &sst1));
+    ASSERT_GT(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // Must have at least start_key + some sampled keys
+    ASSERT_GT(sample_keys.size(), 1);
+
+    // The first key must be exactly the start_key
+    ASSERT_EQ(sample_keys[0], sst1.range().start_key());
+
+    // No duplicate: the second key must be strictly greater than start_key
+    const sstable::Comparator* cmp = sstable::BytewiseComparator();
+    ASSERT_TRUE(cmp->Compare(sample_keys[1], sst1.range().start_key()) > 0);
+
+    // All keys must be unique (no duplicates from start_key + index block sampling)
+    for (size_t i = 1; i < sample_keys.size(); i++) {
+        ASSERT_TRUE(cmp->Compare(sample_keys[i - 1], sample_keys[i]) < 0) << "Duplicate or out-of-order at index " << i;
+    }
+
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+}
+
+// Verify that when parallel compaction tasks are generated from large SSTs,
+// the first task's seek_key equals the SST's start_key (not a later sampled key).
+// This was the original bug: missing start_key caused the first task to skip
+// keys at the beginning of the SST.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_generate_tasks_large_sstable_seek_range_covers_start_key) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    auto old_threshold = config::pk_index_parallel_compaction_task_split_threshold_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 10;
+    config::pk_index_parallel_compaction_task_split_threshold_bytes = 1; // Force many tasks
+
+    // Create a large sstable
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_seek_range_cover.sst", 0, 2000, &sst1));
+    ASSERT_GT(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+
+    std::vector<std::shared_ptr<LakePersistentIndexParallelCompactTask>> tasks;
+    mgr->TEST_generate_compaction_tasks(candidates, _tablet_metadata, false, &tasks);
+
+    ASSERT_GE(tasks.size(), 2); // Should have multiple tasks due to small threshold
+
+    // The first task's output must cover the start_key of the SST.
+    // Run the first task and check the output range.
+    std::vector<PersistentIndexSstablePB> first_output;
+    auto cb = std::make_unique<AsyncCompactCB>(mgr->thread_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT),
+                                               [&](const std::vector<PersistentIndexSstablePB>& sstables) {
+                                                   first_output = sstables;
+                                                   return Status::OK();
+                                               });
+    tasks[0]->set_cb(cb.get());
+    ASSERT_OK(cb->thread_pool_token()->submit(tasks[0]));
+    ASSERT_OK(cb->wait_for());
+
+    // The first task's output must include keys starting from the SST's start_key.
+    ASSERT_FALSE(first_output.empty());
+    ASSERT_EQ(first_output[0].range().start_key(), sst1.range().start_key());
+
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+    config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
+}
+
+// Verify that compaction of a large SST split into parallel tasks produces output
+// that covers the full key range without any gaps at the beginning.
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_large_sstable_no_missing_keys_at_start) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    auto old_interval = config::pk_index_sstable_sample_interval_bytes;
+    auto old_threshold = config::pk_index_parallel_compaction_task_split_threshold_bytes;
+    config::pk_index_sstable_sample_interval_bytes = 10;
+    config::pk_index_parallel_compaction_task_split_threshold_bytes = 1;
+
+    // Create two large overlapping sstables to trigger actual merge
+    PersistentIndexSstablePB sst1, sst2;
+    ASSERT_OK(create_test_sstable("test_no_gap_1.sst", 0, 1000, &sst1));
+    ASSERT_OK(create_test_sstable("test_no_gap_2.sst", 0, 1000, &sst2));
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+    candidates.push_back({sst2});
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
+
+    ASSERT_FALSE(output_sstables.empty());
+
+    // The first output SST must start from the original start_key (no gap at the beginning)
+    ASSERT_EQ(output_sstables[0].range().start_key(), sst1.range().start_key());
+
+    // The last output SST must end at the original end_key
+    ASSERT_EQ(output_sstables.back().range().end_key(), sst1.range().end_key());
+
+    // Verify output sstables are sorted and non-overlapping:
+    // start_key[i] > end_key[i-1] since each task handles a non-overlapping seek range
+    const sstable::Comparator* cmp = sstable::BytewiseComparator();
+    for (size_t i = 1; i < output_sstables.size(); i++) {
+        ASSERT_TRUE(cmp->Compare(output_sstables[i].range().start_key(), output_sstables[i - 1].range().end_key()) > 0)
+                << "Output sstables overlap at index " << i;
+    }
+
+    // Verify all original keys can be found in the output (no keys lost due to missing start_key)
+    for (int k = 0; k < 1000; k++) {
+        std::string key = fmt::format("key_{:016X}", k);
+        bool found = false;
+        for (const auto& out_sst_pb : output_sstables) {
+            ASSIGN_OR_ABORT(auto sst, open_sstable(out_sst_pb));
+            Slice key_slice(key);
+            KeyIndexSet key_indexes;
+            key_indexes.insert(0);
+            std::vector<IndexValue> values(1, IndexValue(NullIndexValue));
+            KeyIndexSet found_key_indexes;
+            auto st = sst->multi_get(&key_slice, key_indexes, -1, values.data(), &found_key_indexes);
+            if (st.ok() && !found_key_indexes.empty()) {
+                found = true;
+                break;
+            }
+        }
+        ASSERT_TRUE(found) << "Key " << key << " not found in any output sstable";
+    }
+
+    config::pk_index_sstable_sample_interval_bytes = old_interval;
+    config::pk_index_parallel_compaction_task_split_threshold_bytes = old_threshold;
+}
+
+// Verify that sample_keys from a small sstable still returns the start_key
+// (behavior preserved after the fix).
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_sample_keys_small_sstable_returns_start_key) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable("test_small_start_key.sst", 100, 50, &sst1));
+    ASSERT_LE(sst1.filesize(), config::pk_index_sstable_sample_interval_bytes);
+
+    std::vector<std::string> sample_keys;
+    ASSERT_OK(mgr->TEST_sample_keys_from_sstable(sst1, _tablet_metadata, &sample_keys));
+
+    // For small sstables, should return exactly one key: the start_key
+    ASSERT_EQ(sample_keys.size(), 1);
+    ASSERT_EQ(sample_keys[0], sst1.range().start_key());
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_tablet_range_filtering) {
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // 1. Setup Tablet Metadata with a specific range [100, 200)
+    _tablet_metadata->mutable_schema()->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
+    auto* range = _tablet_metadata->mutable_range();
+    auto* lower = range->mutable_lower_bound();
+    auto* v_lower = lower->add_values();
+    v_lower->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_lower->set_value("100");
+    range->set_lower_bound_included(true);
+
+    auto* upper = range->mutable_upper_bound();
+    auto* v_upper = upper->add_values();
+    v_upper->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_upper->set_value("200");
+    range->set_upper_bound_included(false);
+
+    // 2. Create an SST with rows [50, 250)
+    PersistentIndexSstablePB sst1;
+    ASSERT_OK(create_test_sstable_with_pk("test_sst_1.sst", 50, 200, &sst1, true /* shared */));
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
+
+    // 3. Verify output
+    // The output should only contain rows in [100, 200).
+    // Since the original SST was [50, 250), it must be rewritten (not moved).
+    ASSERT_EQ(output_sstables.size(), 1);
+    ASSERT_NE(output_sstables[0].filename(), sst1.filename());
+
+    // Check range of output SST
+    // The keys are encoded INTs. We can't directly compare with "100" string.
+    // But we can check if they match the encoded values of 100 and 199.
+    auto encode_key = [&](int32_t v) {
+        auto pk_columns = std::vector<ColumnId>{0};
+        auto pkey_schema = ChunkHelper::convert_schema(TabletSchema::create(_tablet_metadata->schema()), pk_columns);
+        auto chunk = std::make_unique<Chunk>();
+        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col->append_datum(Datum(v));
+        chunk->append_column(std::move(col), (SlotId)0);
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        if (pk_column->is_binary()) {
+            return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
+        } else {
+            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+        }
+    };
+
+    ASSERT_EQ(output_sstables[0].range().start_key(), encode_key(100));
+    ASSERT_EQ(output_sstables[0].range().end_key(), encode_key(199));
+}
+
+TEST_F(LakePersistentIndexParallelCompactMgrTest, test_compact_with_multi_column_tablet_range_filtering) {
+    // Setup tablet metadata with 2 key columns
+    _tablet_metadata = std::make_shared<TabletMetadata>();
+    _tablet_metadata->set_id(next_id());
+    _tablet_metadata->set_version(1);
+    _tablet_metadata->set_enable_persistent_index(true);
+    _tablet_metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+    auto schema = _tablet_metadata->mutable_schema();
+    schema->set_id(next_id());
+    schema->set_num_short_key_columns(2);
+    schema->set_keys_type(PRIMARY_KEYS);
+    auto c0 = schema->add_column();
+    c0->set_unique_id(next_id());
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    auto c1 = schema->add_column();
+    c1->set_unique_id(next_id());
+    c1->set_name("c1");
+    c1->set_type("VARCHAR");
+    c1->set_is_key(true);
+    c1->set_is_nullable(false);
+    auto c2 = schema->add_column();
+    c2->set_unique_id(next_id());
+    c2->set_name("c2");
+    c2->set_type("INT");
+    c2->set_is_key(false);
+    c2->set_is_nullable(false);
+    schema->set_primary_key_encoding_type(PK_ENCODING_TYPE_V2);
+
+    auto mgr = std::make_unique<LakePersistentIndexParallelCompactMgr>(_tablet_mgr.get());
+    ASSERT_OK(mgr->init());
+
+    // 1. Setup Tablet Metadata with range [ (100, "abc"), (200, "def") )
+    auto* range = _tablet_metadata->mutable_range();
+    auto* lower = range->mutable_lower_bound();
+    auto* v_lower1 = lower->add_values();
+    v_lower1->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_lower1->set_value("100");
+    auto* v_lower2 = lower->add_values();
+    v_lower2->mutable_type()->CopyFrom(TypeDescriptor(TYPE_VARCHAR).to_protobuf());
+    v_lower2->set_value("abc");
+    range->set_lower_bound_included(true);
+
+    auto* upper = range->mutable_upper_bound();
+    auto* v_upper1 = upper->add_values();
+    v_upper1->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+    v_upper1->set_value("200");
+    auto* v_upper2 = upper->add_values();
+    v_upper2->mutable_type()->CopyFrom(TypeDescriptor(TYPE_VARCHAR).to_protobuf());
+    v_upper2->set_value("def");
+    range->set_upper_bound_included(false);
+
+    // 2. Create an SST with data that spans across the range
+    sstable::Options options;
+    std::string filename = "test_multi_col.sst";
+    std::string filepath = _tablet_mgr->sst_location(_tablet_metadata->id(), filename);
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(filepath));
+    sstable::TableBuilder builder(options, wf.get());
+
+    std::vector<ColumnId> pk_columns = {0, 1};
+    auto pkey_schema = ChunkHelper::convert_schema(TabletSchema::create(_tablet_metadata->schema()), pk_columns);
+
+    auto encode_key = [&](int32_t v1, const std::string& v2) {
+        auto chunk = std::make_unique<Chunk>();
+        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col1->append_datum(Datum(v1));
+        chunk->append_column(std::move(col1), (SlotId)0);
+        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
+        col2->append_datum(Datum(Slice(v2)));
+        chunk->append_column(std::move(col2), (SlotId)1);
+
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        return ColumnHelper::get_binary_column(pk_column.get())->get_slice(0).to_string();
+    };
+
+    // Add keys: (50, "xxx"), (100, "abc"), (150, "mmm"), (200, "def"), (250, "yyy")
+    std::vector<std::pair<int32_t, std::string>> test_keys = {
+            {50, "xxx"}, {100, "abc"}, {150, "mmm"}, {200, "def"}, {250, "yyy"}};
+    for (const auto& k : test_keys) {
+        std::string encoded_key = encode_key(k.first, k.second);
+        IndexValuesWithVerPB val_pb;
+        auto* v = val_pb.add_values();
+        v->set_version(1);
+        v->set_rssid(1);
+        v->set_rowid(1);
+        builder.Add(Slice(encoded_key), val_pb.SerializeAsString());
+    }
+    ASSERT_OK(builder.Finish());
+    ASSERT_OK(wf->close());
+
+    PersistentIndexSstablePB sst1;
+    sst1.set_filename(filename);
+    sst1.set_filesize(builder.FileSize());
+    sst1.mutable_range()->set_start_key(builder.KeyRange().first.to_string());
+    sst1.mutable_range()->set_end_key(builder.KeyRange().second.to_string());
+    sst1.set_shared(true);
+    auto fileset_id = UniqueId::gen_uid();
+    sst1.mutable_fileset_id()->CopyFrom(fileset_id.to_proto());
+
+    std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+    candidates.push_back({sst1});
+
+    std::vector<PersistentIndexSstablePB> output_sstables;
+    ASSERT_OK(mgr->compact(candidates, _tablet_metadata, false, &output_sstables));
+
+    // 3. Verify output
+    // Should only contain (100, "abc") and (150, "mmm").
+    // (50, "xxx") is before lower bound.
+    // (200, "def") is the upper bound (exclusive).
+    // (250, "yyy") is after upper bound.
+    ASSERT_EQ(output_sstables.size(), 1);
+    ASSERT_EQ(output_sstables[0].range().start_key(), encode_key(100, "abc"));
+    ASSERT_EQ(output_sstables[0].range().end_key(), encode_key(150, "mmm"));
 }
 
 } // namespace starrocks::lake

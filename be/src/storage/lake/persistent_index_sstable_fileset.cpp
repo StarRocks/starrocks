@@ -14,10 +14,10 @@
 
 #include "storage/lake/persistent_index_sstable_fileset.h"
 
+#include "base/debug/trace.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/comparator.h"
-#include "util/trace.h"
 
 namespace starrocks::lake {
 
@@ -48,8 +48,16 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
             if (_standalone_sstable != nullptr) {
                 return Status::InternalError("more than one standalone sstable in fileset");
             }
-            _fileset_id = UniqueId::gen_uid();
-            sstable->set_fileset_id(_fileset_id);
+            // Preserve the existing fileset_id from metadata if present, to keep it
+            // consistent with what compaction txn_log records. Only generate a new
+            // random ID for truly legacy sstables (e.g., created before fileset_id
+            // was introduced).
+            if (sstable->sstable_pb().has_fileset_id()) {
+                _fileset_id = sstable->sstable_pb().fileset_id();
+            } else {
+                _fileset_id = UniqueId::gen_uid();
+                sstable->set_fileset_id(_fileset_id);
+            }
             _standalone_sstable = std::move(sstable);
         }
     }
@@ -73,24 +81,29 @@ Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstabl
         std::string end_key = sstable->sstable_pb().range().end_key();
         _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
     } else {
-        _fileset_id = UniqueId::gen_uid();
-        sstable->set_fileset_id(_fileset_id);
+        // Preserve the existing fileset_id from metadata if present (same reason as above).
+        if (sstable->sstable_pb().has_fileset_id()) {
+            _fileset_id = sstable->sstable_pb().fileset_id();
+        } else {
+            _fileset_id = UniqueId::gen_uid();
+            sstable->set_fileset_id(_fileset_id);
+        }
         _standalone_sstable = std::move(sstable);
     }
     return Status::OK();
 }
 
-Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndexSstable>& sstable) {
+bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstable>& sstable) {
     const sstable::Comparator* comparator = sstable::BytewiseComparator();
     DCHECK(sstable->sstable_pb().has_range());
     // Make sure sstable is inorder via comparator
     if (!_sstable_map.empty()) {
         const auto& last_end_key = _sstable_map.rbegin()->first.second;
         if (comparator->Compare(Slice(last_end_key), Slice(sstable->sstable_pb().range().start_key())) >= 0) {
-            return Status::InternalError("sstables are not in order or have overlap key range");
+            return false;
         }
     } else {
-        return Status::InternalError("sstable fileset is not init yet");
+        return false;
     }
     // Extract keys before moving sstable to avoid undefined behavior
     std::string start_key = sstable->sstable_pb().range().start_key();
@@ -98,7 +111,7 @@ Status PersistentIndexSstableFileset::merge_from(std::unique_ptr<PersistentIndex
     // This sstable belong to same fileset.
     sstable->set_fileset_id(_fileset_id);
     _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
-    return Status::OK();
+    return true;
 }
 
 Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,

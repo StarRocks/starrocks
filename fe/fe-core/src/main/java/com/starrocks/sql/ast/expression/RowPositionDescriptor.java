@@ -34,11 +34,15 @@ import java.util.List;
  */
 public class RowPositionDescriptor {
     public enum Type {
-        ICEBERG_V3
+        ICEBERG_V3,
+        OLAP_SCAN,
+        LAKE_SCAN
     }
 
     // Type of row position format, determines how row positions are encoded and interpreted.
     private Type type;
+
+    private int scanNodeId;
 
     // slot id that identifies the BE/CN where the row originated.
     // it will determine which compute node FetchNode sends the request to
@@ -53,7 +57,8 @@ public class RowPositionDescriptor {
     // must have the same size as fetchRefSlots.
     private List<SlotId> lookupRefSlots;
 
-    public RowPositionDescriptor(Type type, SlotId rowSourceSlot, List<SlotId> fetchRefSlots, List<SlotId> lookupRefSlots) {
+    public RowPositionDescriptor(Type type, int scanNodeId, SlotId rowSourceSlot, 
+                                List<SlotId> fetchRefSlots, List<SlotId> lookupRefSlots) {
         Preconditions.checkState(fetchRefSlots != null && !fetchRefSlots.isEmpty(),
                 "fetchRefSlots can't be null or empty");
         Preconditions.checkState(lookupRefSlots != null && !lookupRefSlots.isEmpty(),
@@ -61,6 +66,7 @@ public class RowPositionDescriptor {
         Preconditions.checkState(fetchRefSlots.size() == lookupRefSlots.size(),
                 "fetchRefSlots'size shoule be same with lookupRefSlots");
         this.type = type;
+        this.scanNodeId = scanNodeId;
         this.rowSourceSlot = rowSourceSlot;
         this.fetchRefSlots = fetchRefSlots;
         this.lookupRefSlots = lookupRefSlots;
@@ -68,6 +74,10 @@ public class RowPositionDescriptor {
 
     public Type getType() {
         return type;
+    }
+
+    public int getScanNodeId() {
+        return scanNodeId;
     }
 
     public SlotId getRowSourceSlot() {
@@ -89,10 +99,17 @@ public class RowPositionDescriptor {
             case ICEBERG_V3:
                 msg.setRow_position_type(TRowPositionType.ICEBERG_V3_ROW_POSITION);
                 break;
+            case OLAP_SCAN:
+                msg.setRow_position_type(TRowPositionType.OLAP_ROW_POSITION);
+                break;
+            case LAKE_SCAN:
+                msg.setRow_position_type(TRowPositionType.LAKE_ROW_POSITION);
+                break;
             default:
-                throw new RuntimeException("unknown type");
+                throw new IllegalStateException("Unexpected value: " + type);
         }
         msg.setRow_source_slot(rowSourceSlot.asInt());
+        msg.setScan_node_id(scanNodeId);
         fetchRefSlots.forEach(slotId -> msg.addToFetch_ref_slots(slotId.asInt()));
         lookupRefSlots.forEach(slotId -> msg.addToLookup_ref_slots(slotId.asInt()));
         return msg;

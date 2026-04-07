@@ -1,4 +1,4 @@
--- name: test_set_partition_version
+-- name: test_set_partition_version @native
 
 CREATE TABLE t (a int);
 

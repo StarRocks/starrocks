@@ -54,23 +54,18 @@ public:
             // merge null flags for each level
             if (col->is_nullable()) {
                 const auto* nullable = down_cast<const NullableColumn*>(col.get());
-                union_null_column =
-                        FunctionHelper::union_null_column(std::move(union_null_column), nullable->null_column());
+                union_null_column = FunctionHelper::union_null_column(union_null_column, nullable->null_column());
             }
 
             const Column* tmp_col = ColumnHelper::get_data_column(col.get());
             DCHECK(tmp_col->is_struct());
             const auto* struct_column = down_cast<const StructColumn*>(tmp_col);
-            col = struct_column->field_column(fieldname);
-            if (col == nullptr) {
-                return Status::InternalError("Struct subfield name: " + fieldname + " not found!");
-            }
+            ASSIGN_OR_RETURN(col, struct_column->field_column(fieldname));
         }
 
         if (col->is_nullable()) {
             const auto* nullable = down_cast<const NullableColumn*>(col.get());
-            union_null_column =
-                    FunctionHelper::union_null_column(std::move(union_null_column), nullable->null_column());
+            union_null_column = FunctionHelper::union_null_column(union_null_column, nullable->null_column());
             col = nullable->data_column();
         }
 
@@ -80,17 +75,19 @@ public:
         if (_copy_flag) {
             return NullableColumn::create(Column::mutate(std::move(col)), std::move(union_null_column));
         } else {
-            return NullableColumn::create(std::move(col), std::move(union_null_column));
+            return NullableColumn::create(col, std::move(union_null_column));
         }
     }
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new SubfieldExpr(*this)); }
 
     int get_subfields(std::vector<std::vector<std::string>>* subfields) const override {
+        int n = Expr::get_subfields(subfields);
         if (subfields != nullptr) {
             subfields->push_back(_used_subfield_names);
+            n += 1;
         }
-        return 1;
+        return n;
     }
 
 private:

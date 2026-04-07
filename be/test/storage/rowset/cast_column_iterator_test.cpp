@@ -16,12 +16,12 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/series_column_iterator.h"
-#include "testutil/assert.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 

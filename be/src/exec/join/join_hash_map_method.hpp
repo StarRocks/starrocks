@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "base/simd/gather.h"
 #include "exec/join/join_hash_map_helper.h"
 #include "exec/join/join_hash_map_method.h"
 #include "exec/join/join_hash_table_descriptor.h"
-#include "simd/gather.h"
 
 namespace starrocks {
 

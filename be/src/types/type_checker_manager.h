@@ -27,11 +27,22 @@ private:
     std::unique_ptr<TypeChecker> _default_checker;
     TypeCheckerManager();
 
+    /**
+     * Attempt to load type checkers from XML configuration.
+     * All type checkers must be defined in XML.
+     * 
+     * @param xml_file_path Path to the XML configuration file
+     * @return true if XML was successfully loaded, false otherwise
+     */
+    bool try_load_from_xml(const std::string& xml_file_path);
+
 public:
     TypeCheckerManager(const TypeCheckerManager&) = delete;
     TypeCheckerManager& operator=(const TypeCheckerManager&) = delete;
 
     static TypeCheckerManager& getInstance();
+
+    void init();
 
     void registerChecker(const std::string& java_class, std::unique_ptr<TypeChecker> checker);
     StatusOr<LogicalType> checkType(const std::string& java_class, const SlotDescriptor* slot_desc);

@@ -45,6 +45,25 @@ REFRESH ASYNC
 AS SELECT /*+ SET_VAR(query_timeout=500) */ * from dual;
 ```
 
+ネストされたクエリでヒントを指定する:
+
+```SQL
+-- メインクエリでヒントを指定するには
+WITH t AS (SELECT region, sales_amount FROM sales_orders)  
+SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming', new_planner_agg_stage = '2') */  
+       SUM(sales_amount) AS total_sales_amount  
+FROM t;
+
+-- サブクエリでヒントを指定するには
+WITH t AS (  
+  SELECT /*+ SET_VAR (streaming_preaggregation_mode = 'force_streaming') */  
+         region, sales_amount  
+  FROM sales_orders  
+)  
+SELECT SUM(sales_amount) AS total_sales_amount  
+FROM t;
+```
+
 ## ユーザー定義変数ヒント
 
 `SET_USER_VARIABLE` ヒントを使用して、SELECT 文または INSERT 文で1つ以上の[ユーザー定義変数](../../sql-reference/user_defined_variables.md)を設定できます。他の文に SELECT 句が含まれている場合、その SELECT 句でも `SET_USER_VARIABLE` ヒントを使用できます。他の文は SELECT 文および INSERT 文であることができますが、CREATE MATERIALIZED VIEW AS SELECT 文および CREATE VIEW AS SELECT 文では使用できません。CTE の SELECT 句で `SET_USER_VARIABLE` ヒントを使用した場合、文が正常に実行されても `SET_USER_VARIABLE` ヒントは効果を発揮しません。v3.2.4 以降、StarRocks はユーザー定義変数ヒントをサポートしています。

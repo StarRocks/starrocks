@@ -32,11 +32,18 @@ This operation requires the ALTER privilege on the target database. You can foll
     ALTER DATABASE <db_name> SET REPLICA QUOTA <quota>;
     ```
 
+4. Set database storage volume
+
+    ```sql
+    ALTER DATABASE <db_name> SET ("storage_volume" = "<new_storage_volume_name>");
+    ```
+
 Note:
 
 ```plain text
 - After renaming the database, use REVOKE and GRANT commands to modify the corresponding user permission if necessary.
 - The database's default data quota and the default replica quota are 2^63-1.
+- The database's default storage volume is the default storage volume when the database is created if the "storage_volume" property is not explicitly provided.
 ```
 
 ## Examples
@@ -61,6 +68,11 @@ Note:
 
     ```SQL
     ALTER DATABASE example_db SET REPLICA QUOTA 102400;
+    ```
+4. Set database storage volume.
+
+    ```SQL
+    ALTER DATABASE example_db SET ("storage_volume" = "aws_s3_storage_volume");
     ```
 
 ## References

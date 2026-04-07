@@ -18,9 +18,9 @@
 #include <arrow/testing/gtest_util.h>
 #include <arrow/testing/util.h>
 #include <arrow/util/bit_util.h>
+#include <base/testutil/parallel_test.h>
+#include <base/utility/guard.h>
 #include <gtest/gtest.h>
-#include <testutil/parallel_test.h>
-#include <util/guard.h>
 
 #include <utility>
 
@@ -31,7 +31,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/file_scanner/parquet_scanner.h"
-#include "runtime/datetime_value.h"
+#include "types/datetime_value.h"
 #include "util/arrow/row_batch.h"
 
 #define ASSERT_STATUS_OK(stmt)    \

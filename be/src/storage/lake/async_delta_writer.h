@@ -17,14 +17,15 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/lake/delta_writer_finish_mode.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 class MemTracker;
@@ -86,9 +87,16 @@ public:
     // [thread-safe]
     //
     // TODO: Change signature to `Future<Status> finish()`
-    void finish(FinishCallback cb) { finish(DeltaWriterFinishMode::kWriteTxnLog, cb); }
+    void finish(FinishCallback cb) { finish(DeltaWriterFinishMode::kWriteTxnLog, std::move(cb)); }
 
     void finish(DeltaWriterFinishMode mode, FinishCallback cb);
+
+    // Cancel the writer with the given status.
+    // After cancellation, subsequent write/flush operations will fail quickly.
+    // This method delegates to the underlying DeltaWriter::cancel() which is thread-safe.
+    //
+    // [thread-safe]
+    void cancel(const Status& st);
 
     // This method will wait for all running tasks completed.
     //

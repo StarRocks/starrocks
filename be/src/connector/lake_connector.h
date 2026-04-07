@@ -22,7 +22,23 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 
+namespace starrocks {
+class TabletSchema;
+class TabletMetadataPB;
+class SlotDescriptor;
+namespace lake {
+class TabletManager;
+}
+} // namespace starrocks
+
 namespace starrocks::connector {
+
+// Check if all PK columns are in the selected slots. Used by CACHE SELECT to
+// decide whether to warm up persistent index SST files.
+bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>& slots);
+
+// Warm up persistent index SST files for cloud-native PK tables.
+Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletManager* tablet_mgr);
 
 class LakeConnector final : public Connector {
 public:
@@ -76,6 +92,8 @@ private:
     void update_counter(RuntimeState* state);
 
     Status _extend_schema_by_access_paths();
+    void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                          const ColumnAccessPath* path);
     Status init_column_access_paths(Schema* schema);
     Status prune_schema_by_access_paths(Schema* schema);
 
@@ -150,6 +168,8 @@ private:
     RuntimeProfile::Counter* _zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bf_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _seg_metadata_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _segs_metadata_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _rows_after_sk_filtered_counter = nullptr;
@@ -160,6 +180,18 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
+
+    // Gin filter Statistics
+    RuntimeProfile::Counter* _gin_filtered_timer = nullptr;
+    RuntimeProfile::Counter* _gin_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_prefix_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filter_timer = nullptr;
+    RuntimeProfile::Counter* _gin_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_counter = nullptr;
+    RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
+
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
@@ -192,9 +224,6 @@ private:
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
 
     RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
-
-    RuntimeProfile::Counter* _record_predicate_filter_timer = nullptr;
-    RuntimeProfile::Counter* _record_predicate_filter_counter = nullptr;
 };
 
 // ================================
@@ -210,8 +239,7 @@ public:
     Status init(ObjectPool* pool, RuntimeState* state) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
-    // always enable shared scan for cloud native table
-    bool always_shared_scan() const override { return true; }
+    bool always_shared_scan() const override { return false; }
 
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
@@ -228,6 +256,9 @@ public:
     bool output_chunk_by_bucket() const override {
         return _t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket;
     }
+
+    size_t next_uniq_id() const { return starrocks::next_uniq_id(_t_lake_scan_node); }
+
     bool is_asc_hint() const override {
         if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
             return _t_lake_scan_node.output_asc_hint;

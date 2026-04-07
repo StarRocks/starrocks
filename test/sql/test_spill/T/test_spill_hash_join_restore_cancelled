@@ -1,4 +1,4 @@
--- name: test_spill_hash_join_restore_cancelled
+-- name: test_spill_hash_join_restore_cancelled @sequential
 
 CREATE TABLE `t0` (
   `c0` int(11) NULL COMMENT "",
@@ -33,4 +33,8 @@ drop task etl_${uuid0};
 function: wait_util_no_queries()
 
 admin disable failpoint 'spill_restore_sleep';
+
+CLEANUP {
+  admin disable failpoint 'spill_restore_sleep';
+} END CLEANUP
 

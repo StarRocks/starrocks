@@ -942,6 +942,70 @@ function: assert_explain_costs_contains("select * from test_overwrite_statistics
 -- result:
 None
 -- !result
+drop all analyze job;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "true");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_statistic_collect_on_first_load" = "false");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_statistic_collect" = "true");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_auto_collect_statistics" = "true");
+-- result:
+-- !result
+shell: sleep 13
+-- result:
+0
+
+-- !result
+drop table if exists test_overwrite_statistics_behavior.t3_predicate;
+-- result:
+-- !result
+delete from _statistics_.column_statistics where table_name like '%t3_predicate%';
+-- result:
+-- !result
+create table t3_predicate(k1 int, k2 int, k3 int) properties("replication_num"="1");
+-- result:
+-- !result
+insert into t3_predicate values(1,2,3), (4,5,6);
+-- result:
+-- !result
+[UC] analyze table t3_predicate(k1);
+-- result:
+test_overwrite_statistics_behavior.t3_predicate	analyze	status	OK
+-- !result
+select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics_behavior.t3_predicate';
+-- result:
+1
+-- !result
+select * from t3_predicate where k2 = 1;
+-- result:
+-- !result
+admin execute on frontend 'import com.starrocks.statistic.columns.PredicateColumnsMgr; PredicateColumnsMgr.getInstance().persist();';
+-- result:
+-- !result
+select table_name, column_name, usage from information_schema.column_stats_usage where table_database = 'test_overwrite_statistics_behavior' and table_name = 't3_predicate' order by column_name;
+-- result:
+t3_predicate	k1	normal
+t3_predicate	k2	normal,predicate
+t3_predicate	k3	normal
+-- !result
+create analyze full all properties  ("statistic_exclude_pattern"="^(?!.*test_overwrite_statistics_behavior).*$");
+-- result:
+-- !result
+shell: sleep 13
+-- result:
+0
+
+-- !result
+select count(*) from _statistics_.column_statistics where table_name = 'test_overwrite_statistics_behavior.t3_predicate';
+-- result:
+2
+-- !result
 ADMIN SET FRONTEND CONFIG ("enable_sync_tablet_stats" = "true");
 -- result:
 -- !result

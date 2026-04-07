@@ -38,7 +38,7 @@
 #include <sstream>
 #include <string>
 
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/es/es_scroll_parser.h"
@@ -56,7 +56,6 @@ const std::string SOURCE_SCROLL_SEARCH_FILTER_PATH =
 const std::string DOCVALUE_SCROLL_SEARCH_FILTER_PATH =
         "filter_path=_scroll_id,hits.total,hits.hits._score,hits.hits.fields";
 
-const std::string REQUEST_PREFERENCE_PREFIX = "&preference=_shards:";
 const std::string REQUEST_SEARCH_SCROLL_PATH = "/_search/scroll";
 
 ESScanReader::ESScanReader(const std::string& target, const std::map<std::string, std::string>& props,

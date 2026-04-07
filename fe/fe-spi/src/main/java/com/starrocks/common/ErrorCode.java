@@ -98,6 +98,7 @@ public enum ErrorCode {
     ERR_UNSUPPORTED_PS(1295, "HY000".getBytes(),
             "This command is not supported in the prepared statement protocol yet"),
     ERR_UNKNOWN_TIME_ZONE(1298, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown or incorrect time zone: '%s'"),
+    ERR_QUERY_INTERRUPTED(1317, new byte[] {'7', '0', '1', '0', '0'}, "Query execution was interrupted"),
     ERR_WRONG_OBJECT(1347, new byte[] {'H', 'Y', '0', '0', '0'}, "'%s'.'%s' is not '%s'"),
     ERR_VIEW_WRONG_LIST(1353, new byte[] {'H', 'Y', '0', '0', '0'},
             "View's SELECT and view's field list have different column counts"),
@@ -171,6 +172,9 @@ public enum ErrorCode {
     ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_COLUMN_TYPE(5063, new byte[] {'4', '2', '0', '0', '0'},
             "Colocate tables distribution columns must have the same data type with group %s," +
                     " current col: %s, should be: %s, current info %s"),
+    ERR_COLOCATE_TABLE_MUST_HAS_SAME_DISTRIBUTION_TYPE(5063, new byte[] {'4', '2', '0', '0', '0'},
+            "Colocate tables must have the same distribution type with group %s," +
+                    " expected: %s, actual: %s"),
     ERR_COLOCATE_NOT_COLOCATE_TABLE(5064, new byte[] {'4', '2', '0', '0', '0'},
             "Table %s is not a colocated table"),
     ERROR_DYNAMIC_PARTITION_TIME_UNIT(5065, new byte[] {'4', '2', '0', '0', '0'},

@@ -25,7 +25,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.AbstractOlapTableScanNode;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -190,8 +190,8 @@ public class TableSchemaService {
         }
         Optional<SchemaInfo> schemaInfo = Optional.ofNullable(coordinator.getScanNodes())
                 .orElse(Collections.emptyList()).stream()
-                .filter(OlapScanNode.class::isInstance)
-                .map(node -> ((OlapScanNode) node).getSchema())
+                .filter(AbstractOlapTableScanNode.class::isInstance)
+                .map(node -> ((AbstractOlapTableScanNode) node).getSchema())
                 .filter(schema -> schema.isPresent() && schema.get().getId() == schemaId)
                 .map(Optional::get)
                 .findFirst();

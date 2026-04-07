@@ -29,6 +29,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -37,6 +38,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.iceberg.IcebergRowLineageUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -45,10 +47,12 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.DefaultValueExpr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -65,6 +69,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -248,9 +253,14 @@ public class InsertAnalyzer {
                         .collect(Collectors.toSet()));
             } else if (table instanceof IcebergTable) {
                 IcebergTable icebergTable = (IcebergTable) table;
+                boolean writeRowLineage = IcebergRowLineageUtils.shouldWriteRowLineageColumns(insertStmt, icebergTable);
                 targetColumns = new ArrayList<>();
                 icebergTable.getFullSchema().forEach(column -> {
-                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
+                    if (!column.getName().startsWith(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX) &&
+                            (!IcebergTable.ICEBERG_META_COLUMNS.contains(column.getName())
+                                    || (writeRowLineage
+                                    && (column.getName().equals(IcebergTable.ROW_ID)
+                                    || column.getName().equals(IcebergTable.LAST_UPDATED_SEQUENCE_NUMBER))))) {
                         targetColumns.add(column);
                     }
                 });
@@ -357,7 +367,7 @@ public class InsertAnalyzer {
 
         insertStmt.setTargetTable(table);
         if (session.getDumpInfo() != null) {
-            session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
+            session.getDumpInfo().addTable(insertStmt.getDbName(), table);
         }
 
         // Set table function table used for load
@@ -428,8 +438,8 @@ public class InsertAnalyzer {
             return false;
         }
 
-        String dbName = insertStmt.getTableName().getDb();
-        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getDbName();
+        String catalogName = insertStmt.getCatalogName();
 
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
         if (database == null) {
@@ -450,30 +460,45 @@ public class InsertAnalyzer {
             Locker locker = new Locker(session.getQueryId());
             locker.lockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);
             try {
-                // get target column names
-                List<String> targetColumnNames = insertStmt.getTargetColumnNames();
-                if (targetColumnNames == null) {
-                    targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
-                            .map(Column::getName).collect(Collectors.toList());
-                }
-
-                // get select column names, null if it is not slot ref column
+                // get select column names, null if it is not slot ref column.
+                // selectColumnNames: source column names used to locate the file column to rewrite.
+                // selectOutputNames: output names (alias if present, else source name) used to look up the
+                //                    target table column type in BY NAME mode.
                 List<String> selectColumnNames = Lists.newArrayList();
+                List<String> selectOutputNames = Lists.newArrayList();
                 List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
                 for (SelectListItem item : listItems) {
                     if (item.isStar()) {
-                        selectColumnNames.addAll(fileTable.getFullSchema().stream().map(Column::getName)
-                                .collect(Collectors.toList()));
+                        List<String> fileColNames = fileTable.getFullSchema().stream().map(Column::getName)
+                                .collect(Collectors.toList());
+                        selectColumnNames.addAll(fileColNames);
+                        selectOutputNames.addAll(fileColNames);
                         continue;
                     }
 
                     Expr expr = item.getExpr();
                     if (expr instanceof SlotRef) {
-                        selectColumnNames.add(((SlotRef) expr).getColumnName());
+                        String srcName = ((SlotRef) expr).getColumnName();
+                        selectColumnNames.add(srcName);
+                        String alias = item.getAlias();
+                        selectOutputNames.add(alias != null ? alias : srcName);
                         continue;
                     }
 
                     selectColumnNames.add(null);
+                    selectOutputNames.add(null);
+                }
+
+                // get target column names
+                List<String> targetColumnNames;
+                if (insertStmt.isColumnMatchByName()) {
+                    targetColumnNames = selectOutputNames;
+                } else {
+                    targetColumnNames = insertStmt.getTargetColumnNames();
+                    if (targetColumnNames == null) {
+                        targetColumnNames = ((OlapTable) targetTable).getBaseSchemaWithoutGeneratedColumn().stream()
+                                .map(Column::getName).collect(Collectors.toList());
+                    }
                 }
 
                 if (targetColumnNames.size() != selectColumnNames.size()) {
@@ -508,6 +533,10 @@ public class InsertAnalyzer {
                     // file table function table should use original column name because BE is case-sensitive when reading columns.
                     String origColumnName = oldCol.getName();
                     newCol.setName(origColumnName);
+                    // FileScanNode will set all slot nullable, it checks null in OlapTableSink if dest table column is not null.
+                    // Currently, the nullable property in files() table is always true.
+                    // So we keep the old column nullable property.
+                    newCol.setIsAllowNull(oldCol.isAllowNull());
                     newFileTableColumns.put(origColumnName, newCol);
                 }
 
@@ -580,10 +609,20 @@ public class InsertAnalyzer {
             return insertStmt.makeBlackHoleTable();
         }
 
-        insertStmt.getTableName().normalization(session);
-        String catalogName = insertStmt.getTableName().getCatalog();
-        String dbName = insertStmt.getTableName().getDb();
-        String tableName = insertStmt.getTableName().getTbl();
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(insertStmt.getTableRef(), session);
+        if (Strings.isNullOrEmpty(tableRef.getDbName()) || Strings.isNullOrEmpty(tableRef.getCatalogName())) {
+            TableName tableName = TableName.fromTableRef(tableRef);
+            tableName.normalization(session);
+            QualifiedName normalizedName = QualifiedName.of(
+                    Arrays.asList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl()),
+                    tableRef.getPos());
+            String alias = tableRef.hasExplicitAlias() ? tableRef.getExplicitAlias() : null;
+            tableRef = new TableRef(normalizedName, tableRef.getPartitionRef(), alias, tableRef.getPos());
+        }
+        insertStmt.setTableRef(tableRef);
+        String catalogName = tableRef.getCatalogName();
+        String dbName = tableRef.getDbName();
+        String tableName = tableRef.getTableName();
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
@@ -591,7 +630,8 @@ public class InsertAnalyzer {
         if (database == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        Table table = MetaUtils.getSessionAwareTable(session, database, insertStmt.getTableName());
+        TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
+        Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }
@@ -600,7 +640,7 @@ public class InsertAnalyzer {
             throw new SemanticException(
                     "The data of '%s' cannot be inserted because '%s' is a materialized view," +
                             "and the data of materialized view must be consistent with the base table.",
-                    insertStmt.getTableName().getTbl(), insertStmt.getTableName().getTbl());
+                    tableName, tableName);
         }
 
         if (insertStmt.isOverwrite()) {

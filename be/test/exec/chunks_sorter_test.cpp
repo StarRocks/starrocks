@@ -20,11 +20,13 @@
 #include <memory>
 #include <string_view>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
-#include "column/datum.h"
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_exec_fwd.h"
 #include "common/object_pool.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_topn.h"
@@ -33,13 +35,13 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/column_ref.h"
+#include "exprs/expr_executor.h"
 #include "fmt/core.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
 #include "testutil/column_test_helper.h"
-#include "util/defer_op.h"
-#include "util/json.h"
+#include "types/datum.h"
+#include "types/json_value.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -484,9 +486,9 @@ public:
             map[i] = i;
         }
 
-        _chunk_1 = std::make_shared<Chunk>(columns1, map);
-        _chunk_2 = std::make_shared<Chunk>(columns2, map);
-        _chunk_3 = std::make_shared<Chunk>(columns3, map);
+        _chunk_1 = std::make_shared<Chunk>(std::move(columns1), map);
+        _chunk_2 = std::make_shared<Chunk>(std::move(columns2), map);
+        _chunk_3 = std::make_shared<Chunk>(std::move(columns3), map);
 
         _expr_cust_key = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);     // refer to cust_key
         _expr_nation = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 1);   // refer to nation
@@ -512,8 +514,8 @@ public:
             map[i] = i;
         }
 
-        _chunk_ranking_1 = std::make_shared<Chunk>(columns1, map);
-        _chunk_ranking_2 = std::make_shared<Chunk>(columns2, map);
+        _chunk_ranking_1 = std::make_shared<Chunk>(std::move(columns1), map);
+        _chunk_ranking_2 = std::make_shared<Chunk>(std::move(columns2), map);
 
         _expr_ranking_key = std::make_unique<ColumnRef>(TYPE_INT_DESC, 0);
     }
@@ -603,8 +605,8 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
     auto pool = std::make_unique<ObjectPool>();
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1024000, 16777216,
@@ -613,6 +615,8 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
                          pool->add(new MemTracker(1L << 62, "", nullptr)));
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_1));
+    (void)sorter._reserved_bytes(_chunk_1);
+    (void)sorter._get_revocable_mem_bytes();
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_2));
     ASSERT_OK(sorter.update(_runtime_state.get(), _chunk_3));
     ASSERT_OK(sorter.done(_runtime_state.get()));
@@ -726,8 +730,8 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
         sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
         // Use DeferOp to ensure cleanup happens even if assertions fail
         DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-        ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-        ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
         constexpr int kTotalRows = 16;
         for (int limit = 1; limit < kTotalRows; limit++) {
@@ -735,6 +739,8 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
             ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, limit);
             size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release())));
+            (void)sorter._reserved_bytes(_chunk_1);
+            (void)sorter._get_revocable_mem_bytes();
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release())));
             ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release())));
             ASSERT_OK(sorter.done(_runtime_state.get()));
@@ -762,8 +768,8 @@ TEST_F(ChunksSorterTest, rank_topn) {
     sort_exprs.push_back(new ExprContext(_expr_ranking_key.get()));
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     std::vector<int32_t> expected_perm = {1, 2, 3, 4, 5, 6, 6, 6, 7, 7, 7, 11, 12, 13, 14, 15, 16, 16, 16, 17, 17, 17};
     std::vector<int32_t> res_num_rows_by_limit = {-1, 1,  2,  3,  4,  5,  8,  8,  8,  11, 11, 11,
@@ -815,8 +821,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     auto pool = std::make_unique<ObjectPool>();
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
@@ -855,8 +861,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     auto pool = std::make_unique<ObjectPool>();
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
@@ -898,8 +904,8 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     auto pool = std::make_unique<ObjectPool>();
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
@@ -945,8 +951,8 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
 
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     auto pool = std::make_unique<ObjectPool>();
     std::vector<SlotId> slots{_expr_region->slot_id(), _expr_cust_key->slot_id()};
@@ -989,8 +995,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2, 7, TTopNType::ROW_NUMBER,
                             ChunksSorterTopn::kDefaultMaxBufferRows, ChunksSorterTopn::kDefaultMaxBufferBytes, 2);
@@ -1028,8 +1034,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     int offset = 7;
     for (int limit = 8; limit + offset <= 16; limit++) {
@@ -1080,8 +1086,8 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
     // Use DeferOp to ensure cleanup happens even if assertions fail
     DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     // partial sort
     ChunksSorterTopn full_sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1, 6,
@@ -1164,8 +1170,8 @@ TEST_F(ChunksSorterTest, get_filter_test) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(pool.add(new ExprContext(c0.get())));
     sort_exprs.push_back(pool.add(new ExprContext(c1.get())));
-    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
-    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
 
     ChunkUniquePtr merged_chunk = std::make_unique<Chunk>();
     {

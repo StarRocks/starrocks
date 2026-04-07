@@ -14,12 +14,11 @@
 
 #pragma once
 
-#include <runtime/decimalv3.h>
+#include <types/decimalv3.h>
 
+#include "base/decimal_types.h"
 #include "column/column.h"
 #include "column/fixed_length_column_base.h"
-#include "util/decimal_types.h"
-#include "util/mysql_row_buffer.h"
 
 namespace starrocks {
 
@@ -36,8 +35,7 @@ public:
     DecimalV3Column(int precision, int scale);
     DecimalV3Column(int precision, int scale, size_t num_rows);
 
-    DecimalV3Column(DecimalV3Column const&) = default;
-    DecimalV3Column& operator=(DecimalV3Column const&) = default;
+    DISALLOW_COPY_TEMPLATE(DecimalV3Column, DecimalV3Column<DecimalType<T>>);
 
     bool is_decimal() const override;
     bool is_numeric() const override;
@@ -47,6 +45,12 @@ public:
     int scale() const;
 
     MutableColumnPtr clone_empty() const override { return this->create(_precision, _scale); }
+
+    MutableColumnPtr clone() const override {
+        auto p = clone_empty();
+        p->append(*this, 0, this->size());
+        return p;
+    }
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
     std::string debug_item(size_t idx) const override;

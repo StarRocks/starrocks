@@ -17,6 +17,7 @@
 
 #include <cmath>
 
+#include "base/testutil/parallel_test.h"
 #include "butil/time.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
@@ -24,9 +25,8 @@
 #include "column/nullable_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "runtime/time_types.h"
-#include "testutil/parallel_test.h"
 #include "types/logical_type.h"
+#include "types/time_types.h"
 
 namespace starrocks {
 

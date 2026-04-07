@@ -156,6 +156,22 @@ INSERT INTO t8 VALUES
 -- 6-table JOIN combinations
 -- ===============================================
 
+-- ===============================================
+-- Test 1c: FULL OUTER JOIN with constant subquery (single join)
+-- ===============================================
+SELECT id, v1
+FROM t1 FULL OUTER JOIN (SELECT 1 AS id) s1 USING(id)
+ORDER BY id, v1;
+
+-- ===============================================
+-- Test 1d: FULL OUTER JOIN with constant subqueries (multi-join)
+-- ===============================================
+SELECT id, v1, v2
+FROM t1 FULL OUTER JOIN (SELECT 1 AS id) s1 USING(id)
+        FULL OUTER JOIN t2 USING(id)
+        FULL OUTER JOIN (SELECT 9 AS id) s2 USING(id)
+ORDER BY id, v1, v2;
+
 -- Test 2: 6-table all FULL OUTER
 SELECT id, v1, v2, v3, v4, v5, v6
 FROM t1 FULL OUTER JOIN t2 USING(id)

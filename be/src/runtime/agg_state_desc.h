@@ -20,7 +20,7 @@
 #include <vector>
 
 #include "gen_cpp/Types_types.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

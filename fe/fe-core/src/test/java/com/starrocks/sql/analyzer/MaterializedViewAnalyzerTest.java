@@ -29,6 +29,7 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.RangeDistributionDesc;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.type.IntegerType;
@@ -463,5 +464,72 @@ public class MaterializedViewAnalyzerTest {
     public void testCreateMVCheckPartitionNameIgnoreCaseSensitive() {
         analyzeSuccess("create materialized view mv_hive_0 partition by str2date(L_SHIPDATE, '%Y%m%d') refresh manual as " +
                 "SELECT l_partkey, L_SHIPDATE  FROM hive0.partitioned_db.lineitem_mul_par3 as a");
+    }
+
+    @Test
+    public void testCreateMVForceRange() throws Exception {
+        boolean oldEnableRangeDistribution = Config.enable_range_distribution;
+        Config.enable_range_distribution = false;
+        try {
+            // set default config for async mvs
+            UtFrameUtils.setDefaultConfigForAsyncMVTest(starRocksAssert.getCtx());
+
+            String sql = "create materialized view test.force_range_mv\n" +
+                    "refresh async\n" +
+                    "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;";
+
+            // 1. Default: should NOT be range distribution if Config is false
+            CreateMaterializedViewStatement stmt1 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+            Assertions.assertFalse(stmt1.getDistributionDesc() instanceof RangeDistributionDesc);
+
+            // 2. Set session variable to true: should be range distribution
+            starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(true);
+            try {
+                CreateMaterializedViewStatement stmt2 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+                Assertions.assertTrue(stmt2.getDistributionDesc() instanceof RangeDistributionDesc);
+            } finally {
+                starRocksAssert.getCtx().getSessionVariable().setEnableRangeDistribution(false);
+            }
+
+            // 3. Set Config to true: should be range distribution even if session variable is false
+            Config.enable_range_distribution = true;
+            CreateMaterializedViewStatement stmt3 = (CreateMaterializedViewStatement) analyzeSuccess(sql);
+            Assertions.assertTrue(stmt3.getDistributionDesc() instanceof RangeDistributionDesc);
+
+        } finally {
+            Config.enable_range_distribution = oldEnableRangeDistribution;
+        }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergTableWithPartitionEvolution() {
+        // Test creating MV on Iceberg table with partition evolution should fail
+        String mvName = "iceberg_evolution_mv";
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY date_trunc('month', ts)\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
+                            + "`t0_date_month_identity_evolution` as a;");
+            Assertions.fail("Should fail because Iceberg table has partition evolution");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains(
+                    "Do not support create materialized view when base iceberg table"));
+            Assertions.assertTrue(e.getMessage().contains("has done partition evolution"));
+        }
+    }
+
+    @Test
+    public void testCreateMvOnIcebergView() {
+        // Test creating MV on IcebergView should fail
+        String sql = "create materialized view mv_on_iceberg_view refresh manual as " +
+                "SELECT id, data, date FROM `iceberg0`.`view_db`.`iceberg_view` as a;";
+        analyzeFail(sql, "Create/Rebuild materialized view do not support the table type: ICEBERG_VIEW");
     }
 }

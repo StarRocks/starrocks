@@ -205,6 +205,9 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
             if (!isReplay && !storageVolumeToDbs.containsKey(svId) && getStorageVolume(svId) == null) {
                 return false;
             }
+            // remove existing bind if exists
+            unbindDbToStorageVolume(dbId);
+
             Set<Long> dbs = storageVolumeToDbs.getOrDefault(svId, new HashSet<>());
             dbs.add(dbId);
             storageVolumeToDbs.put(svId, dbs);
@@ -402,14 +405,14 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin().stream()
                 .filter(dbid -> dbid > NEXT_ID_INIT_VALUE).collect(Collectors.toList());
         for (Long dbId : dbIds) {
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
                 continue;
             }
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
+            Locker locker = new Locker();
             dbBindings.add(dbId);
             try {
+                locker.lockDatabase(db.getId(), LockType.READ);
                 List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db);
                 for (Table table : tables) {
                     Long tableId = table.getId();

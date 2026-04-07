@@ -34,7 +34,7 @@
 
 #include "runtime/stream_load/stream_load_pipe.h"
 
-#include "util/alignment.h"
+#include "base/utility/alignment.h"
 #include "util/compression/compression_utils.h"
 
 namespace starrocks {
@@ -270,7 +270,7 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
         if (compression == CompressionTypePB::UNKNOWN_COMPRESSION) {
             return Status::NotSupported("Unsupported compression algorithm: " + std::to_string(_compression_type));
         }
-        RETURN_IF_ERROR(StreamCompression::create_decompressor(compression, &_decompressor));
+        ASSIGN_OR_RETURN(_decompressor, StreamDecompressor::create_decompressor(compression));
     }
 
     ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());

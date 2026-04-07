@@ -18,12 +18,19 @@
 
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"
+#include "exec/chunks_sorter_topn.h"
+
 namespace starrocks {
-class SpillableChunksSorterFullSort : public ChunksSorterFullSort {
+
+template <typename T>
+concept DerivedFromChunksSorter = std::is_base_of_v<ChunksSorter, T>;
+
+template <DerivedFromChunksSorter TChunksSorter>
+class SpillableChunksSorter : public TChunksSorter {
 public:
     template <class... Args>
-    SpillableChunksSorterFullSort(Args&&... args) : ChunksSorterFullSort(std::forward<Args>(args)...) {}
-    ~SpillableChunksSorterFullSort() noexcept override = default;
+    SpillableChunksSorter(Args&&... args) : TChunksSorter(std::forward<Args>(args)...) {}
+    ~SpillableChunksSorter() noexcept override = default;
 
     bool is_full() override { return (_spiller != nullptr && _spiller->is_full()) || _spill_channel->has_task(); }
 
@@ -42,16 +49,16 @@ public:
 private:
     void _update_revocable_mem_bytes();
 
-    std::function<StatusOr<ChunkPtr>()> _spill_process_task();
-
     Status _get_result_from_spiller(ChunkPtr* chunk, bool* eos);
 
-    // used in spill
-    // index for _staging_unsorted_chunk_idx
-    size_t _process_staging_unsorted_chunk_idx = 0;
-    // index for _sorted_chunk_idx
-    size_t _process_sorted_chunk_idx = 0;
-    // index for _early_materialized_chunks
-    size_t _process_early_materialized_chunks_idx = 0;
+    using TChunksSorter::_spiller;
+    using TChunksSorter::_spill_channel;
+    using TChunksSorter::_spill_strategy;
+    using TChunksSorter::_state;
+    using TChunksSorter::_revocable_mem_bytes;
 };
+
+using SpillableChunksSorterFullSort = SpillableChunksSorter<ChunksSorterFullSort>;
+using SpillableChunksSorterTopN = SpillableChunksSorter<ChunksSorterTopn>;
+
 } // namespace starrocks

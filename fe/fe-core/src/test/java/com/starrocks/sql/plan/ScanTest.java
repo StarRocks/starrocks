@@ -477,7 +477,7 @@ public class ScanTest extends PlanTestBase {
         Collection<Partition> partitions = tb.getPartitions();
         acquireReplica:
         for (Partition partition : partitions) {
-            MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tb.getBaseIndexMetaId());
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestIndex(tb.getBaseIndexMetaId());
             for (Tablet tablet : index.getTablets()) {
                 replicaId = ((LocalTablet) tablet).getImmutableReplicas().get(0).getId();
                 break acquireReplica;

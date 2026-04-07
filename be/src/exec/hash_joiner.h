@@ -17,8 +17,10 @@
 #include <memory>
 #include <utility>
 
+#include "base/phmap/phmap.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_components.h"
@@ -29,8 +31,6 @@
 #include "exec/spill/spiller.h"
 #include "exprs/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
-#include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -141,6 +141,14 @@ inline bool could_short_circuit(TJoinOp::type join_type) {
 inline bool has_post_probe(TJoinOp::type join_type) {
     return join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
            join_type == TJoinOp::FULL_OUTER_JOIN;
+}
+
+inline bool support_partitioned(TJoinOp::type join_type, bool has_other_conjuncts) {
+    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN ||
+           join_type == TJoinOp::LEFT_ANTI_JOIN || join_type == TJoinOp::LEFT_OUTER_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::FULL_OUTER_JOIN ||
+           (join_type == TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN && !has_other_conjuncts);
 }
 
 inline bool is_spillable(TJoinOp::type join_type) {

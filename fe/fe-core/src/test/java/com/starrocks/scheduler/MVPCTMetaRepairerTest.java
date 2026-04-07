@@ -133,8 +133,9 @@ public class MVPCTMetaRepairerTest extends MVTestBase {
                 refreshMaterializedView("test", "iceberg_mv1");
                 Assertions.fail();
             } catch (Exception e) {
-                assertThat(e.getMessage()).contains(" Table t1 is recreated and needed to be repaired, " +
-                        "but it is not supported by MVPCTMetaRepairer");
+                assertThat(e.getMessage()).contains("base table 't1'");
+                assertThat(e.getMessage()).contains(
+                        "was recreated but its table type is not supported for automatic meta repair");
             }
             assertThat(mv.isActive()).isFalse();
             assertThat(mv.getInactiveReason().equals("base-table changed: t1")).isTrue();

@@ -27,6 +27,16 @@ log_error() {
     echo -e "${RED}[ENV-ERROR]${NC} $1"
 }
 
+detect_parallelism() {
+    local cpu_count=""
+
+    cpu_count="$(sysctl -n hw.ncpu 2>/dev/null || getconf _NPROCESSORS_ONLN 2>/dev/null || true)"
+    if [[ -z "${cpu_count}" || ! "${cpu_count}" =~ ^[0-9]+$ || "${cpu_count}" -lt 1 ]]; then
+        cpu_count=1
+    fi
+    echo "${cpu_count}"
+}
+
 # ============================================================================
 # BASIC PATHS
 # ============================================================================
@@ -137,7 +147,7 @@ export USE_CCACHE=1
 export CCACHE_SLOPPINESS="pch_defines,time_macros"
 
 # Parallel builds
-export PARALLEL="$(sysctl -n hw.ncpu)"
+export PARALLEL="$(detect_parallelism)"
 export MAKEFLAGS="-j${PARALLEL}"
 
 log_info "Parallel jobs: $PARALLEL"
@@ -208,7 +218,7 @@ export CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE:-Release}"
 # ============================================================================
 export ASAN_OPTIONS="halt_on_error=1:abort_on_error=1:replace_str=0:replace_intrin=0:detect_odr_violation=0:fast_unwind_on_malloc=0:intercept_strlen=0:intercept_strchr=0:intercept_strndup=0"
 export MallocNanoZone=0
-export STARROCKS_HOME_RUNTIME="$STARROCKS_BE_HOME/output"
+export STARROCKS_HOME_RUNTIME="$STARROCKS_HOME/output/be"
 export PID_DIR="$STARROCKS_HOME_RUNTIME/bin"
 export UDF_RUNTIME_DIR="$STARROCKS_HOME_RUNTIME/lib"
 

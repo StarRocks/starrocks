@@ -165,7 +165,7 @@ FROM test_struct_edge
 GROUP BY category
 ORDER BY min_info;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 17 to line 1, column 25. Detail message: No matching function with signature: min(struct<name varchar(65533), score int(11)>).')
+E: (1064, 'Getting analyzing error from line 1, column 17 to line 1, column 25. Detail message: No matching function with signature: min(struct<`name` varchar(65533), `score` int(11)>).')
 -- !result
 SELECT id, 
        CASE WHEN id % 2 = 0 
@@ -186,7 +186,7 @@ SELECT * FROM (
 WHERE info > named_struct('name', 'Alice', 'age', 20)
 ORDER BY info;
 -- result:
-E: (1064, 'Getting analyzing error from line 7, column 6 to line 7, column 52. Detail message: Column type struct<name varchar, age tinyint(4)> does not support binary predicate operation with type struct<name varchar, age tinyint(4)>.')
+E: (1064, 'Getting analyzing error from line 7, column 6 to line 7, column 52. Detail message: Column type struct<`name` varchar, `age` tinyint(4)> does not support binary predicate operation with type struct<`name` varchar, `age` tinyint(4)>.')
 -- !result
 SELECT DISTINCT info FROM (
     VALUES 

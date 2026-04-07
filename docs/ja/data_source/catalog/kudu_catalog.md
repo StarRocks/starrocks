@@ -182,7 +182,7 @@ Kudu テーブルのスキーマを表示するには、次のいずれかの構
    USE <catalog_name>.<db_name>;
    ```
 
-3. 指定されたデータベース内の目的のテーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用します。
+3. 指定されたデータベース内の目的のテーブルをクエリするには、[SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用します。
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

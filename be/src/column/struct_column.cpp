@@ -15,8 +15,7 @@
 #include "column/struct_column.h"
 
 #include "column/column_helper.h"
-#include "column/column_view/column_view.h"
-#include "util/mysql_row_buffer.h"
+#include "column/mysql_row_buffer.h"
 
 namespace starrocks {
 
@@ -63,11 +62,6 @@ const uint8_t* StructColumn::raw_data() const {
     return nullptr;
 }
 
-uint8_t* StructColumn::mutable_raw_data() {
-    // TODO(SmithCruise)
-    DCHECK(false) << "Don't support struct column raw_data";
-    return nullptr;
-}
 size_t StructColumn::size() const {
     return _fields[0]->size();
 }
@@ -121,24 +115,26 @@ void StructColumn::resize(size_t n) {
 
 StatusOr<MutableColumnPtr> StructColumn::upgrade_if_overflow() {
     for (auto& column : _fields) {
-        auto mutable_column = column->as_mutable_ptr();
-        auto status = upgrade_helper_func(&mutable_column);
-        if (!status.ok()) {
-            return status;
+        auto ret = upgrade_helper_func(column->as_mutable_raw_ptr());
+        if (!ret.ok()) {
+            return ret;
         }
-        column = std::move(mutable_column);
+        if (ret.value() != nullptr) {
+            column = std::move(ret.value());
+        }
     }
     return nullptr;
 }
 
 StatusOr<MutableColumnPtr> StructColumn::downgrade() {
     for (auto& column : _fields) {
-        auto mutable_column = column->as_mutable_ptr();
-        StatusOr<MutableColumnPtr> status = downgrade_helper_func(&mutable_column);
+        StatusOr<MutableColumnPtr> status = downgrade_helper_func(column->as_mutable_raw_ptr());
         if (!status.ok()) {
             return status;
         }
-        column = std::move(mutable_column);
+        if (status.value() != nullptr) {
+            column = std::move(status.value());
+        }
     }
     return nullptr;
 }
@@ -154,8 +150,8 @@ bool StructColumn::has_large_column() const {
 void StructColumn::assign(size_t n, size_t idx) {
     DCHECK_LE(idx, size()) << "Range error when assign StructColumn";
     auto desc = this->clone_empty();
-    auto datum = get(idx);
-    desc->append_value_multiple_times(&datum, n);
+    // Avoid Datum-based round-trip for nested object fields (e.g. shredded VARIANT).
+    desc->append_value_multiple_times(*this, idx, n);
     swap_column(*desc);
     desc->reset_column();
 }
@@ -200,7 +196,7 @@ void StructColumn::update_rows(const Column& src, const uint32_t* indexes) {
 
 void StructColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (src.is_struct_view()) {
-        down_cast<const ColumnView*>(&src)->append_to(*this, indexes, from, size);
+        src.append_selective_to(*this, indexes, from, size);
         return;
     }
     DCHECK(src.is_struct());
@@ -510,24 +506,25 @@ Columns StructColumn::fields() const {
     return columns;
 }
 
-size_t StructColumn::_find_field_idx_by_name(const std::string& field_name) const {
+StatusOr<size_t> StructColumn::_find_field_idx_by_name(const std::string& field_name) const {
     for (size_t i = 0; i < _field_names.size(); i++) {
         if (_field_names[i] == field_name) {
             return i;
         }
     }
-    DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
-    return -1;
+    return Status::InternalError("Struct subfield name: " + field_name + " not found!");
 }
 
-const ColumnPtr& StructColumn::field_column(const std::string& field_name) const {
-    size_t idx = _find_field_idx_by_name(field_name);
-    return _fields.at(idx);
+StatusOr<const ColumnPtr&> StructColumn::field_column(const std::string& field_name) const {
+    ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
+    const ColumnPtr& ref = _fields.at(idx);
+    return ref;
 }
 
-ColumnPtr& StructColumn::field_column(const std::string& field_name) {
-    size_t idx = _find_field_idx_by_name(field_name);
-    return _fields[idx];
+StatusOr<ColumnPtr&> StructColumn::field_column(const std::string& field_name) {
+    ASSIGN_OR_RETURN(size_t idx, _find_field_idx_by_name(field_name));
+    ColumnPtr& ref = _fields.at(idx);
+    return ref;
 }
 
 Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type) {
@@ -535,7 +532,7 @@ Status StructColumn::unfold_const_children(const starrocks::TypeDescriptor& type
     auto num_fields = type.children.size();
     auto num_rows = _fields[0]->size();
     for (int i = 0; i < num_fields; ++i) {
-        _fields[i] = ColumnHelper::unfold_const_column(type.children[i], num_rows, std::move(_fields[i]));
+        _fields[i] = ColumnHelper::unfold_const_column(type.children[i], num_rows, _fields[i]);
     }
     return Status::OK();
 }

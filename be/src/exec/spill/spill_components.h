@@ -18,6 +18,7 @@
 #include <memory>
 #include <queue>
 
+#include "base/concurrency/race_detect.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
@@ -31,8 +32,7 @@
 #include "exec/workgroup/scan_task_queue.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
-#include "runtime/runtime_state.h"
-#include "util/race_detect.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::spill {
 class Spiller;

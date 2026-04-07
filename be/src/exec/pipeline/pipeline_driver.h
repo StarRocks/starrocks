@@ -19,6 +19,7 @@
 #include <atomic>
 #include <chrono>
 
+#include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/fragment_context.h"
@@ -33,11 +34,10 @@
 #include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exec/workgroup/work_group_fwd.h"
-#include "exprs/runtime_filter_bank.h"
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -367,12 +367,13 @@ public:
         if (_all_global_rf_ready_or_timeout) {
             return false;
         }
-        _all_global_rf_ready_or_timeout = true;
 
         // timeout check
         if (_precondition_block_timer_sw->elapsed_time() >= _global_rf_wait_timeout_ns) {
             return false;
         }
+
+        bool all_ready = true;
         // check if all the remote RFs are ready.
         for (auto* rf_desc : _global_rf_descriptors) {
             if (rf_desc->is_local() || rf_desc->runtime_filter(-1) != nullptr) {
@@ -381,9 +382,10 @@ public:
             if (rf_waiting_set != nullptr) {
                 rf_waiting_set->append(std::to_string(rf_desc->filter_id()) + ",");
             }
-            _all_global_rf_ready_or_timeout = false;
+            all_ready = false;
         }
-        return !_all_global_rf_ready_or_timeout;
+        _all_global_rf_ready_or_timeout = _all_global_rf_ready_or_timeout || all_ready;
+        return !all_ready;
     }
 
     // return true if either dependencies_block or local_rf_block return true, which means that the current driver
@@ -506,6 +508,7 @@ public:
     void runtime_report_action();
 
     std::string to_readable_string() const;
+    std::string get_raw_string_name() const;
 
     workgroup::WorkGroup* workgroup();
     const workgroup::WorkGroup* workgroup() const;
@@ -595,6 +598,9 @@ protected:
 
     // used in event scheduler
     void _update_global_rf_timer();
+
+    // Helper function to build readable string with option to use raw operator names
+    std::string _build_readable_string(bool use_raw_name) const;
 
     RuntimeState* _runtime_state = nullptr;
     PipelineObserver _observer;

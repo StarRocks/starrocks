@@ -17,6 +17,9 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/hash/hash_std.hpp"
+#include "base/time/time.h"
+#include "base/uid_util.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/adaptive_dop_param.h"
 #include "exec/pipeline/driver_limiter.h"
@@ -40,13 +43,15 @@
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 #include "storage/predicate_tree_params.h"
-#include "util/hash_util.hpp"
 
 namespace starrocks {
 
 class StreamLoadContext;
+class FragmentDictState;
 
 namespace pipeline {
+
+class PassThroughChunkBufferGuard;
 
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
@@ -69,6 +74,7 @@ public:
     RuntimeState* runtime_state() const { return _runtime_state.get(); }
     std::shared_ptr<RuntimeState> runtime_state_ptr() { return _runtime_state; }
     void set_runtime_state(std::shared_ptr<RuntimeState>&& runtime_state) { _runtime_state = std::move(runtime_state); }
+    FragmentDictState* dict_state() const { return _fragment_dict_state.get(); }
     ExecNode*& plan() { return _plan; }
 
     void move_tplan(TPlan& tplan);
@@ -138,7 +144,7 @@ public:
     AdaptiveDopParam& adaptive_dop_param() { return _adaptive_dop_param; }
 
     const PredicateTreeParams& pred_tree_params() const { return _pred_tree_params; }
-    void set_pred_tree_params(PredicateTreeParams&& params) { _pred_tree_params = std::move(params); }
+    void set_pred_tree_params(const PredicateTreeParams& params) { _pred_tree_params = params; }
 
     size_t next_driver_id() { return _next_driver_id++; }
 
@@ -210,6 +216,7 @@ private:
     // never adjust the order of _runtime_state, _plan, _pipelines and _drivers, since
     // _plan depends on _runtime_state and _drivers depends on _runtime_state.
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
+    std::unique_ptr<FragmentDictState> _fragment_dict_state;
     ExecNode* _plan = nullptr; // lives in _runtime_state->obj_pool()
     size_t _next_driver_id = 0;
     Pipelines _pipelines;
@@ -231,6 +238,8 @@ private:
     Status _s_status;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
+
+    std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
 
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;

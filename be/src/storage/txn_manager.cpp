@@ -41,18 +41,19 @@
 #include <queue>
 #include <set>
 
+#include "base/time/time.h"
+#include "base/utility/scoped_cleanup.h"
+#include "common/config_storage_fwd.h"
+#include "common/runtime_profile.h"
+#include "common/thread/threadpool.h"
 #include "common/tracer.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
-#include "util/runtime_profile.h"
-#include "util/scoped_cleanup.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
-#include "util/time.h"
 
 namespace starrocks {
 

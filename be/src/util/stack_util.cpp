@@ -23,6 +23,10 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <sys/syscall.h>
+#include <unistd.h>
+
+#include <fstream>
+#include <sstream>
 
 #ifdef __APPLE__
 #include <signal.h>
@@ -37,16 +41,16 @@
 #include <thread>
 #include <tuple>
 
-#include "common/config.h"
+#include "base/hash/hash.h"
+#include "base/phmap/phmap.h"
+#include "base/testutil/sync_point.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
+#include "common/config_diagnostic_fwd.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
-#include "util/hash.h"
-#include "util/phmap/phmap.h"
-#include "util/time.h"
 
 namespace google {
 std::string GetStackTrace();
@@ -60,10 +64,6 @@ bool Symbolize(void* pc, char* out, unsigned long out_size, SymbolizeOptions opt
 } // namespace google::glog_internal_namespace_
 
 namespace starrocks {
-
-std::string get_stack_trace() {
-    return google::GetStackTrace();
-}
 
 struct StackTraceTask {
     std::thread::id id;
@@ -293,14 +293,18 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
             continue;
         }
         if (e.second.size() == 1) {
-            ret += strings::Substitute("$0tid: $1\n", line_prefix, e.second[0]);
+            int tid = e.second[0];
+            ret += strings::Substitute("$0tid: $1:$2\n", line_prefix, tid, get_thread_name(tid));
         } else {
             ret += strings::Substitute("$0$1 tids: ", line_prefix, e.second.size());
             for (size_t i = 0; i < e.second.size(); i++) {
+                int tid = e.second[i];
                 if (i > 0) {
-                    ret += ",";
+                    ret += ", ";
                 }
-                ret += std::to_string(e.second[i]);
+                ret += std::to_string(tid);
+                ret += ":";
+                ret += get_thread_name(tid);
             }
             ret += "\n";
         }
@@ -356,6 +360,19 @@ std::vector<int> get_thread_id_list() {
     }
     closedir(dir);
     return thread_id_list;
+}
+
+std::string get_thread_name(int tid) {
+    std::string self_path = "/proc/self/task/" + std::to_string(tid) + "/comm";
+    std::ifstream self_file(self_path);
+    if (self_file.is_open()) {
+        std::string name;
+        std::getline(self_file, name);
+        if (!name.empty()) {
+            return name;
+        }
+    }
+    return "unknown";
 }
 
 class ExceptionStackContext {
@@ -451,9 +468,11 @@ void __wrap___cxa_throw(void* thrown_exception, void* info, void (*dest)(void*))
 
 #if defined(ADDRESS_SANITIZER) && !defined(__APPLE__)
     __interceptor___cxa_throw(thrown_exception, info, dest);
+#elif defined(__APPLE__)
+    __cxxabiv1::__cxa_throw(thrown_exception, info, dest);
 #else
-    __real___cxa_throw(thrown_exception, info, dest);
+__real___cxa_throw(thrown_exception, info, dest);
 #endif
-}
+} // namespace starrocks
 
 } // namespace starrocks

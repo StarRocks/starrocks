@@ -206,9 +206,19 @@ public class Deployer {
         // must be delivered at first.
         Map<Boolean, List<FragmentInstance>> instanceSplits =
                 fragment.getInstances().stream().collect(
-                        Collectors.partitioningBy(instance -> instance.getExecFragment().isRuntimeFilterCoordinator()));
+                        Collectors.partitioningBy(instance -> {
+                            if (deployedWorkerIds.contains(instance.getWorkerId())) {
+                                return false;
+                            }
+                            if (instance.getExecFragment().isRuntimeFilterCoordinator()) {
+                                deployedWorkerIds.add(instance.getWorkerId());
+                                return true;
+                            }
+                            return false;
+                        }));
         // stage 0 holds the instance carrying runtime filter params that used to initialize
         // global runtime filter coordinator if exists.
+        
         threeStageInstancesToDeploy.get(0).addAll(instanceSplits.get(true));
 
         List<FragmentInstance> restInstances = instanceSplits.get(false);
@@ -328,6 +338,10 @@ public class Deployer {
             return;
         }
 
+        // 1. change state to DEPLOYING before sending rpc to avoid race condition with report status
+        fragmentInstanceExecStates.forEach(FragmentInstanceExecState::changeStateIntoDeploying);
+
+        // 2. send RPC
         Future<PExecBatchPlanFragmentsResult> batchFuture = null;
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployStageByStageTime")) {
             batchFuture = execRemoteBatchFragmentsAsync(fragmentInstanceExecStates);
@@ -341,10 +355,10 @@ public class Deployer {
         FakeDeployFuture sharedFakeFuture = new FakeDeployFuture(batchFuture);
         fragmentInstanceExecStates.forEach(
                 fragmentInstanceExecState -> {
-                    fragmentInstanceExecState.changeStateIntoDeploying();
                     fragmentInstanceExecState.setDeployFuture(sharedFakeFuture);
                 });
 
+        // 3. wait
         try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeployWaitTime")) {
             waitForDeploymentCompletion(fragmentInstanceExecStates);
         }

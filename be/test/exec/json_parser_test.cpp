@@ -19,10 +19,11 @@
 #include <memory>
 #include <string>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/simdjson_util.h"
 #include "exprs/json_functions.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "util/simdjson_util.h"
 
 namespace starrocks {
 

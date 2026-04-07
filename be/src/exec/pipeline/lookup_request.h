@@ -14,12 +14,16 @@
 
 #pragma once
 
+#include "base/phmap/phmap.h"
+#include "column/column.h"
 #include "exec/pipeline/fetch_task.h"
+#include "exec/pipeline/lookup/tablet_adaptor.h"
 #include "exec/sorting/sort_permute.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/descriptors.h"
+#include "runtime/descriptors_fwd.h"
+#include "runtime/runtime_fwd.h"
 #include "storage/range.h"
-#include "util/phmap/phmap.h"
+#include "storage/rowset/common.h"
 
 namespace starrocks::pipeline {
 
@@ -33,8 +37,8 @@ public:
 
     virtual TupleId request_tuple_id() const = 0;
     virtual Status collect_input_columns(ChunkPtr chunk) = 0;
-    virtual StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot,
-                                           const std::vector<SlotDescriptor*>& slots, size_t start_offset) = 0;
+    virtual StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, const std::vector<SlotDescriptor*>& slots,
+                                           size_t start_offset) = 0;
     virtual void callback(const Status& status) = 0;
 
     int64_t receive_ts = 0;
@@ -48,8 +52,8 @@ public:
 
     TupleId request_tuple_id() const override { return fetch_ctx->request_tuple_id; }
     Status collect_input_columns(ChunkPtr chunk) override;
-    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot,
-                                   const std::vector<SlotDescriptor*>& slots, size_t start_offset) override;
+    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, const std::vector<SlotDescriptor*>& slots,
+                                   size_t start_offset) override;
     void callback(const Status& status) override;
 
     FetchTaskContextPtr fetch_ctx;
@@ -65,8 +69,8 @@ public:
 
     TupleId request_tuple_id() const override { return request->request_tuple_id(); }
     Status collect_input_columns(ChunkPtr chunk) override;
-    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, SlotId source_id_slot,
-                                   const std::vector<SlotDescriptor*>& slots, size_t start_offset) override;
+    StatusOr<size_t> fill_response(const ChunkPtr& result_chunk, const std::vector<SlotDescriptor*>& slots,
+                                   size_t start_offset) override;
     void callback(const Status& status) override;
 
     ::google::protobuf::RpcController* cntl = nullptr;
@@ -82,6 +86,7 @@ class LookUpOperator;
 class LookUpTaskContext {
 public:
     TupleId request_tuple_id;
+    int64_t scan_id;
     SlotId row_source_slot_id;
     std::vector<SlotId> lookup_ref_slot_ids;
     std::vector<SlotId> fetch_ref_slot_ids;
@@ -133,6 +138,32 @@ private:
             const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges);
 
     TExpr create_row_id_filter_expr(SlotId slot_id, const SparseRange<int64_t>& row_id_range);
+};
+
+class NativeLookUpTask final : public LookUpTask {
+public:
+    NativeLookUpTask(LookUpTaskContextPtr ctx, LookUpTabletAdaptorPtr adaptor)
+            : LookUpTask(std::move(ctx)), _tablet_adaptor(std::move(adaptor)) {}
+    ~NativeLookUpTask() override = default;
+
+    Status process(RuntimeState* state, const ChunkPtr& request_chunk) override;
+
+private:
+    // build rowid range
+    // tablet_id, rssid, row_id range
+    using RowLocatorTuple = std::tuple<int64_t, uint32_t, SparseRange<rowid_t>>;
+    using RowLocators = std::vector<RowLocatorTuple>;
+
+    StatusOr<RowLocators> _build_row_id_range(RuntimeState* state, const Columns& row_locator,
+                                              SmallPermutation* permutation, Buffer<uint32_t>* replicated);
+    // fetch data by rowid range
+    StatusOr<SmallPermutation> _sort_columns(RuntimeState* state, const Columns& columns);
+
+    StatusOr<ChunkPtr> _late_materialize_by_row_locators(RuntimeState* state, const std::vector<SlotDescriptor*>& slots,
+                                                         const RowLocators& row_locators, const ChunkPtr& chunk);
+
+private:
+    LookUpTabletAdaptorPtr _tablet_adaptor;
 };
 
 } // namespace starrocks::pipeline

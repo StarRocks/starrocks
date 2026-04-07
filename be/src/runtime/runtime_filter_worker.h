@@ -19,19 +19,21 @@
 
 #include <atomic>
 #include <cstdint>
+#include <list>
 #include <map>
 #include <memory>
 #include <thread>
 #include <vector>
 
+#include "base/brpc/ref_count_closure.h"
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "util/blocking_queue.hpp"
-#include "util/ref_count_closure.h"
-#include "util/uid_util.h"
+#include "runtime/runtime_filter_serde.h"
 namespace starrocks {
 struct TypeDescriptor;
 
@@ -39,7 +41,6 @@ class ExecEnv;
 class RuntimeState;
 
 class RuntimeFilter;
-class RuntimeFilterProbeDescriptor;
 class RuntimeFilterBuildDescriptor;
 
 using RuntimeFilterRpcClosure = RefCountClosure<PTransmitRuntimeFilterResult>;
@@ -49,10 +50,9 @@ using RuntimeFilterRpcClosures = std::vector<RuntimeFilterRpcClosure*>;
 class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
-    void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
     void publish_runtime_filters(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
 
-    void publish_runtime_filters_for_skew_broadcast_join(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs_list,
+    void publish_runtime_filters_for_skew_broadcast_join(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs,
                                                          const std::vector<Columns>& keyColumns,
                                                          const std::vector<bool>& null_safe,
                                                          const std::vector<TypeDescriptor>& type_descs);
@@ -65,19 +65,14 @@ public:
     std::string listeners(int32_t filter_id);
 
 private:
-    void publish_skew_boradcast_join_key_columns(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
+    void publish_skew_broadcast_join_key_columns(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
                                                  bool null_safe, const TypeDescriptor& type_desc);
     void static prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
                                RuntimeFilterBuildDescriptor* rf_desc);
-    std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _listeners;
     RuntimeState* _state;
 };
 
-struct SkewBroadcastRfMaterial {
-    LogicalType build_type;
-    bool eq_null;
-    ColumnPtr key_column;
-};
+using SkewBroadcastRfMaterial = RuntimeFilterSkewMaterial;
 
 class RuntimeFilterMergerStatus {
 public:

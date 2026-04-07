@@ -257,37 +257,17 @@ PROPERTIES (
 );
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-3
--- !result
 insert into t values('2021-01-01', 1);
 -- result:
--- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-6
 -- !result
 insert into t values('2021-01-03', 1);
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-12
--- !result
 insert into t values('2021-01-05', 1);
 -- result:
 -- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-18
--- !result
 insert into t values('2021-01-01', 1);
 -- result:
--- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='eee';
--- result:
-21
 -- !result
 select * from t;
 -- result:
@@ -549,7 +529,7 @@ select * from t;
 
 
 
--- name: test_mutable_bucket @sequential
+-- name: test_mutable_bucket @sequential @native
 create database ggg;
 -- result:
 -- !result

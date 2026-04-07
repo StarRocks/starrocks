@@ -15,13 +15,21 @@
 #pragma once
 
 #include <memory>
+#include <unordered_map>
 
-#include "cache/cache_options.h"
-#include "common/object_pool.h"
+#include "base/phmap/phmap.h"
 #include "gen_cpp/PlanNodes_types.h"
-#include "util/phmap/phmap.h"
+#include "storage/lake/types_fwd.h"
+#include "storage/olap_common.h"
+#include "storage/rowset/base_rowset.h"
+#include "storage/rowset/rowset.h"
 
-namespace starrocks::pipeline {
+namespace starrocks {
+class Rowset;
+using RowsetSharedPtr = std::shared_ptr<Rowset>;
+} // namespace starrocks
+
+namespace starrocks {
 
 // GlobalLateMaterilizationContext is used to describe the context information required
 // for global late materialization.
@@ -52,18 +60,67 @@ public:
     TPlanNode plan_node;
 };
 
+class OlapScanLazyMaterializationContext : public GlobalLateMaterilizationContext {
+public:
+    void capture_rowsets(int32_t tablet_id, int64_t version, const std::vector<RowsetSharedPtr>& rowsets);
+
+    RowsetSharedPtr get_rowset(int32_t tablet_id, int32_t dynamic_rssid, int32_t* segment_idx) const;
+
+    using RowsetIdToDRSSId = phmap::parallel_flat_hash_map<RowsetId, uint32_t, HashOfRowsetId>;
+    RowsetIdToDRSSId get_rowset_id_to_drssid(int32_t tablet_id) const;
+
+    int64_t get_rowsets_version(int32_t tablet_id) const {
+        std::shared_lock lock(_mutex);
+        return _versions.at(tablet_id);
+    }
+
+    const TOlapScanNode& scan_node() const { return *_thrift_olap_scan_node; }
+    void set_scan_node(const TOlapScanNode& node);
+
+private:
+    mutable std::shared_mutex _mutex;
+    using RowsetInfo = std::tuple<RowsetSharedPtr, uint32_t /*dynamic rss id*/>;
+    // tablet_id -> rowset infos
+    std::unordered_map<int32_t, std::vector<RowsetInfo>> _rowsets;
+    std::unordered_map<int32_t, int64_t> _versions;
+    std::optional<TOlapScanNode> _thrift_olap_scan_node;
+    size_t _dynamic_rss_id_allocator = 0;
+};
+
+class LakeScanLazyMaterializationContext : public GlobalLateMaterilizationContext {
+public:
+    void capture_rowsets(int32_t tablet_id, int64_t version, const std::vector<BaseRowsetSharedPtr>& rowsets);
+
+    lake::RowsetPtr get_rowset(int32_t tablet_id, int32_t dynamic_rssid, int32_t* segment_idx) const;
+    lake::RowsetPtr get_rowset(const std::vector<lake::RowsetPtr>& rowsets, int32_t drssid, int32_t* segment_idx) const;
+
+    int64_t get_rowsets_version(int32_t tablet_id) const {
+        std::shared_lock lock(_mutex);
+        return _versions.at(tablet_id);
+    }
+
+    const TLakeScanNode& scan_node() const { return *_thrift_lake_scan_node; }
+    void set_scan_node(const TLakeScanNode& node);
+
+private:
+    mutable std::shared_mutex _mutex;
+    std::unordered_map<int32_t, std::vector<lake::RowsetPtr>> _rowsets;
+    std::unordered_map<int32_t, int64_t> _versions;
+    std::optional<TLakeScanNode> _thrift_lake_scan_node;
+};
+
 // manage all global late materialization contexts for different data sources
 class GlobalLateMaterilizationContextMgr {
 public:
-    void add_ctx(int32_t row_source_slot_id, GlobalLateMaterilizationContext* ctx);
-    GlobalLateMaterilizationContext* get_ctx(int32_t row_source_slot_id) const;
+    GlobalLateMaterilizationContext* get_ctx(int64_t scan_node_id) const;
     GlobalLateMaterilizationContext* get_or_create_ctx(
-            int32_t row_source_slot_id, const std::function<GlobalLateMaterilizationContext*()>& ctor_func);
+            int64_t scan_node_id, const std::function<GlobalLateMaterilizationContext*()>& ctor_func);
 
     using MutexType = std::shared_mutex;
-    using ContextMap = phmap::parallel_flat_hash_map<int32_t, GlobalLateMaterilizationContext*, phmap::Hash<int32_t>,
-                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>, 4, MutexType>;
+    // scan_node_id -> GlobalLateMaterilizationContext*
+    using ContextMap = phmap::parallel_flat_hash_map<int64_t, GlobalLateMaterilizationContext*, phmap::Hash<int64_t>,
+                                                     phmap::EqualTo<int64_t>, phmap::Allocator<int64_t>, 4, MutexType>;
 
     ContextMap _ctx_map;
 };
-} // namespace starrocks::pipeline
+} // namespace starrocks

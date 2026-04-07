@@ -386,6 +386,10 @@ public class CloudConfigurationFactoryTest {
                         "cred=GCPCloudCredential{endpoint='http://xx', useComputeEngineServiceAccount=false, " +
                         "serviceAccountEmail='XX', serviceAccountPrivateKeyId='XX', serviceAccountPrivateKey='XX', " +
                         "impersonationServiceAccount='XX', accessToken='', accessTokenExpiresAt=''}}");
+        Assertions.assertEquals("SERVICE_ACCOUNT_JSON_KEYFILE", conf.get("fs.gs.auth.type"));
+        Assertions.assertEquals("XX", conf.get("fs.gs.auth.service.account.email"));
+        Assertions.assertEquals("XX", conf.get("fs.gs.auth.service.account.private.key.id"));
+        Assertions.assertEquals("XX", conf.get("fs.gs.auth.service.account.private.key"));
     }
 
     @Test
@@ -402,6 +406,10 @@ public class CloudConfigurationFactoryTest {
                         "serviceAccountPrivateKey='', impersonationServiceAccount='', accessToken='access_token', " +
                         "accessTokenExpiresAt='9223372036854775807'}}",
                 cloudConfiguration.toConfString());
+        Configuration conf = new Configuration();
+        cloudConfiguration.applyToConfiguration(conf);
+        Assertions.assertNull(conf.get("fs.gs.auth.type"));
+        Assertions.assertEquals("access_token", conf.get("fs.gs.temporary.access.token"));
     }
 
     @Test

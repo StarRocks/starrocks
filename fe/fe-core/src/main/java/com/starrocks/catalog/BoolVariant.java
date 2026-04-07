@@ -54,7 +54,7 @@ public class BoolVariant extends Variant {
     }
 
     @Override
-    public int compareTo(Variant other) {
+    protected int compareToImpl(Variant other) {
         if (other instanceof LargeIntVariant) {
             return -other.compareTo(this);
         }

@@ -31,10 +31,10 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 ```plain text
 1. Key         配置项名称
 2. AliasNames  配置项别名
-2. Value       配置项取值
-3. Type        配置项数据类型
-4. IsMutable   是否可以通过 ADMIN SET CONFIG 命令动态设置
-5. Comment     配置项说明
+3. Value       配置项取值
+4. Type        配置项数据类型
+5. IsMutable   是否可以通过 ADMIN SET CONFIG 命令动态设置
+6. Comment     配置项说明
 ```
 
 ## 示例
@@ -48,12 +48,11 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"]
 2. 使用 like 谓词搜索当前 FE 节点的配置。
 
     ```plain text
-    mysql> ADMIN SHOW FRONTEND CONFIG LIKE '%check_java_version%';
-    +--------------------+------------+-------+---------+-----------+---------+
-    | Key                | AliasNames | Value | Type    | IsMutable | Comment |
-    +--------------------+------------+-------+---------+-----------+---------+
-    | check_java_version | []         | true  | boolean | false     |         |
-    +--------------------+------------+-------+---------+-----------+---------+
+    mysql> ADMIN SHOW FRONTEND CONFIG LIKE '%vectorized_load_enable%';
+    +------------------------+------------+-------+---------+-----------+---------+
+    | Key                    | AliasNames | Value | Type    | IsMutable | Comment |
+    +------------------------+------------+-------+---------+-----------+---------+
+    | vectorized_load_enable | []         | true  | boolean | true      |         |
+    +------------------------+------------+-------+---------+-----------+---------+
     1 row in set (0.00 sec)
-
     ```

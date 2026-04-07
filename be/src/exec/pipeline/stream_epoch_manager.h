@@ -14,8 +14,10 @@
 
 #pragma once
 
+#include "base/hash/hash_std.hpp"
+#include "base/uid_util.h"
 #include "column/stream_chunk.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 class ExecEnv;
@@ -24,6 +26,7 @@ class TMVStartEpochTask;
 
 namespace starrocks::pipeline {
 class FragmentContext;
+class QueryContext;
 using TabletId2BinlogOffset = std::unordered_map<int64_t, BinlogOffset>;
 using NodeId2ScanRanges = std::unordered_map<int64_t, TabletId2BinlogOffset>;
 

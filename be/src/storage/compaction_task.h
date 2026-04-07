@@ -19,15 +19,15 @@
 #include <sstream>
 #include <vector>
 
+#include "base/time/time.h"
 #include "column/column_access_path.h"
+#include "common/runtime_profile.h"
 #include "storage/background_task.h"
 #include "storage/compaction_utils.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
-#include "util/runtime_profile.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -258,46 +258,7 @@ protected:
         return Status::OK();
     }
 
-    Status _commit_compaction() {
-        std::stringstream input_stream_info;
-        {
-            std::unique_lock wrlock(_tablet->get_header_lock());
-            // check input_rowsets exist. If not, tablet_meta maybe modify by some other thread, cancel this task
-            for (auto& rowset : _input_rowsets) {
-                if (_tablet->get_rowset_by_version(rowset->version()) == nullptr) {
-                    input_stream_info << "rowset:" << rowset->version()
-                                      << " is not exist in tablet:" << _tablet->tablet_id()
-                                      << ", maybe tablet meta is modify by other thread. cancel this compaction task";
-                    LOG(WARNING) << input_stream_info.str();
-                    return Status::InternalError(input_stream_info.str());
-                }
-            }
-
-            // after one success compaction, low cardinality dict will be generated.
-            // so we can enable shortcut compaction.
-            _tablet->tablet_meta()->set_enable_shortcut_compaction(true);
-
-            for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
-                input_stream_info << _input_rowsets[i]->version() << ";";
-            }
-            if (_input_rowsets.size() > 5) {
-                input_stream_info << ".." << (*_input_rowsets.rbegin())->version();
-            }
-            std::vector<RowsetSharedPtr> to_replace;
-            _tablet->modify_rowsets_without_lock({_output_rowset}, _input_rowsets, &to_replace);
-            _tablet->save_meta(config::skip_schema_in_rowset_meta);
-            Rowset::close_rowsets(_input_rowsets);
-            for (auto& rs : to_replace) {
-                StorageEngine::instance()->add_unused_rowset(rs);
-            }
-        }
-        VLOG(2) << "commit compaction. output version:" << _task_info.output_version
-                << ", output rowset version:" << _output_rowset->version()
-                << ", input rowsets:" << input_stream_info.str() << ", input rowsets size:" << _input_rowsets.size()
-                << ", max_version:" << _tablet->max_continuous_version();
-
-        return Status::OK();
-    }
+    Status _commit_compaction();
 
     void _success_callback();
 

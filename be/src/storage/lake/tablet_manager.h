@@ -17,8 +17,10 @@
 #include <bthread/types.h>
 
 #include <shared_mutex>
+#include <utility>
 #include <variant>
 
+#include "base/bthreads/single_flight.h"
 #include "common/statusor.h"
 #include "compaction_task_context.h"
 #include "gen_cpp/Types_types.h" // for PUniqueId
@@ -29,7 +31,6 @@
 #include "storage/lake/types_fwd.h"
 #include "storage/options.h"
 #include "storage/rowset/base_rowset.h"
-#include "util/bthreads/single_flight.h"
 
 namespace starrocks {
 struct FileInfo;
@@ -81,6 +82,9 @@ public:
                                          bool fill_data_cache = true);
 
     StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context);
+
+    // Compact with pre-selected rowsets (for parallel compaction)
+    StatusOr<CompactionTaskPtr> compact(CompactionTaskContext* context, std::vector<RowsetPtr> input_rowsets);
 
     Status put_tablet_metadata(const TabletMetadata& metadata);
 
@@ -178,7 +182,7 @@ public:
     // TODO: remove this method
     std::shared_ptr<LocationProvider> TEST_set_location_provider(std::shared_ptr<LocationProvider> value) {
         auto ret = _location_provider;
-        _location_provider = value;
+        _location_provider = std::move(value);
         return ret;
     }
 
@@ -209,7 +213,15 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
+    // Get the full path for Lake Compaction Rows Mapper file on remote storage
+    // WHY: When parallel pk index execution is enabled, mapper files are stored on
+    // remote storage (S3/HDFS) instead of local disk. This function constructs the
+    // full path using the location provider, enabling distributed access during
+    // compaction conflict resolution across multiple compute nodes.
+    std::string lcrm_location(int64_t tablet_id, std::string_view crm_name) const;
+
     const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+
     std::string sst_location(int64_t tablet_id, std::string_view sst_filename) const;
 
     UpdateManager* update_mgr();

@@ -181,12 +181,7 @@ public class LeaderImpl {
         // if current node is not master, reject the request
         TMasterResult result = new TMasterResult();
         if (!GlobalStateMgr.getCurrentState().isLeader()) {
-            TStatus status;
-            if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
-                status = new TStatus(TStatusCode.LEADER_TRANSFERRED);
-            } else {
-                status = new TStatus(TStatusCode.INTERNAL_ERROR);
-            }
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList("current fe is not master"));
             result.setStatus(status);
             LOG.warn("current node is not leader, finish task failed, task type: {}. task signature: {}",
@@ -480,7 +475,7 @@ public class LeaderImpl {
         try {
             long dbId = task.getDbId();
             long tableId = task.getTableId();
-            long indexId = task.getIndexId();
+            long indexMetaId = task.getIndexId();
             long backendId = task.getBackendId();
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
             if (db != null) {
@@ -490,7 +485,7 @@ public class LeaderImpl {
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getTable(db.getId(), tableId);
                     if (olapTable != null) {
-                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+                        MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(indexMetaId);
                         if (indexMeta != null) {
                             indexMeta.removeUpdateSchemaBackend(backendId);
                         }
@@ -1036,7 +1031,7 @@ public class LeaderImpl {
 
             for (Partition partition : olapTable.getAllPartitions()) {
                 List<MaterializedIndex> indexes =
-                        partition.getDefaultPhysicalPartition().getMaterializedIndices(IndexExtState.ALL);
+                        partition.getDefaultPhysicalPartition().getLatestMaterializedIndices(IndexExtState.ALL);
                 for (MaterializedIndex index : indexes) {
                     TIndexMeta indexMeta = new TIndexMeta();
                     indexMeta.setIndex_id(index.getId());
@@ -1046,7 +1041,7 @@ public class LeaderImpl {
                     indexMeta.setRollup_index_id(-1L);
                     indexMeta.setRollup_finished_version(-1L);
                     TSchemaMeta schemaMeta = new TSchemaMeta();
-                    MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(index.getId());
+                    MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByMetaId(index.getMetaId());
                     schemaMeta.setSchema_version(materializedIndexMeta.getSchemaVersion());
                     schemaMeta.setSchema_hash(materializedIndexMeta.getSchemaHash());
                     schemaMeta.setShort_key_col_count(materializedIndexMeta.getShortKeyColumnCount());

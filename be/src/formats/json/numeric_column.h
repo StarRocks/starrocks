@@ -19,8 +19,8 @@
 
 #include "column/column.h"
 #include "common/status.h"
-#include "runtime/types.h"
 #include "simdjson.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 

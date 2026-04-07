@@ -275,7 +275,7 @@ public class Utils {
         return createCompound(CompoundPredicateOperator.CompoundType.OR, Arrays.asList(nodes));
     }
 
-    public static ScalarOperator compoundAnd(Collection<ScalarOperator> nodes) {
+    public static ScalarOperator compoundAnd(Collection<? extends ScalarOperator> nodes) {
         return createCompound(CompoundPredicateOperator.CompoundType.AND, nodes);
     }
 
@@ -310,7 +310,7 @@ public class Utils {
     //  /\   /\
     // a  b c  d
     public static ScalarOperator createCompound(CompoundPredicateOperator.CompoundType type,
-                                                Collection<ScalarOperator> nodes) {
+                                                Collection<? extends ScalarOperator> nodes) {
         LinkedList<ScalarOperator> link =
                 nodes.stream().filter(Objects::nonNull).collect(Collectors.toCollection(Lists::newLinkedList));
 
@@ -825,8 +825,15 @@ public class Utils {
         if (distinctFuncs.size() <= 1) {
             return false;
         }
+
+        // If all distinct functions are constant-only expressions, do not treat them as
+        // "sharing the same distinct columns".
+        if (distinctFuncs.stream().allMatch(call -> call.getUsedColumns().isEmpty())) {
+            return false;
+        }
+
         Set<ColumnRefOperator> distinctChildren = Sets.newHashSet();
-        for (CallOperator callOperator : aggCallOperators) {
+        for (CallOperator callOperator : distinctFuncs) {
             if (distinctChildren.isEmpty()) {
                 distinctChildren = Sets.newHashSet(callOperator.getColumnRefs());
             } else {

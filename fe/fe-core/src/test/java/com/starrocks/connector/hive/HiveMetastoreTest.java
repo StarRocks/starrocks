@@ -144,7 +144,9 @@ public class HiveMetastoreTest {
                 .setTableName("table")
                 .setLocation("location")
                 .setValues(Lists.newArrayList("p1=1"))
-                .setParameters(new HashMap<>()).build();
+                .setParameters(new HashMap<>())
+                .setSerDeParameters(new HashMap<>())
+                .build();
 
         HivePartitionStats hivePartitionStats = HivePartitionStats.empty();
         HivePartitionWithStats hivePartitionWithStats = new HivePartitionWithStats("p1=1", hivePartition, hivePartitionStats);

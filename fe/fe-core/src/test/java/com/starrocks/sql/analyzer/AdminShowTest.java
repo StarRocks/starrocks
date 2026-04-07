@@ -39,6 +39,11 @@ public class AdminShowTest {
     }
 
     @Test
+    public void testAdminShowAutomatedClusterSnapshot() {
+        analyzeSuccess("ADMIN SHOW AUTOMATED CLUSTER SNAPSHOT");
+    }
+
+    @Test
     public void testAdminShowReplicaDistribution() {
         analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM tbl1;");
         analyzeSuccess("ADMIN SHOW REPLICA DISTRIBUTION FROM db1.tbl1 PARTITION(p1, p2);");

@@ -73,6 +73,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRawValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -145,7 +146,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitLogicalOlapScan(LogicalOlapScanOperator node, Void context) {
         return "LogicalOlapScanOperator" + " {" + "table=" + node.getTable().getName() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
-                ", selectedIndexId=" + node.getSelectedIndexId() +
+                ", selectedIndexMetaId=" + node.getSelectedIndexMetaId() +
                 ", outputColumns=" + new ArrayList<>(node.getColRefToColumnMetaMap().keySet()) +
                 ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
@@ -381,7 +382,7 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     public String visitPhysicalOlapScan(PhysicalOlapScanOperator node, Void context) {
         return "PhysicalOlapScanOperator" + " {" + "table=" + node.getTable().getId() +
                 ", selectedPartitionId=" + node.getSelectedPartitionId() +
-                ", selectedIndexId=" + node.getSelectedIndexId() +
+                ", selectedIndexMetaId=" + node.getSelectedIndexMetaId() +
                 ", outputColumns=" + node.getOutputColumns() +
                 ", prunedPartitionPredicates=" + node.getPrunedPartitionPredicates() +
                 ", limit=" + node.getLimit() +
@@ -573,12 +574,12 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalFetch(PhysicalFetchOperator node, Void context) {
         Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToLazyColumns = node.getRowIdToLazyColumns();
-        Map<ColumnRefOperator, Table> rowidToTable = node.getRowIdToTable();
+        Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator = node.getRowIdToScanOperator();
 
         StringBuilder sb = new StringBuilder();
         sb.append("PhysicalFetchOperator {");
         sb.append(rowIdToLazyColumns.entrySet().stream().map(entry -> {
-            Table table = rowidToTable.get(entry.getKey());
+            Table table = rowIdToScanOperator.get(entry.getKey()).getTable();
             Set<ColumnRefOperator> columns = entry.getValue();
             String str = columns.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(",", "{", "}"));
             return "table " + table.getId() + " -> " + str;
@@ -590,11 +591,11 @@ public class DebugOperatorTracer extends OperatorVisitor<String, Void> {
     @Override
     public String visitPhysicalLookUp(PhysicalLookUpOperator node, Void context) {
         Map<ColumnRefOperator, Set<ColumnRefOperator>> rowIdToColumns = node.getRowIdToLazyColumns();
-        Map<ColumnRefOperator, Table> rowidToTable = node.getRowIdToTable();
+        Map<ColumnRefOperator, PhysicalScanOperator> rowIdToScanOperator = node.getRowIdToScanOperator();
         StringBuilder sb = new StringBuilder();
         sb.append("PhysicalLookUpOperator {");
         sb.append(rowIdToColumns.entrySet().stream().map(entry -> {
-            Table table = rowidToTable.get(entry.getKey());
+            Table table = rowIdToScanOperator.get(entry.getKey()).getTable();
             Set<ColumnRefOperator> columns = entry.getValue();
             String str = columns.stream().map(ColumnRefOperator::toString).collect(Collectors.joining(",", "{", "}"));
             return "table " + table.getId() + " -> " + str;

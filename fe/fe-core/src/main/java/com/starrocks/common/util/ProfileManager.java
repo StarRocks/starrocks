@@ -39,8 +39,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,40 +53,37 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
-import java.util.stream.Collectors;
 
 /*
- * if you want to visit the atrribute(such as queryID,defaultDb)
+ * if you want to visit the attribute(such as queryID,defaultDb)
  * you can use profile.getInfoStrings("queryId")
  * All attributes can be seen from the above.
  *
- * why the element in the finished profile arary is not RuntimeProfile,
+ * why the element in the finished profile is not RuntimeProfile,
  * the purpose is let coordinator can destruct earlier(the fragment profile is in Coordinator)
  *
  */
 public class ProfileManager implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(ProfileManager.class);
     private static ProfileManager INSTANCE = null;
-    public static final String QUERY_ID = "Query ID";
-    public static final String START_TIME = "Start Time";
-    public static final String END_TIME = "End Time";
-    public static final String TOTAL_TIME = "Total";
-    public static final String RETRY_TIMES = "Retry Times";
-    public static final String QUERY_TYPE = "Query Type";
-    public static final String QUERY_STATE = "Query State";
-    public static final String SQL_STATEMENT = "Sql Statement";
-    public static final String SQL_DIALECT = "Sql Dialect";
-    public static final String USER = "User";
-    public static final String DEFAULT_DB = "Default Db";
-    public static final String VARIABLES = "Variables";
-    public static final String PROFILE_COLLECT_TIME = "Collect Profile Time";
-    public static final String LOAD_TYPE = "Load Type";
-    public static final String WAREHOUSE_CNGROUP = "Warehouse";
+    public static final String QUERY_ID             = ProfileKeyDictionary.QUERY_ID;
+    public static final String START_TIME           = ProfileKeyDictionary.START_TIME;
+    public static final String END_TIME             = ProfileKeyDictionary.END_TIME;
+    public static final String TOTAL_TIME           = ProfileKeyDictionary.TOTAL_TIME;
+    public static final String RETRY_TIMES          = ProfileKeyDictionary.RETRY_TIMES;
+    public static final String QUERY_TYPE           = ProfileKeyDictionary.QUERY_TYPE;
+    public static final String QUERY_STATE          = ProfileKeyDictionary.QUERY_STATE;
+    public static final String SQL_STATEMENT        = ProfileKeyDictionary.SQL_STATEMENT;
+    public static final String SQL_DIALECT          = ProfileKeyDictionary.SQL_DIALECT;
+    public static final String USER                 = ProfileKeyDictionary.USER;
+    public static final String DEFAULT_DB           = ProfileKeyDictionary.DEFAULT_DB;
+    public static final String VARIABLES            = ProfileKeyDictionary.VARIABLES;
+    public static final String PROFILE_COLLECT_TIME = ProfileKeyDictionary.PROFILE_COLLECT_TIME;
+    public static final String LOAD_TYPE            = ProfileKeyDictionary.LOAD_TYPE;
+    public static final String WAREHOUSE_CNGROUP    = ProfileKeyDictionary.WAREHOUSE_CNGROUP;
 
     public static final String LOAD_TYPE_STREAM_LOAD = "STREAM_LOAD";
     public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
-
-    private static final int MEMORY_PROFILE_SAMPLES = 10;
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
@@ -94,8 +91,47 @@ public class ProfileManager implements MemoryTrackable {
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
-        public byte[] profileContent;
+        private byte[] profileContent;
         public ProfilingExecPlan plan;
+
+        void setProfileContent(byte[] content) {
+            this.profileContent = content;
+        }
+
+        /**
+         * Deserialises the stored binary and returns a {@link RuntimeProfile}
+         * for programmatic analysis (e.g. via {@code ExplainAnalyzer}).
+         */
+        public RuntimeProfile getRuntimeProfile() {
+            if (profileContent == null) {
+                return null;
+            }
+            try {
+                return ProfileSerializer.deserialize(profileContent);
+            } catch (IOException e) {
+                LOG.warn("Failed to deserialize profile: {}", e.getMessage());
+                return null;
+            }
+        }
+
+        /**
+         * Returns the profile formatted as a string according to
+         * {@link Config#profile_info_format}.
+         */
+        public String getProfileString() {
+            RuntimeProfile profile = getRuntimeProfile();
+            return profile != null ? format(profile) : null;
+        }
+
+        /** Formats {@code profile} per the current {@link Config#profile_info_format}. */
+        static String format(RuntimeProfile profile) {
+            switch (Config.profile_info_format) {
+                case "json":
+                    return new RuntimeProfile.JsonProfileFormatter().format(profile, "");
+                default:
+                    return profile.toString();
+            }
+        }
 
         public List<String> toRow() {
             List<String> res = Lists.newArrayList();
@@ -103,7 +139,7 @@ public class ProfileManager implements MemoryTrackable {
             res.add(infoStrings.get(START_TIME));
             res.add(infoStrings.get(TOTAL_TIME));
             res.add(infoStrings.get(QUERY_STATE));
-            String statement = infoStrings.get(SQL_STATEMENT);
+            String statement = infoStrings.getOrDefault(SQL_STATEMENT, "");
             if (statement.length() > 128) {
                 statement = statement.substring(0, 124) + " ...";
             }
@@ -132,48 +168,36 @@ public class ProfileManager implements MemoryTrackable {
         profileMap = new LinkedHashMap<>();
     }
 
-    public ProfileElement createElement(RuntimeProfile summaryProfile, String profileString) {
+    // -------------------------------------------------------------------------
+    // Public API
+    // -------------------------------------------------------------------------
+
+    /**
+     * Creates a {@link ProfileElement} by serialising {@code fullProfile} to the
+     * compact binary format (see {@link ProfileSerializer}).
+     * Summary metadata is extracted from {@code summaryProfile}.
+     */
+    public ProfileElement createElement(RuntimeProfile summaryProfile,
+                                        RuntimeProfile fullProfile) {
         ProfileElement element = new ProfileElement();
         for (String header : PROFILE_HEADERS) {
             element.infoStrings.put(header, summaryProfile.getInfoString(header));
         }
         try {
-            element.profileContent = CompressionUtils.gzipCompressString(profileString);
+            element.setProfileContent(ProfileSerializer.serialize(fullProfile));
         } catch (IOException e) {
-            LOG.warn("Compress profile string failed, length: {}, reason: {}",
-                    profileString.length(), e.getMessage());
+            LOG.warn("Failed to serialize profile, reason: {}", e.getMessage());
         }
         return element;
     }
 
-    private String generateProfileString(RuntimeProfile profile) {
-        if (profile == null) {
-            return "";
-        }
-
-        String profileString;
-        switch (Config.profile_info_format) {
-            case "default":
-                profileString = profile.toString();
-                break;
-            case "json":
-                RuntimeProfile.ProfileFormatter formatter = new RuntimeProfile.JsonProfileFormatter();
-                profileString = formatter.format(profile, "");
-                break;
-            default:
-                profileString = profile.toString();
-                LOG.warn("unknown profile format '{}',  use default format instead.", Config.profile_info_format);
-        }
-        return profileString;
-    }
-
     public String pushProfile(ProfilingExecPlan plan, RuntimeProfile profile) {
-        String profileString = generateProfileString(profile);
-        ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
+        // Format eagerly: the caller (e.g. StmtExecutor) needs the string immediately.
+        // The element stores compact binary so in-memory size is proportional to data.
+        String profileString = ProfileElement.format(profile);
+        ProfileElement element = createElement(profile.getChildList().get(0).first, profile);
         element.plan = plan;
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
-        // check when push in, which can ensure every element in the list has QUERY_ID column,
-        // so there is no need to check when remove element from list.
         if (Strings.isNullOrEmpty(queryId)) {
             LOG.warn("the key or value of Map is null, "
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
@@ -241,23 +265,21 @@ public class ProfileManager implements MemoryTrackable {
         }
     }
 
+    /**
+     * Returns the formatted profile string for {@code queryId}.
+     *
+     * <p>Deserialisation and formatting are performed outside the read lock so
+     * the lock is held only for the map lookup.</p>
+     */
     public String getProfile(String queryId) {
-        ProfileElement element = new ProfileElement();
+        ProfileElement element;
         readLock.lock();
         try {
             element = profileMap.get(queryId);
-            if (element == null) {
-                return null;
-            }
-
-            return CompressionUtils.gzipDecompressString(element.profileContent);
-        } catch (IOException e) {
-            LOG.warn("Decompress profile content failed, length: {}, reason: {}",
-                    element.profileContent.length, e.getMessage());
-            return null;
         } finally {
             readLock.unlock();
         }
+        return element != null ? element.getProfileString() : null;
     }
 
     public ProfileElement getProfileElement(String queryId) {
@@ -282,19 +304,19 @@ public class ProfileManager implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryProfile", (long) profileMap.size());
+        readLock.lock();
+        try {
+            return ImmutableMap.of("QueryProfile", (long) profileMap.size());
+        } finally {
+            readLock.unlock();
+        }
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
+    public long estimateSize() {
         readLock.lock();
         try {
-            List<Object> profileSamples = profileMap.values()
-                    .stream()
-                    .limit(MEMORY_PROFILE_SAMPLES)
-                    .collect(Collectors.toList());
-
-            return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()));
+            return Estimator.estimate(profileMap, 10);
         } finally {
             readLock.unlock();
         }

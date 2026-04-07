@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
@@ -34,6 +35,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class JDBCTable extends Table {
 
@@ -118,6 +120,20 @@ public class JDBCTable extends Table {
 
     public String getConnectInfo(String connectInfoKey) {
         return connectInfo.get(connectInfoKey);
+    }
+
+    public String getJdbcUri() {
+        if (!Strings.isNullOrEmpty(resourceName)) {
+            JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
+                    .getResource(resourceName);
+            return resource != null ? resource.getProperty(JDBCResource.URI) : null;
+        }
+        return connectInfo != null ? connectInfo.get(JDBCResource.URI) : null;
+    }
+
+    public boolean isMySQLCompatible() {
+        String uri = getJdbcUri();
+        return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -279,5 +295,10 @@ public class JDBCTable extends Table {
         MARIADB,
 
         CLICKHOUSE
+    }
+
+    @Override
+    public Set<TableOperation> getSupportedOperations() {
+        return Sets.newHashSet(TableOperation.READ, TableOperation.ALTER);
     }
 }

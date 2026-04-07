@@ -16,13 +16,15 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
+#include "common/config_exec_fwd.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -100,9 +102,9 @@ public:
             map[i] = i;
         }
 
-        _chunk_1 = std::make_shared<Chunk>(columns_1, map);
-        _chunk_2 = std::make_shared<Chunk>(columns_2, map);
-        _chunk_3 = std::make_shared<Chunk>(columns_3, map);
+        _chunk_1 = std::make_shared<Chunk>(std::move(columns_1), map);
+        _chunk_2 = std::make_shared<Chunk>(std::move(columns_2), map);
+        _chunk_3 = std::make_shared<Chunk>(std::move(columns_3), map);
 
         auto* expr1 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 2); // refer to region
         auto* expr2 = new ColumnRef(TypeDescriptor(TYPE_VARCHAR), 1); // refer to nation
@@ -124,8 +126,8 @@ public:
 
         _runtime_state = _create_runtime_state();
 
-        ASSERT_OK(Expr::prepare(_sort_exprs, _runtime_state.get()));
-        ASSERT_OK(Expr::open(_sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::prepare(_sort_exprs, _runtime_state.get()));
+        ASSERT_OK(ExprExecutor::open(_sort_exprs, _runtime_state.get()));
     }
 
     void TearDown() override {

@@ -46,7 +46,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.LogBuilder;
@@ -56,6 +55,7 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -106,7 +106,6 @@ import java.util.stream.Collectors;
  */
 public class LoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
-    private static final int MEMORY_JOB_SAMPLES = 10;
 
     private final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
     private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
@@ -495,6 +494,24 @@ public class LoadMgr implements MemoryTrackable {
         }
     }
 
+    public void removeLoadJobsByDb(long dbId) {
+        writeLock();
+        try {
+            // Get all jobs belonging to the database
+            List<LoadJob> jobsToRemove = idToLoadJob.values().stream()
+                    .filter(job -> job.getDbId() == dbId)
+                    .collect(Collectors.toList());
+
+            // Remove each job
+            for (LoadJob job : jobsToRemove) {
+                LOG.info("remove load job {} of database {}", job.getLabel(), dbId);
+                unprotectedRemoveJobReleatedMeta(job);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
     // only for those jobs which transaction is not started
     public void processTimeoutJobs() {
         idToLoadJob.values().stream().forEach(entity -> entity.processTimeout());
@@ -510,13 +527,13 @@ public class LoadMgr implements MemoryTrackable {
                         LOG.info("update load job etl status failed. job id: {}", job.getId(), e);
                         job.cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED,
                                         DataQualityException.QUALITY_FAIL_MSG),
-                                true, true);
+                                true);
                     } catch (TimeoutException e) {
                         // timeout, retry next time
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                     } catch (StarRocksException e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
-                        job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+                        job.cancelJobWithoutCheck(new FailMsg(CancelType.ETL_RUN_FAIL, e.getMessage()), true);
                     } catch (Exception e) {
                         LOG.warn("update load job etl status failed. job id: {}", job.getId(), e);
                     }
@@ -531,7 +548,7 @@ public class LoadMgr implements MemoryTrackable {
                         ((SparkLoadJob) job).updateLoadingStatus();
                     } catch (StarRocksException e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
-                        job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
+                        job.cancelJobWithoutCheck(new FailMsg(CancelType.LOAD_RUN_FAIL, e.getMessage()), true);
                     } catch (Exception e) {
                         LOG.warn("update load job loading status failed. job id: {}", job.getId(), e);
                     }
@@ -844,12 +861,8 @@ public class LoadMgr implements MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = idToLoadJob.values()
-                .stream()
-                .limit(MEMORY_JOB_SAMPLES)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(samples, (long) idToLoadJob.size()));
+    public long estimateSize() {
+        return Estimator.estimate(idToLoadJob, 20);
     }
 
     public Map<Long, Long> getRunningLoadCount() {

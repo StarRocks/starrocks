@@ -76,6 +76,9 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // operators can truncate overlapping data produced by the local-distinct stage.
     private long localLimit = DEFAULT_LIMIT;
 
+    // TopN information for filtering group by data during aggregation
+    private LogicalTopNOperator.TopNSortInfo aggTopnSortInfo = null;
+
     // If the AggType is not GLOBAL, it means we have split the agg hence the isSplit should be true.
     // `this.isSplit = !type.isGlobal() || isSplit;` helps us do the work.
     // If you want to manually set this value, you could invoke setOnlyLocalAggregate().
@@ -160,6 +163,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public long getLocalLimit() {
         return localLimit;
+    }
+
+    public LogicalTopNOperator.TopNSortInfo getAggTopnSortInfo() {
+        return aggTopnSortInfo;
     }
 
     public boolean checkGroupByCountDistinct() {
@@ -290,12 +297,14 @@ public class LogicalAggregationOperator extends LogicalOperator {
                 type == that.type && Objects.equals(aggregations, that.aggregations) &&
                 Objects.equals(groupingKeys, that.groupingKeys) &&
                 Objects.equals(partitionByColumns, that.partitionByColumns) &&
-                topNLocalAgg == that.topNLocalAgg;
+                topNLocalAgg == that.topNLocalAgg &&
+                Objects.equals(aggTopnSortInfo, that.aggTopnSortInfo);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns, topNLocalAgg);
+        return Objects.hash(super.hashCode(), type, isSplit, aggregations, groupingKeys, partitionByColumns, topNLocalAgg,
+                aggTopnSortInfo);
     }
 
     public static Builder builder() {
@@ -330,6 +339,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
             builder.distinctColumnDataSkew = aggregationOperator.distinctColumnDataSkew;
             builder.topNLocalAgg = aggregationOperator.topNLocalAgg;
             builder.localLimit = aggregationOperator.localLimit;
+            builder.aggTopnSortInfo = aggregationOperator.aggTopnSortInfo;
             return this;
         }
 
@@ -380,6 +390,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
         public Builder setTopNLocalAgg(boolean topNLocalAgg) {
             builder.topNLocalAgg = topNLocalAgg;
+            return this;
+        }
+
+        public Builder setAggTopnSortInfo(LogicalTopNOperator.TopNSortInfo aggTopnSortInfo) {
+            builder.aggTopnSortInfo = aggTopnSortInfo;
             return this;
         }
     }

@@ -259,24 +259,27 @@ public class ColumnPrivilege {
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             Table table = node.getTargetTable();
-            tableNameToTableObj.put(node.getTableName(), table);
-            tableTableNameMap.put(table, node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tableNameToTableObj.put(tableName, table);
+            tableTableNameMap.put(table, tableName);
             return super.visitInsertStatement(node, context);
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
             Table table = node.getTable();
-            tableNameToTableObj.put(node.getTableName(), table);
-            tableTableNameMap.put(table, node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tableNameToTableObj.put(tableName, table);
+            tableTableNameMap.put(table, tableName);
             return super.visitUpdateStatement(node, context);
         }
 
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
             Table table = node.getTable();
-            tableNameToTableObj.put(node.getTableName(), table);
-            tableTableNameMap.put(table, node.getTableName());
+            TableName tableName = TableName.fromTableRef(node.getTableRef());
+            tableNameToTableObj.put(tableName, table);
+            tableTableNameMap.put(table, tableName);
             return super.visitDeleteStatement(node, context);
         }
 

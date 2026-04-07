@@ -21,10 +21,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -45,6 +48,7 @@ import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -52,7 +56,9 @@ import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.QueryDebugOptions;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
+import org.apache.parquet.Strings;
 
 import java.util.Map;
 import java.util.Set;
@@ -162,7 +168,9 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         PlannerMetaLocker locker = new PlannerMetaLocker(ctx, insertStmt);
         ExecPlan execPlan = null;
         if (!locker.tryLock(Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
-            throw new LockTimeoutException("Failed to lock database in prepareRefreshPlan");
+            throw new LockTimeoutException(String.format("Materialized view %s.%s refresh failed: " +
+                    "failed to acquire planner meta lock within %d ms when preparing refresh plan",
+                    db.getFullName(), mv.getName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
         MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, mvRefreshPartitioner);
@@ -185,14 +193,29 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
             locker.unlock();
         }
 
+        final InsertStmt finalInsertStmt = insertStmt;
         updateTaskRunStatus(status -> {
             MVTaskRunExtraMessage message = status.getMvTaskRunExtraMessage();
             if (message == null) {
                 return;
             }
+
+            // update plan builder message
             Map<String, String> planBuildMessage = planBuilder.getPlanBuilderMessage();
-            logger.info("MV Refresh PlanBuilderMessage: {}", planBuildMessage);
-            message.setPlanBuilderMessage(planBuildMessage);
+            if (planBuildMessage != null) {
+                logger.info("MV Refresh PlanBuilderMessage: {}", planBuildMessage);
+                message.setPlanBuilderMessage(planBuildMessage);
+                // record the plan builder message
+                Tracers.record("MVRefreshPlanBuilderInfo", planBuildMessage.toString());
+            }
+
+            final String refreshedSql = finalInsertStmt != null ? AstToSQLBuilder.buildSimple(finalInsertStmt) : "";
+            // update mv refresh definition
+            if (!Strings.isNullOrEmpty(refreshedSql)) {
+                // Remove line separator and shrink to MAX_FIELD_VARCHAR_LENGTH-1 which is defined in the TaskRunsSystemTable.java
+                String query = LogUtil.removeLineSeparator(refreshedSql);
+                status.setDefinition(MvUtils.shrinkToSize(query, SystemTable.MAX_FIELD_VARCHAR_LENGTH - 1));
+            }
         });
 
         QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
@@ -293,6 +316,20 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
     public void updateVersionMeta(ExecPlan execPlan,
                                   PCellSortedSet mvRefreshedPartitions,
                                   Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+        // Only promote TVR checkpoint on the last batch. Intermediate batches pass empty map
+        // to avoid committing TVR before all partitions are refreshed.
+        Map<BaseTableInfo, TvrVersionRange> tvrMap;
+        if (mvContext.hasNextBatchPartition()) {
+            tvrMap = Maps.newHashMap();
+        } else {
+            tvrMap = mv.getRefreshScheme().getAsyncRefreshContext().getTempBaseTableInfoTvrDeltaMap();
+        }
+        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, tvrMap);
+        // Clear temp map after the last batch promotes TVR, preventing stale data from being
+        // reused by subsequent unrelated refreshes (e.g., user-initiated partial refresh or
+        // explain-time planning that populates the temp map without executing).
+        if (!mvContext.hasNextBatchPartition()) {
+            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaMap();
+        }
     }
 }

@@ -16,12 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/config_cache_fwd.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
-#include "testutil/assert.h"
 
 namespace starrocks::io {
 

@@ -20,6 +20,7 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "common/config_exec_fwd.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/file_reader.h"

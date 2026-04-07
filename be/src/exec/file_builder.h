@@ -14,10 +14,8 @@
 
 #pragma once
 
-#include "fs/fs.h"
-#include "gen_cpp/DataSinks_types.h"
-#include "runtime/result_writer.h"
-#include "runtime/runtime_state.h"
+#include "column/vectorized_fwd.h"
+#include "common/status.h"
 
 namespace starrocks {
 

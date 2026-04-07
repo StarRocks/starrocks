@@ -21,11 +21,16 @@
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/map_column.h"
+#include "common/config_exec_fwd.h"
+#include "common/http/content_type.h"
+#include "common/util/debug_util.h"
+#include "formats/column_evaluator.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
 #include "formats/utils.h"
+#include "fs/fs.h"
+#include "io/async_flush_output_stream.h"
 #include "runtime/current_thread.h"
-#include "util/debug_util.h"
 
 namespace starrocks::formats {
 
@@ -111,8 +116,8 @@ Status ORCFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult ORCFileWriter::commit() {
-    FileWriter::CommitResult result{
+FileWriter::CommitResult ORCFileWriter::close() {
+    CommitResult result{
             .io_status = Status::OK(), .format = ORC, .location = _location, .rollback_action = _rollback_action};
     try {
         if (_writer != nullptr) {
@@ -133,8 +138,8 @@ FileWriter::CommitResult ORCFileWriter::commit() {
         result.file_statistics.file_size = _output_stream->getLength();
     }
 
-    auto promise = std::make_shared<std::promise<FileWriter::CommitResult>>();
-    std::future<FileWriter::CommitResult> future = promise->get_future();
+    auto promise = std::make_shared<std::promise<CommitResult>>();
+    std::future<CommitResult> future = promise->get_future();
 
     _writer = nullptr;
     return result;
@@ -493,7 +498,9 @@ Status ORCFileWriterFactory::init() {
 }
 
 StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const {
-    ASSIGN_OR_RETURN(auto file, _fs->new_writable_file(WritableFileOptions{.direct_write = true}, path));
+    ASSIGN_OR_RETURN(auto file,
+                     _fs->new_writable_file(
+                             WritableFileOptions{.direct_write = true, .content_type = http::ContentType::ORC}, path));
     auto rollback_action = [fs = _fs, path = path]() {
         WARN_IF_ERROR(ignore_not_found(fs->delete_file(path)), "fail to delete file");
     };
@@ -506,8 +513,8 @@ StatusOr<WriterAndStream> ORCFileWriterFactory::create(const string& path) const
             std::make_unique<ORCFileWriter>(path, orc_output_stream, _column_names, types, std::move(column_evaluators),
                                             _compression_type, _parsed_options, rollback_action);
     return WriterAndStream{
-            .writer = std::move(writer),
             .stream = std::move(async_output_stream),
+            .writer = std::move(writer),
     };
 }
 

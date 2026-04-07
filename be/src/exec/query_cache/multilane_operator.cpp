@@ -16,7 +16,7 @@
 
 #include <glog/logging.h>
 
-#include "util/defer_op.h"
+#include "base/utility/defer_op.h"
 
 namespace starrocks::query_cache {
 MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, size_t num_lanes,

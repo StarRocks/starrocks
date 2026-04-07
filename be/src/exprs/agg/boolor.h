@@ -17,12 +17,12 @@
 #include <limits>
 #include <type_traits>
 
+#include "base/container/raw_container.h"
 #include "column/fixed_length_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -177,7 +177,7 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
-        dst = src[0]->clone();
+        dst = std::move(*(src[0])).mutate();
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

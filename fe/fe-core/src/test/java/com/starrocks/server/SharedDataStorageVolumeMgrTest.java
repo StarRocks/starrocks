@@ -209,12 +209,8 @@ public class SharedDataStorageVolumeMgrTest {
         storageParams.put(AWS_S3_ENDPOINT, "endpoint1");
         storageParams.put(AWS_S3_ACCESS_KEY, "ak");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
-        try {
-            svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(false), "test update");
-            Assertions.fail();
-        } catch (IllegalStateException e) {
-            Assertions.assertTrue(e.getMessage().contains("Storage volume 'test1' does not exist"));
-        }
+        Assertions.assertThrows(MetaNotFoundException.class, () ->
+                svm.updateStorageVolume(svName1, null, null, storageParams, Optional.of(true), "test update"));
         storageParams.put("aaa", "bbb");
         Assertions.assertThrows(DdlException.class, () ->
                 svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(true), "test update"));
@@ -878,7 +874,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testCreateHDFS() throws DdlException, AlreadyExistsException {
+    public void testCreateHDFS() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         String svName = "test";
         // create
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
@@ -893,7 +889,7 @@ public class SharedDataStorageVolumeMgrTest {
 
         storageParams.put("dfs.client.failover.proxy.provider",
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
-        svm.updateStorageVolume("test", null, null, storageParams, Optional.of(false), "");
+        svm.updateStorageVolume(svName, null, null, storageParams, Optional.of(false), "");
         Assertions.assertEquals(false, svm.getStorageVolumeByName(svName).getEnabled());
     }
 

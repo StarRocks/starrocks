@@ -43,16 +43,16 @@
 #include <thread>
 #include <unordered_map>
 
+#include "base/concurrency/blocking_queue.hpp"
+#include "base/uid_util.h"
 #include "common/compiler_util.h"
 #include "common/statusor.h"
+#include "common/thread/threadpool.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/load_channel.h"
 #include "runtime/tablets_channel.h"
-#include "util/blocking_queue.hpp"
-#include "util/threadpool.h"
-#include "util/uid_util.h"
 
 namespace brpc {
 class Controller;
@@ -104,7 +104,7 @@ class StatusPB;
 //
 class LoadChannelMgr {
 public:
-    LoadChannelMgr();
+    explicit LoadChannelMgr(lake::TabletManager* lake_tablet_manager);
     ~LoadChannelMgr();
 
     Status init(MemTracker* mem_tracker);
@@ -173,13 +173,14 @@ private:
     std::unordered_map<UniqueId, std::pair<time_t, std::string>> _aborted_load_channels;
 
     // check the total load mem consumption of this Backend
-    MemTracker* _mem_tracker;
+    MemTracker* _mem_tracker{nullptr};
 
     // thread to clean timeout load channels
-    bthread_t _load_channels_clean_thread;
+    bthread_t _load_channels_clean_thread{INVALID_BTHREAD};
 
     // Thread pool used to handle rpc request asynchronously
     std::unique_ptr<ThreadPool> _async_rpc_pool;
+    lake::TabletManager* _lake_tablet_manager;
 };
 
 } // namespace starrocks

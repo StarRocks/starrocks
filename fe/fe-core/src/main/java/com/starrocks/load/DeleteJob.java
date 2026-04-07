@@ -116,18 +116,16 @@ public abstract class DeleteJob extends AbstractTxnStateChangeCallback {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
-        if (!txnOperated) {
-            return;
-        }
-        setState(DeleteState.FINISHED);
-        GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
-        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo);
+    public void afterVisible(TransactionState txnState) {
+        GlobalStateMgr.getCurrentState().getEditLog().logFinishMultiDelete(deleteInfo, wal -> {
+            setState(DeleteState.FINISHED);
+            GlobalStateMgr.getCurrentState().getDeleteMgr().recordFinishedJob(this);
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
+        });
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
         // just to clean the callback
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(getId());
     }

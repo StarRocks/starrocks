@@ -34,13 +34,17 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <util/time.h>
-
 #include <condition_variable>
 #include <deque>
 #include <utility>
 
+#include "base/phmap/phmap.h"
+#include "base/string/faststring.h"
+#include "base/time/time.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
+#include "common/util/debug_util.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/sort_exec_exprs.h"
 #include "gen_cpp/data.pb.h"
@@ -52,12 +56,7 @@
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "util/compression/block_compression.h"
-#include "util/debug_util.h"
-#include "util/defer_op.h"
-#include "util/faststring.h"
 #include "util/logging.h"
-#include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -128,6 +127,7 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
 std::vector<merge_path::MergePathChunkProvider> DataStreamRecvr::create_merge_path_chunk_providers() {
     DCHECK(_is_merging);
     std::vector<merge_path::MergePathChunkProvider> chunk_providers;
+    chunk_providers.reserve(_sender_queues.size());
     for (SenderQueue* q : _sender_queues) {
         chunk_providers.emplace_back([q](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
             if (!q->has_chunk()) {

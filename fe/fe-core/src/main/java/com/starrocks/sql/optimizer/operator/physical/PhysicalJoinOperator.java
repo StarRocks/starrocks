@@ -31,7 +31,7 @@ import java.util.Set;
 
 public abstract class PhysicalJoinOperator extends PhysicalOperator {
     protected final JoinOperator joinType;
-    protected final ScalarOperator onPredicate;
+    protected ScalarOperator onPredicate;
     protected final String joinHint;
     protected boolean outputRequireHashPartition = true;
 
@@ -62,6 +62,10 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         return onPredicate;
     }
 
+    public void setOnPredicate(ScalarOperator onPredicate) {
+        this.onPredicate = onPredicate;
+    }
+
     public String getJoinHint() {
         return joinHint;
     }
@@ -80,12 +84,16 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         if (predicate != null) {
             refs.union(predicate.getUsedColumns());
         }
+
+        if (predicateCommonOperators != null) {
+            predicateCommonOperators.forEach((k, v) -> refs.union(v.getUsedColumns()));
+        }
+
         if (onPredicate != null) {
             refs.union(onPredicate.getUsedColumns());
         }
         return refs;
     }
-
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {

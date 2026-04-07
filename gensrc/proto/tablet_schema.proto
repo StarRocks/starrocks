@@ -96,6 +96,7 @@ message TabletSchemaPB {
     repeated uint32 sort_key_unique_ids = 13;
     repeated TabletIndexPB table_indices = 14;
     optional int32 compression_level = 15 [default=-1];
+    optional PrimaryKeyEncodingTypePB primary_key_encoding_type = 16;
     optional int64 id = 50;
 }
 

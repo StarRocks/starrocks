@@ -91,6 +91,15 @@ public class MockedLocalMetaStore extends LocalMetastore {
     }
 
     @Override
+    public void unprotectCreateDb(Database database) {
+        nameToDb.put(database.getFullName(), database);
+        idToDb.put(database.getId(), database);
+
+        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        globalTransactionMgr.addDatabaseTransactionMgr(database.getId());
+    }
+
+    @Override
     public boolean createTable(CreateTableStmt stmt) throws DdlException {
         Database db = getDb(stmt.getDbName());
         String tableName = stmt.getTableName();

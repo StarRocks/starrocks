@@ -16,9 +16,9 @@
 
 #include <fmt/format.h>
 
+#include "base/simd/simd.h"
 #include "column/column_helper.h"
 #include "column/struct_column.h"
-#include "simd/simd.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 
@@ -55,7 +55,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     // assign the key chunk
     for (int i = 0; i < _dictionary_get_expr.key_size; ++i) {
         ColumnPtr key_column = columns[1 + i];
-        key_chunk->update_column_by_index(key_column, i);
+        key_chunk->update_column_by_index(std::move(key_column), i);
     }
     value_chunk->reserve(size);
 
@@ -125,8 +125,8 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
         sub_columns.emplace_back(NullableColumn::create(column, std::move(sub_null_column)));
     }
     auto null_column = UInt8Column::create(0, 0);
-    _nullable_struct_column = NullableColumn::create(
-            StructColumn::create(std::move(sub_columns), std::move(value_columns_name)), std::move(null_column));
+    _nullable_struct_column = NullableColumn::create(StructColumn::create(sub_columns, std::move(value_columns_name)),
+                                                     std::move(null_column));
     DCHECK(_nullable_struct_column != nullptr);
 
     return Status::OK();

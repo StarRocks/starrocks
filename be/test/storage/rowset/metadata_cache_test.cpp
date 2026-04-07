@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -26,7 +27,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_schema.h"
 #include "storage/tablet_schema_helper.h"
-#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 class MetadataCacheTest : public ::testing::Test {
@@ -53,7 +53,7 @@ public:
         auto schema = ChunkHelper::convert_schema(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto cols = chunk->mutable_columns();
-        for (long key : keys) {
+        for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(key % 100 + 1)));
             cols[2]->append_datum(Datum((int32_t)(key % 1000 + 2)));

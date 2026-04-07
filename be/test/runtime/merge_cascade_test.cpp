@@ -16,6 +16,7 @@
 
 #include <algorithm>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -24,7 +25,6 @@
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 #include "testutil/exprs_test_helper.h"
 
 namespace starrocks {

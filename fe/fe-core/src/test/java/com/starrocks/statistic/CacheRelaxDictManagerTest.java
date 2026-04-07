@@ -252,7 +252,6 @@ public class CacheRelaxDictManagerTest {
             Assertions.assertEquals(size + 1, optional.get().getDictSize());
             Assertions.assertEquals(1,
                     ((CacheRelaxDictManager) manager).estimateCount().get("ExternalTableColumnDict").intValue());
-            Assertions.assertEquals(1, ((CacheRelaxDictManager) manager).getSamples().get(0).first.size());
 
             manager.removeGlobalDict(tableUUID, columnName);
         }

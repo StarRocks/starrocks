@@ -33,27 +33,29 @@
 #include <utility>
 #include <vector>
 
+#include "base/phmap/phmap.h"
 #include "column/column_helper.h"
 #include "column/json_column.h"
+#include "column/json_converter.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/runtime_profile.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
-#include "runtime/types.h"
+#include "runtime/descriptors.h"
 #include "storage/rowset/column_reader.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "util/bloom_filter.h"
-#include "util/json.h"
-#include "util/json_converter.h"
-#include "util/phmap/phmap.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -199,7 +201,7 @@ using JsonFlatExtractFunc = void (*)(const vpack::Slice* json, NullableColumn* r
 using JsonFlatMergeFunc = void (*)(vpack::Builder* builder, const std::string_view& name, const Column* src, size_t idx);
 static const uint8_t JSON_BASE_TYPE_BITS = 0;   // least flat to JSON type
 static const uint8_t JSON_BIGINT_TYPE_BITS = 7; // bigint compatible type
-static const uint8_t JSON_NULL_TYPE_BITS = 31;  // JSON_NULL_TYPE_BITS, initial value for JsonFlatDesc::type
+// static const uint8_t JSON_NULL_TYPE_BITS = 31;  // JSON_NULL_TYPE_BITS, initial value for JsonFlatDesc::type
 
 // bool will flatting as string, because it's need save string-literal(true/false)
 // int & string compatible type is json, because int cast to string will add double quote, it's different with json
@@ -371,9 +373,17 @@ StatusOr<size_t> JsonPathDeriver::check_null_factor(const std::vector<const Colu
     return total_rows - null_count;
 }
 
+JsonPathDeriver::JsonPathDeriver()
+        : _min_json_sparsity_factory(config::json_flat_sparsity_factor),
+          _max_json_null_factor(config::json_flat_null_factor),
+          _max_column(config::json_flat_column_max) {}
+
 JsonPathDeriver::JsonPathDeriver(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                  bool has_remain)
-        : _has_remain(has_remain), _paths(std::move(paths)), _types(types) {
+        : JsonPathDeriver() {
+    _has_remain = has_remain;
+    _paths = paths;
+    _types = types;
     for (size_t i = 0; i < _paths.size(); i++) {
         auto* leaf = JsonFlatPath::normalize_from_path(_paths[i], _path_root.get());
         leaf->type = types[i];
@@ -410,7 +420,7 @@ void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     _total_rows = res.value();
 
     _path_root = std::make_shared<JsonFlatPath>();
-    // init path by flat json
+    // init path by flat JSON
     _derived_on_flat_json(json_datas);
 
     // extract common keys, type
@@ -582,7 +592,7 @@ void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFla
 }
 
 void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath* root, size_t mark_row) {
-    vpack::ObjectIterator it(value, false);
+    vpack::ObjectIterator it(value, true);
 
     for (; it.valid(); it.next()) {
         auto current = (*it);
@@ -600,19 +610,18 @@ void JsonPathDeriver::_visit_json_paths(const vpack::Slice& value, JsonFlatPath*
         child->last_row = mark_row;
 
         if (v.isObject()) {
-            // Accumulate remain status: if node is ever empty in any row, mark as remain
-            child->remain |= v.isEmptyObject();
-            // If this node was previously visited as primitive (desc->type != JSON_BASE_TYPE_BITS and != initial value),
-            // but now we see an object, this indicates a type mismatch.
-            // Mark the parent node as remain to preserve the actual data structure.
-            if (child->json_type != flat_json::JSON_BASE_TYPE_BITS &&
-                child->json_type != flat_json::JSON_NULL_TYPE_BITS) {
+            // If we have seen any non-object value on the same key before, keep parent as remain.
+            // This covers array<->object and primitive<->object conflicts and preserves the original structure.
+            if (child->hits > child->object_count + 1) {
                 root->remain = true;
             }
+            child->object_count++;
+            // Accumulate remain status: if node is ever empty in any row, mark as remain
+            child->remain |= v.isEmptyObject();
             child->json_type = flat_json::JSON_BASE_TYPE_BITS;
             _visit_json_paths(v, child, mark_row);
-        } else {
-            // If this node has children (was previously visited as object), but now we see a primitive,
+        } else { // NOTE that array is also treated as primitive here.
+            // If this node was previously visited as object, but now we see a primitive,
             // this indicates a type mismatch: path tree expects object but actual data has primitive.
             // Mark the parent node as remain to preserve the actual data structure.
             if (!child->children.empty()) {
@@ -788,7 +797,7 @@ JsonFlattener::JsonFlattener(JsonPathDeriver& deriver) {
 
 JsonFlattener::JsonFlattener(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                              bool has_remain)
-        : _has_remain(has_remain), _dst_paths(std::move(paths)) {
+        : _has_remain(has_remain), _dst_paths(paths) {
     _dst_root = std::make_shared<JsonFlatPath>();
 
     for (size_t i = 0; i < _dst_paths.size(); i++) {
@@ -845,7 +854,7 @@ void JsonFlattener::flatten(const Column* json_column) {
 template <bool REMAIN>
 bool JsonFlattener::_flatten_json(const vpack::Slice& value, const JsonFlatPath* root, vpack::Builder* builder,
                                   uint32_t* hit_count) {
-    vpack::ObjectIterator it(value, false);
+    vpack::ObjectIterator it(value, true);
     for (; it.valid(); it.next()) {
         auto current = (*it);
         // sub-object
@@ -973,7 +982,7 @@ MutableColumns JsonFlattener::mutable_result() {
 }
 
 JsonMerger::JsonMerger(const std::vector<std::string>& paths, const std::vector<LogicalType>& types, bool has_remain)
-        : _src_paths(std::move(paths)), _has_remain(has_remain) {
+        : _src_paths(paths), _has_remain(has_remain) {
     _src_root = std::make_shared<JsonFlatPath>();
 
     for (size_t i = 0; i < _src_paths.size(); i++) {
@@ -1105,7 +1114,7 @@ void JsonMerger::_merge_impl(size_t rows) {
 template <bool IN_TREE>
 void JsonMerger::_merge_json_with_remain(const JsonFlatPath* root, const vpack::Slice* remain, vpack::Builder* builder,
                                          size_t index) {
-    vpack::ObjectIterator it(*remain, false);
+    vpack::ObjectIterator it(*remain, true);
     for (; it.valid(); it.next()) {
         auto k = it.key().stringView();
         auto v = it.value();
@@ -1261,7 +1270,7 @@ void JsonMerger::_check_has_non_null_values(const JsonFlatPath* root, size_t ind
 
 HyperJsonTransformer::HyperJsonTransformer(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                                            bool has_remain)
-        : _dst_remain(has_remain), _dst_paths(std::move(paths)), _dst_types(types) {
+        : _dst_remain(has_remain), _dst_paths(paths), _dst_types(types) {
     for (size_t i = 0; i < _dst_paths.size(); i++) {
         _dst_columns.emplace_back(ColumnHelper::create_column(TypeDescriptor(types[i]), true));
     }

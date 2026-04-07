@@ -93,6 +93,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.Backend;
@@ -168,6 +169,8 @@ public class ExportJob implements Writable, GsonPostProcessable {
     @SerializedName("rd")
     private String rowDelimiter;
     private boolean includeQueryId;
+    @SerializedName("withHdr")
+    private boolean withHeader;
     @SerializedName("pt")
     private Map<String, String> properties = Maps.newHashMap();
     @SerializedName("ps")
@@ -242,7 +245,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         CRAcquireContext acquireContext = CRAcquireContext.of(this.warehouseId, this.computeResource);
         this.computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
-        String dbName = stmt.getTblName().getDb();
+        String dbName = stmt.getDbName();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         if (db == null) {
             throw new DdlException("Database " + dbName + " does not exist");
@@ -256,6 +259,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
         this.columnSeparator = stmt.getColumnSeparator();
         this.rowDelimiter = stmt.getRowDelimiter();
         this.includeQueryId = stmt.isIncludeQueryId();
+        this.withHeader = stmt.isWithHeader();
         this.properties = stmt.getProperties();
 
         exportPath = stmt.getPath();
@@ -272,12 +276,17 @@ public class ExportJob implements Writable, GsonPostProcessable {
 
         this.dbId = db.getId();
         this.exportTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), stmt.getTblName().getTbl());
+                .getTable(db.getFullName(), stmt.getTableName());
         if (exportTable == null) {
-            throw new DdlException("Table " + stmt.getTblName().getTbl() + " does not exist");
+            throw new DdlException("Table " + stmt.getTableName() + " does not exist");
         }
         this.tableId = exportTable.getId();
-        this.tableName = stmt.getTblName();
+        TableRef tableRef = stmt.getTableRef();
+        if (tableRef == null) {
+            throw new DdlException("Table reference is null in export statement");
+        }
+        this.tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
 
         try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(this.tableId),
                 LockType.READ)) {
@@ -459,8 +468,15 @@ public class ExportJob implements Writable, GsonPostProcessable {
             HdfsUtil.getTProperties(exportTempPath, brokerPersistInfo.getProperties(), hdfsProperties);
         }
         BrokerDesc runtimeBrokerDesc = new BrokerDesc(brokerPersistInfo.getName(), brokerPersistInfo.getProperties());
+
+        // Extract column names from slot descriptors for CSV header row
+        List<String> exportColumnNames = Lists.newArrayList();
+        for (SlotDescriptor slot : exportTupleDesc.getSlots()) {
+            exportColumnNames.add(slot.getColumn().getName());
+        }
+
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
-                rowDelimiter, runtimeBrokerDesc, hdfsProperties));
+                rowDelimiter, runtimeBrokerDesc, hdfsProperties, exportColumnNames, withHeader));
         try {
             fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {

@@ -17,8 +17,8 @@
 
 #include <atomic>
 
+#include "base/concurrency/countdown_latch.h"
 #include "google/protobuf/stubs/callback.h"
-#include "util/countdown_latch.h"
 
 namespace starrocks {
 

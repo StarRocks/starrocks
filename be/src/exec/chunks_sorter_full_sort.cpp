@@ -14,14 +14,14 @@
 
 #include "chunks_sorter_full_sort.h"
 
+#include "base/utility/defer_op.h"
+#include "common/runtime_profile.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 DEFINE_FAIL_POINT(chunks_sorter_full_sort_partial_sort_bad_alloc);
@@ -61,7 +61,7 @@ Status ChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr& chunk) 
 // Accumulate unsorted input chunks into a larger chunk
 Status ChunksSorterFullSort::_merge_unsorted(RuntimeState* state, const ChunkPtr& chunk) {
     SCOPED_TIMER(_build_timer);
-    _staging_unsorted_chunks.push_back(std::move(chunk));
+    _staging_unsorted_chunks.push_back(chunk);
     _staging_unsorted_rows += chunk->num_rows();
     _staging_unsorted_bytes += chunk->bytes_usage();
     return Status::OK();
@@ -74,7 +74,7 @@ static void reserve_memory(Column* dst_col, const std::vector<ChunkPtr>& src_chu
     for (const auto& src_chk : src_chunks) {
         const auto* src_data_col = ColumnHelper::get_data_column(src_chk->get_column_by_index(col_idx).get());
         const auto* src_binary_col = down_cast<const BinaryColumnType*>(src_data_col);
-        total_num_bytes += src_binary_col->get_bytes().size();
+        total_num_bytes += src_binary_col->get_immutable_bytes().size();
     }
     binary_dst_col->get_bytes().reserve(total_num_bytes);
 }
@@ -306,6 +306,50 @@ void ChunksSorterFullSort::_reset() {
     _late_materialized_chunks.clear();
     _early_materialized_chunks.clear();
     _merged_runs.clear();
+}
+
+size_t ChunksSorterFullSort::_reserved_bytes(const ChunkPtr& chunk) {
+    if (chunk) {
+        return chunk->memory_usage() + (_unsorted_chunk != nullptr ? _unsorted_chunk->memory_usage() * 2 : 0);
+    }
+    return _unsorted_chunk != nullptr ? _unsorted_chunk->memory_usage() * 2 : 0;
+}
+
+size_t ChunksSorterFullSort::_get_revocable_mem_bytes() {
+    size_t revocable_mem_bytes = 0;
+    if (auto unsorted_chunk = _unsorted_chunk) {
+        revocable_mem_bytes += unsorted_chunk->memory_usage();
+    }
+
+    for (const auto& chunk : _sorted_chunks) {
+        if (chunk) {
+            revocable_mem_bytes += chunk->memory_usage();
+        }
+    }
+
+    return revocable_mem_bytes;
+}
+std::function<StatusOr<ChunkPtr>()> ChunksSorterFullSort::_get_chunk_iterator() {
+    return [this]() -> StatusOr<ChunkPtr> {
+        if (_unsorted_chunk != nullptr) {
+            return std::move(_unsorted_chunk);
+        }
+
+        if (_process_staging_unsorted_chunk_idx != _staging_unsorted_chunks.size()) {
+            return std::move(_staging_unsorted_chunks[_process_staging_unsorted_chunk_idx++]);
+        }
+        if (_process_early_materialized_chunks_idx != _early_materialized_chunks.size()) {
+            return _late_materialize(std::move(_early_materialized_chunks[_process_early_materialized_chunks_idx++]));
+        }
+        if (_process_sorted_chunk_idx != _sorted_chunks.size()) {
+            return std::move(_sorted_chunks[_process_sorted_chunk_idx++]);
+        }
+        return Status::EndOfFile("No more chunk to restore");
+    };
+}
+
+bool ChunksSorterFullSort::_have_no_staging_data() const {
+    return _sorted_chunks.empty() && _unsorted_chunk == nullptr && _staging_unsorted_chunks.empty();
 }
 
 } // namespace starrocks

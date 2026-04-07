@@ -17,11 +17,13 @@ package com.starrocks.sql.optimizer.rule;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.rule.implementation.AssertOneRowImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.BenchmarkScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorToNoCTEImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEConsumeInlineImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEConsumerReuseImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEProduceImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.CacheStatsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.DeltaLakeScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.EsScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ExceptImplementationRule;
@@ -198,7 +200,9 @@ public class RuleSet {
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
+            new CacheStatsScanImplementationRule(),
             new JDBCScanImplementationRule(),
+            new BenchmarkScanImplementationRule(),
             new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
@@ -428,6 +432,11 @@ public class RuleSet {
                     RewriteSimpleAggToHDFSScanRule.SCAN_AND_PROJECT,
                     new MinMaxOptOnScanRule()
             ));
+
+    // Unified IVM delta/version rewrite rules.
+    // Concrete scan rules for each table type will be added in subsequent PRs.
+    public static final Rule IVM_DELTA_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_IVM_DELTA_REWRITE, ImmutableList.of());
 
     public static final Rule TVR_REWRITE_RULES =
             new CombinationRule(RuleType.GP_TVR_REWRITE, ImmutableList.of(

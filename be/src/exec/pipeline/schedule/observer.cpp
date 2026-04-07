@@ -16,6 +16,7 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/schedule/common.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 static void on_update(PipelineDriver* driver) {
@@ -82,6 +83,21 @@ std::string Observable::to_string() const {
         str += observer->driver()->to_readable_string() + "\n";
     }
     return str;
+}
+
+void Observable::add_observer(RuntimeState* state, PipelineObserver* observer) {
+    if (state->enable_event_scheduler()) {
+        DCHECK(observer != nullptr);
+        _observers.push_back(observer);
+    }
+}
+
+void PipeObservable::attach_sink_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+    _sink_observable.add_observer(state, observer);
+}
+
+void PipeObservable::attach_source_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+    _source_observable.add_observer(state, observer);
 }
 
 void Observable::notify_runtime_filter_timeout() {

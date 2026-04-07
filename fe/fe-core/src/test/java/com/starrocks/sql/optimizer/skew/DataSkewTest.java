@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.skew;
 
 import com.google.crypto.tink.subtle.Random;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Bucket;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -27,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -123,6 +125,156 @@ public class DataSkewTest {
         // WHEN / THEN
         assertTrue(DataSkew.isColumnSkewed(stats, skewedColStats));
         assertFalse(DataSkew.isColumnSkewed(stats, nonSkewedColStats));
+    }
+
+    @Test
+    void itShouldReturnMoreSkewedMetric() {
+        // GIVEN
+        final var skewedHistogram = getSkewedHistogram();
+        final var nullAndMcvButMoreNullSkewedCol = createNewTestColumn();
+        final var nullAndMcvButMoreNullSkewedStats = ColumnStatistic.builder()
+                .setNullsFraction(99) //
+                .setHistogram(skewedHistogram) //
+                .build();
+
+        final var nullAndMcvButMoreMcvSkewedCol = createNewTestColumn();
+        final var nullAndMcvButMoreMcvSkewedStats = ColumnStatistic.builder()
+                .setNullsFraction(0.6) //
+                .setHistogram(skewedHistogram) //
+                .build();
+
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(nullAndMcvButMoreNullSkewedCol, nullAndMcvButMoreNullSkewedStats) //
+                .addColumnStatistic(nullAndMcvButMoreMcvSkewedCol, nullAndMcvButMoreMcvSkewedStats) //
+                .build();
+
+        // WHEN / THEN
+        final var nullAndMcvButMoreNullSkewInfo = DataSkew.getColumnSkewInfo(stats, nullAndMcvButMoreNullSkewedStats);
+        assertTrue(nullAndMcvButMoreNullSkewInfo.isSkewed());
+        assertEquals(DataSkew.SkewType.SKEWED_NULL, nullAndMcvButMoreNullSkewInfo.type());
+        assertFalse(nullAndMcvButMoreNullSkewInfo.maybeMcvs().isPresent());
+
+        final var nullAndMcvButMoreMcvSkewInfo = DataSkew.getColumnSkewInfo(stats, nullAndMcvButMoreMcvSkewedStats);
+        assertTrue(nullAndMcvButMoreMcvSkewInfo.isSkewed());
+        assertEquals(DataSkew.SkewType.SKEWED_MCV, nullAndMcvButMoreMcvSkewInfo.type());
+        assertTrue(nullAndMcvButMoreMcvSkewInfo.maybeMcvs().isPresent());
+
+        final var expectedMcvs =
+                List.of(Pair.create("1", 50000L), Pair.create("2", 20000L), Pair.create("3", 10000L), Pair.create("4", 5000L),
+                        Pair.create("5", 500L));
+        assertEquals(expectedMcvs.size(), nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().size());
+        for (final var value : expectedMcvs) {
+            assertTrue(nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().contains(value));
+        }
+    }
+
+    @Test
+    void itShouldReturnSkewCandidatesIncludingNullAndMcvs() {
+        // GIVEN
+        final var histogram = getSkewedHistogram();
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.3) // NULL skewed with default threshold 0.2
+                .setHistogram(histogram) //
+                .build();
+
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats)
+                .build();
+
+        // WHEN
+        final var thresholds = new DataSkew.Thresholds(5, 0.2);
+        final var candidates = DataSkew.getSkewCandidates(stats, colStats, thresholds, 0.05);
+
+        // THEN
+        assertTrue(candidates.isSkewed());
+        assertTrue(candidates.includeNull());
+        assertFalse(candidates.mcvs().isEmpty());
+    }
+
+    @Test
+    void itShouldFilterMcvCandidatesBySingleThreshold() {
+        // GIVEN
+        final var buckets = List.of(new Bucket(0, 1, 1L, 1L));
+        // One strong MCV and one weak MCV.
+        final var mcv = Map.of(
+                "1", 20_000L,  // 20%
+                "2", 1_000L    // 1%
+        );
+        final var histogram = new Histogram(buckets, mcv);
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.0)
+                .setHistogram(histogram)
+                .build();
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats)
+                .build();
+
+        // WHEN
+        final var thresholds = new DataSkew.Thresholds(5, 0.2);
+        final var candidates = DataSkew.getSkewCandidates(stats, colStats, thresholds, 0.05);
+
+        // THEN
+        assertTrue(candidates.isSkewed());
+        assertEquals(List.of(Pair.create("1", 20_000L)), candidates.mcvs());
+    }
+
+    @Test
+    void itShouldReturnSkewCandidatesForNullOnly() {
+        // GIVEN: NULL skew only (no MCVs)
+        final var buckets = List.of(new Bucket(0, 1, 1L, 1L));
+        final var histogram = new Histogram(buckets, Map.of());
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.3) // >= default threshold 0.2
+                .setHistogram(histogram)
+                .build();
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats)
+                .build();
+
+        // WHEN
+        final var thresholds = new DataSkew.Thresholds(5, 0.2);
+        final var candidates = DataSkew.getSkewCandidates(stats, colStats, thresholds, 0.05);
+
+        // THEN
+        assertTrue(candidates.isSkewed());
+        assertTrue(candidates.includeNull());
+        assertTrue(candidates.mcvs().isEmpty());
+    }
+
+    @Test
+    void itShouldReturnSkewCandidatesForMcvOnly() {
+        // GIVEN: MCV skew only (no NULL skew)
+        final var buckets = List.of(new Bucket(0, 1, 1L, 1L));
+        final var mcv = Map.of(
+                "1", 60_000L, // 60%
+                "2", 10_000L  // 10%
+        );
+        final var histogram = new Histogram(buckets, mcv);
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.0)
+                .setHistogram(histogram)
+                .build();
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats)
+                .build();
+
+        // WHEN
+        final var thresholds = new DataSkew.Thresholds(5, 0.2);
+        final var candidates = DataSkew.getSkewCandidates(stats, colStats, thresholds, 0.05);
+
+        // THEN
+        assertTrue(candidates.isSkewed());
+        assertFalse(candidates.includeNull());
+        assertFalse(candidates.mcvs().isEmpty());
     }
 
     private static Histogram getSkewedHistogram() {

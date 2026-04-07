@@ -19,7 +19,6 @@
 #include <boost/thread/future.hpp>
 #include <future>
 
-#include "column/chunk.h"
 #include "common/status.h"
 #include "connector/async_flush_stream_poller.h"
 #include "connector/connector.h"
@@ -27,8 +26,6 @@
 #include "connector_chunk_sink.h"
 #include "formats/column_evaluator.h"
 #include "formats/file_writer.h"
-#include "fs/fs.h"
-#include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 #include "utils.h"
 

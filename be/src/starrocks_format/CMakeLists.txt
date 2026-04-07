@@ -22,12 +22,16 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/starrocks_format")
 # Set starrocks libraries
 set(STARROCKS_LIBS
     ${WL_START_GROUP}
+    Base
     Common
     Column
+    ColumnCore
     Connector
     Exec
     -Wl,--whole-archive Exprs -Wl,--no-whole-archive
+    -Wl,--whole-archive ExprCore -Wl,--no-whole-archive
     FileSystem
+    FSCore
     Formats
     Gutil
     IO
@@ -35,13 +39,14 @@ set(STARROCKS_LIBS
     Storage
     Rowset
     Runtime
+    RuntimeCore
+    TypesCore
     Types
     Util
     Script
     StarRocksGen
     Webserver
     TestUtil
-    Simd
     Cache
     ${WL_END_GROUP}
 )

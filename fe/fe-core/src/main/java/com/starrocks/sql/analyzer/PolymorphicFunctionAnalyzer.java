@@ -31,6 +31,8 @@ import com.starrocks.type.AnyMapType;
 import com.starrocks.type.AnyStructType;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.MapType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -215,6 +217,28 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class SumMapDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            MapType mapType = (MapType) types[0];
+            Type k = mapType.getKeyType();
+            Type v = mapType.getValueType();
+            boolean allScalarKv = k.isScalarType() && v.isScalarType();
+            if (!allScalarKv) {
+                throw new SemanticException("sum_map only support scalar KV");
+            }
+            if (v.isDecimalOfAnyVersion() || v.isStringType() || v.isDateType()) {
+                throw new SemanticException("sum_map unsupported value type:" + v);
+            }
+            if (v.isIntegerType() || v.isBoolean()) {
+                v = IntegerType.BIGINT;
+            } else if (v.isFloatingPointType()) {
+                v = FloatType.DOUBLE;
+            }
+            return new MapType(k, v);
+        }
+    }
+
     private static class ArraysZipDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
@@ -287,6 +311,7 @@ public class PolymorphicFunctionAnalyzer {
             .put(FunctionSet.getStateUnionName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.getAggStateCombineName(FunctionSet.ARRAY_AGG), types -> types[0])
             .put(FunctionSet.MAP_AGG, new MapAggDeduce())
+            .put(FunctionSet.SUM_MAP, new SumMapDeduce())
             // array functions
             .put(FunctionSet.ARRAYS_ZIP, new ArraysZipDeduce())
             .build();
@@ -514,4 +539,3 @@ public class PolymorphicFunctionAnalyzer {
         return null;
     }
 }
-

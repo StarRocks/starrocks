@@ -17,14 +17,16 @@
 #include <atomic>
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -36,6 +38,11 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
     _name = "connector_scan";
     auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
     _connector_type = c->connector_type();
+    if (tnode.connector_scan_node.__isset.catalog_type) {
+        _catalog_type = tnode.connector_scan_node.catalog_type;
+    }
+    // else: leave _catalog_type empty. During rolling upgrades (old FE -> new BE),
+    // catalog_type is not set — skip catalog metrics rather than guess wrong values.
     _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
@@ -119,7 +126,7 @@ int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
     return capacity;
 }
 
-pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
 

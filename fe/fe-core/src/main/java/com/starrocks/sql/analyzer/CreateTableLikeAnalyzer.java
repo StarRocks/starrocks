@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -25,8 +26,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableLikeStmt;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 
 import java.util.List;
@@ -34,18 +38,21 @@ import java.util.List;
 public class CreateTableLikeAnalyzer {
 
     public static void analyze(CreateTableLikeStmt stmt, ConnectContext context) {
-        TableName existedDbTbl = stmt.getExistedDbTbl();
-        stmt.getDbTbl().normalization(context);
-        existedDbTbl.normalization(context);
-        String tableName = stmt.getTableName();
-        FeNameFormat.checkTableName(tableName);
+        TableRef tableRef = AnalyzerUtils.normalizedTableRef(stmt.getTableRef(), context);
+        TableRef existedTableRef = AnalyzerUtils.normalizedTableRef(stmt.getExistedTableRef(), context);
+        stmt.setTableRef(tableRef);
+        stmt.setExistedTableRef(existedTableRef);
 
-        MetaUtils.checkNotSupportCatalog(existedDbTbl.getCatalog(), "CREATE TABLE LIKE");
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(context, existedDbTbl.getCatalog(),
-                existedDbTbl.getDb(), existedDbTbl.getTbl());
+        TableName targetTableName = TableName.fromTableRef(tableRef);
+        TableName existedTableName = TableName.fromTableRef(existedTableRef);
+        FeNameFormat.checkTableName(targetTableName.getTbl());
+
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
+                context, existedTableName.getCatalog(), existedTableName.getDb(), existedTableName.getTbl());
         if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName);
+            throw new SemanticException("Table %s is not found", existedTableName.getTbl());
         }
+        MetaUtils.checkNotSupportCatalog(table, TableOperation.CREATE_TABLE_LIKE, existedTableName.getCatalog());
 
         List<String> createTableStmt = Lists.newArrayList();
 
@@ -54,7 +61,7 @@ public class CreateTableLikeAnalyzer {
                 throw new SemanticException("temporary table only support olap engine");
             }
         }
-        AstToStringBuilder.getDdlStmt(stmt.getDbName(), table, createTableStmt, null,
+        AstToStringBuilder.getDdlStmt(targetTableName.getDb(), table, createTableStmt, null,
                 null, false, false, stmt instanceof CreateTemporaryTableLikeStmt);
         if (createTableStmt.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERROR_CREATE_TABLE_LIKE_EMPTY, "CREATE");
@@ -64,7 +71,12 @@ public class CreateTableLikeAnalyzer {
                 SqlParser.parseOneWithStarRocksDialect(createTableStmt.get(0), context.getSessionVariable());
         if (statementBase instanceof CreateTableStmt) {
             CreateTableStmt parsedCreateTableStmt = (CreateTableStmt) statementBase;
-            parsedCreateTableStmt.setTableName(stmt.getTableName());
+            NodePosition tablePos = parsedCreateTableStmt.getTableRef() != null
+                    ? parsedCreateTableStmt.getTableRef().getPos()
+                    : NodePosition.ZERO;
+            QualifiedName normalizedName = QualifiedName.of(Lists.newArrayList(
+                    targetTableName.getCatalog(), targetTableName.getDb(), targetTableName.getTbl()));
+            parsedCreateTableStmt.setTableRef(new TableRef(normalizedName, null, tablePos));
             if (stmt.isSetIfNotExists()) {
                 parsedCreateTableStmt.setIfNotExists();
             }

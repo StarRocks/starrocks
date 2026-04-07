@@ -17,14 +17,16 @@
 #include <algorithm>
 #include <cstdint>
 #include <limits>
+#include <string>
 
+#include "base/bit/bit_stream_utils.h"
+#include "base/simd/delta_decode.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
-#include "simd/delta_decode.h"
-#include "util/bit_stream_utils.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 
@@ -108,6 +110,8 @@ public:
         Put(reinterpret_cast<const T*>(vals), static_cast<int>(count));
         return Status::OK();
     }
+
+    std::string to_string() const override { return fmt::format("DeltaBinaryPackedEncoder<{}>", typeid(T).name()); }
 
 private:
     const uint32_t values_per_block_;
@@ -250,6 +254,8 @@ public:
     DeltaBinaryPackedDecoder() = default;
     ~DeltaBinaryPackedDecoder() override = default;
 
+    std::string to_string() const override { return fmt::format("DeltaBinaryPackedDecoder<{}>", typeid(T).name()); }
+
     Status set_data(const Slice& data) override {
         _data = data;
         _offset = 0;
@@ -264,7 +270,9 @@ public:
         }
         size_t cur_size = dst->size();
         dst->resize(count + cur_size);
-        T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
+        MutableRawDataVisitor visitor;
+        RETURN_IF_ERROR(dst->accept_mutable(&visitor));
+        T* data = reinterpret_cast<T*>(visitor.result()) + cur_size;
         RETURN_IF_ERROR(GetInternal(data, count));
         return Status::OK();
     }
@@ -514,6 +522,8 @@ public:
         return Status::OK();
     }
 
+    std::string to_string() const override { return "DeltaLengthByteArrayEncoder"; }
+
 private:
     faststring string_buffer_;
     DeltaBinaryPackedEncoder<int> length_encoder_;
@@ -572,6 +582,8 @@ class DeltaLengthByteArrayDecoder : public Decoder {
 public:
     DeltaLengthByteArrayDecoder() = default;
     ~DeltaLengthByteArrayDecoder() override = default;
+
+    std::string to_string() const override { return "DeltaLengthByteArrayDecoder"; }
 
     Status set_data(const Slice& data) override {
         RETURN_IF_ERROR(len_decoder_.set_data(data));
@@ -720,6 +732,8 @@ public:
     DeltaByteArrayEncoder() = default;
     ~DeltaByteArrayEncoder() override = default;
 
+    std::string to_string() const override { return "DeltaByteArrayEncoder"; }
+
     Slice build() override {
         FlushValues();
         return Slice(sink_.data(), sink_.size());
@@ -807,6 +821,8 @@ class DeltaByteArrayDecoder : public Decoder {
 public:
     DeltaByteArrayDecoder() = default;
     ~DeltaByteArrayDecoder() override = default;
+
+    std::string to_string() const override { return "DeltaByteArrayDecoder"; }
 
 private:
     DeltaBinaryPackedDecoder<int32_t> prefix_len_decoder_;

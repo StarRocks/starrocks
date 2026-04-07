@@ -18,16 +18,18 @@
 #include <string>
 #include <type_traits>
 
+#include "base/string/slice.h"
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
 #include "column/container_resource.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_cow_fwd.h"
 #include "common/cow.h"
+#include "common/delete_condition.h" // for DelCondSatisfied
+#include "common/memory/column_allocator.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
-#include "runtime/memory/column_allocator.h"
-#include "storage/delete_condition.h" // for DelCondSatisfied
-#include "util/slice.h"
+#include "gutil/macros.h"
 
 namespace starrocks {
 
@@ -66,7 +68,7 @@ public:
     static const int EQUALS_NULL = -1;
     static const int EQUALS_TRUE = 1;
 
-    virtual ~Column() = default;
+    ~Column() override = default;
 
     // If true means this is a null literal column
     virtual bool only_null() const { return false; }
@@ -112,10 +114,6 @@ public:
     virtual bool is_struct() const { return false; }
 
     virtual const uint8_t* raw_data() const = 0;
-
-    virtual uint8_t* mutable_raw_data() = 0;
-
-    virtual const uint8_t* continuous_data() const { return raw_data(); }
 
     // Return number of values in column.
     virtual size_t size() const = 0;
@@ -217,6 +215,10 @@ public:
         static_assert(std::is_same<T, uint32_t>::value, "The type of indexes must be uint32_t");
         return append_selective(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
     }
+
+    // Append rows from this source column to destination column by selection.
+    // This is specialized for view-like source columns. Non-view columns should not override this.
+    virtual void append_selective_to(Column& dest, const uint32_t* indexes, uint32_t from, uint32_t size) const;
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
     // Currently only `ObjectColumn<BitmapValue>` support shallow copy
@@ -469,9 +471,13 @@ public:
 
     // mutate the column to mutable column, but doesn't reset the column
     MutablePtr mutate() const&& {
-        MutablePtr res = try_mutate();
-        res->mutate_each_subcolumn();
-        return res;
+        if (config::enable_cow_optimization) {
+            MutablePtr res = try_mutate();
+            res->mutate_each_subcolumn();
+            return res;
+        } else {
+            return clone();
+        }
     }
 
     // mutate the column to mutable column, and reset the column to nullptr
@@ -487,12 +493,12 @@ protected:
     // if downgrade failed, return the error status.
     // if upgrade success, always return nullptr.
     // if downgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> downgrade_helper_func(MutablePtr* col);
+    static StatusOr<MutablePtr> downgrade_helper_func(Column* col);
     // Helper functions for upgrade and downgrade,
     // if upgrade failed, return the error status.
     // if upgrade success, always return nullptr.
     // if upgrade's result is not nullptr, it will replace the input col with the new column.
-    static StatusOr<MutablePtr> upgrade_helper_func(MutablePtr* col);
+    static StatusOr<MutablePtr> upgrade_helper_func(Column* col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };

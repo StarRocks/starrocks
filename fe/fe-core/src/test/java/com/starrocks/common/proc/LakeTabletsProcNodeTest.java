@@ -122,11 +122,13 @@ public class LakeTabletsProcNodeTest {
             Assertions.assertEquals((long) result.get(0).get(0), tablet1Id);
             String backendIds = (String) result.get(0).get(1);
             Assertions.assertTrue(backendIds.contains("10000") && backendIds.contains("10001"));
+            Assertions.assertEquals("null", result.get(0).get(5));
         }
         {
             Assertions.assertEquals((long) result.get(1).get(0), tablet2Id);
             String backendIds = (String) result.get(1).get(1);
             Assertions.assertTrue(backendIds.contains("10001") && backendIds.contains("10002"));
+            Assertions.assertEquals("null", result.get(1).get(5));
         }
 
         { // check show single tablet with tablet id
@@ -139,6 +141,7 @@ public class LakeTabletsProcNodeTest {
             Assertions.assertEquals(new Gson().toJson(tablet1.getBackendIds()), row.get(1));
             Assertions.assertEquals(new ByteSizeValue(tablet1.getDataSize(true)).toString(), row.get(2));
             Assertions.assertEquals(String.valueOf(tablet1.getRowCount(0L)), row.get(3));
+            Assertions.assertEquals("null", row.get(5));
         }
 
         { // error case

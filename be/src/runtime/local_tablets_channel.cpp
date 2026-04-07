@@ -23,13 +23,18 @@
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/failpoint/fail_point.h"
+#include "base/string/faststring.h"
 #include "column/chunk.h"
-#include "common/closure_guard.h"
+#include "common/brpc_helper.h"
+#include "common/config_ingest_fwd.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
 #include "gutil/strings/join.h"
+#include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
@@ -38,6 +43,7 @@
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "storage/delta_writer.h"
@@ -50,10 +56,7 @@
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
 #include "util/disposable_closure.h"
-#include "util/failpoint/fail_point.h"
-#include "util/faststring.h"
-#include "util/starrocks_metrics.h"
-#include "util/stopwatch.hpp"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
@@ -68,6 +71,7 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
           _load_channel(load_channel),
           _key(key),
           _mem_tracker(mem_tracker),
+          _max_sliding_window_size(config::max_load_dop * 3),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {
@@ -152,7 +156,7 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
 #ifndef BE_TEST
-    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+    _table_metrics = GlobalMetricsRegistry::instance()->table_metrics(_schema->table_id());
 #endif
 
     _senders = std::vector<Sender>(params.num_senders());
@@ -648,7 +652,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
         auto closure = new DisposableClosure<PTabletWriterCancelResult, Context>(
                 {request.id(), _txn_id, endpoint.host(), node_abort_tablet_id_list_str});
         closure->cntl.set_timeout_ms(request.timeout_ms());
-        SET_IGNORE_OVERCROWDED(closure->cntl, load);
+        set_ignore_overcrowded_for_load(closure->cntl);
         closure->addSuccessHandler([](const Context& ctx, const PTabletWriterCancelResult& result) {
             VLOG(2) << "Success to cancel secondary replicas, txn_id: " << ctx.txn_id
                     << ", load_id: " << print_id(ctx.load_id) << ", replica_node: " << ctx.host
@@ -815,10 +819,11 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     return Status::OK();
 }
 
-void LocalTabletsChannel::cancel() {
+void LocalTabletsChannel::cancel(const std::string& reason) {
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
+    auto cancel_status = Status::Cancelled(reason.empty() ? "cancel" : reason);
     for (auto& it : _delta_writers) {
-        it.second->cancel(Status::Cancelled("cancel"));
+        it.second->cancel(cancel_status);
     }
 }
 
@@ -1324,7 +1329,7 @@ void SecondaryReplicasWaiter::_send_replica_status_request(int unfinished_tablet
     _replica_status_closure = new ReusableClosure<PLoadReplicaStatusResult>();
     _replica_status_closure->ref();
     _replica_status_closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(_replica_status_closure->cntl, load);
+    set_ignore_overcrowded_for_load(_replica_status_closure->cntl);
     PLoadReplicaStatusRequest request;
     request.mutable_load_id()->set_hi(_load_id.hi());
     request.mutable_load_id()->set_lo(_load_id.lo());
@@ -1433,7 +1438,7 @@ void SecondaryReplicasWaiter::_try_diagnose_stack_strace_on_primary(int unfinish
     }
     auto closure = new ReusableClosure<PLoadDiagnoseResult>();
     closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
-    SET_IGNORE_OVERCROWDED(closure->cntl, load);
+    set_ignore_overcrowded_for_load(closure->cntl);
     PLoadDiagnoseRequest request;
     request.mutable_id()->set_hi(_load_id.hi());
     request.mutable_id()->set_lo(_load_id.lo());

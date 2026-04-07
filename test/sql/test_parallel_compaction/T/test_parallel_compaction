@@ -1,0 +1,587 @@
+-- name: test_parallel_compaction_pk_table @cloud @sequential
+-- Test parallel compaction for primary key table with different parallelism settings
+create database test_parallel_compaction_pk_${uuid0};
+use test_parallel_compaction_pk_${uuid0};
+
+-- Create PK table with parallel compaction enabled (max_parallel = 2)
+CREATE TABLE `pk_parallel_2` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "2"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_parallel_2' and TABLE_SCHEMA='test_parallel_compaction_pk_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert multiple batches to generate multiple rowsets
+INSERT INTO pk_parallel_2 VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+INSERT INTO pk_parallel_2 VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+INSERT INTO pk_parallel_2 VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+INSERT INTO pk_parallel_2 VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+INSERT INTO pk_parallel_2 VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
+
+-- Check rowset count before compaction (should be 5 rowsets from 5 inserts)
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+
+-- Verify data before compaction
+SELECT COUNT(*) FROM pk_parallel_2;
+SELECT * FROM pk_parallel_2 ORDER BY k1, k2;
+
+-- Set very small compaction bytes per subtask to trigger parallel compaction
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction
+[UC]ALTER TABLE pk_parallel_2 COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(30);
+
+-- Check rowset count after compaction (should be reduced, typically to 1)
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_2' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_${uuid0}';
+
+-- Verify data correctness after compaction
+SELECT COUNT(*) FROM pk_parallel_2;
+SELECT * FROM pk_parallel_2 ORDER BY k1, k2;
+
+-- Reset BE config
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+DROP DATABASE test_parallel_compaction_pk_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_pk_high_parallel @cloud @sequential
+-- Test parallel compaction for primary key table with higher parallelism
+create database test_parallel_compaction_pk_high_${uuid0};
+use test_parallel_compaction_pk_high_${uuid0};
+
+-- Create PK table with higher parallel compaction (max_parallel = 5)
+CREATE TABLE `pk_parallel_5` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "5"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_parallel_5' and TABLE_SCHEMA='test_parallel_compaction_pk_high_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert multiple batches to generate multiple rowsets
+INSERT INTO pk_parallel_5 VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+INSERT INTO pk_parallel_5 VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+INSERT INTO pk_parallel_5 VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+INSERT INTO pk_parallel_5 VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+INSERT INTO pk_parallel_5 VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
+INSERT INTO pk_parallel_5 VALUES (11, 11, 'k', 1100), (12, 12, 'l', 1200);
+INSERT INTO pk_parallel_5 VALUES (13, 13, 'm', 1300), (14, 14, 'n', 1400);
+INSERT INTO pk_parallel_5 VALUES (15, 15, 'o', 1500), (16, 16, 'p', 1600);
+
+-- Check rowset count before compaction (should be 8 rowsets from 8 inserts)
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+
+-- Verify data before compaction
+SELECT COUNT(*) FROM pk_parallel_5;
+SELECT * FROM pk_parallel_5 ORDER BY k1, k2;
+
+-- Set very small compaction bytes per subtask
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction
+[UC]ALTER TABLE pk_parallel_5 COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(30);
+
+-- Check rowset count after compaction (should be reduced)
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_parallel_5' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_high_${uuid0}';
+
+-- Verify data correctness after compaction
+SELECT COUNT(*) FROM pk_parallel_5;
+SELECT * FROM pk_parallel_5 ORDER BY k1, k2;
+
+-- Reset BE config
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+DROP DATABASE test_parallel_compaction_pk_high_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_dup_table @cloud @sequential
+-- Test parallel compaction for duplicate key table
+create database test_parallel_compaction_dup_${uuid0};
+use test_parallel_compaction_dup_${uuid0};
+
+-- Create DUP table with parallel compaction enabled
+CREATE TABLE `dup_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+DUPLICATE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "3"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='dup_parallel' and TABLE_SCHEMA='test_parallel_compaction_dup_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert multiple batches to generate multiple rowsets
+INSERT INTO dup_parallel VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+INSERT INTO dup_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+INSERT INTO dup_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+INSERT INTO dup_parallel VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+INSERT INTO dup_parallel VALUES (9, 9, 'i', 900), (10, 10, 'j', 1000);
+
+-- Check rowset count before compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+
+-- Verify data before compaction
+SELECT COUNT(*) FROM dup_parallel;
+SELECT * FROM dup_parallel ORDER BY k1, k2;
+
+-- Set very small compaction bytes per subtask
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction
+[UC]ALTER TABLE dup_parallel COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(30);
+
+-- Check rowset count after compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'dup_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_dup_${uuid0}';
+
+-- Verify data correctness after compaction
+SELECT COUNT(*) FROM dup_parallel;
+SELECT * FROM dup_parallel ORDER BY k1, k2;
+
+-- Reset BE config
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+DROP DATABASE test_parallel_compaction_dup_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_agg_table @cloud @sequential
+-- Test parallel compaction for aggregate key table
+create database test_parallel_compaction_agg_${uuid0};
+use test_parallel_compaction_agg_${uuid0};
+
+-- Create AGG table with parallel compaction enabled
+CREATE TABLE `agg_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` BIGINT SUM,
+    `v2` BIGINT MAX
+)
+AGGREGATE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "3"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='agg_parallel' and TABLE_SCHEMA='test_parallel_compaction_agg_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert multiple batches to generate multiple rowsets
+INSERT INTO agg_parallel VALUES (1, 1, 100, 100), (2, 2, 200, 200);
+INSERT INTO agg_parallel VALUES (3, 3, 300, 300), (4, 4, 400, 400);
+INSERT INTO agg_parallel VALUES (1, 1, 50, 150), (2, 2, 100, 250);
+INSERT INTO agg_parallel VALUES (5, 5, 500, 500), (6, 6, 600, 600);
+INSERT INTO agg_parallel VALUES (3, 3, 200, 400), (4, 4, 300, 500);
+
+-- Check rowset count before compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+
+-- Verify data before compaction (aggregated)
+SELECT COUNT(*) FROM agg_parallel;
+SELECT * FROM agg_parallel ORDER BY k1, k2;
+
+-- Set very small compaction bytes per subtask
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction
+[UC]ALTER TABLE agg_parallel COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(30);
+
+-- Check rowset count after compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'agg_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_agg_${uuid0}';
+
+-- Verify data correctness after compaction (aggregated results should be same)
+SELECT COUNT(*) FROM agg_parallel;
+SELECT * FROM agg_parallel ORDER BY k1, k2;
+
+-- Reset BE config
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+DROP DATABASE test_parallel_compaction_agg_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_unique_table @cloud @sequential
+-- Test parallel compaction for unique key table
+create database test_parallel_compaction_uniq_${uuid0};
+use test_parallel_compaction_uniq_${uuid0};
+
+-- Create UNIQUE table with parallel compaction enabled
+CREATE TABLE `uniq_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+UNIQUE KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "4"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='uniq_parallel' and TABLE_SCHEMA='test_parallel_compaction_uniq_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert multiple batches to generate multiple rowsets
+INSERT INTO uniq_parallel VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+INSERT INTO uniq_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+INSERT INTO uniq_parallel VALUES (1, 1, 'a_updated', 150), (2, 2, 'b_updated', 250);
+INSERT INTO uniq_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+INSERT INTO uniq_parallel VALUES (3, 3, 'c_updated', 350), (7, 7, 'g', 700);
+
+-- Check rowset count before compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+
+-- Verify data before compaction (should show latest values for duplicate keys)
+SELECT COUNT(*) FROM uniq_parallel;
+SELECT * FROM uniq_parallel ORDER BY k1, k2;
+
+-- Set very small compaction bytes per subtask
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction
+[UC]ALTER TABLE uniq_parallel COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(30);
+
+-- Check rowset count after compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'uniq_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_uniq_${uuid0}';
+
+-- Verify data correctness after compaction (unique results should be same)
+SELECT COUNT(*) FROM uniq_parallel;
+SELECT * FROM uniq_parallel ORDER BY k1, k2;
+
+-- Reset BE config
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+DROP DATABASE test_parallel_compaction_uniq_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_disabled @cloud @sequential
+-- Test when parallel compaction is disabled (max_parallel = 0)
+create database test_parallel_compaction_disabled_${uuid0};
+use test_parallel_compaction_disabled_${uuid0};
+
+-- Create PK table with parallel compaction disabled
+CREATE TABLE `pk_no_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "0"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_no_parallel' and TABLE_SCHEMA='test_parallel_compaction_disabled_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert multiple batches
+INSERT INTO pk_no_parallel VALUES (1, 1, 'a', 100), (2, 2, 'b', 200);
+INSERT INTO pk_no_parallel VALUES (3, 3, 'c', 300), (4, 4, 'd', 400);
+INSERT INTO pk_no_parallel VALUES (5, 5, 'e', 500), (6, 6, 'f', 600);
+
+-- Check rowset count before compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
+
+-- Verify data before compaction
+SELECT COUNT(*) FROM pk_no_parallel;
+SELECT * FROM pk_no_parallel ORDER BY k1, k2;
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction (will use normal compaction, not parallel)
+[UC]ALTER TABLE pk_no_parallel COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(30);
+
+-- Check rowset count after compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_no_parallel' AND c.TABLE_SCHEMA = 'test_parallel_compaction_disabled_${uuid0}';
+
+-- Verify data correctness after compaction
+SELECT COUNT(*) FROM pk_no_parallel;
+SELECT * FROM pk_no_parallel ORDER BY k1, k2;
+
+DROP DATABASE test_parallel_compaction_disabled_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_alter_property @cloud @sequential
+-- Test altering lake_compaction_max_parallel property
+create database test_parallel_compaction_alter_${uuid0};
+use test_parallel_compaction_alter_${uuid0};
+
+-- Create PK table with default parallel compaction setting
+CREATE TABLE `pk_alter_parallel` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "2"
+);
+
+-- Show table properties
+SHOW CREATE TABLE pk_alter_parallel;
+
+-- Alter property to higher parallelism
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "5");
+
+-- Verify property change
+SHOW CREATE TABLE pk_alter_parallel;
+
+-- Alter property to disable parallel compaction
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "0");
+
+-- Verify property change
+SHOW CREATE TABLE pk_alter_parallel;
+
+-- Alter property back to enable
+ALTER TABLE pk_alter_parallel SET ("lake_compaction_max_parallel" = "3");
+
+-- Verify property change
+SHOW CREATE TABLE pk_alter_parallel;
+
+DROP DATABASE test_parallel_compaction_alter_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_pk_with_updates @cloud @sequential
+-- Test parallel compaction for primary key table with updates
+create database test_parallel_compaction_pk_upd_${uuid0};
+use test_parallel_compaction_pk_upd_${uuid0};
+
+-- Create PK table with parallel compaction enabled
+CREATE TABLE `pk_with_updates` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "3"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_with_updates' and TABLE_SCHEMA='test_parallel_compaction_pk_upd_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert initial data
+INSERT INTO pk_with_updates VALUES (1, 1, 'a', 100), (2, 2, 'b', 200), (3, 3, 'c', 300);
+INSERT INTO pk_with_updates VALUES (4, 4, 'd', 400), (5, 5, 'e', 500), (6, 6, 'f', 600);
+
+-- Update some records
+UPDATE pk_with_updates SET v1 = 'a_v2', v2 = 110 WHERE k1 = 1;
+UPDATE pk_with_updates SET v1 = 'b_v2', v2 = 220 WHERE k1 = 2;
+
+-- Delete some records
+DELETE FROM pk_with_updates WHERE k1 = 3;
+
+-- Insert more data
+INSERT INTO pk_with_updates VALUES (7, 7, 'g', 700), (8, 8, 'h', 800);
+
+-- Update more records
+UPDATE pk_with_updates SET v1 = 'd_v2', v2 = 440 WHERE k1 = 4;
+
+-- Check rowset count before compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+
+-- Verify data before compaction
+SELECT COUNT(*) FROM pk_with_updates;
+SELECT * FROM pk_with_updates ORDER BY k1, k2;
+
+-- Set very small compaction bytes per subtask
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction
+[UC]ALTER TABLE pk_with_updates COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(30);
+
+-- Check rowset count after compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_with_updates' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_upd_${uuid0}';
+
+-- Verify data correctness after compaction
+SELECT COUNT(*) FROM pk_with_updates;
+SELECT * FROM pk_with_updates ORDER BY k1, k2;
+
+-- Reset BE config
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+DROP DATABASE test_parallel_compaction_pk_upd_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_pk_large_data @cloud @sequential
+-- Test parallel compaction for primary key table with larger data volume
+create database test_parallel_compaction_pk_large_${uuid0};
+use test_parallel_compaction_pk_large_${uuid0};
+
+-- Create PK table with parallel compaction enabled
+CREATE TABLE `pk_large_data` (
+    `k1` BIGINT NOT NULL,
+    `v1` VARCHAR(1000),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+PROPERTIES (
+    "lake_compaction_max_parallel" = "4"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_large_data' and TABLE_SCHEMA='test_parallel_compaction_pk_large_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert larger batches using generate_series to generate more data
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('x', 100), generate_series * 10 FROM TABLE(generate_series(1, 1000));
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('y', 100), generate_series * 10 FROM TABLE(generate_series(1001, 2000));
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('z', 100), generate_series * 10 FROM TABLE(generate_series(2001, 3000));
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('w', 100), generate_series * 10 FROM TABLE(generate_series(3001, 4000));
+INSERT INTO pk_large_data SELECT generate_series, REPEAT('v', 100), generate_series * 10 FROM TABLE(generate_series(4001, 5000));
+
+-- Check rowset count before compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+
+-- Verify data count before compaction
+SELECT COUNT(*) FROM pk_large_data;
+SELECT MIN(k1), MAX(k1) FROM pk_large_data;
+
+-- Set very small compaction bytes per subtask to trigger parallel compaction
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction
+[UC]ALTER TABLE pk_large_data COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(60);
+
+-- Check rowset count after compaction
+SELECT NUM_ROWSET FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_large_data' AND c.TABLE_SCHEMA = 'test_parallel_compaction_pk_large_${uuid0}';
+
+-- Verify data correctness after compaction
+SELECT COUNT(*) FROM pk_large_data;
+SELECT MIN(k1), MAX(k1) FROM pk_large_data;
+
+-- Reset BE config
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+DROP DATABASE test_parallel_compaction_pk_large_${uuid0} FORCE;
+
+-- name: test_parallel_compaction_multiple_buckets @cloud @sequential
+-- Test parallel compaction with multiple buckets
+create database test_parallel_compaction_buckets_${uuid0};
+use test_parallel_compaction_buckets_${uuid0};
+
+-- Create PK table with multiple buckets
+CREATE TABLE `pk_multi_buckets` (
+    `k1` BIGINT NOT NULL,
+    `k2` INT NOT NULL,
+    `v1` VARCHAR(100),
+    `v2` BIGINT
+)
+PRIMARY KEY(`k1`, `k2`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES (
+    "lake_compaction_max_parallel" = "2"
+);
+
+-- Get table_id and disable compaction for this table
+[UC]tid=select TABLE_ID from information_schema.tables_config where TABLE_NAME='pk_multi_buckets' and TABLE_SCHEMA='test_parallel_compaction_buckets_${uuid0}';
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "${tid}");
+
+-- Insert data across multiple buckets
+INSERT INTO pk_multi_buckets VALUES (1, 1, 'a', 100), (2, 2, 'b', 200), (3, 3, 'c', 300);
+INSERT INTO pk_multi_buckets VALUES (4, 4, 'd', 400), (5, 5, 'e', 500), (6, 6, 'f', 600);
+INSERT INTO pk_multi_buckets VALUES (7, 7, 'g', 700), (8, 8, 'h', 800), (9, 9, 'i', 900);
+INSERT INTO pk_multi_buckets VALUES (10, 10, 'j', 1000), (11, 11, 'k', 1100), (12, 12, 'l', 1200);
+INSERT INTO pk_multi_buckets VALUES (13, 13, 'm', 1300), (14, 14, 'n', 1400), (15, 15, 'o', 1500);
+
+-- Check rowset count before compaction (should have multiple rowsets per bucket)
+SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+
+-- Verify data before compaction
+SELECT COUNT(*) FROM pk_multi_buckets;
+SELECT * FROM pk_multi_buckets ORDER BY k1, k2;
+
+-- Set very small compaction bytes per subtask
+UPDATE information_schema.be_configs SET VALUE = '1' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+-- Re-enable compaction for this table
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
+
+-- Manually trigger compaction
+[UC]ALTER TABLE pk_multi_buckets COMPACT;
+
+-- Wait for compaction to complete
+SELECT sleep(30);
+
+-- Check rowset count after compaction (should be reduced for each bucket)
+SELECT SUM(NUM_ROWSET) FROM information_schema.be_tablets t, information_schema.tables_config c WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = 'pk_multi_buckets' AND c.TABLE_SCHEMA = 'test_parallel_compaction_buckets_${uuid0}';
+
+-- Verify data correctness after compaction
+SELECT COUNT(*) FROM pk_multi_buckets;
+SELECT * FROM pk_multi_buckets ORDER BY k1, k2;
+
+-- Reset BE config
+UPDATE information_schema.be_configs SET VALUE = '5368709120' WHERE name = 'lake_compaction_max_bytes_per_subtask';
+
+DROP DATABASE test_parallel_compaction_buckets_${uuid0} FORCE;
+
+-- Restore default settings at the end
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_ids" = "");
