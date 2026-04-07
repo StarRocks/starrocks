@@ -399,6 +399,10 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         this.isAggregationTypeImplicit = isAggregationTypeImplicit;
     }
 
+    public void setAggStateDesc(AggStateDesc aggStateDesc) {
+        this.aggStateDesc = aggStateDesc;
+    }
+
     public void setAggregationTypeImplicit(boolean isAggregationTypeImplicit) {
         this.isAggregationTypeImplicit = isAggregationTypeImplicit;
     }

@@ -19,10 +19,20 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+
+import java.util.List;
 
 public class PhysicalJDBCScanOperator extends PhysicalScanOperator {
+    private final List<ColumnRefOperator> groupingKeys;
+
     public PhysicalJDBCScanOperator(LogicalJDBCScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_JDBC_SCAN, scanOperator);
+        this.groupingKeys = scanOperator.getGroupingKeys();
+    }
+
+    public List<ColumnRefOperator> getGroupingKeys() {
+        return groupingKeys;
     }
 
     @Override

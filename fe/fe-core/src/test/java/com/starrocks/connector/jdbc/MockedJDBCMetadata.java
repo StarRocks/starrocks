@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.mockrunner.mock.jdbc.MockResultSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCTable;
@@ -27,6 +28,8 @@ import com.starrocks.type.CharType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 
+import java.sql.SQLException;
+import java.sql.Types;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -46,6 +49,8 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "tbl2";
     public static final String MOCKED_PARTITIONED_TABLE_NAME3 = "tbl3";
     public static final String MOCKED_PARTITIONED_TABLE_NAME5 = "tbl5";
+    public static final String MOCKED_CLICKHOUSE_AGG_DB_NAME = "ck_db";
+    public static final String MOCKED_CLICKHOUSE_AGG_TABLE_NAME = "ck_agg_table";
 
     // string partition table
     public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME1 = "part_tbl1";
@@ -114,6 +119,42 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
             } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
                 return Arrays.asList(new Column("a", VarcharType.VARCHAR), new Column("b", VarcharType.VARCHAR),
                         new Column("c", IntegerType.INT), new Column("d", CharType.CHAR));
+            } else if (tblName.equals(MOCKED_CLICKHOUSE_AGG_TABLE_NAME)) {
+                try {
+                    MockResultSet columnResult = new MockResultSet("columns");
+                    columnResult.addColumn("DATA_TYPE", Arrays.asList(
+                            Types.INTEGER, // id
+                            Types.OTHER,   // clicks (sum)
+                            Types.OTHER,   // max_price (max)
+                            Types.OTHER,   // min_price (min)
+                            Types.OTHER,   // total_count (count)
+                            Types.OTHER,    // avg_score (avg)
+                            Types.OTHER,    // simple_sum (simple sum)
+                            Types.OTHER  // decimal_col (sum Decimal)
+                    ));
+                    columnResult.addColumn("TYPE_NAME", Arrays.asList(
+                            "Int32", 
+                            "AggregateFunction(sum, Int32)",
+                            "AggregateFunction(max, Float64)",
+                            "AggregateFunction(min, Float64)",
+                            "AggregateFunction(count, Int32)",
+                            "AggregateFunction(avg, Float64)",
+                            "SimpleAggregateFunction(sum, Int32)",
+                            "AggregateFunction(sum, Decimal(18, 4))"
+                    ));
+                    columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 0, 0, 0, 0, 0, 0, 18));
+                    columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 0, 0, 0, 0, 4));
+                    columnResult.addColumn("COLUMN_NAME", Arrays.asList(
+                            "id", "clicks", "max_price", "min_price", "total_count", "avg_score", "simple_sum", "decimal_col"));
+                    columnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "YES", "YES", "YES", "YES", "YES", "YES", "YES"));
+                    columnResult.addColumn("REMARKS", Arrays.asList("", "", "", "", "", "", "", ""));
+
+
+                    ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+                    return resolver.convertToSRTable(columnResult);
+                } catch (SQLException e) {
+                    throw new RuntimeException("Failed to resolve ClickHouse aggregate table schema", e);
+                }
             } else {
                 return Arrays.asList(new Column("a", VarcharType.VARCHAR), new Column("b", VarcharType.VARCHAR),
                         new Column("c", IntegerType.INT), new Column("d", VarcharType.VARCHAR));
@@ -188,7 +229,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
             return Arrays.asList(MOCKED_PARTITIONED_TABLE_NAME0, MOCKED_PARTITIONED_TABLE_NAME1,
                     MOCKED_PARTITIONED_TABLE_NAME2, MOCKED_PARTITIONED_TABLE_NAME3,
                     MOCKED_STRING_PARTITIONED_TABLE_NAME1, MOCKED_STRING_PARTITIONED_TABLE_NAME2,
-                    MOCKED_STRING_PARTITIONED_TABLE_NAME3);
+                    MOCKED_STRING_PARTITIONED_TABLE_NAME3, MOCKED_CLICKHOUSE_AGG_TABLE_NAME);
         } finally {
             readUnlock();
         }
@@ -198,7 +239,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public List<String> listDbNames(ConnectContext context) {
         readLock();
         try {
-            return Arrays.asList(MOCKED_PARTITIONED_DB_NAME);
+            return Arrays.asList(MOCKED_PARTITIONED_DB_NAME, MOCKED_CLICKHOUSE_AGG_DB_NAME);
         } finally {
             readUnlock();
         }
