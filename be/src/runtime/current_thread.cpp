@@ -14,10 +14,9 @@
 
 #include "runtime/current_thread.h"
 
+#include "common/logging.h"
 #include "runtime/exec_env.h"
 #include "storage/storage_engine.h"
-
-#include "common/logging.h"
 
 namespace starrocks {
 

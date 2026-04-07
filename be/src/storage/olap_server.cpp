@@ -67,7 +67,7 @@
 #include "util/thread.h"
 #include "util/time.h"
 
-using std::string;
+        using std::string;
 
 namespace starrocks {
 
