@@ -59,8 +59,11 @@ namespace starrocks {
 // to a VARBINARY field so that put_mysql_row_buffer can encode its bytes
 // correctly when the column is serialised inside a nested type.
 static void mark_varbinary_columns(const ColumnPtr& col, const TypeDescriptor& type) {
-    // Unwrap NullableColumn to reach the data column.
+    // Unwrap ConstColumn and NullableColumn to reach the actual data column.
     const Column* data_col = col.get();
+    if (data_col->is_constant()) {
+        data_col = down_cast<const ConstColumn*>(data_col)->data_column().get();
+    }
     if (data_col->is_nullable()) {
         data_col = down_cast<const NullableColumn*>(data_col)->data_column().get();
     }
