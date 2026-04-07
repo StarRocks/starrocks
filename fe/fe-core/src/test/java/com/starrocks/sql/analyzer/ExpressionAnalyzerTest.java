@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.MapExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
@@ -41,9 +42,11 @@ import com.starrocks.type.MapType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
+import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.List;
 
 public class ExpressionAnalyzerTest extends PlanTestBase {
@@ -279,26 +282,71 @@ public class ExpressionAnalyzerTest extends PlanTestBase {
         verifySuccess.accept("date_part('month', '2023-01-01')");
         verifySuccess.accept("date_part('week', '2023-01-01')");
         verifySuccess.accept("date_part('day', '2023-01-01')");
-        
+
         verifySuccess.accept("date_part('hour', '2023-01-01 12:00:00')");
         verifySuccess.accept("date_part('minute', '2023-01-01 12:00:00')");
         verifySuccess.accept("date_part('second', '2023-01-01 12:00:00')");
 
         verifySuccess.accept("date_part('yy', '2023-01-01')");
         verifySuccess.accept("date_part('qq', '2023-01-01')");
-        verifySuccess.accept("date_part('mm', '2023-01-01')"); 
+        verifySuccess.accept("date_part('mm', '2023-01-01')");
         verifySuccess.accept("date_part('wk', '2023-01-01')");
         verifySuccess.accept("date_part('dd', '2023-01-01')");
         verifySuccess.accept("date_part('hh', '2023-01-01 12:00:00')");
         verifySuccess.accept("date_part('mi', '2023-01-01 12:00:00')");
         verifySuccess.accept("date_part('ss', '2023-01-01 12:00:00')");
-        
+
         verifySuccess.accept("date_part('dow', '2023-01-01')");
         verifySuccess.accept("date_part('doy', '2023-01-01')");
 
         verifyFail.accept("date_part('year')", "DATE_PART requires 2 arguments");
         verifyFail.accept("date_part(123, '2023-01-01')", "must be a constant string literal");
         verifyFail.accept("date_part('invalid_unit', '2023-01-01')", "Unsupported unit for DATE_PART");
+    }
+
+    /**
+     * Regression test for: MAP<SMALLINT, SMALLINT> default value causes BE heap-buffer-overflow.
+     * Integer literals (values 1-4) get TINYINT type by default. When the MapExpr has an explicit
+     * concrete map type, children must be cast to the declared key/value types so the Thrift
+     * serialization sends the correct type to BE.
+     */
+    @Test
+    public void testMapExprChildrenCastToTargetType() {
+        MapExpr mapExpr = getMapExpr();
+
+        // After analysis, the map type must still be MAP<SMALLINT, SMALLINT>
+        Assertions.assertInstanceOf(MapType.class, mapExpr.getType());
+        MapType resultType = (MapType) mapExpr.getType();
+        Assertions.assertEquals(IntegerType.SMALLINT, resultType.getKeyType());
+        Assertions.assertEquals(IntegerType.SMALLINT, resultType.getValueType());
+
+        // Each child must have been coerced to SMALLINT (the declared map key/value type).
+        // castIntLiteral may fold the cast into a typed IntLiteral rather than a CastExpr,
+        // so we only assert the resulting type — not the specific Expr subclass.
+        for (Expr child : mapExpr.getChildren()) {
+            Assertions.assertEquals(IntegerType.SMALLINT, child.getType(),
+                    "Child type must be SMALLINT after coercion");
+        }
+    }
+
+    @NotNull
+    private static MapExpr getMapExpr() {
+        ExpressionAnalyzer.Visitor visitor = new ExpressionAnalyzer.Visitor(new AnalyzeState(), new ConnectContext());
+        Scope scope = new Scope(RelationId.anonymous(), new RelationFields());
+
+        // Simulate: map<smallint, smallint>{1: 2, 3: 4}
+        // IntLiteral.init() assigns TINYINT for small values (they fit in [-128, 127])
+        MapType smallintMapType = new MapType(IntegerType.SMALLINT, IntegerType.SMALLINT);
+        MapExpr mapExpr = new MapExpr(
+                smallintMapType,
+                Arrays.asList(
+                        new IntLiteral(1),
+                        new IntLiteral(2),
+                        new IntLiteral(3),
+                        new IntLiteral(4)));
+
+        visitor.visitMapExpr(mapExpr, scope);
+        return mapExpr;
     }
 
     @Test
