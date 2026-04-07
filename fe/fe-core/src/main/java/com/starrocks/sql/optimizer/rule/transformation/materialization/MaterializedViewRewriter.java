@@ -1019,27 +1019,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return true;
     }
 
-    private boolean hasForeignKeyConstraintInMv(Table childTable, MaterializedView materializedView,
-                                                List<String> childKeys) {
-        if (materializedView.getForeignKeyConstraints() == null) {
-            return false;
-        }
-        Set<String> childKeySet = Sets.newHashSet(childKeys);
-
-        for (ForeignKeyConstraint foreignKeyConstraint : materializedView.getForeignKeyConstraints()) {
-            if (foreignKeyConstraint.getChildTableInfo() != null &&
-                    MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo()).equals(childTable)) {
-                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnNameRefPairs(materializedView);
-                Set<String> mvChildKeySet = columnPairs.stream().map(pair -> pair.first)
-                        .map(String::toLowerCase).collect(Collectors.toSet());
-                if (childKeySet.equals(mvChildKeySet)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     private boolean extraJoinCheck(
             TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
             List<Pair<String, String>> columnPairs, List<String> childKeys, List<String> parentKeys,

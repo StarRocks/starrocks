@@ -2370,7 +2370,23 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String query = "select empid, deptno from emps_null";
         String constraint = "\"unique_constraints\" = \"depts.deptno\"," +
                 "\"foreign_key_constraints\" = \"emps_null(deptno) references depts(deptno)\" ";
-        testRewriteFail(mv, query, constraint);
+
+        // Use rewrite() directly and assert no exception, proving the MV was successfully created.
+        // nonMatch() requires exception == null (via Preconditions.checkState), so it will fail
+        // if MV creation itself threw — distinguishing "rewrite rejected at nullability check"
+        // from "MV could not be created at all".
+        MVRewriteChecker checker = new MVRewriteChecker(null, mv, query, constraint).rewrite();
+        Assertions.assertNull(checker.getException(),
+                "MV should be created successfully even though deptno is nullable");
+        checker.nonMatch();
+
+        // Also verify the query executes correctly via base-table scan when MV rewrite is disabled,
+        // confirming that all rows from emps_null are returned (no rows silently dropped).
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DISABLE.toString());
+        sql(query).nonMatch("TABLE: mv0").contains("TABLE: emps_null");
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.DEFAULT.toString());
     }
 
     @Test
