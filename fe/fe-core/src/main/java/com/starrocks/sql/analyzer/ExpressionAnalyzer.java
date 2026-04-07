@@ -577,7 +577,9 @@ public class ExpressionAnalyzer {
                     }
 
                     node.setType(new MapType(keyType, valueType));
-                } catch (Exception e) {
+                } catch (SemanticException e) {
+                    throw e;
+                } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
             } else {
