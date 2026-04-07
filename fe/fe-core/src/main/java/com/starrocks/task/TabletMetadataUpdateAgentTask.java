@@ -47,6 +47,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import static java.util.Objects.requireNonNull;
@@ -69,6 +70,12 @@ public abstract class TabletMetadataUpdateAgentTask extends AgentTask {
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
+        // Include txnId in signature to prevent collision between different jobs
+        // operating on the same tablet set. Without this, two jobs altering the same
+        // table/partition produce identical signatures, causing AgentTaskQueue to
+        // reject the second task or FE to match BE's old task completion report
+        // to the wrong job.
+        this.signature = Objects.hash(this.signature, txnId);
     }
 
     public void countDownLatch(long backendId, Set<Long> tablets) {

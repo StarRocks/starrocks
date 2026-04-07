@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -185,7 +186,9 @@ public class AgentTaskQueueSignatureCollisionTest {
 
         // AgentTaskQueue correctly deduplicates retries
         assertTrue(AgentTaskQueue.addTask(task1));
-        // task2 has the same signature, so it should be rejected (correct dedup)
-        // This is intentional: if the same job retries, the old task must be removed first
+        assertFalse(AgentTaskQueue.addTask(task2),
+                "task2 with same signature should be rejected (correct dedup)");
+        assertSame(task1, AgentTaskQueue.getTask(BACKEND_ID, TASK_TYPE, task1.getSignature()),
+                "Queue should still contain task1, not task2");
     }
 }
