@@ -59,21 +59,19 @@ namespace starrocks {
 // to a BINARY / VARBINARY field so that put_mysql_row_buffer can encode its bytes
 // correctly when the column is serialised inside a nested type.
 static void mark_binary_columns(const ColumnPtr& col, const TypeDescriptor& type) {
-    // Unwrap ConstColumn and NullableColumn to reach the actual data column.
-    const Column* data_col = col.get();
-    if (data_col->is_constant()) {
-        data_col = down_cast<const ConstColumn*>(data_col)->data_column().get();
-    }
-    if (data_col->is_nullable()) {
-        data_col = down_cast<const NullableColumn*>(data_col)->data_column().get();
-    }
+    const Column* data_col = ColumnHelper::get_data_column(col);
 
     switch (type.type) {
     case TYPE_BINARY:
     case TYPE_VARBINARY: {
-        // Both BINARY and VARBINARY use BinaryColumn as their underlying storage.
-        auto* bin = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_col));
-        bin->set_is_binary_type(true);
+        if (data_col->is_binary()) {
+            auto* bin = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_col));
+            bin->set_is_binary_type(true);
+        } else {
+            DCHECK(data_col->is_large_binary());
+            auto* large_bin = const_cast<LargeBinaryColumn*>(down_cast<const LargeBinaryColumn*>(data_col));
+            large_bin->set_is_binary_type(true);
+        }
         break;
     }
     case TYPE_STRUCT: {

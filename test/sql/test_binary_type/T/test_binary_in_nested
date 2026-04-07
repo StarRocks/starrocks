@@ -62,4 +62,15 @@ insert into t_map_binary values
 
 select id, kv from t_map_binary order by id;
 
+-- -----------------------------------------------------------------------
+-- Constant nested literals should also be encoded correctly. Expr evaluation
+-- returns ConstColumn for these cases, so they cover the unwrap path in
+-- mark_binary_columns().
+-- -----------------------------------------------------------------------
+select [unhex('AABB'), null];
+
+select named_struct('bin_field', unhex('DEADBEEF'), 'arr_field', [unhex('00'), unhex('01')]);
+
+select map{'k1': unhex('CAFE'), 'k2': null};
+
 drop database db_${uuid0};

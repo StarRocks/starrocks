@@ -43,11 +43,11 @@
 namespace starrocks {
 
 // Options controlling how MysqlRowBuffer serializes certain types.
-// Currently only affects how binary data (VARBINARY) is encoded when it
-// appears inside a nested type (ARRAY / MAP / STRUCT).
+// Currently only affects how binary data is encoded when it appears inside
+// a nested type (ARRAY / MAP / STRUCT).
 struct MysqlRowBufferOptions {
     enum class NestedBinaryFormat {
-        HEX,    // encode as uppercase hex string, e.g. "48656C6C6F"  (default)
+        HEX,    // encode as lowercase hex string, e.g. "48656c6c6f"  (default)
         BASE64, // encode as standard base64 string, e.g. "SGVsbG8="
     };
 
