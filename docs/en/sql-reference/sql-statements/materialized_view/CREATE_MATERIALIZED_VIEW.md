@@ -471,9 +471,9 @@ StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh be
 - There are restrictions when adjusting `refresh_mode`:
   - You cannot change legacy materialized views (for example, those of type `PCT`) to use `AUTO` or `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.
   - When modifying a materialized view from `AUTO` or `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
-- Incremental materialized views do not support specifying partition refresh:
+- Materialized views with `refresh_mode` set to `INCREMENTAL` or `AUTO` do not support specifying partition refresh:
   - For `INCREMENTAL` materialized views, an exception is thrown if you attempt a partition refresh.
-  - For `AUTO` materialized views, StarRocks will automatically switch to `PCT` mode for the refresh operation.
+  - For `AUTO` materialized views, an exception is thrown if you attempt a partition refresh. Refresh the whole materialized view instead.
 
 ### Supported Incremental Operators
 
