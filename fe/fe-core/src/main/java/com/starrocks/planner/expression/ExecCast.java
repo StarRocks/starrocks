@@ -48,12 +48,19 @@ public class ExecCast extends ExecExpr {
 
     @Override
     public boolean isNullable() {
-        return children.get(0).isNullable();
+        ExecExpr child = children.get(0);
+        // Non-compatible casts (e.g., VARCHAR→INT) can produce NULL even from non-null input
+        if (child.getType().isFullyCompatible(type)) {
+            return child.isNullable();
+        }
+        return true;
     }
 
     @Override
     public boolean isSelfMonotonic() {
-        return true;
+        // Narrowing casts can overflow to NULL, breaking monotonic order.
+        // e.g., cast(bigint to tinyint) < 10: min/max may overflow, but values in between may not.
+        return false;
     }
 
     @Override

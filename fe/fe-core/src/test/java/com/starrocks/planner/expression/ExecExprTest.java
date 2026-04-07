@@ -344,9 +344,10 @@ public class ExecExprTest {
 
     @Test
     public void testExecCastIsSelfMonotonic() {
+        // Cast is NOT self-monotonic: narrowing casts can overflow to NULL, breaking order
         ExecLiteral child = makeIntLiteral(1);
         ExecCast cast = new ExecCast(IntegerType.BIGINT, child, false);
-        assertTrue(cast.isSelfMonotonic());
+        assertFalse(cast.isSelfMonotonic());
     }
 
     @Test

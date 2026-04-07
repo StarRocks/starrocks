@@ -40,6 +40,10 @@ public final class ExecExprUtils {
     public static boolean isBoundByTupleIds(ExecExpr expr, List<TupleId> tids) {
         if (expr instanceof ExecSlotRef) {
             ExecSlotRef slotRef = (ExecSlotRef) expr;
+            // Lambda argument slots may not have a parent tuple; treat them as unbound.
+            if (slotRef.getDesc().getParent() == null) {
+                return false;
+            }
             return tids.contains(slotRef.getTupleId());
         }
         for (ExecExpr child : expr.getChildren()) {
