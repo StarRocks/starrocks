@@ -134,8 +134,8 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
     RETURN_IF_ERROR(segment_iterator(
             [&](const CompactConflictResolveParams& params, const std::vector<std::shared_ptr<Segment>>& segments,
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
-                // Phase 1: Read all rssid_rowids from mapper and collect unique rssids.
-                // Store per-segment data for reuse in Phase 2.
+                // Pre-scan the mapper to collect unique rssids and store per-segment
+                // data. This enables batch loading of delvecs for large compactions.
                 std::vector<std::vector<uint64_t>> all_rssid_rowids(segments.size());
                 std::unordered_set<uint32_t> unique_rssids;
                 for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
@@ -148,16 +148,19 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                     }
                 }
 
-                // Phase 2: Batch-load all delvecs concurrently.
-                // This issues all range reads in parallel, overlapping the ~2-3ms
-                // per-request HTTP latency across hundreds of segments.
-                {
+                // Only use concurrent batch loading for large compactions (>=100
+                // unique rssids). For smaller compactions, the pre-scan + batch_load
+                // overhead exceeds the parallelism benefit — sequential is faster.
+                static constexpr size_t kBatchLoadThreshold = 100;
+                if (unique_rssids.size() >= kBatchLoadThreshold) {
                     TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
                     RETURN_IF_ERROR(
                             params.delvec_loader->batch_load(params.tablet_id, params.base_version, unique_rssids));
                 }
 
-                // Phase 3: Process rows using pre-loaded delvecs.
+                // Process rows using delvecs. For large compactions (>=threshold),
+                // delvecs are already preloaded. For small compactions, load() falls
+                // through to on-demand sequential loading (original behavior).
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 for (size_t segment_id = 0; segment_id < segments.size(); segment_id++) {
                     vector<uint32_t> tmp_deletes;
@@ -167,16 +170,18 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                         const uint32_t rowid = rssid_rowids[i] & 0xffffffff;
                         if (rssid_to_delvec.count(rssid) == 0) {
                             DelVectorPtr delvec_ptr;
-                            // This will hit the preloaded map — no remote IO
-                            RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid}, params.base_version,
-                                                                       &delvec_ptr));
+                            {
+                                TRACE_COUNTER_SCOPE_LATENCY_US("compaction_delvec_loader_latency_us");
+                                RETURN_IF_ERROR(params.delvec_loader->load({params.tablet_id, rssid},
+                                                                           params.base_version, &delvec_ptr));
+                            }
                             rssid_to_delvec[rssid] = delvec_ptr;
                         }
                         if (!rssid_to_delvec[rssid]->empty() && rssid_to_delvec[rssid]->roaring()->contains(rowid)) {
                             tmp_deletes.push_back(i);
                         }
                     }
-                    // 3. generate final delvec
+                    // generate final delvec
                     DelVectorPtr dv = std::make_shared<DelVector>();
                     if (tmp_deletes.empty()) {
                         dv->init(params.new_version, nullptr, 0);
