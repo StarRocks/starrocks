@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -168,10 +169,10 @@ public class TablesSystemTable extends SystemTable {
             ConstantOperator value = binary.getChild(1).cast();
             switch (name.toUpperCase()) {
                 case "TABLE_NAME":
-                    params.setTable_name(value.getVarchar());
+                    params.setTable_name(PatternMatcher.escapeLikeValue(value.getVarchar()));
                     break;
                 case "TABLE_SCHEMA":
-                    authInfo.setPattern(value.getVarchar());
+                    authInfo.setPattern(PatternMatcher.escapeLikeValue(value.getVarchar()));
                     break;
                 default:
                     throw new NotImplementedException("unsupported column: " + name);
