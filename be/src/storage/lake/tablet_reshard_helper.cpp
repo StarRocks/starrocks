@@ -175,4 +175,45 @@ Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range) {
     return Status::OK();
 }
 
+void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index) {
+    if (split_count <= 1) return;
+
+    if (rowset->has_num_rows()) {
+        int64_t num_rows = rowset->num_rows();
+        rowset->set_num_rows(num_rows / split_count + (split_index < num_rows % split_count ? 1 : 0));
+    }
+    if (rowset->has_data_size()) {
+        int64_t data_size = rowset->data_size();
+        rowset->set_data_size(data_size / split_count + (split_index < data_size % split_count ? 1 : 0));
+    }
+}
+
+void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index) {
+    if (txn_log->has_op_write() && txn_log->mutable_op_write()->has_rowset()) {
+        update_rowset_data_stats(txn_log->mutable_op_write()->mutable_rowset(), split_count, split_index);
+    }
+    if (txn_log->has_op_compaction() && txn_log->mutable_op_compaction()->has_output_rowset()) {
+        update_rowset_data_stats(txn_log->mutable_op_compaction()->mutable_output_rowset(), split_count, split_index);
+    }
+    if (txn_log->has_op_schema_change()) {
+        for (auto& rowset : *txn_log->mutable_op_schema_change()->mutable_rowsets()) {
+            update_rowset_data_stats(&rowset, split_count, split_index);
+        }
+    }
+    if (txn_log->has_op_replication()) {
+        for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
+            if (op_write.has_rowset()) {
+                update_rowset_data_stats(op_write.mutable_rowset(), split_count, split_index);
+            }
+        }
+    }
+    if (txn_log->has_op_parallel_compaction()) {
+        for (auto& subtask : *txn_log->mutable_op_parallel_compaction()->mutable_subtask_compactions()) {
+            if (subtask.has_output_rowset()) {
+                update_rowset_data_stats(subtask.mutable_output_rowset(), split_count, split_index);
+            }
+        }
+    }
+}
+
 } // namespace starrocks::lake::tablet_reshard_helper

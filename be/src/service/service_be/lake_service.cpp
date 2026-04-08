@@ -238,9 +238,13 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 // Splitting tablet
                 const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
                 task_num += splitting_tablet_info.new_tablet_ids_size();
+                int32_t split_count = splitting_tablet_info.new_tablet_ids_size();
+                int32_t split_index = 0;
                 for (auto new_tablet_id : splitting_tablet_info.new_tablet_ids()) {
                     publish_tablet_infos.emplace_back(lake::PublishTabletInfo::SPLITTING_TABLET,
-                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id);
+                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id, split_count,
+                                                      split_index);
+                    split_index++;
                 }
             } else if (resharding_tablet_info.has_merging_tablet_info()) {
                 // Merging tablets

@@ -17,6 +17,7 @@
 #include <span>
 #include <vector>
 
+#include "common/logging.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
@@ -43,10 +44,15 @@ public:
 
     // For publish cross transaction with only one txn log, including splitting tablet and identical tablet
     PublishTabletInfo(PublishTabletType publish_tablet_type, int64_t tablet_id_in_txn_log,
-                      int64_t tablet_id_in_metadata)
+                      int64_t tablet_id_in_metadata, int32_t split_count = 0, int32_t split_index = 0)
             : publish_tablet_type(publish_tablet_type),
               tablet_ids_in_txn_logs(1, tablet_id_in_txn_log),
-              tablet_id_in_metadata(tablet_id_in_metadata) {}
+              tablet_id_in_metadata(tablet_id_in_metadata),
+              split_count(split_count),
+              split_index(split_index) {
+        DCHECK(publish_tablet_type != SPLITTING_TABLET ||
+               (split_count > 1 && split_index >= 0 && split_index < split_count));
+    }
 
     // For cross publish merging tablet with multiple txn logs
     PublishTabletInfo(PublishTabletType publish_tablet_type, const std::span<const int64_t>& tablet_ids_in_txn_logs,
@@ -58,6 +64,8 @@ public:
     PublishTabletType get_publish_tablet_type() const { return publish_tablet_type; }
     const std::vector<int64_t>& get_tablet_ids_in_txn_logs() const { return tablet_ids_in_txn_logs; }
     int64_t get_tablet_id_in_metadata() const { return tablet_id_in_metadata; }
+    int32_t get_split_count() const { return split_count; }
+    int32_t get_split_index() const { return split_index; }
     // A txn log will be applied to multiple tablets in splitting tablet, so it cannot be deleted after applied.
     bool can_delete_txn_log() const { return publish_tablet_type != SPLITTING_TABLET; }
 
@@ -65,6 +73,8 @@ private:
     PublishTabletType publish_tablet_type;
     std::vector<int64_t> tablet_ids_in_txn_logs;
     int64_t tablet_id_in_metadata;
+    int32_t split_count = 0;
+    int32_t split_index = 0;
 };
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info);
