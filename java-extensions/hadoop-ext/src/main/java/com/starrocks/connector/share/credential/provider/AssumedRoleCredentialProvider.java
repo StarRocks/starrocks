@@ -35,7 +35,7 @@
  * limitations under the License.
  */
 
-package com.starrocks.credential.provider;
+package com.starrocks.connector.share.credential.provider;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -104,7 +104,7 @@ public final class AssumedRoleCredentialProvider implements AwsCredentialsProvid
     private static final Logger LOG =
             LoggerFactory.getLogger(AssumedRoleCredentialProvider.class);
     public static final String NAME
-            = "com.starrocks.credential.provider.AssumedRoleCredentialProvider";
+            = "com.starrocks.connector.share.credential.provider.AssumedRoleCredentialProvider";
 
     public static final String E_NO_ROLE = "Unset property "
             + ASSUMED_ROLE_ARN;
