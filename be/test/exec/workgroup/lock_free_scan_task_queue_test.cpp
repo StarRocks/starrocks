@@ -135,4 +135,45 @@ PARALLEL_TEST(LockFreeScanTaskQueueTest, test_multithread) {
     ASSERT_EQ(queue.size(), 0);
 }
 
+// Test boundary priorities: 0 (lowest) and 20 (highest).
+PARALLEL_TEST(LockFreeScanTaskQueueTest, test_boundary_priorities) {
+    constexpr int NUM_WORKERS = 2;
+    LockFreeScanTaskQueue queue(NUM_WORKERS);
+
+    queue.force_put(make_task(0), 0);
+    queue.force_put(make_task(20), 0);
+
+    ScanTask out;
+
+    // Highest priority (20) should come first.
+    ASSERT_TRUE(queue.try_take(out));
+    ASSERT_EQ(out.priority, 20);
+
+    // Lowest priority (0) next.
+    ASSERT_TRUE(queue.try_take(out));
+    ASSERT_EQ(out.priority, 0);
+
+    ASSERT_FALSE(queue.try_take(out));
+}
+
+// Test multiple tasks at the same priority level — all should be dequeued (no loss).
+PARALLEL_TEST(LockFreeScanTaskQueueTest, test_same_priority) {
+    constexpr int NUM_WORKERS = 2;
+    LockFreeScanTaskQueue queue(NUM_WORKERS);
+
+    constexpr int COUNT = 100;
+    for (int i = 0; i < COUNT; ++i) {
+        queue.force_put(make_task(10), 0);
+    }
+    ASSERT_EQ(queue.size(), COUNT);
+
+    int dequeued = 0;
+    ScanTask out;
+    while (queue.try_take(out)) {
+        ASSERT_EQ(out.priority, 10);
+        ++dequeued;
+    }
+    ASSERT_EQ(dequeued, COUNT);
+}
+
 } // namespace starrocks::workgroup

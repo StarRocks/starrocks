@@ -201,4 +201,39 @@ PARALLEL_TEST(LockFreeDriverQueueTest, test_multithread) {
     ASSERT_EQ(queue.size(), 0);
 }
 
+// Test that after draining one level, items at other levels are still dequeued.
+PARALLEL_TEST(LockFreeDriverQueueTest, test_bitmap_after_partial_drain) {
+    constexpr int NUM_WORKERS = 2;
+    LockFreeDriverQueue queue(NUM_WORKERS);
+
+    QueryContext query_context;
+
+    // Driver at level 0 (low accumulated time).
+    auto d0 = std::make_shared<PipelineDriver>(gen_operators(), &query_context, nullptr, nullptr, -1);
+    d0->set_driver_queue_level(0);
+
+    // Driver at level 7 (high accumulated time).
+    auto d7 = std::make_shared<PipelineDriver>(gen_operators(), &query_context, nullptr, nullptr, -1);
+    d7->set_driver_queue_level(0);
+    d7->driver_acct().update_last_time_spent(8'000'000'000L);
+
+    queue.put_back(d0.get(), 0);
+    queue.put_back(d7.get(), 0);
+    ASSERT_EQ(queue.size(), 2);
+
+    // Take level 0 driver first (lower weighted time).
+    DriverRawPtr out = nullptr;
+    ASSERT_TRUE(queue.try_take(out));
+    ASSERT_EQ(out, d0.get());
+
+    // Level 0 is now empty, but level 7 still has an item.
+    // Bitmap should reflect this and try_take should succeed.
+    ASSERT_TRUE(queue.try_take(out));
+    ASSERT_EQ(out, d7.get());
+
+    // Now fully empty.
+    ASSERT_FALSE(queue.try_take(out));
+    ASSERT_EQ(queue.size(), 0);
+}
+
 } // namespace starrocks::pipeline

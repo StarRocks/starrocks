@@ -21,6 +21,7 @@
 #include <thread>
 
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 
@@ -48,17 +49,18 @@ static Operators gen_wg_ops() {
 class LockFreeWorkGroupDriverQueueTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _wg1 = std::make_shared<workgroup::WorkGroup>("wg_lf1", 1001, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
-                                                      1.0, workgroup::WorkGroupType::WG_NORMAL,
-                                                      workgroup::WorkGroup::DEFAULT_MEM_POOL);
-        _wg2 = std::make_shared<workgroup::WorkGroup>("wg_lf2", 1002, workgroup::WorkGroup::DEFAULT_VERSION, 2, 0.5, 10,
-                                                      1.0, workgroup::WorkGroupType::WG_NORMAL,
-                                                      workgroup::WorkGroup::DEFAULT_MEM_POOL);
+        _wg1 = std::make_shared<workgroup::WorkGroup>("wg_lf1", 1001, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5,
+                                                       10, 1.0, workgroup::WorkGroupType::WG_NORMAL,
+                                                       workgroup::WorkGroup::DEFAULT_MEM_POOL);
+        _wg2 = std::make_shared<workgroup::WorkGroup>("wg_lf2", 1002, workgroup::WorkGroup::DEFAULT_VERSION, 2, 0.5,
+                                                       10, 1.0, workgroup::WorkGroupType::WG_NORMAL,
+                                                       workgroup::WorkGroup::DEFAULT_MEM_POOL);
         _wg1 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg1);
         _wg2 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg2);
     }
 
 protected:
+    PipelineExecutorMetrics _metrics;
     workgroup::WorkGroupPtr _wg1;
     workgroup::WorkGroupPtr _wg2;
 };
@@ -66,19 +68,19 @@ protected:
 // Test: put_back one driver into a single workgroup, take it back non-blocking.
 TEST_F(LockFreeWorkGroupDriverQueueTest, test_single_workgroup) {
     constexpr int NUM_WORKERS = 4;
-    LockFreeWorkGroupDriverQueue queue(NUM_WORKERS);
+    LockFreeWorkGroupDriverQueue queue(_metrics.get_driver_queue_metrics(), NUM_WORKERS);
 
     QueryContext query_ctx;
     auto driver = std::make_shared<PipelineDriver>(gen_wg_ops(), &query_ctx, nullptr, nullptr, -1);
     driver->set_driver_queue_level(0);
     driver->set_workgroup(_wg1);
 
-    queue.put_back(driver.get(), 0);
+    queue.put_back(driver.get());
     ASSERT_EQ(queue.size(), 1);
 
-    DriverRawPtr out = nullptr;
-    ASSERT_TRUE(queue.take(out, /*blocking=*/false));
-    ASSERT_EQ(out, driver.get());
+    auto result = queue.take(false);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value(), driver.get());
     ASSERT_EQ(queue.size(), 0);
 }
 
@@ -86,7 +88,7 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_single_workgroup) {
 // cancelled one has CANCELED state.
 TEST_F(LockFreeWorkGroupDriverQueueTest, test_cancel) {
     constexpr int NUM_WORKERS = 4;
-    LockFreeWorkGroupDriverQueue queue(NUM_WORKERS);
+    LockFreeWorkGroupDriverQueue queue(_metrics.get_driver_queue_metrics(), NUM_WORKERS);
 
     QueryContext query_ctx;
     auto driver1 = std::make_shared<PipelineDriver>(gen_wg_ops(), &query_ctx, nullptr, nullptr, -1);
@@ -97,19 +99,22 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_cancel) {
     driver2->set_driver_queue_level(0);
     driver2->set_workgroup(_wg1);
 
-    queue.put_back(driver1.get(), 0);
-    queue.put_back(driver2.get(), 0);
+    queue.put_back(driver1.get());
+    queue.put_back(driver2.get());
     ASSERT_EQ(queue.size(), 2);
 
     // Cancel driver2 while it is still in the queue.
     queue.cancel(driver2.get());
 
     // Take both drivers. One of them should have CANCELED state.
-    DriverRawPtr out1 = nullptr;
-    DriverRawPtr out2 = nullptr;
-    ASSERT_TRUE(queue.take(out1, /*blocking=*/false));
-    ASSERT_TRUE(queue.take(out2, /*blocking=*/false));
+    auto r1 = queue.take(false);
+    auto r2 = queue.take(false);
+    ASSERT_TRUE(r1.ok() && r1.value() != nullptr);
+    ASSERT_TRUE(r2.ok() && r2.value() != nullptr);
     ASSERT_EQ(queue.size(), 0);
+
+    auto* out1 = r1.value();
+    auto* out2 = r2.value();
 
     // Find which one was cancelled.
     if (out1 == driver2.get()) {
@@ -125,7 +130,7 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_cancel) {
 // consumer should unblock and receive the driver.
 TEST_F(LockFreeWorkGroupDriverQueueTest, test_blocking_wakeup) {
     constexpr int NUM_WORKERS = 4;
-    LockFreeWorkGroupDriverQueue queue(NUM_WORKERS);
+    LockFreeWorkGroupDriverQueue queue(_metrics.get_driver_queue_metrics(), NUM_WORKERS);
 
     QueryContext query_ctx;
     auto driver = std::make_shared<PipelineDriver>(gen_wg_ops(), &query_ctx, nullptr, nullptr, -1);
@@ -136,10 +141,9 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_blocking_wakeup) {
     DriverRawPtr consumer_result = nullptr;
 
     auto consumer_thread = std::thread([&]() {
-        DriverRawPtr out = nullptr;
-        bool ok = queue.take(out, /*blocking=*/true);
-        if (ok) {
-            consumer_result = out;
+        auto result = queue.take(true);
+        if (result.ok() && result.value() != nullptr) {
+            consumer_result = result.value();
             consumer_got_driver.store(true, std::memory_order_release);
         }
     });
@@ -149,24 +153,24 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_blocking_wakeup) {
     ASSERT_FALSE(consumer_got_driver.load(std::memory_order_acquire));
 
     // Put a driver; the consumer should unblock.
-    queue.put_back(driver.get(), 0);
+    queue.put_back(driver.get());
 
     consumer_thread.join();
     ASSERT_TRUE(consumer_got_driver.load(std::memory_order_acquire));
     ASSERT_EQ(consumer_result, driver.get());
 }
 
-// Test: consumer blocks on take, close() wakes it and take returns false.
+// Test: consumer blocks on take, close() wakes it and take returns Cancelled.
 TEST_F(LockFreeWorkGroupDriverQueueTest, test_close) {
     constexpr int NUM_WORKERS = 4;
-    LockFreeWorkGroupDriverQueue queue(NUM_WORKERS);
+    LockFreeWorkGroupDriverQueue queue(_metrics.get_driver_queue_metrics(), NUM_WORKERS);
 
     std::atomic<bool> consumer_returned{false};
-    bool take_result = true;
+    bool take_ok = true;
 
     auto consumer_thread = std::thread([&]() {
-        DriverRawPtr out = nullptr;
-        take_result = queue.take(out, /*blocking=*/true);
+        auto result = queue.take(true);
+        take_ok = result.ok() && result.value() != nullptr;
         consumer_returned.store(true, std::memory_order_release);
     });
 
@@ -174,23 +178,22 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_close) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
     ASSERT_FALSE(consumer_returned.load(std::memory_order_acquire));
 
-    // Close the queue; the consumer should wake up and return false.
+    // Close the queue; the consumer should wake up and return Cancelled.
     queue.close();
 
     consumer_thread.join();
     ASSERT_TRUE(consumer_returned.load(std::memory_order_acquire));
-    ASSERT_FALSE(take_result);
+    ASSERT_FALSE(take_ok);
 }
 
 // Test: two workgroups with different vruntimes. The workgroup with lower
 // vruntime should be selected first.
 TEST_F(LockFreeWorkGroupDriverQueueTest, test_workgroup_vruntime_selection) {
     constexpr int NUM_WORKERS = 4;
-    LockFreeWorkGroupDriverQueue queue(NUM_WORKERS);
+    LockFreeWorkGroupDriverQueue queue(_metrics.get_driver_queue_metrics(), NUM_WORKERS);
 
     QueryContext query_ctx;
 
-    // Create a driver for wg1 and wg2.
     auto driver1 = std::make_shared<PipelineDriver>(gen_wg_ops(), &query_ctx, nullptr, nullptr, -1);
     driver1->set_driver_queue_level(0);
     driver1->set_workgroup(_wg1);
@@ -203,16 +206,17 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_workgroup_vruntime_selection) {
     auto* entity2 = _wg2->driver_sched_entity();
     entity2->incr_runtime_ns(1'000'000'000L);
 
-    queue.put_back(driver2.get(), 0);
-    queue.put_back(driver1.get(), 1);
+    queue.put_back(driver2.get());
+    queue.put_back(driver1.get());
 
     // wg1 has lower vruntime, so driver1 should come out first.
-    DriverRawPtr out = nullptr;
-    ASSERT_TRUE(queue.take(out, /*blocking=*/false));
-    ASSERT_EQ(out, driver1.get());
+    auto r1 = queue.take(false);
+    ASSERT_TRUE(r1.ok());
+    ASSERT_EQ(r1.value(), driver1.get());
 
-    ASSERT_TRUE(queue.take(out, /*blocking=*/false));
-    ASSERT_EQ(out, driver2.get());
+    auto r2 = queue.take(false);
+    ASSERT_TRUE(r2.ok());
+    ASSERT_EQ(r2.value(), driver2.get());
 
     ASSERT_EQ(queue.size(), 0);
 }
@@ -220,7 +224,7 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_workgroup_vruntime_selection) {
 // Test: update_statistics increments workgroup vruntime.
 TEST_F(LockFreeWorkGroupDriverQueueTest, test_update_statistics) {
     constexpr int NUM_WORKERS = 4;
-    LockFreeWorkGroupDriverQueue queue(NUM_WORKERS);
+    LockFreeWorkGroupDriverQueue queue(_metrics.get_driver_queue_metrics(), NUM_WORKERS);
 
     QueryContext query_ctx;
     auto driver = std::make_shared<PipelineDriver>(gen_wg_ops(), &query_ctx, nullptr, nullptr, -1);
@@ -235,34 +239,35 @@ TEST_F(LockFreeWorkGroupDriverQueueTest, test_update_statistics) {
     ASSERT_GT(vruntime_after, vruntime_before);
 }
 
-// Test: non-blocking take on empty queue returns false.
+// Test: non-blocking take on empty queue returns nullptr.
 TEST_F(LockFreeWorkGroupDriverQueueTest, test_empty_take) {
     constexpr int NUM_WORKERS = 2;
-    LockFreeWorkGroupDriverQueue queue(NUM_WORKERS);
+    LockFreeWorkGroupDriverQueue queue(_metrics.get_driver_queue_metrics(), NUM_WORKERS);
 
-    DriverRawPtr out = nullptr;
-    ASSERT_FALSE(queue.take(out, /*blocking=*/false));
+    auto result = queue.take(false);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value(), nullptr);
     ASSERT_EQ(queue.size(), 0);
 }
 
-// Test: external producer path (put_back without worker_id).
-TEST_F(LockFreeWorkGroupDriverQueueTest, test_external_producer) {
-    constexpr int NUM_WORKERS = 2;
-    LockFreeWorkGroupDriverQueue queue(NUM_WORKERS);
+// Test: driver state is managed correctly by put_back/take.
+TEST_F(LockFreeWorkGroupDriverQueueTest, test_driver_state_management) {
+    constexpr int NUM_WORKERS = 4;
+    LockFreeWorkGroupDriverQueue queue(_metrics.get_driver_queue_metrics(), NUM_WORKERS);
 
     QueryContext query_ctx;
     auto driver = std::make_shared<PipelineDriver>(gen_wg_ops(), &query_ctx, nullptr, nullptr, -1);
     driver->set_driver_queue_level(0);
     driver->set_workgroup(_wg1);
 
-    // Use external producer variant (no worker_id).
-    queue.put_back(driver.get());
-    ASSERT_EQ(queue.size(), 1);
+    ASSERT_FALSE(driver->is_in_ready());
 
-    DriverRawPtr out = nullptr;
-    ASSERT_TRUE(queue.take(out, /*blocking=*/false));
-    ASSERT_EQ(out, driver.get());
-    ASSERT_EQ(queue.size(), 0);
+    queue.put_back(driver.get());
+    ASSERT_TRUE(driver->is_in_ready());
+
+    auto result = queue.take(false);
+    ASSERT_TRUE(result.ok());
+    ASSERT_FALSE(result.value()->is_in_ready());
 }
 
 } // namespace starrocks::pipeline
