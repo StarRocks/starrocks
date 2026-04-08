@@ -28,6 +28,7 @@ Map the local scripts and GitHub workflows that enforce structural rules, run va
 
 - Structural rules should be enforced by small repo-local scripts with actionable error messages.
 - Parallel backend compile loops should use the repo-local agent-pool workflow instead of creating one-off cold worktrees.
+- Agent-pool build loops must keep the shared repo `thirdparty/` tree and the slot `CMAKE_BUILD_PREFIX` from the acquired env attached to every BE build or UT command; prefer `build-support/agent-pool.sh run -- ...` over manually reassembling that environment.
 - CI path filters must stay aligned with the files each checker owns.
 - Generated handbook or AGENTS content should be validated mechanically when a generator exists.
 

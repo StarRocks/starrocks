@@ -164,6 +164,37 @@ class AgentPoolTest(unittest.TestCase):
             self.assertFalse(marker.exists())
             self.assertTrue((repo_root / ".worktrees" / "agent-pool" / "slot-01").exists())
 
+    def test_run_releases_slot_when_command_launch_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root, head = self._create_repo(Path(tmpdir))
+
+            self.assertEqual(
+                0,
+                self._run_cli(repo_root, "bootstrap", "--slots", "1", "--base", head, "--skip-warmup").returncode,
+            )
+            run_result = self._run_cli(repo_root, "run", "--base", head, "--", "__agent_pool_missing_command__")
+            self.assertNotEqual(0, run_result.returncode)
+            self.assertFalse((repo_root / ".agent-pool" / "locks" / "slot-01.lock").exists())
+
+            reacquire = self._run_cli(repo_root, "acquire", "--base", head, "--json")
+            self.assertEqual(0, reacquire.returncode, reacquire.stderr)
+            reacquired = json.loads(reacquire.stdout)
+            self.assertEqual("slot-01", reacquired["slot"])
+
+    def test_acquire_rejects_slot_outside_configured_pool(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_root, head = self._create_repo(Path(tmpdir))
+
+            self.assertEqual(
+                0,
+                self._run_cli(repo_root, "bootstrap", "--slots", "2", "--base", head, "--skip-warmup").returncode,
+            )
+            acquire = self._run_cli(repo_root, "acquire", "--slot", "3", "--base", head, "--json")
+            self.assertNotEqual(0, acquire.returncode)
+            self.assertIn("outside the configured pool", acquire.stderr)
+            self.assertFalse((repo_root / ".worktrees" / "agent-pool" / "slot-03").exists())
+            self.assertFalse((repo_root / ".agent-pool" / "locks" / "slot-03.lock").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

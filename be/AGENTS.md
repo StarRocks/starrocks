@@ -45,6 +45,15 @@ BUILD_TYPE=ASAN ./build.sh --be
 ./run-be-ut.sh --build-target <test_binary> --module <test_binary> --without-java-ext
 ```
 
+For parallel agent-owned worktrees, do not treat those commands as standalone cold-checkout loops. Prefer:
+
+```bash
+./build-support/agent-pool.sh run --base HEAD -- ./build.sh --be --without-java-ext
+./build-support/agent-pool.sh run --base HEAD -- ./run-be-ut.sh --build-target <test_binary> --module <test_binary> --without-java-ext
+```
+
+If you use `python3 build-support/agent_pool.py acquire --json` instead of `run`, export the returned `env` map first. Agents must reuse the shared repo `thirdparty/` tree via `STARROCKS_THIRDPARTY` and the slot's shared build root via `CMAKE_BUILD_PREFIX` before invoking BE build or UT commands.
+
 Useful core binaries for fast iterations:
 
 - `base_test`
@@ -174,3 +183,4 @@ python3 build-support/render_be_agents.py --check
 ```
 
 If you changed a core module, prefer its focused test binary before broader `run-be-ut.sh`.
+If verification happens in a pooled agent worktree, keep the shared `STARROCKS_THIRDPARTY` and `CMAKE_BUILD_PREFIX` environment from the acquired slot for the entire loop.

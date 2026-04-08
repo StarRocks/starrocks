@@ -151,6 +151,12 @@ def _slot_names(slot_count: int) -> list[str]:
     return [f"slot-{index:02d}" for index in range(1, slot_count + 1)]
 
 
+def _validate_slot_name(slot_name: str, slot_count: int) -> None:
+    slot_number = int(slot_name.split("-", 1)[1])
+    if slot_number > slot_count:
+        raise AgentPoolError(f"{slot_name} is outside the configured pool of {slot_count} slots")
+
+
 def _infer_slot_name_from_cwd(layout: PoolLayout, cwd: Path) -> str | None:
     resolved_cwd = cwd.resolve()
     try:
@@ -417,6 +423,8 @@ def _acquire_slot(
     env: dict[str, str],
     command: list[str] | None = None,
 ) -> dict[str, Any]:
+    if slot_name:
+        _validate_slot_name(slot_name, slot_count)
     candidate_names = [slot_name] if slot_name else _slot_names(slot_count)
     for candidate in candidate_names:
         paths = _slot_paths(layout, candidate)
@@ -544,12 +552,14 @@ def _cmd_run(args: argparse.Namespace) -> int:
     child_env = os.environ.copy()
     child_env.update(acquired["env"])
     print(f"[agent-pool] running in {acquired['slot']} ({worktree_path})", file=sys.stderr)
-    result = subprocess.run(run_command, cwd=str(worktree_path), env=child_env, check=False)
-    if worktree_path.exists() and not _slot_dirty(layout, paths):
-        _release_slot(layout, paths, force=True)
-    else:
-        print(f"[agent-pool] {acquired['slot']} kept locked because the worktree is dirty", file=sys.stderr)
-    return int(result.returncode)
+    try:
+        result = subprocess.run(run_command, cwd=str(worktree_path), env=child_env, check=False)
+        return int(result.returncode)
+    finally:
+        if worktree_path.exists() and not _slot_dirty(layout, paths):
+            _release_slot(layout, paths, force=True)
+        else:
+            print(f"[agent-pool] {acquired['slot']} kept locked because the worktree is dirty", file=sys.stderr)
 
 
 def _cmd_status(args: argparse.Namespace) -> int:

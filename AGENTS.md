@@ -41,6 +41,7 @@ cd test && python3 run.py -v
 - Thrift fields must stay optional/repeated; never add `required` and never reuse ordinals.
 - User-facing config or metric changes must update the matching docs in `docs/en/` and `docs/zh/` when applicable.
 - Parallel backend build or backend unit-test work in agent-owned worktrees must use the repo-local agent-pool workflow in [`handbook/policies/agent-pool-workflow.md`](./handbook/policies/agent-pool-workflow.md) and [`build-support/README.md`](./build-support/README.md).
+- For those pooled backend runs, reuse the shared repo `thirdparty/` tree and the slot's shared `CMAKE_BUILD_PREFIX` from the acquired agent-pool env. Prefer `./build-support/agent-pool.sh run -- ...`; if you use `acquire --json`, export the returned `env` map before invoking `./build.sh --be` or `./run-be-ut.sh`.
 
 ## PR Contract
 

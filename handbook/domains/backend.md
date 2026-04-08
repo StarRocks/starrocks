@@ -23,6 +23,7 @@ Map the BE development surface for execution, storage, runtime, services, and th
 - The BE module boundary manifest is the source of truth for the current architectural lattice.
 - Reviewed legacy debt in `build-support/be_module_boundary_baseline.json` is shrink-only.
 - BE config or metric changes must update matching public docs.
+- Parallel BE compile or UT work in agent-owned worktrees must use the agent-pool workflow and keep the acquired slot env, especially `STARROCKS_THIRDPARTY` and `CMAKE_BUILD_PREFIX`, attached to every build command.
 
 ## Test and Validation
 
