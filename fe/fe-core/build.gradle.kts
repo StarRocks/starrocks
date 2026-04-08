@@ -372,25 +372,28 @@ tasks.register<Task>("generateThriftSources") {
         exclude("parquet.thrift")
     }.files
 
-    // Declare inputs (proto files)
+    // Mirror the binary-discovery logic from gensrc/thrift/Makefile:
+    // prefer $STARROCKS_THIRDPARTY/installed/bin/thrift, fall back to "thrift" on PATH.
+    // Resolved at configuration time so Gradle can track it as a task input.
+    val thriftBin: String = run {
+        val tp = System.getenv("STARROCKS_THIRDPARTY")
+        if (tp != null) {
+            val candidate = file("$tp/installed/bin/thrift")
+            if (candidate.exists()) return@run candidate.absolutePath
+        }
+        "thrift"
+    }
+
+    // Declare inputs: proto files and the thrift compiler binary.
+    // Including the binary ensures the task is re-run when the toolchain is upgraded.
     inputs.files(protoFiles)
+    inputs.property("thriftBin", thriftBin)
 
     // Declare output directory
     outputs.dir(outputDir)
 
     doFirst {
         mkdir(outputDir)
-
-        // Mirror the binary-discovery logic from gensrc/thrift/Makefile:
-        // prefer $STARROCKS_THIRDPARTY/installed/bin/thrift, fall back to "thrift" on PATH.
-        val thriftBin: String = run {
-            val tp = System.getenv("STARROCKS_THIRDPARTY")
-            if (tp != null) {
-                val candidate = file("$tp/installed/bin/thrift")
-                if (candidate.exists()) return@run candidate.absolutePath
-            }
-            "thrift"
-        }
 
         // Process each thrift file with the native compiler, matching Maven's maven-thrift-plugin args.
         protoFiles.forEach { thriftFile ->
