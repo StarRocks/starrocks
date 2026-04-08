@@ -1,0 +1,118 @@
+-- name: test_binary_in_nested
+-- Verify that BINARY / VARBINARY data inside nested types (STRUCT / ARRAY / MAP)
+-- is serialised as a hex-encoded string rather than raw bytes in the MySQL
+-- result set, which keeps the JSON-like output well-formed.
+
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+
+-- -----------------------------------------------------------------------
+-- STRUCT with BINARY and VARBINARY fields.
+-- Both should appear as lowercase hex; STRING field stays as plain text.
+-- -----------------------------------------------------------------------
+create table t_struct_binary (
+    id      int,
+    payload struct<bin_field varbinary, str_field varchar(64)>
+) duplicate key(id)
+distributed by hash(id)
+buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+
+insert into t_struct_binary
+select 1, named_struct('bin_field', unhex('DEADBEEF'), 'str_field', 'hello')
+union all
+select 2, named_struct('bin_field', unhex('CAFE'),     'str_field', 'world')
+union all
+select 3, named_struct('bin_field', null,              'str_field', 'null_bin');
+-- result:
+-- !result
+
+select id, payload from t_struct_binary order by id;
+-- result:
+1	{"bin_field":"deadbeef","str_field":"hello"}
+2	{"bin_field":"cafe","str_field":"world"}
+3	{"bin_field":null,"str_field":"null_bin"}
+-- !result
+
+-- -----------------------------------------------------------------------
+-- ARRAY<VARBINARY>: each element should appear as lowercase hex.
+-- -----------------------------------------------------------------------
+create table t_array_binary (
+    id   int,
+    bins array<varbinary>
+) duplicate key(id)
+distributed by hash(id)
+buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+
+insert into t_array_binary values
+    (1, [unhex('AABB'), unhex('CCDD')]),
+    (2, [unhex('00'), null]),
+    (3, null);
+-- result:
+-- !result
+
+select id, bins from t_array_binary order by id;
+-- result:
+1	["aabb","ccdd"]
+2	["00",null]
+3	None
+-- !result
+
+-- -----------------------------------------------------------------------
+-- MAP<VARCHAR, VARBINARY>: values should appear as lowercase hex.
+-- -----------------------------------------------------------------------
+create table t_map_binary (
+    id int,
+    kv map<varchar(32), varbinary>
+) duplicate key(id)
+distributed by hash(id)
+buckets 1
+properties('replication_num'='1');
+-- result:
+-- !result
+
+insert into t_map_binary values
+    (1, map{'k1': unhex('CAFE'), 'k2': unhex('BABE')}),
+    (2, map{'only': null});
+-- result:
+-- !result
+
+select id, kv from t_map_binary order by id;
+-- result:
+1	{"k1":"cafe","k2":"babe"}
+2	{"only":null}
+-- !result
+
+-- -----------------------------------------------------------------------
+-- Constant nested literals should also be encoded correctly.
+-- Use TO_BINARY(..., 'hex') here so the test stays scoped to VARBINARY output
+-- without changing UNHEX() semantics in this PR.
+-- -----------------------------------------------------------------------
+select [to_binary('AABB', 'hex'), null];
+-- result:
+["aabb",null]
+-- !result
+
+select named_struct('bin_field', to_binary('DEADBEEF', 'hex'), 'arr_field',
+                    [to_binary('00', 'hex'), to_binary('01', 'hex')]);
+-- result:
+{"bin_field":"deadbeef","arr_field":["00","01"]}
+-- !result
+
+select map{'k1': to_binary('CAFE', 'hex'), 'k2': null};
+-- result:
+{"k1":"cafe","k2":null}
+-- !result
+
+drop database db_${uuid0};
+-- result:
+-- !result

@@ -37,7 +37,6 @@
 #include <column/column_helper.h>
 
 #include "column/chunk.h"
-#include "column/const_column.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
@@ -118,6 +117,9 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
                          : column;
+        // Mark BinaryColumns that carry VARBINARY data so that push_binary is
+        // used when they appear inside nested types (ARRAY / MAP / STRUCT).
+        ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
         result_columns.emplace_back(std::move(column));
     }
 
@@ -160,6 +162,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
                          : column;
+        ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
         result_columns.emplace_back(std::move(column));
     }
 

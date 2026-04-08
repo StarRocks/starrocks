@@ -42,10 +42,12 @@
 #include <type_traits>
 
 #include "common/logging.h"
+#include "gutil/strings/escaping.h"
 #include "gutil/strings/fastmem.h"
 #include "types/int256.h"
 #include "types/large_int_value.h"
 #include "util/mysql_global.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -90,7 +92,7 @@ void MysqlRowBuffer::push_null(bool is_binary_protocol) {
         return;
     }
 
-    if (_array_level == 0) {
+    if (_nesting_level == 0) {
         _data.push_back(0xfb);
     } else {
         // lowercase 'null' is more convenient for JSON parsing
@@ -146,7 +148,7 @@ void MysqlRowBuffer::push_number(T data, bool is_binary_protocol) {
     int length = 0;
     char* end = nullptr;
     char* pos = nullptr;
-    const int length_prefix_bytes = _array_level == 0 ? 1 : 0;
+    const int length_prefix_bytes = _nesting_level == 0 ? 1 : 0;
     if constexpr (std::is_same_v<T, float>) {
         // 1 for length, 1 for sign, other for digits.
         pos = _resize_extra(2 + MAX_FLOAT_STR_LENGTH);
@@ -191,7 +193,7 @@ void MysqlRowBuffer::push_number(T data, bool is_binary_protocol) {
 }
 
 void MysqlRowBuffer::push_string(const char* str, size_t length, char escape_char) {
-    if (_array_level == 0) {
+    if (_nesting_level == 0) {
         _push_string_normal(str, length);
     } else {
         // Surround the string with two double-quotas.
@@ -213,7 +215,7 @@ void MysqlRowBuffer::push_string(const char* str, size_t length, char escape_cha
 }
 
 void MysqlRowBuffer::push_decimal(const Slice& s) {
-    if (_array_level == 0) {
+    if (_nesting_level == 0) {
         _push_string_normal(s.data, s.size);
     } else {
         char* pos = _resize_extra(s.size);
@@ -272,7 +274,7 @@ void MysqlRowBuffer::push_timestamp(const TimestampValue& data, bool is_binary_p
 }
 
 void MysqlRowBuffer::_enter_scope(char c) {
-    if (++_array_level == 1) {
+    if (++_nesting_level == 1) {
         // Leave one space for storing the string length.
         _data.push_back(0x00);
         _array_offset = _data.size();
@@ -281,9 +283,9 @@ void MysqlRowBuffer::_enter_scope(char c) {
 }
 
 void MysqlRowBuffer::_leave_scope(char c) {
-    DCHECK_GT(_array_level, 0);
+    DCHECK_GT(_nesting_level, 0);
     _data.push_back(c);
-    if (--_array_level == 0) {
+    if (--_nesting_level == 0) {
         uint64_t curr_scope_len = _data.size() - _array_offset;
         if (curr_scope_len < 251) {
             int1store(&_data[_array_offset - 1], curr_scope_len);
@@ -307,7 +309,7 @@ void MysqlRowBuffer::_leave_scope(char c) {
 }
 
 void MysqlRowBuffer::separator(char c) {
-    DCHECK_GT(_array_level, 0);
+    DCHECK_GT(_nesting_level, 0);
     _data.push_back(c);
 }
 
@@ -334,6 +336,24 @@ char* MysqlRowBuffer::_escape(char* dst, const char* src, size_t length, char es
         }
     }
     return dst;
+}
+
+void MysqlRowBuffer::push_binary(const char* data, size_t length) {
+    const bool should_encode =
+            (_options.binary_encoding_level == MysqlRowBufferOptions::BinaryEncodingLevel::ALL) || (_nesting_level > 0);
+    std::string encoded;
+    if (should_encode && _options.binary_encoding_format != MysqlRowBufferOptions::BinaryEncodingFormat::RAW) {
+        if (_options.binary_encoding_format == MysqlRowBufferOptions::BinaryEncodingFormat::BASE64) {
+            strings::Base64Escape(reinterpret_cast<const unsigned char*>(data), static_cast<int>(length), &encoded,
+                                  true);
+        } else {
+            DCHECK(_options.binary_encoding_format == MysqlRowBufferOptions::BinaryEncodingFormat::HEX);
+            encoded = strings::b2a_hex(data, static_cast<int>(length));
+        }
+        data = encoded.data();
+        length = encoded.size();
+    }
+    push_string(data, length);
 }
 
 void MysqlRowBuffer::_push_string_normal(const char* str, size_t length) {
