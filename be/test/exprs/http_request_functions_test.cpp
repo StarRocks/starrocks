@@ -1318,7 +1318,7 @@ TEST_F(HttpRequestFunctionsTest, buildJsonResponse_TextBody) {
 
 TEST_F(HttpRequestFunctionsTest, buildJsonResponse_InvalidUtf8) {
     // Invalid UTF-8 should return error response
-    std::string result = build_json_response(200, "Bad\x80Data");
+    std::string result = build_json_response(200, std::string("Bad") + char(0x80) + "Data");
     EXPECT_TRUE(result.find("\"status\": -1") != std::string::npos);
     EXPECT_TRUE(result.find("invalid UTF-8") != std::string::npos);
 }
