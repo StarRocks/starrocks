@@ -39,8 +39,7 @@ DEFINE_FAIL_POINT(parquet_chunk_writer_init_failed);
 
 namespace {
 
-FieldPtr build_field_from_type_desc(const TypeDescriptor& type_desc, const std::string& name, int32_t id,
-                                    bool nullable) {
+FieldPtr build_field_from_type_desc(const TypeDescriptor& type_desc, std::string_view name, int32_t id, bool nullable) {
     TypeInfoPtr type_info = get_type_info(type_desc);
     DCHECK(type_info != nullptr);
 
@@ -52,14 +51,14 @@ FieldPtr build_field_from_type_desc(const TypeDescriptor& type_desc, const std::
     switch (type_desc.type) {
     case TYPE_ARRAY: {
         const TypeDescriptor& item_type = type_desc.children[0];
-        sub_fields.push_back(build_field_from_type_desc(item_type, name + ".item", id * 10 + 1, true));
+        sub_fields.push_back(build_field_from_type_desc(item_type, fmt::format("{}.item", name), id * 10 + 1, true));
         break;
     }
     case TYPE_MAP: {
         const TypeDescriptor& key_type = type_desc.children[0];
         const TypeDescriptor& value_type = type_desc.children[1];
-        sub_fields.push_back(build_field_from_type_desc(key_type, name + ".key", id * 10 + 1, true));
-        sub_fields.push_back(build_field_from_type_desc(value_type, name + ".value", id * 10 + 2, true));
+        sub_fields.push_back(build_field_from_type_desc(key_type, fmt::format("{}.key", name), id * 10 + 1, true));
+        sub_fields.push_back(build_field_from_type_desc(value_type, fmt::format("{}.value", name), id * 10 + 2, true));
         break;
     }
     case TYPE_STRUCT: {
@@ -69,7 +68,7 @@ FieldPtr build_field_from_type_desc(const TypeDescriptor& type_desc, const std::
             if (i < type_desc.field_names.size()) {
                 child_name = type_desc.field_names[i];
             } else {
-                child_name = name + ".field" + std::to_string(i);
+                child_name = fmt::format("{}.field{}", name, i);
             }
             sub_fields.push_back(build_field_from_type_desc(child_type, child_name, id * 10 + 1 + i, true));
         }

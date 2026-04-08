@@ -96,11 +96,11 @@ public:
     std::vector<ColumnId> value_field_column_ids() const;
 
     // return null if name not found
-    FieldPtr get_field_by_name(const std::string& name) const;
+    FieldPtr get_field_by_name(std::string_view name) const;
 
     void set_field_by_name(FieldPtr field, const std::string& name);
 
-    size_t get_field_index_by_name(const std::string& name) const;
+    size_t get_field_index_by_name(std::string_view name) const;
 
     std::vector<ColumnId> field_column_ids(bool use_rowstore = false) const;
 

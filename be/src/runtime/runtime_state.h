@@ -38,6 +38,7 @@
 #include <fstream>
 #include <limits>
 #include <memory>
+#include <memory_resource>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -52,6 +53,7 @@
 #include "common/logging.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/arena_allocator.h"
 #include "runtime/exec_env_fwd.h"
 #include "runtime/mem_tracker.h"
 
@@ -153,6 +155,16 @@ public:
     ExecEnv* exec_env() { return _exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
+
+    // Fragment-level shared MemPool for placement-new allocations.
+    // Owned by RuntimeState so it outlives all PipelineDrivers.
+    MemPool* fragment_mem_pool() { return _fragment_mem_pool.get(); }
+
+    // PMR memory resource backed by the fragment MemPool.
+    std::pmr::memory_resource* mem_resource() { return _mem_resource.get(); }
+
+    // Create the fragment-level MemPool. Called once during fragment preparation.
+    void init_fragment_mem_pool();
     std::shared_ptr<MemTracker> query_mem_tracker_ptr() { return _query_mem_tracker; }
     void set_query_mem_tracker(const std::shared_ptr<MemTracker>& query_mem_tracker) {
         _query_mem_tracker = query_mem_tracker;
@@ -633,6 +645,17 @@ private:
 
     // Memory usage of this fragment instance
     std::shared_ptr<MemTracker> _instance_mem_tracker;
+
+    // Fragment-level memory pool for placement-new allocation of query objects
+    // (ExecNodes, Descriptors, etc.).  Declared BEFORE _obj_pool so that it is
+    // destroyed AFTER _obj_pool (C++ reverse member destruction order).  This
+    // guarantees ObjectPool calls destructors before MemPool memory is freed.
+    //
+    // Owned here (not in FragmentContext) because RuntimeState is ref-counted
+    // via shared_ptr and PipelineDrivers can outlive FragmentContext.
+    std::unique_ptr<MemPool> _fragment_mem_pool;
+    // PMR adapter — nullptr when _fragment_mem_pool is null.
+    std::unique_ptr<MemPoolResource> _mem_resource;
 
     std::shared_ptr<ObjectPool> _obj_pool;
 

@@ -83,7 +83,7 @@ Status ParquetScanner::initialize_src_chunk(ChunkPtr* chunk) {
             continue;
         }
         MutableColumnPtr column;
-        auto array_ptr = _batch->GetColumnByName(slot_desc->col_name());
+        auto array_ptr = _batch->GetColumnByName(std::string(slot_desc->col_name()));
         if (array_ptr == nullptr) {
             _cast_exprs[i] = _pool.add(new ColumnRef(slot_desc));
             column = ColumnHelper::create_column(slot_desc->type(), slot_desc->is_nullable());
@@ -109,7 +109,7 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
         }
         _conv_ctx.current_slot = slot_desc;
         auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_desc->id());
-        auto array_ptr = _batch->GetColumnByName(slot_desc->col_name());
+        auto array_ptr = _batch->GetColumnByName(std::string(slot_desc->col_name()));
         if (array_ptr == nullptr) {
             (void)column->append_nulls(_batch->num_rows());
         } else {

@@ -48,8 +48,8 @@ Status append_iceberg_sink_column(const SlotDescriptor* slot,
         return Status::InternalError("Iceberg sink columns do not match output expressions");
     }
 
-    const std::string& col_name = slot->col_name();
-    column_names->push_back(col_name);
+    const std::string col_name(slot->col_name());
+    column_names->emplace_back(col_name);
 
     auto it = field_ids_by_name.find(col_name);
     if (it != field_ids_by_name.end()) {
@@ -215,7 +215,7 @@ Status IcebergTableSink::create_delete_sink_context(
         const auto& expr = output_exprs[i];
         for (const auto& node : expr.nodes) {
             if (node.node_type == TExprNodeType::SLOT_REF && node.__isset.slot_ref) {
-                delete_sink_ctx->column_slot_map[slot->col_name()] = node;
+                delete_sink_ctx->column_slot_map[std::string(slot->col_name())] = node;
                 break;
             }
         }

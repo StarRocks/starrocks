@@ -136,11 +136,11 @@ public:
     std::string debug_string() const;
 
     const bool exist_filed_id() const { return _exist_field_id; }
-    const int32_t get_field_idx_by_column_name(const std::string& column_name) const;
+    const int32_t get_field_idx_by_column_name(std::string_view column_name) const;
     const int32_t get_field_idx_by_field_id(int32_t field_id) const;
     const ParquetField* get_stored_column_by_field_idx(size_t field_idx) const { return &_fields[field_idx]; }
     const ParquetField* get_stored_column_by_field_id(int32_t field_id) const;
-    const ParquetField* get_stored_column_by_column_name(const std::string& column_name) const;
+    const ParquetField* get_stored_column_by_column_name(std::string_view column_name) const;
     const std::vector<ParquetField>& get_parquet_fields() const { return _fields; }
     const size_t get_fields_size() const { return _fields.size(); }
     const bool contain_field_id(int32_t field_id) const {

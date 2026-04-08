@@ -765,7 +765,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             GlobalDictsWithVersion<GlobalDictMap> dict;
             dict.dict = std::move(global_dict);
             dict.version = slot.has_global_dict_version() ? slot.global_dict_version() : 0;
-            _global_dicts.emplace(std::make_pair(slot.col_name(), std::move(dict)));
+            _global_dicts.emplace(std::string(slot.col_name()), std::move(dict));
         }
     }
 

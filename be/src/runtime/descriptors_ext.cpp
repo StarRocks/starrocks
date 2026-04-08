@@ -29,6 +29,7 @@
 #include "exprs/expr_factory.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "util/compression/block_compression.h"
 
@@ -470,7 +471,21 @@ std::string JDBCTableDescriptor::debug_string() const {
 
 Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl,
                              DescriptorTbl** tbl, int32_t chunk_size) {
-    *tbl = pool->add(new DescriptorTbl());
+    // Only use fragment MemPool when pool is the fragment-level ObjectPool.
+    // When pool is query-level (e.g. _query_ctx->object_pool()), descriptors may
+    // outlive the fragment, so they must be heap-allocated to avoid use-after-free.
+    MemPool* mp = (state != nullptr && pool == state->obj_pool()) ? state->fragment_mem_pool() : nullptr;
+
+// Placement-new T into fragment MemPool; fall back to heap when unavailable.
+#define ALLOC_DESC(T, ...)                                                                      \
+    (mp != nullptr ? pool->emplace<T>(mp->allocate_aligned(sizeof(T), alignof(T)), __VA_ARGS__) \
+                   : pool->add(new T(__VA_ARGS__)))
+
+    if (mp != nullptr) {
+        *tbl = pool->emplace<DescriptorTbl>(mp->allocate_aligned(sizeof(DescriptorTbl), alignof(DescriptorTbl)));
+    } else {
+        *tbl = pool->add(new DescriptorTbl());
+    }
 
     // deserialize table descriptors first, they are being referenced by tuple descriptors
     for (const auto& tdesc : thrift_tbl.tableDescriptors) {
@@ -478,64 +493,58 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
 
         switch (tdesc.tableType) {
         case TTableType::MYSQL_TABLE:
-            desc = pool->add(new MySQLTableDescriptor(tdesc));
+            desc = ALLOC_DESC(MySQLTableDescriptor, tdesc);
             break;
-
         case TTableType::OLAP_TABLE:
         case TTableType::MATERIALIZED_VIEW:
-            desc = pool->add(new OlapTableDescriptor(tdesc));
+            desc = ALLOC_DESC(OlapTableDescriptor, tdesc);
             break;
-
         case TTableType::SCHEMA_TABLE:
-            desc = pool->add(new SchemaTableDescriptor(tdesc));
+            desc = ALLOC_DESC(SchemaTableDescriptor, tdesc);
             break;
         case TTableType::BROKER_TABLE:
-            desc = pool->add(new BrokerTableDescriptor(tdesc));
+            desc = ALLOC_DESC(BrokerTableDescriptor, tdesc);
             break;
         case TTableType::ES_TABLE:
-            desc = pool->add(new EsTableDescriptor(tdesc));
+            desc = ALLOC_DESC(EsTableDescriptor, tdesc);
             break;
         case TTableType::HDFS_TABLE: {
-            auto* hdfs_desc = pool->add(new HdfsTableDescriptor(tdesc, pool));
+            auto* hdfs_desc = ALLOC_DESC(HdfsTableDescriptor, tdesc, pool);
             RETURN_IF_ERROR(hdfs_desc->create_key_exprs(state, pool));
             desc = hdfs_desc;
             break;
         }
-        case TTableType::FILE_TABLE: {
-            desc = pool->add(new FileTableDescriptor(tdesc, pool));
+        case TTableType::FILE_TABLE:
+            desc = ALLOC_DESC(FileTableDescriptor, tdesc, pool);
             break;
-        }
         case TTableType::ICEBERG_TABLE: {
-            auto* iceberg_desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
+            auto* iceberg_desc = ALLOC_DESC(IcebergTableDescriptor, tdesc, pool);
             RETURN_IF_ERROR(iceberg_desc->set_partition_desc_map(tdesc.icebergTable, pool));
             RETURN_IF_ERROR(iceberg_desc->create_key_exprs(state, pool));
             desc = iceberg_desc;
             break;
         }
         case TTableType::DELTALAKE_TABLE: {
-            auto* delta_lake_desc = pool->add(new DeltaLakeTableDescriptor(tdesc, pool));
+            auto* delta_lake_desc = ALLOC_DESC(DeltaLakeTableDescriptor, tdesc, pool);
             RETURN_IF_ERROR(delta_lake_desc->create_key_exprs(state, pool));
             desc = delta_lake_desc;
             break;
         }
         case TTableType::HUDI_TABLE: {
-            auto* hudi_desc = pool->add(new HudiTableDescriptor(tdesc, pool));
+            auto* hudi_desc = ALLOC_DESC(HudiTableDescriptor, tdesc, pool);
             RETURN_IF_ERROR(hudi_desc->create_key_exprs(state, pool));
             desc = hudi_desc;
             break;
         }
-        case TTableType::PAIMON_TABLE: {
-            desc = pool->add(new PaimonTableDescriptor(tdesc, pool));
+        case TTableType::PAIMON_TABLE:
+            desc = ALLOC_DESC(PaimonTableDescriptor, tdesc, pool);
             break;
-        }
-        case TTableType::JDBC_TABLE: {
-            desc = pool->add(new JDBCTableDescriptor(tdesc));
+        case TTableType::JDBC_TABLE:
+            desc = ALLOC_DESC(JDBCTableDescriptor, tdesc);
             break;
-        }
-        case TTableType::ODPS_TABLE: {
-            desc = pool->add(new OdpsTableDescriptor(tdesc, pool));
+        case TTableType::ODPS_TABLE:
+            desc = ALLOC_DESC(OdpsTableDescriptor, tdesc, pool);
             break;
-        }
         case TTableType::LOGICAL_ICEBERG_METADATA_TABLE:
         case TTableType::ICEBERG_REFS_TABLE:
         case TTableType::ICEBERG_HISTORY_TABLE:
@@ -544,14 +553,12 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         case TTableType::ICEBERG_MANIFESTS_TABLE:
         case TTableType::ICEBERG_FILES_TABLE:
         case TTableType::ICEBERG_PARTITIONS_TABLE:
-        case TTableType::ICEBERG_PROPERTIES_TABLE: {
-            desc = pool->add(new IcebergMetadataTableDescriptor(tdesc, pool));
+        case TTableType::ICEBERG_PROPERTIES_TABLE:
+            desc = ALLOC_DESC(IcebergMetadataTableDescriptor, tdesc, pool);
             break;
-        }
-        case TTableType::KUDU_TABLE: {
-            desc = pool->add(new KuduTableDescriptor(tdesc, pool));
+        case TTableType::KUDU_TABLE:
+            desc = ALLOC_DESC(KuduTableDescriptor, tdesc, pool);
             break;
-        }
         default:
             DCHECK(false) << "invalid table type: " << tdesc.tableType;
         }
@@ -560,7 +567,7 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
     }
 
     for (const auto& tdesc : thrift_tbl.tupleDescriptors) {
-        TupleDescriptor* desc = pool->add(new TupleDescriptor(tdesc));
+        TupleDescriptor* desc = ALLOC_DESC(TupleDescriptor, tdesc);
 
         // fix up table pointer
         if (tdesc.__isset.tableId) {
@@ -572,7 +579,7 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
     }
 
     for (const auto& tdesc : thrift_tbl.slotDescriptors) {
-        SlotDescriptor* slot_d = pool->add(new SlotDescriptor(tdesc));
+        SlotDescriptor* slot_d = ALLOC_DESC(SlotDescriptor, tdesc);
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
         if (!slot_d->col_name().empty()) {
             (*tbl)->_slot_with_column_name_map[tdesc.id] = slot_d;
@@ -586,6 +593,8 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
 
         entry->second->add_slot(slot_d);
     }
+
+#undef ALLOC_DESC
 
     return Status::OK();
 }

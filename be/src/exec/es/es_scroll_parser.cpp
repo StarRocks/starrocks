@@ -245,8 +245,8 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
             // if pure_doc_value enabled, docvalue_context must contains the key
             // todo: need move all `pure_docvalue` for every tuple outside fill_tuple
             //  should check pure_docvalue for one table scan not every tuple
-            const char* col_name = pure_doc_value ? _doc_value_context->at(slot_desc->col_name()).c_str()
-                                                  : slot_desc->col_name().c_str();
+            const char* col_name = pure_doc_value ? _doc_value_context->at(std::string(slot_desc->col_name())).c_str()
+                                                  : slot_desc->col_name().data();
 
             auto has_col = line.HasMember(col_name);
             if (has_col) {

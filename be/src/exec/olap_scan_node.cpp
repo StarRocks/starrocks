@@ -846,7 +846,7 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
         field_bytes += type_estimated_overhead_bytes(slot->type().type);
 
         _estimated_scan_row_bytes += field_bytes;
-        if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {
+        if (unused_output_column_set.find(std::string(slot->col_name())) == unused_output_column_set.end()) {
             _estimated_output_row_bytes += field_bytes;
         }
     }

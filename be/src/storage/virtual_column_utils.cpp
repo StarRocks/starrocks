@@ -140,7 +140,7 @@ StatusOr<TabletSchemaCSPtr> extend_schema_by_virtual_columns(const TabletSchemaC
     }
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*schema, schema->columns());
     for (const auto& slot : slots) {
-        const std::string& col_name = slot->col_name();
+        const auto col_name = slot->col_name();
         if (slot->is_virtual()) {
             bool found = false;
             for (const auto& vc : VIRTUAL_COLUMNS) {

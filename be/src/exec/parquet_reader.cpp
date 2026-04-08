@@ -242,7 +242,7 @@ Status ParquetReaderWrap::column_indices(const std::vector<SlotDescriptor*>& tup
         if (slot_desc == nullptr) {
             continue;
         }
-        std::string col_name = slot_desc->col_name();
+        std::string col_name(slot_desc->col_name());
 
         auto iter = _map_column_nested.find(col_name);
         if (iter != _map_column_nested.end()) {

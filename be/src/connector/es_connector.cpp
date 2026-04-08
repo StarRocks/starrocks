@@ -90,7 +90,7 @@ Status ESDataSource::open(RuntimeState* state) {
         if (!slot->is_materialized()) {
             continue;
         }
-        _column_names.push_back(slot->col_name());
+        _column_names.emplace_back(slot->col_name());
     }
 
     RETURN_IF_ERROR(_build_conjuncts());

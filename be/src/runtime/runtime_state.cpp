@@ -50,6 +50,7 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "types/datetime_value.h"
@@ -157,6 +158,13 @@ RuntimeState::~RuntimeState() {
     // close rejected record file
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
+    }
+}
+
+void RuntimeState::init_fragment_mem_pool() {
+    if (_fragment_mem_pool == nullptr) {
+        _fragment_mem_pool = std::make_unique<MemPool>();
+        _mem_resource = std::make_unique<MemPoolResource>(_fragment_mem_pool.get());
     }
 }
 
