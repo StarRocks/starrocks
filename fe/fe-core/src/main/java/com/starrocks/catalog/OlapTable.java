@@ -2065,6 +2065,16 @@ public class OlapTable extends Table {
         return tableProperty.enablePersistentIndex();
     }
 
+    public boolean isCnFreeTabletCreation() {
+        return tableProperty.cnFreeTabletCreation();
+    }
+
+    public void setCnFreeTabletCreation(boolean cnFreeTabletCreation) {
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_CN_FREE_TABLET_CREATION,
+                Boolean.valueOf(cnFreeTabletCreation).toString());
+        tableProperty.buildCnFreeTabletCreation();
+    }
+
     public int primaryIndexCacheExpireSec() {
         return tableProperty.primaryIndexCacheExpireSec();
     }
@@ -3005,6 +3015,11 @@ public class OlapTable extends Table {
         if (getCompactionStrategy() != TCompactionStrategy.DEFAULT) {
             properties.put(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY,
                     TableProperty.compactionStrategyToString(getCompactionStrategy()));
+        }
+
+        if (isCloudNativeTable()) {
+            properties.put(PropertyAnalyzer.PROPERTIES_CN_FREE_TABLET_CREATION,
+                    Boolean.toString(isCnFreeTabletCreation()));
         }
 
         // lake_compaction_max_parallel (only for cloud native table, only show when not default)

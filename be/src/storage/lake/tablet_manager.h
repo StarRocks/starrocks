@@ -301,6 +301,7 @@ private:
     Status put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location);
     StatusOr<TabletMetadataPtr> load_tablet_metadata(const std::string& metadata_location, bool fill_data_cache,
                                                      int64_t expected_gtid, const std::shared_ptr<FileSystem>& fs);
+    StatusOr<TabletMetadataPtr> construct_initial_metadata(int64_t tablet_id);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);
     Status corrupted_tablet_meta_handler(const Status& s, const std::string& metadata_location);

@@ -3713,6 +3713,14 @@ public class Config extends ConfigBase {
     public static boolean enable_cloud_native_persistent_index_by_default = true;
 
     /**
+     * Whether to enable cn-free tablet creation by default for newly created cloud native tables.
+     * When enabled, DDL operations skip CreateReplicaTask and no version 1 metadata is written to
+     * object storage during tablet creation. The initial metadata is fetched from FE on demand.
+     */
+    @ConfField(mutable = true)
+    public static boolean lake_enable_cn_free_tablet_creation = true;
+
+    /**
      * timeout for external table commit
      */
     @ConfField(mutable = true)

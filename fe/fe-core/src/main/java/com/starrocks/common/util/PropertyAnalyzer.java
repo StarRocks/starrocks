@@ -158,6 +158,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_CN_FREE_TABLET_CREATION = "cn_free_tablet_creation";
+
     public static final String PROPERTIES_LABELS_LOCATION = "labels.location";
 
     public static final String PROPERTIES_PERSISTENT_INDEX_TYPE = "persistent_index_type";

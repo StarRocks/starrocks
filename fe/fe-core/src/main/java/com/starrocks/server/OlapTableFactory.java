@@ -404,6 +404,13 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             if (table.isCloudNativeTable()) {
+                boolean cnFreeTabletCreation = PropertyAnalyzer.analyzeBooleanProp(
+                        properties, PropertyAnalyzer.PROPERTIES_CN_FREE_TABLET_CREATION,
+                        Config.lake_enable_cn_free_tablet_creation);
+                table.setCnFreeTabletCreation(cnFreeTabletCreation);
+            }
+
+            if (table.isCloudNativeTable()) {
                 TCompactionStrategy compactionStrategy;
                 try {
                     compactionStrategy = PropertyAnalyzer.analyzecompactionStrategy(properties);
@@ -806,8 +813,10 @@ public class OlapTableFactory implements AbstractTableFactory {
             // if failed in any step, use this set to do clear things
             Set<Long> tabletIdSet = new HashSet<Long>();
 
+            // cn-free tablet creation skips CreateReplicaTask and does not need a live CN,
+            // so skip acquiring compute resource to allow table creation when all CNs are down.
             ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
-            if (ConnectContext.get() != null) {
+            if (ConnectContext.get() != null && !table.isCnFreeTabletCreation()) {
                 ConnectContext connectContext = ConnectContext.get();
                 computeResource = connectContext.getCurrentComputeResource();
             }

@@ -207,6 +207,8 @@ UpdateManager* TabletManager::update_mgr() {
     return _update_mgr;
 }
 
+// NOTE: if you add a new field here, also update construct_initial_metadata() and
+// TGetTabletInitialMetadataResponse in FrontendService.thrift to keep them in sync.
 Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     // generate tablet metadata pb
     auto tablet_metadata_pb = std::make_shared<TabletMetadataPB>();
@@ -273,6 +275,125 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     }
 
     return put_tablet_metadata(std::move(tablet_metadata_pb));
+}
+
+// NOTE: if you add a new field to create_tablet(), also update this method and
+// TGetTabletInitialMetadataResponse in FrontendService.thrift to keep them in sync.
+StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t tablet_id) {
+    TEST_ERROR_POINT("TabletManager::construct_initial_metadata");
+#ifdef BE_TEST
+    // In unit test environment, starlet worker is not available. Return NOT_FOUND so
+    // that callers treat cn-free fallback as a normal "tablet not found" case.
+    return Status::NotFound(fmt::format("cn-free tablet creation disabled in unit test, tablet_id: {}", tablet_id));
+#endif
+    // Get (table_id, partition_id, index_id) from shard info.
+    // These are used for the FE RPC request and for SingleFlight grouping by (table_id, index_id),
+    // so concurrent requests for different tablets under the same index share one RPC.
+    int64_t table_id = -1;
+    int64_t partition_id = -1;
+    int64_t index_id = -1;
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (g_worker != nullptr) {
+        auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+        if (shard_info_or.ok()) {
+            const auto& properties = shard_info_or.value().properties;
+            auto table_id_iter = properties.find("tableId");
+            if (table_id_iter != properties.end()) {
+                table_id = std::atol(table_id_iter->second.data());
+            }
+            auto partition_id_iter = properties.find("partitionId");
+            if (partition_id_iter != properties.end()) {
+                partition_id = std::atol(partition_id_iter->second.data());
+            }
+            auto index_id_iter = properties.find("indexId");
+            if (index_id_iter != properties.end()) {
+                index_id = std::atol(index_id_iter->second.data());
+            }
+        } else {
+            return Status::InternalError(
+                    fmt::format("fail to get shard info, tablet_id: {}, error: {}",
+                                tablet_id, shard_info_or.status().message()));
+        }
+    } else {
+        return Status::InternalError(fmt::format("starlet worker not initialized, tablet_id: {}", tablet_id));
+    }
+    if (table_id <= 0 || partition_id <= 0 || index_id <= 0) {
+        return Status::InternalError(
+                fmt::format("incomplete shard properties, tablet_id: {}, table_id: {}, partition_id: {}, index_id: {}",
+                            tablet_id, table_id, partition_id, index_id));
+    }
+#else
+    return Status::InternalError("cn-free tablet creation requires USE_STAROS");
+#endif
+
+    ASSIGN_OR_RETURN(auto resp,
+                     _table_schema_service->get_tablet_initial_metadata(tablet_id, table_id, partition_id, index_id));
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(kInitialVersion);
+    metadata->set_next_rowset_id(1);
+    metadata->set_cumulative_point(0);
+    metadata->set_gtid(resp.gtid);
+
+    // schema
+    auto compress_type = resp.__isset.compression_type ? resp.compression_type : TCompressionType::LZ4_FRAME;
+    RETURN_IF_ERROR(convert_t_schema_to_pb_schema(resp.schema, compress_type, metadata->mutable_schema()));
+    auto compression_level = resp.__isset.compression_level ? resp.compression_level : -1;
+    metadata->mutable_schema()->set_compression_level(compression_level);
+
+    // range: look up this tablet's range from the tablet_ranges map
+    if (resp.__isset.tablet_ranges) {
+        auto it = resp.tablet_ranges.find(tablet_id);
+        if (it != resp.tablet_ranges.end()) {
+            ASSIGN_OR_RETURN(auto range_pb, TabletRangeHelper::convert_t_range_to_pb_range(it->second));
+            *metadata->mutable_range() = range_pb;
+        }
+    }
+
+    // persistent index
+    if (resp.__isset.enable_persistent_index) {
+        metadata->set_enable_persistent_index(resp.enable_persistent_index);
+        if (resp.__isset.persistent_index_type) {
+            switch (resp.persistent_index_type) {
+            case TPersistentIndexType::LOCAL:
+                metadata->set_persistent_index_type(PersistentIndexTypePB::LOCAL);
+                break;
+            case TPersistentIndexType::CLOUD_NATIVE:
+                metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+                break;
+            default:
+                return Status::InternalError(
+                        strings::Substitute("Unknown persistent index type, tabletId:$0", tablet_id));
+            }
+        }
+    }
+
+    // flat json config
+    if (resp.__isset.flat_json_config) {
+        FlatJsonConfig flat_json_config;
+        flat_json_config.update(resp.flat_json_config);
+        flat_json_config.to_pb(metadata->mutable_flat_json_config());
+    }
+
+    // compaction strategy
+    if (resp.__isset.compaction_strategy) {
+        switch (resp.compaction_strategy) {
+        case TCompactionStrategy::DEFAULT:
+            metadata->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
+            break;
+        case TCompactionStrategy::REAL_TIME:
+            metadata->set_compaction_strategy(CompactionStrategyPB::REAL_TIME);
+            break;
+        default:
+            return Status::InternalError(
+                    strings::Substitute("Unknown compaction strategy, tabletId:$0", tablet_id));
+        }
+    } else {
+        metadata->set_compaction_strategy(CompactionStrategyPB::DEFAULT);
+    }
+
+    return metadata;
 }
 
 StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
@@ -575,6 +696,20 @@ StatusOr<TabletMetadataPtr> TabletManager::get_tablet_metadata(const string& pat
             auto metadata = const_cast<starrocks::TabletMetadataPB*>(metadata_or.value().get());
             metadata->set_id(tablet_id);
         }
+    }
+
+    // CN-Free Tablet Creation fallback: when cn_free_tablet_creation is enabled, DDL skips
+    // writing version 1 metadata to object storage. When a consumer first needs version 1
+    // metadata, we fetch the tablet's initial configuration from FE and construct the
+    // TabletMetadataPB on demand.
+    //
+    // The fs == nullptr check excludes cross-cluster replication reads, where |fs| points to
+    // the source cluster's object storage. Without this check, a source tablet_id that
+    // coincidentally matches a local tablet_id would cause us to fetch the wrong metadata
+    // from the local FE. Other local callers that pass non-null fs (e.g. LakeDelvecLoader)
+    // do not request version 1 in practice, since version 1 has no rowsets or delvecs.
+    if (metadata_or.status().is_not_found() && tablet_id != 0 && version == kInitialVersion && fs == nullptr) {
+        metadata_or = construct_initial_metadata(tablet_id);
     }
 
     if (!metadata_or.ok()) {

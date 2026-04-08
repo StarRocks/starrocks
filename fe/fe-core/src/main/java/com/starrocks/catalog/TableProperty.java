@@ -252,6 +252,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // Only meaningful when enablePersistentIndex = true.
     TPersistentIndexType persistentIndexType;
 
+    private boolean cnFreeTabletCreation = false;
+
     private int primaryIndexCacheExpireSec = 0;
 
     /*
@@ -383,6 +385,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.mvTransparentRewriteMode = other.mvTransparentRewriteMode;
         this.enablePersistentIndex = other.enablePersistentIndex;
         this.persistentIndexType = other.persistentIndexType;
+        this.cnFreeTabletCreation = other.cnFreeTabletCreation;
         this.primaryIndexCacheExpireSec = other.primaryIndexCacheExpireSec;
         this.storageVolume = other.storageVolume;
         this.storageCoolDownTTL = other.storageCoolDownTTL;
@@ -879,6 +882,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildCnFreeTabletCreation() {
+        cnFreeTabletCreation = Boolean.parseBoolean(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_CN_FREE_TABLET_CREATION, "false"));
+        return this;
+    }
+
     public TableProperty buildPrimaryIndexCacheExpireSec() {
         primaryIndexCacheExpireSec = Integer.parseInt(properties.getOrDefault(
                 PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC, "0"));
@@ -1209,6 +1218,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enablePersistentIndex;
     }
 
+    public boolean cnFreeTabletCreation() {
+        return cnFreeTabletCreation;
+    }
+
     public boolean isFileBundling() {
         return fileBundling;
     }
@@ -1431,6 +1444,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageCoolDownTTL();
         buildEnablePersistentIndex();
         buildPersistentIndexType();
+        buildCnFreeTabletCreation();
         buildPrimaryIndexCacheExpireSec();
         buildCompressionType();
         buildWriteQuorum();

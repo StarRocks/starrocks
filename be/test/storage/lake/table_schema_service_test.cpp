@@ -212,6 +212,23 @@ protected:
         out.mock_thrift_rpc = static_cast<bool*>((*arr)[3]);
         return out;
     }
+
+    struct InitialMetadataRpcHookArgs {
+        const TGetTabletInitialMetadataRequest* request = nullptr;
+        TBatchGetTabletInitialMetadataResponse* response = nullptr;
+        Status* status = nullptr;
+        bool* mock_thrift_rpc = nullptr;
+    };
+
+    static InitialMetadataRpcHookArgs unpack_initial_metadata_hook_args(void* arg) {
+        auto* arr = static_cast<std::array<void*, 4>*>(arg);
+        InitialMetadataRpcHookArgs out;
+        out.request = static_cast<const TGetTabletInitialMetadataRequest*>((*arr)[0]);
+        out.response = static_cast<TBatchGetTabletInitialMetadataResponse*>((*arr)[1]);
+        out.status = static_cast<Status*>((*arr)[2]);
+        out.mock_thrift_rpc = static_cast<bool*>((*arr)[3]);
+        return out;
+    }
     void clear_and_init_test_dir() {
         (void)fs::remove_all(_test_directory);
         CHECK_OK(fs::create_directories(join_path(_test_directory, kSegmentDirectoryName)));
@@ -344,6 +361,14 @@ protected:
         setup_rpc_test_hook([](const RpcHookArgs& ctx) {
             *ctx.mock_thrift_rpc = true;
             *ctx.status = Status::ThriftRpcError("Invalid method name 'getTableSchema'");
+        });
+    }
+
+    void setup_skip_construct_initial_metadata() {
+        SyncPoint::GetInstance()->SetCallBack("TabletManager::construct_initial_metadata", [](void* arg) {
+            // Return NOT_FOUND to simulate tablet not existing, because construct_initial_metadata
+            // requires g_worker (StarOS) which is unavailable in unit tests.
+            *static_cast<Status*>(arg) = Status::NotFound("skipped by test");
         });
     }
 
@@ -504,7 +529,10 @@ TEST_F(TableSchemaServiceTest, remote_error_handling) {
 
     const std::vector<Case> cases{
             {"method_not_found_maps_to_not_supported",
-             [](TableSchemaServiceTest* t) { t->setup_rpc_method_not_found(); },
+             [](TableSchemaServiceTest* t) {
+                 t->setup_rpc_method_not_found();
+                 t->setup_skip_construct_initial_metadata();
+             },
              [](const Status& st) { ASSERT_TRUE(st.is_not_found()) << st; }},
             {"other_thrift_rpc_error_fail_fast", [](TableSchemaServiceTest* t) { t->setup_rpc_other_thrift_error(); },
              [](const Status& st) { ASSERT_TRUE(st.is_thrift_rpc_error()) << st; }},
@@ -607,6 +635,8 @@ TEST_F(TableSchemaServiceTest, load_fallback_to_tablet_schema) {
 
         setup_rpc_method_not_found();
         mock_tablet_schema_by_id(Status::NotFound("mocked not found"));
+        // Mock cn-free fallback RPC to return NOT_FOUND, otherwise it tries real RPC
+        setup_skip_construct_initial_metadata();
 
         auto result = _schema_service->get_schema_for_load(create_schema_info(schema_id, 100, 101), tablet_id, 1);
         ASSERT_TRUE(result.status().is_not_found());
@@ -759,6 +789,216 @@ TEST_F(TableSchemaServiceTest, query_interference) {
     ASSERT_FALSE(barrier.timed_out()) << "Timed out waiting for follower to join singleflight group";
     ASSERT_TRUE((r1.ok() && !r2.ok()) || (!r1.ok() && r2.ok()));
     ASSERT_GE(rpc_call_count.load(), 2);
+}
+
+TEST_F(TableSchemaServiceTest, get_tablet_initial_metadata_success) {
+    ScopedSyncPoint sync_point;
+    auto schema_id = next_id();
+
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
+                auto ctx = unpack_initial_metadata_hook_args(arg);
+                *ctx.mock_thrift_rpc = true;
+                *ctx.status = Status::OK();
+
+                TableSchemaServiceTest::set_status(&ctx.response->status, TStatusCode::OK);
+                ctx.response->__set_responses(std::vector<TGetTabletInitialMetadataResponse>{});
+                auto& resp = ctx.response->responses.emplace_back();
+                TableSchemaServiceTest::set_status(&resp.status, TStatusCode::OK);
+                resp.__set_schema(TableSchemaServiceTest::make_thrift_schema(schema_id));
+                resp.__set_enable_persistent_index(true);
+                resp.__set_persistent_index_type(TPersistentIndexType::CLOUD_NATIVE);
+                resp.__set_compaction_strategy(TCompactionStrategy::REAL_TIME);
+                resp.__set_compression_type(TCompressionType::LZ4_FRAME);
+                resp.__set_compression_level(3);
+                resp.__set_gtid(12345);
+            });
+
+    auto tablet_id = next_id();
+    auto table_id = next_id();
+    auto partition_id = next_id();
+    auto index_id = next_id();
+    auto result = _schema_service->get_tablet_initial_metadata(tablet_id, table_id, partition_id, index_id);
+    ASSERT_TRUE(result.ok());
+
+    auto& resp = result.value();
+    ASSERT_TRUE(resp.__isset.schema);
+    ASSERT_EQ(schema_id, resp.schema.id);
+    ASSERT_TRUE(resp.enable_persistent_index);
+    ASSERT_EQ(TPersistentIndexType::CLOUD_NATIVE, resp.persistent_index_type);
+    ASSERT_EQ(TCompactionStrategy::REAL_TIME, resp.compaction_strategy);
+    ASSERT_EQ(TCompressionType::LZ4_FRAME, resp.compression_type);
+    ASSERT_EQ(3, resp.compression_level);
+    ASSERT_EQ(12345, resp.gtid);
+}
+
+TEST_F(TableSchemaServiceTest, get_tablet_initial_metadata_not_found) {
+    ScopedSyncPoint sync_point;
+
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
+                auto ctx = unpack_initial_metadata_hook_args(arg);
+                *ctx.mock_thrift_rpc = true;
+                *ctx.status = Status::OK();
+
+                TableSchemaServiceTest::set_status(&ctx.response->status, TStatusCode::OK);
+                ctx.response->__set_responses(std::vector<TGetTabletInitialMetadataResponse>{});
+                auto& resp = ctx.response->responses.emplace_back();
+                TableSchemaServiceTest::set_status(&resp.status, TStatusCode::NOT_FOUND, "tablet not found");
+            });
+
+    auto result = _schema_service->get_tablet_initial_metadata(next_id(), next_id(), next_id(), next_id());
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_not_found());
+}
+
+TEST_F(TableSchemaServiceTest, get_tablet_initial_metadata_rpc_error) {
+    ScopedSyncPoint sync_point;
+
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
+                auto ctx = unpack_initial_metadata_hook_args(arg);
+                *ctx.mock_thrift_rpc = true;
+                *ctx.status = Status::ThriftRpcError("connection refused");
+            });
+
+    auto result = _schema_service->get_tablet_initial_metadata(next_id(), next_id(), next_id(), next_id());
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_thrift_rpc_error());
+}
+
+TEST_F(TableSchemaServiceTest, construct_initial_metadata_fields_match_create_tablet) {
+    ScopedSyncPoint sync_point;
+    auto tablet_id_a = next_id();
+    auto schema_id = next_id();
+
+    // 1. Build TCreateTabletReq and create tablet A via create_tablet()
+    TCreateTabletReq create_req;
+    create_req.tablet_id = tablet_id_a;
+    create_req.__set_version(1);
+    create_req.__set_enable_persistent_index(true);
+    create_req.__set_persistent_index_type(TPersistentIndexType::CLOUD_NATIVE);
+    create_req.__set_compaction_strategy(TCompactionStrategy::REAL_TIME);
+    create_req.__set_compression_type(TCompressionType::LZ4_FRAME);
+    create_req.__set_compression_level(5);
+    create_req.__set_gtid(99999);
+    create_req.__set_create_schema_file(false);
+
+    auto thrift_schema = make_thrift_schema(schema_id);
+    create_req.__set_tablet_schema(thrift_schema);
+
+    ASSERT_OK(_tablet_manager->create_tablet(create_req));
+    ASSIGN_OR_ABORT(auto metadata_a, _tablet_manager->get_tablet_metadata(tablet_id_a, 1));
+
+    // 2. Mock RPC to return the same fields, then call get_tablet_initial_metadata directly
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
+                auto ctx = unpack_initial_metadata_hook_args(arg);
+                *ctx.mock_thrift_rpc = true;
+                *ctx.status = Status::OK();
+
+                TableSchemaServiceTest::set_status(&ctx.response->status, TStatusCode::OK);
+                ctx.response->__set_responses(std::vector<TGetTabletInitialMetadataResponse>{});
+                auto& resp = ctx.response->responses.emplace_back();
+                TableSchemaServiceTest::set_status(&resp.status, TStatusCode::OK);
+                resp.__set_schema(thrift_schema);
+                resp.__set_enable_persistent_index(true);
+                resp.__set_persistent_index_type(TPersistentIndexType::CLOUD_NATIVE);
+                resp.__set_compaction_strategy(TCompactionStrategy::REAL_TIME);
+                resp.__set_compression_type(TCompressionType::LZ4_FRAME);
+                resp.__set_compression_level(5);
+                resp.__set_gtid(99999);
+            });
+
+    // 3. Get response and manually build metadata_b the same way construct_initial_metadata does
+    auto tablet_id_b = next_id();
+    auto resp_or = _schema_service->get_tablet_initial_metadata(tablet_id_b, next_id(), next_id(), next_id());
+    ASSERT_TRUE(resp_or.ok());
+    auto& resp = resp_or.value();
+
+    auto metadata_b = std::make_shared<TabletMetadataPB>();
+    metadata_b->set_id(tablet_id_b);
+    metadata_b->set_version(1);
+    metadata_b->set_next_rowset_id(1);
+    metadata_b->set_cumulative_point(0);
+    metadata_b->set_gtid(resp.gtid);
+    auto compress_type = resp.__isset.compression_type ? resp.compression_type : TCompressionType::LZ4_FRAME;
+    ASSERT_OK(convert_t_schema_to_pb_schema(resp.schema, compress_type, metadata_b->mutable_schema()));
+    metadata_b->mutable_schema()->set_compression_level(resp.__isset.compression_level ? resp.compression_level : -1);
+    if (resp.__isset.enable_persistent_index) {
+        metadata_b->set_enable_persistent_index(resp.enable_persistent_index);
+    }
+    if (resp.__isset.persistent_index_type) {
+        metadata_b->set_persistent_index_type(resp.persistent_index_type == TPersistentIndexType::LOCAL
+                                                      ? PersistentIndexTypePB::LOCAL
+                                                      : PersistentIndexTypePB::CLOUD_NATIVE);
+    }
+    if (resp.__isset.compaction_strategy) {
+        metadata_b->set_compaction_strategy(resp.compaction_strategy == TCompactionStrategy::DEFAULT
+                                                    ? CompactionStrategyPB::DEFAULT
+                                                    : CompactionStrategyPB::REAL_TIME);
+    }
+
+    // 4. Compare fields
+    ASSERT_EQ(metadata_a->version(), metadata_b->version());
+    ASSERT_EQ(metadata_a->next_rowset_id(), metadata_b->next_rowset_id());
+    ASSERT_EQ(metadata_a->cumulative_point(), metadata_b->cumulative_point());
+    ASSERT_EQ(metadata_a->gtid(), metadata_b->gtid());
+    ASSERT_EQ(metadata_a->enable_persistent_index(), metadata_b->enable_persistent_index());
+    ASSERT_EQ(metadata_a->persistent_index_type(), metadata_b->persistent_index_type());
+    ASSERT_EQ(metadata_a->compaction_strategy(), metadata_b->compaction_strategy());
+    ASSERT_EQ(metadata_a->schema().id(), metadata_b->schema().id());
+    ASSERT_EQ(metadata_a->schema().compression_level(), metadata_b->schema().compression_level());
+}
+
+TEST_F(TableSchemaServiceTest, cn_free_fallback_not_triggered_for_version_gt_1) {
+    ScopedSyncPoint sync_point;
+    std::atomic<int> rpc_calls{0};
+
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
+                rpc_calls.fetch_add(1);
+                auto ctx = unpack_initial_metadata_hook_args(arg);
+                *ctx.mock_thrift_rpc = true;
+                *ctx.status = Status::OK();
+                TableSchemaServiceTest::set_status(&ctx.response->status, TStatusCode::OK);
+                ctx.response->__set_responses(std::vector<TGetTabletInitialMetadataResponse>{});
+                auto& resp = ctx.response->responses.emplace_back();
+                TableSchemaServiceTest::set_status(&resp.status, TStatusCode::OK);
+                resp.__set_schema(make_thrift_schema(next_id()));
+            });
+
+    // version 2 not found should NOT trigger cn-free fallback
+    auto result = _tablet_manager->get_tablet_metadata(next_id(), 2);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_not_found());
+    ASSERT_EQ(0, rpc_calls.load());
+}
+
+TEST_F(TableSchemaServiceTest, cn_free_fallback_not_triggered_with_external_fs) {
+    ScopedSyncPoint sync_point;
+    std::atomic<int> rpc_calls{0};
+
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
+                rpc_calls.fetch_add(1);
+                auto ctx = unpack_initial_metadata_hook_args(arg);
+                *ctx.mock_thrift_rpc = true;
+                *ctx.status = Status::OK();
+                TableSchemaServiceTest::set_status(&ctx.response->status, TStatusCode::OK);
+                ctx.response->__set_responses(std::vector<TGetTabletInitialMetadataResponse>{});
+                auto& resp = ctx.response->responses.emplace_back();
+                TableSchemaServiceTest::set_status(&resp.status, TStatusCode::OK);
+                resp.__set_schema(make_thrift_schema(next_id()));
+            });
+
+    // version 1 not found with non-null fs should NOT trigger cn-free fallback
+    auto external_fs = std::shared_ptr<FileSystem>(FileSystem::Default(), [](FileSystem*) {});
+    auto tablet_id = next_id();
+    auto result = _tablet_manager->get_tablet_metadata(tablet_id, 1, true, 0, external_fs);
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_not_found());
+    ASSERT_EQ(0, rpc_calls.load());
 }
 
 } // namespace starrocks::lake

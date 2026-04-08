@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
@@ -33,10 +34,17 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.thrift.TBatchGetTabletInitialMetadataRequest;
+import com.starrocks.thrift.TBatchGetTabletInitialMetadataResponse;
+import com.starrocks.thrift.TGetTabletInitialMetadataRequest;
+import com.starrocks.thrift.TGetTabletInitialMetadataResponse;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTabletRange;
 import com.starrocks.utframe.UtFrameUtils;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.internal.SnapshotImpl;
@@ -527,6 +535,7 @@ public class CreateLakeTableTest {
                 "DISTRIBUTED BY HASH(`k2`) BUCKETS 3 \n" +
                 "PROPERTIES (\n" +
                 "\"cloud_native_fast_schema_evolution_v2\" = \"true\",\n" +
+                "\"cn_free_tablet_creation\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\",\n" +
                 "\"datacache.enable\" = \"true\",\n" +
                 "\"enable_async_write_back\" = \"false\",\n" +
@@ -580,5 +589,163 @@ public class CreateLakeTableTest {
                 snapshot, engine, metastore);
         LightWeightDeltaLakeTable light = new LightWeightDeltaLakeTable(table);
         Assertions.assertThrows(UnsupportedOperationException.class, light::getDeltaSnapshot);
+    }
+
+    @Test
+    public void testCnFreeTabletCreation() throws Exception {
+        // default: enabled for lake table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.cn_free_default\n" +
+                        "(c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2"));
+        Assertions.assertTrue(getLakeTable("lake_test", "cn_free_default").isCnFreeTabletCreation());
+
+        // explicit false
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.cn_free_false\n" +
+                        "(c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('cn_free_tablet_creation' = 'false')"));
+        Assertions.assertFalse(getLakeTable("lake_test", "cn_free_false").isCnFreeTabletCreation());
+
+        // explicit true
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.cn_free_true\n" +
+                        "(c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('cn_free_tablet_creation' = 'true')"));
+        Assertions.assertTrue(getLakeTable("lake_test", "cn_free_true").isCnFreeTabletCreation());
+
+        // config disabled: default becomes false
+        boolean saved = Config.lake_enable_cn_free_tablet_creation;
+        try {
+            Config.lake_enable_cn_free_tablet_creation = false;
+            ExceptionChecker.expectThrowsNoException(() -> createTable(
+                    "create table lake_test.cn_free_config_off\n" +
+                            "(c0 int, c1 string)\n" +
+                            "duplicate key(c0)\n" +
+                            "distributed by hash(c0) buckets 2"));
+            Assertions.assertFalse(getLakeTable("lake_test", "cn_free_config_off").isCnFreeTabletCreation());
+        } finally {
+            Config.lake_enable_cn_free_tablet_creation = saved;
+        }
+
+        // show create table contains the property
+        String sql = "show create table lake_test.cn_free_default";
+        ShowCreateTableStmt showCreateTableStmt =
+                (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        ShowResultSet resultSet = ShowExecutor.execute(showCreateTableStmt, connectContext);
+        List<List<String>> result = resultSet.getResultRows();
+        Assertions.assertFalse(result.isEmpty());
+        Assertions.assertTrue(result.get(0).get(1).contains("\"cn_free_tablet_creation\" = \"true\""));
+    }
+
+    @Test
+    public void testGetTabletInitialMetadata() throws Exception {
+        // create a table to get real tablet ids
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.cn_free_rpc_test\n" +
+                        "(c0 int, c1 string)\n" +
+                        "duplicate key(c0)\n" +
+                        "distributed by hash(c0) buckets 2\n" +
+                        "properties('cn_free_tablet_creation' = 'true')"));
+        LakeTable lakeTable = getLakeTable("lake_test", "cn_free_rpc_test");
+        Partition partition = lakeTable.getPartitions().stream().findFirst().get();
+        MaterializedIndex index = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        long tabletId = index.getTablets().get(0).getId();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(null);
+
+        // hash distribution tablet: returns OK with schema, no range
+        {
+            TGetTabletInitialMetadataRequest req = new TGetTabletInitialMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tabletId);
+            TBatchGetTabletInitialMetadataRequest batchReq = new TBatchGetTabletInitialMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletInitialMetadataResponse batchResp = impl.getTabletInitialMetadata(batchReq);
+
+            Assertions.assertEquals(TStatusCode.OK, batchResp.getStatus().getStatus_code());
+            Assertions.assertEquals(1, batchResp.getResponsesSize());
+            TGetTabletInitialMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.OK, resp.getStatus().getStatus_code());
+            Assertions.assertTrue(resp.isSetSchema());
+            Assertions.assertTrue(resp.isSetCompression_type());
+            // hash distribution table should not have tablet_ranges set
+            Assertions.assertFalse(resp.isSetTablet_ranges());
+        }
+
+        // range distribution tablet: tablet_ranges should contain all tablets' ranges
+        {
+            boolean savedRangeDistribution = Config.enable_range_distribution;
+            try {
+                Config.enable_range_distribution = true;
+                connectContext.getSessionVariable().setEnableRangeDistribution(true);
+                ExceptionChecker.expectThrowsNoException(() -> createTable(
+                        "create table lake_test.cn_free_range_test\n" +
+                                "(c0 int, c1 string)\n" +
+                                "PRIMARY KEY(c0)\n" +
+                                "properties('cn_free_tablet_creation' = 'true')"));
+                LakeTable rangeTable = getLakeTable("lake_test", "cn_free_range_test");
+                Assertions.assertTrue(rangeTable.isRangeDistribution());
+
+                Partition rangePart = rangeTable.getPartitions().stream().findFirst().get();
+                MaterializedIndex rangeIndex = rangePart.getDefaultPhysicalPartition().getLatestBaseIndex();
+                int numTablets = rangeIndex.getTablets().size();
+                long rangeTabletId = rangeIndex.getTablets().get(0).getId();
+                TGetTabletInitialMetadataRequest req = new TGetTabletInitialMetadataRequest();
+                req.setTable_id(rangeTable.getId());
+                req.setPartition_id(rangePart.getDefaultPhysicalPartition().getId());
+                req.setIndex_id(rangeIndex.getId());
+                req.setTablet_id(rangeTabletId);
+                TBatchGetTabletInitialMetadataRequest batchReq = new TBatchGetTabletInitialMetadataRequest();
+                batchReq.addToRequests(req);
+                TBatchGetTabletInitialMetadataResponse batchResp = impl.getTabletInitialMetadata(batchReq);
+
+                TGetTabletInitialMetadataResponse resp = batchResp.getResponses().get(0);
+                Assertions.assertEquals(TStatusCode.OK, resp.getStatus().getStatus_code());
+                Assertions.assertTrue(resp.isSetTablet_ranges());
+                // tablet_ranges should contain all tablets in this index
+                Assertions.assertEquals(numTablets, resp.getTablet_ranges().size());
+                // this tablet's range should be present
+                Assertions.assertTrue(resp.getTablet_ranges().containsKey(rangeTabletId));
+                // initial range is Range.all(), so bounds are not set
+                TTabletRange tabletRange = resp.getTablet_ranges().get(rangeTabletId);
+                Assertions.assertFalse(tabletRange.isSetLower_bound());
+                Assertions.assertFalse(tabletRange.isSetUpper_bound());
+            } finally {
+                Config.enable_range_distribution = savedRangeDistribution;
+                connectContext.getSessionVariable().setEnableRangeDistribution(false);
+            }
+        }
+
+        // non-existent tablet: returns NOT_FOUND
+        {
+            TGetTabletInitialMetadataRequest req = new TGetTabletInitialMetadataRequest();
+            req.setTable_id(999999999L);
+            req.setPartition_id(1L);
+            req.setIndex_id(1L);
+            req.setTablet_id(999999999L);
+            TBatchGetTabletInitialMetadataRequest batchReq = new TBatchGetTabletInitialMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletInitialMetadataResponse batchResp = impl.getTabletInitialMetadata(batchReq);
+
+            Assertions.assertEquals(TStatusCode.OK, batchResp.getStatus().getStatus_code());
+            TGetTabletInitialMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
+        }
+
+        // empty request
+        {
+            TBatchGetTabletInitialMetadataRequest batchReq = new TBatchGetTabletInitialMetadataRequest();
+            TBatchGetTabletInitialMetadataResponse batchResp = impl.getTabletInitialMetadata(batchReq);
+            Assertions.assertEquals(TStatusCode.OK, batchResp.getStatus().getStatus_code());
+            Assertions.assertFalse(batchResp.isSetResponses());
+        }
     }
 }

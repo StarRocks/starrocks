@@ -2294,6 +2294,35 @@ struct TBatchGetTableSchemaResponse {
     2: optional list<TGetTableSchemaResponse> responses;
 }
 
+struct TGetTabletInitialMetadataRequest {
+    1: optional i64 tablet_id;
+    2: optional i64 table_id;
+    3: optional i64 partition_id;
+    4: optional i64 index_id;
+}
+
+struct TGetTabletInitialMetadataResponse {
+    1: optional Status.TStatus status;
+    2: optional AgentService.TTabletSchema schema;
+    3: optional bool enable_persistent_index;
+    4: optional AgentService.TPersistentIndexType persistent_index_type;
+    5: optional AgentService.TCompactionStrategy compaction_strategy;
+    6: optional AgentService.TFlatJsonConfig flat_json_config;
+    7: optional map<i64, Types.TTabletRange> tablet_ranges;
+    8: optional i64 gtid;
+    9: optional Types.TCompressionType compression_type;
+    10: optional i32 compression_level;
+}
+
+struct TBatchGetTabletInitialMetadataRequest {
+    1: optional list<TGetTabletInitialMetadataRequest> requests;
+}
+
+struct TBatchGetTabletInitialMetadataResponse {
+    1: optional Status.TStatus status;
+    2: optional list<TGetTabletInitialMetadataResponse> responses;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2445,4 +2474,6 @@ service FrontendService {
     TRefreshConnectionsResponse refreshConnections(1: TRefreshConnectionsRequest request)
 
     TBatchGetTableSchemaResponse getTableSchema(1: TBatchGetTableSchemaRequest request)
+
+    TBatchGetTabletInitialMetadataResponse getTabletInitialMetadata(1: optional TBatchGetTabletInitialMetadataRequest request)
 }

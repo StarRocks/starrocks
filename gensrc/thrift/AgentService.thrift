@@ -140,6 +140,12 @@ struct TCreateTabletReq {
     25: optional TFlatJsonConfig flat_json_config;
     26: optional TCompactionStrategy compaction_strategy;
     27: optional Types.TTabletRange range;
+
+    // New fields should be added above this comment.
+    // NOTE: If you add a new field here that
+    // create_tablet() writes into TabletMetadataPB, also update
+    // TGetTabletInitialMetadataResponse in FrontendService.thrift,
+    // construct_initial_metadata() and handleGetTabletInitialMetadata() to keep them in sync.
 }
 
 struct TDropTabletReq {
