@@ -238,13 +238,26 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 All data files in a single batch must be of the same file format.
 :::
 
-##### Push down target table schema check
+##### Push down target table column types / schema
 
-From v3.4.0 onwards, the system supports pushing down the target table schema check to the Scan stage of `FILES()`.
+From v3.4.0 onwards, the system supports pushing down target table column types to the Scan stage of `FILES()` to improve type inference accuracy.
 
-Schema detection of `FILES()` is not fully strict. For example, any integer column in CSV files is inferred and checked as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the `TINYINT` type, the CSV data records that exceed the BIGINT type will not be filtered. Instead, they will be filled with `NULL` implicitly.
+Schema detection of `FILES()` is not fully strict. For example, any integer column in CSV files is inferred as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the `TINYINT` type, the CSV data records that exceed the TINYINT range will not be filtered. Instead, they will be filled with `NULL` implicitly.
 
-To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_schema` to control whether to push down the target table schema check to the Scan stage of `FILES()`. By setting `files_enable_insert_push_down_schema` to `true`, the system will filter the data records which fail the target table schema check at the file reading.
+To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_column_type` (alias: `files_enable_insert_push_down_schema`) to control whether to push down the target table column types to the Scan stage of `FILES()`. By setting `files_enable_insert_push_down_column_type` to `true`, the system will rewrite the types of matched file columns with the target table column types at the file reading stage. Only columns that already exist in the inferred file schema are affected; no columns are added or removed.
+
+For full schema push-down (both column names and types), you can set the INSERT property `enable_push_down_schema` to `true`. Unlike the FE configuration, this is specified on the INSERT statement itself rather than in the `FILES()` properties:
+
+```sql
+INSERT INTO target_table
+PROPERTIES ("enable_push_down_schema" = "true")
+SELECT * FROM FILES(
+    "path" = "s3://...",
+    "format" = "parquet"
+);
+```
+
+When `enable_push_down_schema` is `true`, StarRocks reshapes the `FILES()` schema to match the target table columns — adding columns that are missing from the inferred schema and trimming the schema to only the columns actually read by the SELECT list. Note that in `BY NAME` mode with `SELECT *`, the `*` is expanded to the target table's column names rather than the file's original columns, so extra file columns are dropped even with `SELECT *`.
 
 ##### Union files with different schema
 
