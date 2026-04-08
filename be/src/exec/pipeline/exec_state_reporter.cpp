@@ -30,7 +30,6 @@
 #include "exec/pipeline/query_context.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state_helper.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
@@ -64,8 +63,6 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
     auto* runtime_state = fragment_ctx->runtime_state();
     DCHECK(runtime_state != nullptr);
     DCHECK(profile != nullptr);
-    auto* exec_env = fragment_ctx->runtime_state()->exec_env();
-    DCHECK(exec_env != nullptr);
     params.protocol_version = FrontendServiceVersion::V1;
     params.__set_query_id(fragment_ctx->query_id());
     params.__set_backend_num(runtime_state->be_number());
@@ -102,8 +99,9 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
 
         if (!runtime_state->output_files().empty()) {
             params.__isset.delta_urls = true;
+            const auto master_token = get_master_token();
             for (auto& it : runtime_state->output_files()) {
-                params.delta_urls.push_back(to_http_path(exec_env->token(), it));
+                params.delta_urls.push_back(to_http_path(master_token, it));
             }
         }
         if (runtime_state->num_rows_load_sink() > 0 || runtime_state->num_rows_load_filtered() > 0 ||

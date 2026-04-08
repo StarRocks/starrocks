@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import posixpath
 import re
+import shutil
 import sys
 import unicodedata
 from dataclasses import dataclass
@@ -183,7 +184,9 @@ def collect_local_plans(repo_root: Path) -> list[PlanRecord]:
     if not active_dir.exists():
         return []
     plans: list[PlanRecord] = []
-    for absolute_path in sorted(active_dir.glob("*.md")):
+    local_paths = list(active_dir.glob("*.md"))
+    local_paths.extend(path / "README.md" for path in active_dir.iterdir() if path.is_dir() and (path / "README.md").is_file())
+    for absolute_path in sorted(local_paths, key=lambda path: rel_path(path, repo_root)):
         metadata = parse_metadata(absolute_path)
         plans.append(
             PlanRecord(
@@ -286,24 +289,32 @@ def resolve_local_plan(repo_root: Path, plan_ref: str) -> Path:
     if not active_dir.exists():
         raise ValueError("no local handbook plans exist")
 
-    candidates = sorted(active_dir.glob("*.md"))
+    candidates = [plan.absolute_path for plan in collect_local_plans(repo_root)]
     if not candidates:
         raise ValueError("no local handbook plans exist")
 
     requested_ref = plan_ref.strip()
     normalized_ref = posixpath.normpath(requested_ref) if requested_ref else requested_ref
-    matches = [
-        candidate
-        for candidate in candidates
-        if normalized_ref
-        in {
-            candidate.name,
-            candidate.stem,
+    matches = []
+    for candidate in candidates:
+        refs = {
             candidate.relative_to(active_dir).as_posix(),
             candidate.relative_to(local_root_path(repo_root)).as_posix(),
             rel_path(candidate, repo_root),
         }
-    ]
+        if candidate.name != "README.md":
+            refs.update({candidate.name, candidate.stem})
+        else:
+            plan_dir = candidate.parent
+            refs.update(
+                {
+                    plan_dir.relative_to(active_dir).as_posix(),
+                    plan_dir.relative_to(local_root_path(repo_root)).as_posix(),
+                    rel_path(plan_dir, repo_root),
+                }
+            )
+        if normalized_ref in refs:
+            matches.append(candidate)
     if not matches:
         raise ValueError(f"no local handbook plan matched {plan_ref!r}")
     if len(matches) > 1:
@@ -314,9 +325,17 @@ def resolve_local_plan(repo_root: Path, plan_ref: str) -> Path:
 
 def complete_local_plan(repo_root: Path, plan_ref: str) -> Path:
     plan_path = resolve_local_plan(repo_root, plan_ref)
-    plan_path.unlink()
+    if plan_path.name == "README.md" and plan_path.parent.parent == local_active_dir(repo_root):
+        removed_path = plan_path.parent
+        if removed_path.is_symlink():
+            removed_path.unlink()
+        else:
+            shutil.rmtree(removed_path)
+    else:
+        removed_path = plan_path
+        plan_path.unlink()
     rewrite_local_index(repo_root)
-    return plan_path
+    return removed_path
 
 
 def effective_active_plans(repo_root: Path) -> list[PlanRecord]:

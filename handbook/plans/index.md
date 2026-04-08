@@ -13,6 +13,7 @@ Use this directory for repo-local execution plans that agents can read, update, 
 ## Local Plans
 
 Use `python3 build-support/handbook_plan.py create --local --title "<title>" --owner "<owner>"` to create a gitignored local plan under `handbook/plans/local/active/`.
+Directory-root local rollout trees at `handbook/plans/local/active/<slug>/README.md` are also valid local plans and should appear in `handbook/plans/local/index.md`.
 
 If `handbook/plans/local/index.md` exists, agents should read it after this page. Local plans may add `- Overrides: handbook/plans/active/<plan>.md` to replace a tracked plan for the current checkout only.
 

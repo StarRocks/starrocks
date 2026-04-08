@@ -140,6 +140,22 @@ class HandbookPlanTest(unittest.TestCase):
             self.assertIn("- handbook/plans/local/active/", output)
             self.assertNotIn("\n- handbook/plans/active/roadmap.md\n", output)
 
+    def test_list_includes_tree_root_local_plan(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            self._write_tree_local_plan(repo, "rollout-tree", "ExecEnv Rollout Tree")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = MODULE.main(["list"], repo_root=repo)
+
+            self.assertEqual(0, result)
+            output = stdout.getvalue()
+            self.assertIn("- handbook/plans/local/active/rollout-tree/README.md (local)", output)
+            local_index = (repo / "handbook" / "plans" / "local" / "index.md").read_text()
+            self.assertIn("[ExecEnv Rollout Tree](active/rollout-tree/README.md)", local_index)
+
     def test_complete_local_plan_accepts_slug_and_removes_index_entry(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             repo = Path(tmpdir)
@@ -245,6 +261,53 @@ class HandbookPlanTest(unittest.TestCase):
                     """
                 ),
             )
+
+    def test_complete_tree_root_local_plan_accepts_directory_ref_and_removes_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            tree_root = self._write_tree_local_plan(repo, "rollout-tree", "ExecEnv Rollout Tree")
+
+            stdout = io.StringIO()
+            with contextlib.redirect_stdout(stdout):
+                result = MODULE.main(["complete", "--local", "--plan", "rollout-tree"], repo_root=repo)
+
+            self.assertEqual(0, result)
+            self.assertEqual("handbook/plans/local/active/rollout-tree", stdout.getvalue().strip())
+            self.assertFalse(tree_root.exists())
+            local_index = (repo / "handbook" / "plans" / "local" / "index.md").read_text()
+            self.assertNotIn("[ExecEnv Rollout Tree](", local_index)
+
+    def test_complete_local_plan_rejects_ambiguous_slug_between_file_and_tree_root(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+
+            local_active_dir = repo / "handbook" / "plans" / "local" / "active"
+            local_active_dir.mkdir(parents=True)
+            (local_active_dir / "collision.md").write_text(
+                textwrap.dedent(
+                    """\
+                    # Collision File
+
+                    - Status: active
+                    - Owner: Engineering Productivity
+                    - Last Updated: 2026-04-08
+
+                    ## Summary
+
+                    File-based local plan.
+                    """
+                )
+            )
+            self._write_tree_local_plan(repo, "collision", "Collision Tree")
+
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                result = MODULE.main(["complete", "--local", "--plan", "collision"], repo_root=repo)
+
+            self.assertEqual(1, result)
+            self.assertIn("ambiguous local plan reference 'collision'", stderr.getvalue())
 
     def test_complete_local_plan_rejects_traversal_ref_without_deleting_tracked_plan(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -375,6 +438,27 @@ class HandbookPlanTest(unittest.TestCase):
                 """
             )
         )
+
+    def _write_tree_local_plan(self, repo: Path, slug: str, title: str) -> Path:
+        tree_root = repo / "handbook" / "plans" / "local" / "active" / slug
+        tree_root.mkdir(parents=True, exist_ok=True)
+        (tree_root / "README.md").write_text(
+            textwrap.dedent(
+                f"""\
+                # {title}
+
+                - Status: active
+                - Owner: Engineering Productivity
+                - Last Updated: 2026-04-08
+
+                ## Summary
+
+                Directory-root local rollout tree.
+                """
+            )
+        )
+        MODULE.rewrite_local_index(repo)
+        return tree_root
 
 
 if __name__ == "__main__":

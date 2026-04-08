@@ -25,7 +25,6 @@
 #include "formats/file_writer.h"
 #include "fs/fs.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/convert_helper.h"
@@ -167,7 +166,8 @@ SpillPartitionChunkWriter::SpillPartitionChunkWriter(std::string partition,
           _fragment_context(ctx->fragment_context),
           _column_evaluators(ctx->column_evaluators),
           _sort_ordering(ctx->sort_ordering) {
-    _chunk_spill_token = ExecEnv::GetInstance()->connector_sink_spill_executor()->create_token();
+    DCHECK(ctx->spill_executor != nullptr);
+    _chunk_spill_token = ctx->spill_executor->create_token();
     _block_merge_token = StorageEngine::instance()->load_spill_block_merge_executor()->create_token();
     _tuple_desc = ctx->tuple_desc;
     _writer_id = generate_uuid();
