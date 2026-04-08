@@ -32,14 +32,31 @@ import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.PrimitiveType;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * full scan on JDBC table.
  */
 public class JDBCScanNode extends ScanNode {
+    private static final Pattern ORACLE_DATETIME_LITERAL_PATTERN = Pattern.compile(
+            "^(\\d{4})-(\\d{2})-(\\d{2})(?: (\\d{2}):(\\d{2}):(\\d{2})(?:\\.(\\d{1,9}))?)?$");
+    private static final Pattern ORACLE_COLUMN_LITERAL_PREDICATE_PATTERN = Pattern.compile(
+            "(^|[^A-Za-z0-9_$#])(\"?[A-Za-z_][A-Za-z0-9_$#]*\"?)\\s*(=|!=|<>|<=|>=|<|>)\\s*'([^']*)'",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern ORACLE_LITERAL_COLUMN_PREDICATE_PATTERN = Pattern.compile(
+            "(^|[^A-Za-z0-9_$#])'([^']*)'\\s*(=|!=|<>|<=|>=|<|>)\\s*(\"?[A-Za-z_][A-Za-z0-9_$#]*\"?)",
+            Pattern.CASE_INSENSITIVE);
+    private static final Pattern ORACLE_BETWEEN_PREDICATE_PATTERN = Pattern.compile(
+            "(^|[^A-Za-z0-9_$#])(\"?[A-Za-z_][A-Za-z0-9_$#]*\"?)\\s+BETWEEN\\s+'([^']*)'\\s+AND\\s+'([^']*)'",
+            Pattern.CASE_INSENSITIVE);
 
     private final List<String> columns = new ArrayList<>();
     private final List<String> filters = new ArrayList<>();
@@ -164,6 +181,200 @@ public class JDBCScanNode extends ScanNode {
         return "";
     }
 
+    private boolean isOracleJdbcUri() {
+        String jdbcUri = getJdbcUri();
+        return jdbcUri != null && jdbcUri.toLowerCase(Locale.ROOT).startsWith("jdbc:oracle");
+    }
+
+    private static String normalizeColumnName(String columnName) {
+        if (columnName == null) {
+            return "";
+        }
+        if (columnName.length() >= 2) {
+            char first = columnName.charAt(0);
+            char last = columnName.charAt(columnName.length() - 1);
+            if ((first == '"' && last == '"') || (first == '`' && last == '`')) {
+                columnName = columnName.substring(1, columnName.length() - 1);
+            }
+        }
+        return columnName.toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean isAsciiAlphaNumeric(char ch) {
+        return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9');
+    }
+
+    private static PrimitiveType inferTemporalKindFromName(String normalizedColumnName) {
+        boolean hasDateLikeToken = false;
+        boolean hasTimeLikeToken = false;
+        StringBuilder tokenBuilder = new StringBuilder(normalizedColumnName.length());
+        for (int i = 0; i < normalizedColumnName.length(); i++) {
+            char ch = normalizedColumnName.charAt(i);
+            if (isAsciiAlphaNumeric(ch)) {
+                tokenBuilder.append(Character.toLowerCase(ch));
+                continue;
+            }
+            if (tokenBuilder.length() == 0) {
+                continue;
+            }
+            String token = tokenBuilder.toString();
+            if ("date".equals(token) || "dt".equals(token)) {
+                hasDateLikeToken = true;
+            } else if ("time".equals(token) || "datetime".equals(token) || "timestamp".equals(token) ||
+                    "ts".equals(token) || "tstz".equals(token) || "tsltz".equals(token) ||
+                    "timetz".equals(token) || "timestamptz".equals(token) || "timestampltz".equals(token) ||
+                    token.startsWith("timestamp")) {
+                hasTimeLikeToken = true;
+            }
+            tokenBuilder.setLength(0);
+        }
+
+        if (tokenBuilder.length() > 0) {
+            String token = tokenBuilder.toString();
+            if ("date".equals(token) || "dt".equals(token)) {
+                hasDateLikeToken = true;
+            } else if ("time".equals(token) || "datetime".equals(token) || "timestamp".equals(token) ||
+                    "ts".equals(token) || "tstz".equals(token) || "tsltz".equals(token) ||
+                    "timetz".equals(token) || "timestamptz".equals(token) || "timestampltz".equals(token) ||
+                    token.startsWith("timestamp")) {
+                hasTimeLikeToken = true;
+            }
+        }
+
+        if (hasTimeLikeToken) {
+            return PrimitiveType.DATETIME;
+        }
+        if (hasDateLikeToken) {
+            return PrimitiveType.DATE;
+        }
+        return PrimitiveType.INVALID_TYPE;
+    }
+
+    private Map<String, PrimitiveType> collectOracleTemporalColumns() {
+        Map<String, PrimitiveType> temporalColumns = new HashMap<>();
+        for (SlotDescriptor slotDesc : desc.getSlots()) {
+            if (slotDesc == null || slotDesc.getType() == null) {
+                continue;
+            }
+            String columnName;
+            if (slotDesc.getColumn() != null) {
+                columnName = slotDesc.getColumn().getName();
+            } else {
+                columnName = slotDesc.getLabel();
+            }
+            String normalizedColumnName = normalizeColumnName(columnName);
+            PrimitiveType slotType = slotDesc.getType().getPrimitiveType();
+            if (slotType == PrimitiveType.DATETIME || slotType == PrimitiveType.DATE) {
+                temporalColumns.put(normalizedColumnName, slotType);
+                continue;
+            }
+
+            if (slotType == PrimitiveType.VARCHAR || slotType == PrimitiveType.CHAR) {
+                PrimitiveType inferredTemporalType = inferTemporalKindFromName(normalizedColumnName);
+                if (inferredTemporalType != PrimitiveType.INVALID_TYPE) {
+                    temporalColumns.put(normalizedColumnName, inferredTemporalType);
+                }
+            }
+        }
+        return temporalColumns;
+    }
+
+    private static boolean literalContainsTimeComponent(String literal) {
+        return literal.indexOf(':') >= 0 || literal.indexOf(' ') >= 0 || literal.indexOf('.') >= 0;
+    }
+
+    private static String buildOracleTemporalConversionExpr(String literal, PrimitiveType slotType) {
+        Matcher matcher = ORACLE_DATETIME_LITERAL_PATTERN.matcher(literal);
+        if (!matcher.matches()) {
+            // Fallback to Oracle NLS-based conversion for non-canonical literals, such as "2022-01-1".
+            if (slotType == PrimitiveType.DATE || !literalContainsTimeComponent(literal)) {
+                return String.format("TO_DATE('%s')", literal);
+            }
+            return String.format("TO_TIMESTAMP('%s')", literal);
+        }
+
+        if (matcher.group(4) == null) {
+            if (slotType == PrimitiveType.DATE) {
+                return String.format("TO_DATE('%s', 'YYYY-MM-DD')", literal);
+            }
+            return String.format("TO_TIMESTAMP('%s', 'YYYY-MM-DD')", literal);
+        }
+
+        if (matcher.group(7) == null) {
+            if (slotType == PrimitiveType.DATE) {
+                return String.format("TO_DATE('%s', 'YYYY-MM-DD HH24:MI:SS')", literal);
+            }
+            return String.format("TO_TIMESTAMP('%s', 'YYYY-MM-DD HH24:MI:SS')", literal);
+        }
+
+        return String.format("TO_TIMESTAMP('%s', 'YYYY-MM-DD HH24:MI:SS.FF%d')", literal, matcher.group(7).length());
+    }
+
+    private static String rewriteOracleColumnLiteralPredicates(String filter, Map<String, PrimitiveType> temporalColumns) {
+        Matcher matcher = ORACLE_COLUMN_LITERAL_PREDICATE_PATTERN.matcher(filter);
+        StringBuffer rewritten = new StringBuffer();
+        while (matcher.find()) {
+            String replacement = matcher.group(0);
+            PrimitiveType slotType = temporalColumns.get(normalizeColumnName(matcher.group(2)));
+            if (slotType != null) {
+                String datetimeExpr = buildOracleTemporalConversionExpr(matcher.group(4), slotType);
+                replacement = matcher.group(1) + matcher.group(2) + " " + matcher.group(3) + " " + datetimeExpr;
+            }
+            matcher.appendReplacement(rewritten, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(rewritten);
+        return rewritten.toString();
+    }
+
+    private static String rewriteOracleLiteralColumnPredicates(String filter, Map<String, PrimitiveType> temporalColumns) {
+        Matcher matcher = ORACLE_LITERAL_COLUMN_PREDICATE_PATTERN.matcher(filter);
+        StringBuffer rewritten = new StringBuffer();
+        while (matcher.find()) {
+            String replacement = matcher.group(0);
+            PrimitiveType slotType = temporalColumns.get(normalizeColumnName(matcher.group(4)));
+            if (slotType != null) {
+                String datetimeExpr = buildOracleTemporalConversionExpr(matcher.group(2), slotType);
+                replacement = matcher.group(1) + datetimeExpr + " " + matcher.group(3) + " " + matcher.group(4);
+            }
+            matcher.appendReplacement(rewritten, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(rewritten);
+        return rewritten.toString();
+    }
+
+    private static String rewriteOracleBetweenPredicates(String filter, Map<String, PrimitiveType> temporalColumns) {
+        Matcher matcher = ORACLE_BETWEEN_PREDICATE_PATTERN.matcher(filter);
+        StringBuffer rewritten = new StringBuffer();
+        while (matcher.find()) {
+            String replacement = matcher.group(0);
+            PrimitiveType slotType = temporalColumns.get(normalizeColumnName(matcher.group(2)));
+            if (slotType != null) {
+                String lowExpr = buildOracleTemporalConversionExpr(matcher.group(3), slotType);
+                String highExpr = buildOracleTemporalConversionExpr(matcher.group(4), slotType);
+                replacement = matcher.group(1) + matcher.group(2) + " BETWEEN " + lowExpr + " AND " + highExpr;
+            }
+            matcher.appendReplacement(rewritten, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(rewritten);
+        return rewritten.toString();
+    }
+
+    private List<String> rewriteOracleDatetimeFilters(List<String> originalFilters) {
+        Map<String, PrimitiveType> temporalColumns = collectOracleTemporalColumns();
+        if (temporalColumns.isEmpty()) {
+            return originalFilters;
+        }
+
+        List<String> rewrittenFilters = new ArrayList<>(originalFilters.size());
+        for (String filter : originalFilters) {
+            String rewritten = rewriteOracleBetweenPredicates(filter, temporalColumns);
+            rewritten = rewriteOracleColumnLiteralPredicates(rewritten, temporalColumns);
+            rewritten = rewriteOracleLiteralColumnPredicates(rewritten, temporalColumns);
+            rewrittenFilters.add(rewritten);
+        }
+        return rewrittenFilters;
+    }
+
     private void createJDBCTableFilters() {
         if (conjuncts.isEmpty()) {
             return;
@@ -184,9 +395,16 @@ public class JDBCScanNode extends ScanNode {
         // would be unmatched after remove cast operator in PushDownPredicateTOExternalTableScanRule, which
         // would cause BE report error "VectorizedInPredicate type not same";
         conjuncts.clear();
+        List<String> originalFilters = new ArrayList<>(jdbcConjuncts.size());
         for (Expr p : jdbcConjuncts) {
             p = ExprUtils.replaceLargeStringLiteral(p);
-            filters.add(AstToStringBuilder.toString(p));
+            originalFilters.add(AstToStringBuilder.toString(p));
+        }
+
+        if (isOracleJdbcUri()) {
+            filters.addAll(rewriteOracleDatetimeFilters(originalFilters));
+        } else {
+            filters.addAll(originalFilters);
         }
     }
 
