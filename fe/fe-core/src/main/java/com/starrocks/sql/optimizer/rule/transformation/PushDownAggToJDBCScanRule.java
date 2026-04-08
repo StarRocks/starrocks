@@ -93,6 +93,9 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         // Validate every aggregate call against ClickHouse aggregation model metadata.
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : agg.getAggregations().entrySet()) {
             CallOperator call = entry.getValue();
+            if (call.isDistinct()) {
+                return false;
+            }
             if (call.getArguments().size() != 1) {
                 return false;
             }

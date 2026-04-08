@@ -68,5 +68,12 @@ public class LogicalJDBCScanOperator extends LogicalScanOperator {
         protected LogicalJDBCScanOperator newInstance() {
             return new LogicalJDBCScanOperator();
         }
+
+        @Override
+        public LogicalJDBCScanOperator.Builder withOperator(LogicalJDBCScanOperator scanOperator) {
+            super.withOperator(scanOperator);
+            builder.groupingKeys = scanOperator.groupingKeys;
+            return this;
+        }
     }
 }

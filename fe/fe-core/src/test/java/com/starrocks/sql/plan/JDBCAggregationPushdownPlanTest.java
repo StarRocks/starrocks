@@ -19,8 +19,6 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
-import com.zaxxer.hikari.HikariDataSource;
-import mockit.Mocked;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -37,14 +35,6 @@ public class JDBCAggregationPushdownPlanTest extends ConnectorPlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
-        // 利用 JMockit 静态拦截 HikariPool 的物理连接行为，彻底掐断建连报错噪音
-        new mockit.MockUp<com.zaxxer.hikari.HikariDataSource>() {
-            @mockit.Mock
-            public void $init(com.zaxxer.hikari.HikariConfig configuration) {
-                // do nothing，不触发真实的建连
-            }
-        };
-
         ConnectorPlanTestBase.beforeClass();
         setupClickHouseCatalog();
     }
@@ -144,5 +134,13 @@ public class JDBCAggregationPushdownPlanTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN JDBC");
         assertContains(plan, "sumMerge(`clicks`) AS Float64");
+    }
+
+    @Test
+    public void testDistinctAggShouldNotPushdown() throws Exception {
+        String sql = "SELECT SUM(DISTINCT clicks) FROM ck_jdbc.ck_db.ck_agg_table";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "AGGREGATE");
+        assertNotContains(plan, "sumMerge(`clicks`) AS Float64");
     }
 }
