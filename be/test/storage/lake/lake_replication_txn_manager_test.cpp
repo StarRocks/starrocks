@@ -50,6 +50,7 @@
 #include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "service/staros_worker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
@@ -1336,6 +1337,27 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
 // data_version metadata (which may reference vacuumed files).
 class UUIDMapVisibleVersionTest : public testing::Test {
 public:
+    UUIDMapVisibleVersionTest() { _test_dir = kTestDirectory; }
+
+protected:
+    void SetUp() override {
+        (void)fs::remove_all(_test_dir);
+        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
+        _tablet_mgr = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        _replication_txn_manager = std::make_unique<lake::LakeReplicationTxnManager>(_tablet_mgr.get());
+    }
+
+    void TearDown() override {
+        ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+        ASSERT_OK(fs::remove_all(_test_dir));
+    }
+
+public:
     static MutableTabletMetadataPtr create_metadata(int64_t tablet_id, int64_t version) {
         auto meta = std::make_shared<TabletMetadata>();
         meta->set_id(tablet_id);
@@ -1366,6 +1388,16 @@ public:
             rowset->add_segment_size(i < segment_sizes.size() ? segment_sizes[i] : 512);
         }
     }
+
+protected:
+    constexpr static const char* const kTestDirectory = "test_uuid_map_visible_version";
+
+    std::string _test_dir;
+    std::shared_ptr<lake::FixedLocationProvider> _location_provider;
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::unique_ptr<lake::UpdateManager> _update_manager;
+    std::unique_ptr<lake::TabletManager> _tablet_mgr;
+    std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
 };
 
 // Scenario: Target cluster compaction vacuumed files referenced by data_version metadata.
@@ -1394,16 +1426,15 @@ TEST_F(UUIDMapVisibleVersionTest, test_uuid_map_uses_visible_version_not_data_ve
     std::string target_seg_c = fmt::format("{:016x}_{}.dat", 50, UUID_C);
     add_rowset_with_segments(target_visible_meta.get(), 10, {target_seg_c}, {1024});
 
-    LakeReplicationTxnManager mgr(nullptr);
     std::unordered_map<std::string, size_t> segment_name_to_size_map;
     std::map<std::string, std::string> file_locations;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
     // Call convert_and_build_new_tablet_meta with target_visible_meta (visible_version).
     // UUID_A is NOT in visible_version metadata -> should trigger file copy, not skip.
-    auto result = mgr.convert_and_build_new_tablet_meta(src_meta, target_visible_meta, src_tablet_id, target_tablet_id,
-                                                        txn_id, src_data_dir, segment_name_to_size_map, file_locations,
-                                                        filename_map);
+    auto result = _replication_txn_manager->convert_and_build_new_tablet_meta(
+            src_meta, target_visible_meta, src_tablet_id, target_tablet_id, txn_id, src_data_dir,
+            segment_name_to_size_map, file_locations, filename_map);
     ASSERT_OK(result.status());
 
     // Both source segments (UUID_A and UUID_D) should be in file_locations (need to be copied)
@@ -1440,14 +1471,13 @@ TEST_F(UUIDMapVisibleVersionTest, test_uuid_map_reuses_existing_files_from_visib
     std::string target_seg_a = fmt::format("{:016x}_{}.dat", 50, UUID_A);
     add_rowset_with_segments(target_visible_meta.get(), 5, {target_seg_a}, {512});
 
-    LakeReplicationTxnManager mgr(nullptr);
     std::unordered_map<std::string, size_t> segment_name_to_size_map;
     std::map<std::string, std::string> file_locations;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
 
-    auto result = mgr.convert_and_build_new_tablet_meta(src_meta, target_visible_meta, src_tablet_id, target_tablet_id,
-                                                        txn_id, src_data_dir, segment_name_to_size_map, file_locations,
-                                                        filename_map);
+    auto result = _replication_txn_manager->convert_and_build_new_tablet_meta(
+            src_meta, target_visible_meta, src_tablet_id, target_tablet_id, txn_id, src_data_dir,
+            segment_name_to_size_map, file_locations, filename_map);
     ASSERT_OK(result.status());
 
     // UUID_A exists in visible_version metadata -> should be reused (not copied)
