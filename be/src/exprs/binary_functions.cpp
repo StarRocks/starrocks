@@ -17,6 +17,7 @@
 #include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "exprs/encryption_functions.h"
 #include "exprs/function_helper.h"
@@ -115,29 +116,23 @@ Status BinaryFunctions::from_binary_close(FunctionContext* context, FunctionCont
 }
 
 StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    (void)has_null;
-    const int size = c0->size();
-    int32_t width = c1->get(0).get_int32();
-    uint8_t* raw_null_flags = null_flags->get_data().data();
-    auto col = ColumnHelper::cast_to_raw<TYPE_BINARY>(c0);
-    ColumnBuilder<TYPE_BINARY> result(size);
-    const auto raw_c0 = col->immutable_data();
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
 
-#define SLICE_SIZE_MIN(x, y) x < y ? x : y
-    for (auto i = 0; i < size; i++) {
-        if (raw_null_flags[i]) {
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_VARBINARY> viewer(columns[0]);
+    int32_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    ColumnBuilder<TYPE_BINARY> result(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
             result.append_null();
         } else {
-            Slice src_value = raw_c0[i];
-            result.append(Slice(src_value.get_data(), SLICE_SIZE_MIN(width, src_value.get_size())));
+            Slice src_value = viewer.value(i);
+            result.append(Slice(src_value.get_data(), std::min(width, static_cast<int32_t>(src_value.get_size()))));
         }
     }
-#undef SLICE_SIZE_MIN
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
