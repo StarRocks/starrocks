@@ -144,7 +144,7 @@ void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescri
     case TYPE_STRUCT: {
         const auto* struct_column = down_cast<const StructColumn*>(data_column);
         for (size_t i = 0; i < type.children.size(); ++i) {
-            mark_binary_columns(struct_column->get_column_by_idx(i), type.children[i]);
+            mark_binary_columns(struct_column->fields_column()[i], type.children[i]);
         }
         break;
     }
