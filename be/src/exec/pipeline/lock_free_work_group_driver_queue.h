@@ -23,7 +23,7 @@
 #include <vector>
 
 #include "base/concurrency/moodycamel/concurrentqueue.h"
-#include "base/concurrency/moodycamel/lightweightsemaphore.h"
+#include "base/concurrency/moodycamel/blockingconcurrentqueue.h"
 #include "base/phmap/phmap.h"
 #include "exec/pipeline/lock_free_driver_queue.h"
 #include "exec/pipeline/pipeline_driver.h"

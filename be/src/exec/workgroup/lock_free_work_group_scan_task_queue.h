@@ -20,7 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "base/concurrency/moodycamel/lightweightsemaphore.h"
+#include "base/concurrency/moodycamel/blockingconcurrentqueue.h"
 #include "exec/workgroup/lock_free_scan_task_queue.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
