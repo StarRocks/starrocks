@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
@@ -32,12 +33,16 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -195,6 +200,139 @@ public class RestoreClusterSnapshotMgrTest {
         Assertions.assertEquals(30L, restoredSnapshotInfo.getStarMgrJournalId());
 
         RestoreClusterSnapshotMgr.finishRestoring();
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+    }
+
+    @Test
+    public void testAutoDiscoveryEmptySnapshotList() throws Exception {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir)
+                    throws StarRocksException {
+                return new ArrayList<>();
+            }
+        };
+
+        Assertions.assertThrows(StarRocksException.class,
+                () -> RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot_auto.yaml", true));
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+    }
+
+    @Test
+    public void testSelectSnapshotWithMetaFile() throws Exception {
+        // Three snapshot directories: snap_1 (oldest), snap_2 (middle, has meta), snap_3 (newest, no meta)
+        String basePath = "s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image";
+        String snap1 = basePath + "/automated_cluster_snapshot_1000000000000";
+        String snap2 = basePath + "/automated_cluster_snapshot_2000000000000";
+        String snap3 = basePath + "/automated_cluster_snapshot_3000000000000";
+
+        List<FileStatus> fileStatusList = new ArrayList<>();
+        // Unsorted order to verify sorting
+        fileStatusList.add(new FileStatus(0, true, 0, 0, 0, new Path(snap1)));
+        fileStatusList.add(new FileStatus(0, true, 0, 0, 0, new Path(snap3)));
+        fileStatusList.add(new FileStatus(0, true, 0, 0, 0, new Path(snap2)));
+
+        List<String> copiedSrcPaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir)
+                    throws StarRocksException {
+                return fileStatusList;
+            }
+
+            @Mock
+            public boolean checkPathExist(String remotePath, BrokerDesc brokerDesc) throws StarRocksException {
+                // Only snap2 has meta file
+                return remotePath.equals(snap2 + "/" + ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            }
+
+            @Mock
+            public void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
+                    throws StarRocksException {
+                copiedSrcPaths.add(srcPath);
+            }
+        };
+
+        new MockUp<Storage>() {
+            @Mock
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot_auto.yaml", true);
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
+
+        // Should have selected snap2 (newest with meta file), not snap3 (newest overall)
+        Assertions.assertEquals(1, copiedSrcPaths.size());
+        Assertions.assertTrue(copiedSrcPaths.get(0).contains("automated_cluster_snapshot_2000000000000"));
+
+        RestoredSnapshotInfo info = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
+        Assertions.assertEquals("automated_cluster_snapshot_2000000000000", info.getSnapshotName());
+
+        try {
+            RestoreClusterSnapshotMgr.finishRestoring();
+        } catch (Exception e) {
+            // Storage volume update may fail in test environment; the singleton is still cleaned up
+        }
+        Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
+    }
+
+    @Test
+    public void testSelectSnapshotFallbackNoMetaFile() throws Exception {
+        // Three snapshot directories, none has meta file
+        String basePath = "s3://defaultbucket/test/f7265e80-631c-44d3-a8ac-cf7cdc7adec811019/meta/image";
+        String snap1 = basePath + "/automated_cluster_snapshot_1000000000000";
+        String snap2 = basePath + "/automated_cluster_snapshot_2000000000000";
+        String snap3 = basePath + "/automated_cluster_snapshot_3000000000000";
+
+        List<FileStatus> fileStatusList = new ArrayList<>();
+        fileStatusList.add(new FileStatus(0, true, 0, 0, 0, new Path(snap1)));
+        fileStatusList.add(new FileStatus(0, true, 0, 0, 0, new Path(snap3)));
+        fileStatusList.add(new FileStatus(0, true, 0, 0, 0, new Path(snap2)));
+
+        List<String> copiedSrcPaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public List<FileStatus> listFileMeta(String path, BrokerDesc brokerDesc, boolean skipDir)
+                    throws StarRocksException {
+                return fileStatusList;
+            }
+
+            @Mock
+            public boolean checkPathExist(String remotePath, BrokerDesc brokerDesc) throws StarRocksException {
+                return false; // No meta files exist
+            }
+
+            @Mock
+            public void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
+                    throws StarRocksException {
+                copiedSrcPaths.add(srcPath);
+            }
+        };
+
+        new MockUp<Storage>() {
+            @Mock
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot_auto.yaml", true);
+        Assertions.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
+
+        // Should fallback to the first directory after sorting (snap3 is newest by name)
+        Assertions.assertEquals(1, copiedSrcPaths.size());
+        Assertions.assertTrue(copiedSrcPaths.get(0).contains("automated_cluster_snapshot_3000000000000"));
+
+        RestoredSnapshotInfo info = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
+        Assertions.assertEquals("automated_cluster_snapshot_3000000000000", info.getSnapshotName());
+
+        try {
+            RestoreClusterSnapshotMgr.finishRestoring();
+        } catch (Exception e) {
+            // Storage volume update may fail in test environment; the singleton is still cleaned up
+        }
         Assertions.assertFalse(RestoreClusterSnapshotMgr.isRestoring());
     }
 }

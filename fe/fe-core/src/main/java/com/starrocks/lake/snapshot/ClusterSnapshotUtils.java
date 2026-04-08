@@ -17,10 +17,21 @@ package com.starrocks.lake.snapshot;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.storagevolume.StorageVolume;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 
 public class ClusterSnapshotUtils {
+    private static final Logger LOG = LogManager.getLogger(ClusterSnapshotUtils.class);
+
+    public static final String SNAPSHOT_META_FILE_NAME = "snapshot_meta.json";
+
     public static String getSnapshotImagePath(StorageVolume sv, String snapshotName) {
         return String.join("/", sv.getLocations().get(0),
                 GlobalStateMgr.getCurrentState().getStarOSAgent().getRawServiceId(), "meta/image", snapshotName);
@@ -37,6 +48,8 @@ public class ClusterSnapshotUtils {
         String localImagePath = GlobalStateMgr.getImageDirPath();
 
         HdfsUtil.copyFromLocal(localImagePath, snapshotImagePath, sv.getProperties());
+
+        writeSnapshotMetaFile(job, snapshotImagePath, new BrokerDesc(sv.getProperties()));
     }
 
     public static void clearClusterSnapshotFromRemote(ClusterSnapshotJob job) throws StarRocksException {
@@ -49,6 +62,61 @@ public class ClusterSnapshotUtils {
         BrokerDesc brokerDesc = new BrokerDesc(sv.getProperties());
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
 
+        // Delete meta file first to mark snapshot as incomplete immediately
+        deleteSnapshotMetaFile(snapshotImagePath, brokerDesc);
+
         HdfsUtil.deletePath(snapshotImagePath, brokerDesc);
+    }
+
+    public static String getSnapshotMetaFilePath(String snapshotImagePath) {
+        return snapshotImagePath + "/" + SNAPSHOT_META_FILE_NAME;
+    }
+
+    public static boolean checkSnapshotMetaFileExist(String snapshotImagePath,
+            BrokerDesc brokerDesc) throws StarRocksException {
+        return HdfsUtil.checkPathExist(getSnapshotMetaFilePath(snapshotImagePath), brokerDesc);
+    }
+
+    public static void deleteSnapshotMetaFile(String snapshotImagePath, BrokerDesc brokerDesc) {
+        String metaFilePath = getSnapshotMetaFilePath(snapshotImagePath);
+        try {
+            HdfsUtil.deletePath(metaFilePath, brokerDesc);
+        } catch (Exception e) {
+            LOG.warn("Failed to delete snapshot meta file: {}", metaFilePath, e);
+        }
+    }
+
+    public static ClusterSnapshot readLocalSnapshotMetaFile(String localImagePath) {
+        File localMetaFile = new File(localImagePath, SNAPSHOT_META_FILE_NAME);
+        if (!localMetaFile.exists()) {
+            return null;
+        }
+        try {
+            String json = new String(Files.readAllBytes(localMetaFile.toPath()), StandardCharsets.UTF_8);
+            ClusterSnapshot snapshot = GsonUtils.GSON.fromJson(json, ClusterSnapshot.class);
+            if (snapshot == null || snapshot.getSnapshotName() == null || snapshot.getSnapshotName().isEmpty()
+                    || snapshot.getFeJournalId() <= 0 || snapshot.getStarMgrJournalId() <= 0) {
+                LOG.warn("Invalid local snapshot meta file: {}", localMetaFile.getAbsolutePath());
+                return null;
+            }
+            return snapshot;
+        } catch (Exception e) {
+            LOG.warn("Failed to read local snapshot meta file: {}", localMetaFile.getAbsolutePath(), e);
+            return null;
+        }
+    }
+
+    public static void deleteLocalSnapshotMetaFile(String localImagePath) {
+        File localMetaFile = new File(localImagePath, SNAPSHOT_META_FILE_NAME);
+        if (localMetaFile.exists() && !localMetaFile.delete()) {
+            LOG.warn("Failed to delete local snapshot meta file: {}", localMetaFile.getAbsolutePath());
+        }
+    }
+
+    private static void writeSnapshotMetaFile(ClusterSnapshotJob job, String snapshotImagePath,
+            BrokerDesc brokerDesc) throws StarRocksException {
+        String metaFilePath = getSnapshotMetaFilePath(snapshotImagePath);
+        HdfsUtil.writeFile(GsonUtils.GSON.toJson(job.getSnapshot()).getBytes(StandardCharsets.UTF_8),
+                metaFilePath, brokerDesc);
     }
 }
