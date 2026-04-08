@@ -64,13 +64,28 @@ bool LockFreeScanTaskQueue::try_take(ScanTask& task, int worker_id) {
     uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
     if (bitmap == 0) return false;
 
+    return _try_take_from_levels(bitmap, task, [this, worker_id](int level, ScanTask& t) {
+        return _queue.try_dequeue(level, t, worker_id);
+    });
+}
+
+bool LockFreeScanTaskQueue::try_take(ScanTask& task) {
+    uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
+    if (bitmap == 0) return false;
+
+    return _try_take_from_levels(bitmap, task,
+                                 [this](int level, ScanTask& t) { return _queue.try_dequeue(level, t); });
+}
+
+template <typename DequeueFunc>
+bool LockFreeScanTaskQueue::_try_take_from_levels(uint32_t bitmap, ScanTask& task, DequeueFunc&& dequeue) {
     // Scan from highest priority (level 20) down to lowest (level 0).
     // Only try levels with bitmap bit set.
     uint32_t to_clear = 0;
     for (int level = NUM_PRIORITY_LEVELS - 1; level >= 0; --level) {
         uint32_t mask = 1u << level;
         if (!(bitmap & mask)) continue;
-        if (_queue.try_dequeue(level, task, worker_id)) {
+        if (dequeue(level, task)) {
             if (to_clear) {
                 _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
             }
@@ -80,27 +95,6 @@ bool LockFreeScanTaskQueue::try_take(ScanTask& task, int worker_id) {
     }
 
     // All attempted levels were empty — batch clear.
-    _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
-    return false;
-}
-
-bool LockFreeScanTaskQueue::try_take(ScanTask& task) {
-    uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
-    if (bitmap == 0) return false;
-
-    uint32_t to_clear = 0;
-    for (int level = NUM_PRIORITY_LEVELS - 1; level >= 0; --level) {
-        uint32_t mask = 1u << level;
-        if (!(bitmap & mask)) continue;
-        if (_queue.try_dequeue(level, task)) {
-            if (to_clear) {
-                _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
-            }
-            return true;
-        }
-        to_clear |= mask;
-    }
-
     _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
     return false;
 }

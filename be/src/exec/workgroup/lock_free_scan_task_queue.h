@@ -61,6 +61,11 @@ public:
     size_t size() const;
 
 private:
+    // Scan from highest priority down to lowest, trying dequeue at each non-empty level.
+    // DequeueFunc: (int level, ScanTask& task) -> bool
+    template <typename DequeueFunc>
+    bool _try_take_from_levels(uint32_t bitmap, ScanTask& task, DequeueFunc&& dequeue);
+
     pipeline::WorkStealingQueue<ScanTask, NUM_PRIORITY_LEVELS> _queue;
 
     // Bitmap of levels that are known to be non-empty.
