@@ -71,6 +71,16 @@ private:
     // higher (lower-priority) levels.
     int _compute_driver_level(DriverRawPtr driver) const;
 
+    // Find the non-empty level with minimum weighted accu_time among bits set in bitmap.
+    // Returns -1 if no candidate found.
+    int _find_best_level(uint8_t bitmap) const;
+
+    // Try best_level first, then fallback to remaining levels in bitmap.
+    // DequeueFunc: (int level, DriverRawPtr& driver) -> bool
+    template <typename DequeueFunc>
+    bool _try_take_from_levels(uint8_t bitmap, int best_level, int start, DriverRawPtr& driver,
+                               DequeueFunc&& dequeue);
+
     WorkStealingQueue<DriverRawPtr, QUEUE_SIZE> _queue;
 
     // Bitmap of levels that are known to be non-empty.

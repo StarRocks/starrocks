@@ -66,29 +66,34 @@ void LockFreeDriverQueue::put_back(DriverRawPtr driver) {
 }
 
 bool LockFreeDriverQueue::try_take(DriverRawPtr& driver, int worker_id) {
-    // Read the non-empty bitmap once — replaces 8 × O(P) size_approx() calls.
     uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
     if (bitmap == 0) return false;
 
-    // Find the level with minimum weighted accu_time among non-empty levels.
-    int best_level = -1;
-    double min_time = std::numeric_limits<double>::max();
-    int start = worker_id % QUEUE_SIZE;
-    for (int j = 0; j < QUEUE_SIZE; ++j) {
-        int i = (start + j) % QUEUE_SIZE;
-        if (!(bitmap & (1u << i))) continue;
-        double weighted_time = static_cast<double>(_level_stats[i].accu_time_ns.load(std::memory_order_relaxed)) /
-                               _level_stats[i].factor;
-        if (weighted_time < min_time) {
-            min_time = weighted_time;
-            best_level = i;
-        }
-    }
-
+    int best_level = _find_best_level(bitmap);
     if (best_level < 0) return false;
 
+    return _try_take_from_levels(bitmap, best_level, worker_id % QUEUE_SIZE, driver,
+                                 [this, worker_id](int level, DriverRawPtr& d) {
+                                     return _queue.try_dequeue(level, d, worker_id);
+                                 });
+}
+
+bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
+    uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
+    if (bitmap == 0) return false;
+
+    int best_level = _find_best_level(bitmap);
+    if (best_level < 0) return false;
+
+    return _try_take_from_levels(bitmap, best_level, 0, driver,
+                                 [this](int level, DriverRawPtr& d) { return _queue.try_dequeue(level, d); });
+}
+
+template <typename DequeueFunc>
+bool LockFreeDriverQueue::_try_take_from_levels(uint8_t bitmap, int best_level, int start, DriverRawPtr& driver,
+                                                DequeueFunc&& dequeue) {
     // Try the best level first — this succeeds most of the time.
-    if (_queue.try_dequeue(best_level, driver, worker_id)) {
+    if (dequeue(best_level, driver)) {
         return true;
     }
 
@@ -98,23 +103,18 @@ bool LockFreeDriverQueue::try_take(DriverRawPtr& driver, int worker_id) {
     for (int j = 0; j < QUEUE_SIZE; ++j) {
         int i = (start + j) % QUEUE_SIZE;
         if (i == best_level || !(bitmap & (1u << i))) continue;
-        if (_queue.try_dequeue(i, driver, worker_id)) {
-            // Clear bits for levels confirmed empty.
+        if (dequeue(i, driver)) {
             _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
             return true;
         }
         to_clear |= static_cast<uint8_t>(1u << i);
     }
 
-    // All levels empty — batch clear.
     _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
     return false;
 }
 
-bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
-    uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
-    if (bitmap == 0) return false;
-
+int LockFreeDriverQueue::_find_best_level(uint8_t bitmap) const {
     int best_level = -1;
     double min_time = std::numeric_limits<double>::max();
     for (int i = 0; i < QUEUE_SIZE; ++i) {
@@ -126,25 +126,7 @@ bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
             best_level = i;
         }
     }
-
-    if (best_level < 0) return false;
-
-    if (_queue.try_dequeue(best_level, driver)) {
-        return true;
-    }
-
-    uint8_t to_clear = static_cast<uint8_t>(1u << best_level);
-    for (int i = 0; i < QUEUE_SIZE; ++i) {
-        if (i == best_level || !(bitmap & (1u << i))) continue;
-        if (_queue.try_dequeue(i, driver)) {
-            _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
-            return true;
-        }
-        to_clear |= static_cast<uint8_t>(1u << i);
-    }
-
-    _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
-    return false;
+    return best_level;
 }
 
 void LockFreeDriverQueue::update_statistics(int level, int64_t execution_time_ns) {
