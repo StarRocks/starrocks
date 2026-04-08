@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <optional>
 #include <unordered_set>
 
@@ -32,6 +33,17 @@ namespace starrocks::lake {
 class MetaFileBuilder;
 class TabletManager;
 class TabletWriter;
+
+struct PreparedSegmentScanState {
+    SegmentPtr segment;
+    std::optional<SeekRange> tablet_range;
+};
+
+struct PreparedRowsetReadState {
+    std::vector<PreparedSegmentScanState> segment_scans;
+    int64_t metadata_filtered_rows = 0;
+    int64_t metadata_filtered_segments = 0;
+};
 
 class Rowset : public BaseRowset {
 public:
@@ -69,6 +81,10 @@ public:
     DISALLOW_COPY_AND_MOVE(Rowset);
 
     StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+    StatusOr<PreparedRowsetReadState> prepare_read(const RowsetReadOptions& options);
+    StatusOr<std::vector<ChunkIteratorPtr>> read_with_prepared(const Schema& schema, const Schema& segment_schema,
+                                                               const RowsetReadOptions& options,
+                                                               const PreparedRowsetReadState& prepared);
 
     StatusOr<size_t> get_read_iterator_num();
 
@@ -166,6 +182,8 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
+    bool _copy_cached_segments(std::vector<SegmentPtr>* segments,
+                               const std::unordered_set<int>* skip_segment_idxs = nullptr);
     StatusOr<std::optional<SeekRange>> get_seek_range() const;
 
     TabletManager* _tablet_mgr;
@@ -175,6 +193,7 @@ private:
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    mutable std::mutex _segments_lock;
     bool _parallel_load;
     // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
     // default is 0 means every segment will be used.

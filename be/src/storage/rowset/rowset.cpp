@@ -842,10 +842,13 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
             }
             seg_options.rowid_range_option = std::move(rowid_range);
             seg_options.is_first_split_of_segment = is_first_split_of_segment;
+            seg_options.skip_key_range_filter = options.skip_key_range_filter;
         } else if (options.short_key_ranges_option != nullptr) { // logical split.
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
+            seg_options.skip_key_range_filter = false;
         } else {
             seg_options.is_first_split_of_segment = true;
+            seg_options.skip_key_range_filter = false;
         }
 
         auto res = seg_ptr->new_iterator(segment_schema, seg_options);

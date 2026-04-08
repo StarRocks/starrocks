@@ -15,6 +15,7 @@
 #include "storage/lake/rowset.h"
 
 #include <future>
+#include <set>
 #include <unordered_set>
 
 #include "base/debug/trace.h"
@@ -267,6 +268,33 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
+    std::unique_ptr<Schema> segment_schema_guard;
+    auto* segment_schema = const_cast<Schema*>(&schema);
+    if (options.delete_predicates != nullptr && options.tablet_schema != nullptr) {
+        std::set<ColumnId> need_added_column;
+        options.delete_predicates->get_predicates(_index).get_column_ids(&need_added_column);
+        for (ColumnId cid : need_added_column) {
+            const TabletColumn& col = options.tablet_schema->column(cid);
+            if (segment_schema->get_field_by_name(std::string(col.name())) != nullptr) {
+                continue;
+            }
+            if (segment_schema == &schema) {
+                segment_schema = new Schema(schema);
+                segment_schema_guard.reset(segment_schema);
+            }
+            auto f = ChunkHelper::convert_field(cid, col);
+            segment_schema->append(std::make_shared<Field>(std::move(f)));
+        }
+    }
+    auto prepare_options = options;
+    prepare_options.stats = nullptr;
+    ASSIGN_OR_RETURN(auto prepared, prepare_read(prepare_options));
+    return read_with_prepared(schema, *segment_schema, options, prepared);
+}
+
+StatusOr<PreparedRowsetReadState> Rowset::prepare_read(const RowsetReadOptions& options) {
+    PreparedRowsetReadState prepared;
+
     SegmentReadOptions seg_options;
     if (options.lake_io_opts.fs) {
         seg_options.fs = options.lake_io_opts.fs;
@@ -315,28 +343,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
     seg_options.has_preaggregation = options.has_preaggregation;
 
-    std::unique_ptr<Schema> segment_schema_guard;
-    auto* segment_schema = const_cast<Schema*>(&schema);
-    // Append the columns with delete condition to segment schema.
-    std::set<ColumnId> need_added_column;
-    seg_options.delete_predicates.get_column_ids(&need_added_column);
-
-    for (ColumnId cid : need_added_column) {
-        const TabletColumn& col = options.tablet_schema->column(cid);
-        if (segment_schema->get_field_by_name(std::string(col.name())) != nullptr) {
-            continue;
-        }
-        // copy on write
-        if (segment_schema == &schema) {
-            segment_schema = new Schema(schema);
-            segment_schema_guard.reset(segment_schema);
-        }
-        auto f = ChunkHelper::convert_field(cid, col);
-        segment_schema->append(std::make_shared<Field>(std::move(f)));
-    }
-
-    std::vector<ChunkIteratorPtr> segment_iterators;
-
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
     // Check if segment metadata filter can be used.
@@ -351,9 +357,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             if (!SegmentMetadataFilter::may_contain(segment_meta, options.pred_tree_for_zone_map,
                                                     *options.tablet_schema)) {
                 skip_segment_idxs.insert(i);
+                int64_t filtered_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
+                prepared.metadata_filtered_rows += filtered_rows;
+                prepared.metadata_filtered_segments++;
                 if (options.stats) {
                     // Use num_rows from segment metadata if available, otherwise use 0
-                    int64_t filtered_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
                     options.stats->segment_metadata_filtered += filtered_rows;
                     options.stats->segments_metadata_filtered++;
                 }
@@ -364,13 +372,16 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 
     std::vector<SegmentPtr> segments;
     const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
-    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+    if (!_copy_cached_segments(&segments, skip_ptr)) {
+        RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+    }
 
     // Update segments_read_count after filtering
     if (options.stats) {
         options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
     }
 
+    prepared.segment_scans.reserve(segments.size());
     for (int i = 0; i < segments.size(); i++) {
         auto& seg_ptr = segments[i];
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
@@ -381,11 +392,78 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             continue;
         }
 
-        seg_options.tablet_range = std::nullopt;
+        std::optional<SeekRange> tablet_range = std::nullopt;
         if (i < _metadata->shared_segments_size() && _metadata->shared_segments(i) &&
             shared_segment_range.has_value()) {
-            seg_options.tablet_range = *shared_segment_range;
+            tablet_range = *shared_segment_range;
         }
+        prepared.segment_scans.emplace_back(PreparedSegmentScanState{seg_ptr, std::move(tablet_range)});
+    }
+    return prepared;
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read_with_prepared(const Schema& schema, const Schema& segment_schema,
+                                                                   const RowsetReadOptions& options,
+                                                                   const PreparedRowsetReadState& prepared) {
+    SegmentReadOptions seg_options;
+    if (options.lake_io_opts.fs) {
+        seg_options.fs = options.lake_io_opts.fs;
+    } else {
+        auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
+        ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
+    }
+    seg_options.stats = options.stats;
+    seg_options.ranges = options.ranges;
+    seg_options.pred_tree = options.pred_tree;
+    seg_options.pred_tree_for_zone_map = options.pred_tree_for_zone_map;
+    seg_options.runtime_filter_preds = options.runtime_filter_preds;
+    seg_options.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
+    seg_options.use_page_cache = options.use_page_cache;
+    seg_options.profile = options.profile;
+    seg_options.reader_type = options.reader_type;
+    seg_options.chunk_size = options.chunk_size;
+    seg_options.global_dictmaps = options.global_dictmaps;
+    seg_options.unused_output_column_ids = options.unused_output_column_ids;
+    seg_options.runtime_range_pruner = options.runtime_range_pruner;
+    seg_options.tablet_schema = options.tablet_schema;
+    seg_options.lake_io_opts = options.lake_io_opts;
+    seg_options.asc_hint = options.asc_hint;
+    seg_options.column_access_paths = options.column_access_paths;
+    seg_options.has_preaggregation = options.has_preaggregation;
+    seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
+    seg_options.tablet_id = tablet_id();
+    seg_options.rowset_id = metadata().id();
+    seg_options.dynamic_rss_id_base = options.dynamic_rss_id_base;
+    if (options.is_primary_keys) {
+        seg_options.is_primary_keys = true;
+        seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
+                _tablet_mgr, nullptr, seg_options.lake_io_opts.fill_data_cache, seg_options.lake_io_opts);
+        seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
+        seg_options.version = options.version;
+    }
+    if (options.delete_predicates != nullptr) {
+        seg_options.delete_predicates = options.delete_predicates->get_predicates(_index);
+    }
+
+    if (options.short_key_ranges_option != nullptr) {
+        seg_options.short_key_ranges = options.short_key_ranges_option->short_key_ranges;
+    }
+    seg_options.enable_gin_filter = options.enable_gin_filter;
+    seg_options.prune_column_after_index_filter = options.prune_column_after_index_filter;
+    seg_options.has_preaggregation = options.has_preaggregation;
+
+    std::vector<ChunkIteratorPtr> segment_iterators;
+    segment_iterators.reserve(prepared.segment_scans.size());
+    const bool needs_projection = &segment_schema != &schema;
+    if (options.stats) {
+        options.stats->segments_read_count += prepared.segment_scans.size();
+        options.stats->segment_metadata_filtered += prepared.metadata_filtered_rows;
+        options.stats->segments_metadata_filtered += prepared.metadata_filtered_segments;
+    }
+
+    for (const auto& prepared_segment : prepared.segment_scans) {
+        auto& seg_ptr = prepared_segment.segment;
+        seg_options.tablet_range = prepared_segment.tablet_range;
 
         if (options.rowid_range_option != nullptr) { // physical split.
             auto [rowid_range, is_first_split_of_segment] =
@@ -395,20 +473,25 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             }
             seg_options.rowid_range_option = std::move(rowid_range);
             seg_options.is_first_split_of_segment = is_first_split_of_segment;
+            seg_options.skip_key_range_filter = options.skip_key_range_filter;
         } else if (options.short_key_ranges_option != nullptr) { // logical split.
+            seg_options.rowid_range_option = nullptr;
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
+            seg_options.skip_key_range_filter = false;
         } else {
+            seg_options.rowid_range_option = nullptr;
             seg_options.is_first_split_of_segment = true;
+            seg_options.skip_key_range_filter = false;
         }
 
-        auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
+        auto res = seg_ptr->new_iterator(segment_schema, seg_options);
         if (res.status().is_end_of_file()) {
             continue;
         }
         if (!res.ok()) {
             return res.status();
         }
-        if (segment_schema != &schema) {
+        if (needs_projection) {
             segment_iterators.emplace_back(new_projection_iterator(schema, std::move(res).value()));
         } else {
             segment_iterators.emplace_back(std::move(res).value());
@@ -425,7 +508,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 
 StatusOr<size_t> Rowset::get_read_iterator_num() {
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    if (!_copy_cached_segments(&segments)) {
+        RETURN_IF_ERROR(load_segments(&segments, false));
+    }
 
     size_t segment_num = 0;
     for (auto& seg_ptr : segments) {
@@ -446,7 +531,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
                                                                           OlapReaderStatistics* stats) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
+    if (!_copy_cached_segments(&segments)) {
+        RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
+    }
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
@@ -480,7 +567,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    if (!_copy_cached_segments(&segments)) {
+        RETURN_IF_ERROR(load_segments(&segments, false));
+    }
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
@@ -531,16 +620,24 @@ RowsetId Rowset::rowset_id() const {
 }
 
 std::vector<SegmentSharedPtr> Rowset::get_segments() {
-    if (!_segments.empty()) {
-        return _segments;
+    {
+        std::lock_guard<std::mutex> l(_segments_lock);
+        if (!_segments.empty()) {
+            return _segments;
+        }
     }
 
     auto segments_or = segments(true);
     if (!segments_or.ok()) {
         return {};
     }
-    _segments = std::move(segments_or.value());
-    return _segments;
+    {
+        std::lock_guard<std::mutex> l(_segments_lock);
+        if (_segments.empty()) {
+            _segments = std::move(segments_or.value());
+        }
+        return _segments;
+    }
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
@@ -562,6 +659,23 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache,
     seg_options.lake_io_opts.fill_metadata_cache = fill_cache;
     seg_options.lake_io_opts.buffer_size = buffer_size;
     return load_segments(segments, seg_options, nullptr);
+}
+
+bool Rowset::_copy_cached_segments(std::vector<SegmentPtr>* segments, const std::unordered_set<int>* skip_segment_idxs) {
+    std::lock_guard<std::mutex> l(_segments_lock);
+    if (_segments.empty()) {
+        return false;
+    }
+
+    segments->reserve(segments->size() + _segments.size());
+    for (size_t i = 0; i < _segments.size(); ++i) {
+        if (skip_segment_idxs != nullptr && skip_segment_idxs->count(i) > 0) {
+            segments->emplace_back(nullptr);
+        } else {
+            segments->emplace_back(_segments[i]);
+        }
+    }
+    return true;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,

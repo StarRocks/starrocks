@@ -14,6 +14,8 @@
 
 #include "connector/lake_connector.h"
 
+#include "storage/rowset/rowid_range_option.h"
+
 #include <vector>
 
 #include "base/string/string_parser.hpp"
@@ -128,24 +130,36 @@ Status LakeDataSource::open(RuntimeState* state) {
     // Parse conjuncts via _conjuncts_manager.
     RETURN_IF_ERROR(cm.parse_conjuncts());
 
-    RETURN_IF_ERROR(build_scan_range(_runtime_state));
+    bool restored_prepared_split_ranges = false;
+    if (should_reuse_prepared_split_open_state() && _split_context != nullptr) {
+        RETURN_IF_ERROR(get_tablet(_scan_range));
+        auto prepared_split_open_state = _resolved_tablet_state->prepared_split_open_state;
+        std::lock_guard<std::mutex> l(prepared_split_open_state->lock);
+        if (prepared_split_open_state->ready) {
+            _not_push_down_conjuncts = prepared_split_open_state->not_push_down_conjuncts;
+            _scanner_ranges = prepared_split_open_state->scanner_ranges;
+            restored_prepared_split_ranges = true;
+        }
+    }
+    if (!restored_prepared_split_ranges) {
+        RETURN_IF_ERROR(build_scan_range(_runtime_state));
+    }
 
     RETURN_IF_ERROR(init_tablet_reader(_runtime_state));
     return Status::OK();
 }
 
 void LakeDataSource::close(RuntimeState* state) {
-    if (_reader) {
-        // close reader to update statistics before update counters
-        _reader->close();
-        update_counter(state);
-    }
-    if (_prj_iter) {
+    if (_prj_iter != nullptr) {
         _prj_iter->close();
+    } else if (_reader != nullptr) {
+        _reader->close();
     }
-    if (_reader) {
+    if (_reader != nullptr) {
+        update_counter(state);
         _reader.reset();
     }
+    _prj_iter.reset();
     _predicate_free_pool.clear();
 }
 
@@ -194,26 +208,64 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 }
 
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
-    int64_t tablet_id = scan_range.tablet_id;
-    int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
-    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-    ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
-    auto& lake_scan_node = _provider->_t_lake_scan_node;
-    if (lake_scan_node.__isset.schema_key) {
-        const auto& t_schema_key = lake_scan_node.schema_key;
-        TableSchemaKeyPB schema_key_pb;
-        schema_key_pb.set_schema_id(t_schema_key.schema_id);
-        schema_key_pb.set_db_id(t_schema_key.db_id);
-        schema_key_pb.set_table_id(t_schema_key.table_id);
-        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
-                                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
-                                                 _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
-    } else {
-        // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
-        // so fallback to the old way to get schema from tablet metadata
-        _tablet_schema = _tablet.get_schema();
+    ASSIGN_OR_RETURN(auto resolved_tablet, _provider->get_resolved_tablet(_runtime_state, scan_range));
+    _resolved_tablet_state = std::move(resolved_tablet);
+    _tablet = _resolved_tablet_state->tablet;
+    _tablet_schema = _resolved_tablet_state->tablet_schema;
+    return Status::OK();
+}
+
+bool LakeDataSource::should_reuse_prepared_split_open_state() const {
+    return _provider->could_split() && !_provider->_t_lake_scan_node.__isset.column_access_paths;
+}
+
+Status LakeDataSource::_try_restore_prepared_split_open_state(const PreparedSplitOpenState& prepared,
+                                                              std::vector<uint32_t>* scanner_columns,
+                                                              std::vector<uint32_t>* reader_columns,
+                                                              Schema* child_schema,
+                                                              std::optional<Schema>* output_schema) {
+    if (!prepared.ready) {
+        return Status::NotFound("prepared split state is not ready");
+    }
+    _tablet_schema = prepared.tablet_schema;
+    _query_slots = prepared.query_slots;
+    _unused_output_column_ids = prepared.unused_output_column_ids;
+    _params.global_dictmaps = const_cast<ColumnIdToGlobalDictMap*>(&prepared.global_dictmaps);
+    _params.unused_output_column_ids = &_unused_output_column_ids;
+    _scanner_ranges = prepared.scanner_ranges;
+    *scanner_columns = prepared.scanner_columns;
+    *reader_columns = prepared.reader_columns;
+    *child_schema = prepared.child_schema;
+    *output_schema = prepared.output_schema;
+    if (prepared.predicate_trees_ready) {
+        _params.pred_tree = prepared.pushdown_pred_tree;
+        _non_pushdown_pred_tree = prepared.non_pushdown_pred_tree;
+        _has_any_predicate = prepared.has_any_predicate;
     }
     return Status::OK();
+}
+
+void LakeDataSource::_capture_prepared_split_open_state(PreparedSplitOpenState* prepared,
+                                                        std::vector<uint32_t>* scanner_columns,
+                                                        std::vector<uint32_t>* reader_columns, Schema* child_schema,
+                                                        std::optional<Schema>* output_schema) {
+    prepared->tablet_schema = _tablet_schema;
+    prepared->global_dictmaps = _params.global_dictmaps != nullptr ? *_params.global_dictmaps : ColumnIdToGlobalDictMap{};
+    prepared->unused_output_column_ids = _unused_output_column_ids;
+    prepared->scanner_columns = *scanner_columns;
+    prepared->reader_columns = *reader_columns;
+    prepared->query_slots = _query_slots;
+    prepared->not_push_down_conjuncts = _not_push_down_conjuncts;
+    prepared->key_ranges = std::move(_key_ranges);
+    prepared->scanner_ranges.clear();
+    prepared->scanner_ranges.reserve(prepared->key_ranges.size());
+    for (const auto& key_range : prepared->key_ranges) {
+        prepared->scanner_ranges.push_back(key_range.get());
+    }
+    prepared->child_schema = *child_schema;
+    prepared->output_schema = *output_schema;
+    prepared->has_any_predicate = _has_any_predicate;
+    prepared->ready = true;
 }
 
 // mapping a slot-column-id to schema-columnid
@@ -307,7 +359,8 @@ void LakeDataSource::decide_chunk_size(bool has_predicate) {
     }
 }
 
-Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges) {
+Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key_ranges,
+                                          PreparedSplitOpenState* prepared_state) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
     auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
@@ -339,30 +392,34 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
     }
 
-    ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
     _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
     if (_params.enable_join_runtime_filter_pushdown) {
         ASSIGN_OR_RETURN(_params.runtime_filter_preds,
                          _conjuncts_manager->get_runtime_filter_predicates(&_obj_pool, parser));
     }
-    decide_chunk_size(!pred_tree.empty());
-    _has_any_predicate = !pred_tree.empty();
+    if (prepared_state != nullptr && prepared_state->predicate_trees_ready) {
+        _params.pred_tree = prepared_state->pushdown_pred_tree;
+        _non_pushdown_pred_tree = prepared_state->non_pushdown_pred_tree;
+        _has_any_predicate = prepared_state->has_any_predicate;
+    } else {
+        ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
+        _has_any_predicate = !pred_tree.empty();
 
-    PredicateAndNode pushdown_pred_root;
-    PredicateAndNode non_pushdown_pred_root;
-    pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
-                                    &pushdown_pred_root, &non_pushdown_pred_root);
-    _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
-    _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
+        PredicateAndNode pushdown_pred_root;
+        PredicateAndNode non_pushdown_pred_root;
+        pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
+                                        &pushdown_pred_root, &non_pushdown_pred_root);
+        _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
+        _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
+    }
+    decide_chunk_size(_has_any_predicate);
 
     for (const auto& cid : _non_pushdown_pred_tree.column_ids()) {
         _unused_output_column_ids.erase(cid);
     }
 
-    std::vector<ExprContext*> not_pushdown_conjuncts;
-    _conjuncts_manager->get_not_push_down_conjuncts(&not_pushdown_conjuncts);
     std::unordered_set<SlotId> conjuncts_slot_ids;
-    for (auto* expr : not_pushdown_conjuncts) {
+    for (auto* expr : _not_push_down_conjuncts) {
         expr->root()->for_each_slot_id([&conjuncts_slot_ids](SlotId id) { conjuncts_slot_ids.insert(id); });
     }
     for (auto& slot : *_slots) {
@@ -374,7 +431,17 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
 
     {
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
-        RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(&_obj_pool, _non_pushdown_pred_tree));
+        ObjectPool* predicate_obj_pool = prepared_state != nullptr ? &prepared_state->predicate_obj_pool : &_obj_pool;
+        if (prepared_state == nullptr || !prepared_state->predicate_trees_ready) {
+            RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(predicate_obj_pool, _non_pushdown_pred_tree));
+        }
+    }
+    if (prepared_state != nullptr && !prepared_state->predicate_trees_ready) {
+        prepared_state->predicate_free_pool = std::move(_predicate_free_pool);
+        prepared_state->pushdown_pred_tree = _params.pred_tree;
+        prepared_state->non_pushdown_pred_tree = _non_pushdown_pred_tree;
+        prepared_state->has_any_predicate = _has_any_predicate;
+        prepared_state->predicate_trees_ready = true;
     }
 
     // Range
@@ -401,6 +468,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> scanner_columns;
     // columns fetched from |_reader|.
     std::vector<uint32_t> reader_columns;
+    std::optional<Schema> output_schema;
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
 
@@ -420,11 +488,34 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
     }
 
-    RETURN_IF_ERROR(_extend_schema_by_access_paths());
-    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
-    RETURN_IF_ERROR(init_global_dicts(&_params));
-    RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
-    RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+    bool restored_prepared_split_open_state = false;
+    Schema child_schema;
+    std::shared_ptr<PreparedSplitOpenState> prepared_split_open_state;
+    std::shared_ptr<lake::PreparedSplitScanOpenState> prepared_scan_state;
+    if (should_reuse_prepared_split_open_state() && _resolved_tablet_state != nullptr) {
+        prepared_split_open_state = _resolved_tablet_state->prepared_split_open_state;
+        std::lock_guard<std::mutex> l(prepared_split_open_state->lock);
+        if (prepared_split_open_state->ready) {
+            RETURN_IF_ERROR(_try_restore_prepared_split_open_state(*prepared_split_open_state, &scanner_columns,
+                                                                  &reader_columns, &child_schema, &output_schema));
+            restored_prepared_split_open_state = true;
+        }
+        if (!prepared_split_open_state->disabled && _provider->could_split_physically()) {
+            if (prepared_split_open_state->prepared_scan_state == nullptr) {
+                prepared_split_open_state->prepared_scan_state = std::make_shared<lake::PreparedSplitScanOpenState>();
+            }
+            prepared_scan_state = prepared_split_open_state->prepared_scan_state;
+        }
+    }
+
+    if (!restored_prepared_split_open_state) {
+        RETURN_IF_ERROR(_extend_schema_by_access_paths());
+        ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
+        RETURN_IF_ERROR(init_global_dicts(&_params));
+        RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
+    }
+    RETURN_IF_ERROR(init_reader_params(_scanner_ranges, prepared_split_open_state.get()));
+    _params.unused_output_column_ids = &_unused_output_column_ids;
 
     // Setup SST warmup callback for CACHE SELECT on PK tables
     if (_params.lake_io_opts.cache_file_only && _slots != nullptr &&
@@ -437,22 +528,44 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         };
     }
 
-    RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
+    if (!restored_prepared_split_open_state) {
+        RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
+    }
 
+    _params.rowid_range_option = nullptr;
+    _params.short_key_ranges_option = nullptr;
+    _params.skip_key_range_filter = false;
     if (_split_context != nullptr) {
         auto split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
         if (_provider->could_split_physically()) {
             // physical
             _params.rowid_range_option = split_context->rowid_range;
+            _params.skip_key_range_filter =
+                    split_context->rowid_range != nullptr && split_context->rowid_range->key_ranges_materialized;
         } else {
             // logical
             _params.short_key_ranges_option = split_context->short_key_range;
+            _params.skip_key_range_filter = false;
         }
     }
-    starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
-    RETURN_IF_ERROR(init_column_access_paths(&child_schema));
-    // will modify schema field, need to copy schema
-    RETURN_IF_ERROR(prune_schema_by_access_paths(&child_schema));
+    if (restored_prepared_split_open_state) {
+        DCHECK(prepared_split_open_state != nullptr);
+    } else {
+        child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
+        RETURN_IF_ERROR(init_column_access_paths(&child_schema));
+        // will modify schema field, need to copy schema
+        RETURN_IF_ERROR(prune_schema_by_access_paths(&child_schema));
+        if (reader_columns.size() != scanner_columns.size()) {
+            output_schema = ChunkHelper::convert_schema(_tablet_schema, scanner_columns);
+        }
+        if (prepared_split_open_state != nullptr) {
+            std::lock_guard<std::mutex> l(prepared_split_open_state->lock);
+            if (!prepared_split_open_state->ready && !prepared_split_open_state->disabled) {
+                _capture_prepared_split_open_state(prepared_split_open_state.get(), &scanner_columns, &reader_columns,
+                                                   &child_schema, &output_schema);
+            }
+        }
+    }
 
     // need to split
     bool need_split = _provider->could_split() && _split_context == nullptr;
@@ -467,8 +580,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
-        starrocks::Schema output_schema = ChunkHelper::convert_schema(_tablet_schema, scanner_columns);
-        _prj_iter = new_projection_iterator(output_schema, _reader);
+        DCHECK(output_schema.has_value());
+        _prj_iter = new_projection_iterator(*output_schema, _reader);
     }
 
     if (!_not_push_down_conjuncts.empty() || !_non_pushdown_pred_tree.empty()) {
@@ -490,8 +603,15 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
     RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
     _reader->set_is_asc_hint(_provider->is_asc_hint());
+    _reader->set_prepared_split_scan_open_state(prepared_scan_state);
 
     RETURN_IF_ERROR(_reader->prepare());
+    if (prepared_split_open_state != nullptr && prepared_scan_state != nullptr && !prepared_scan_state->ready) {
+        std::lock_guard<std::mutex> l(prepared_split_open_state->lock);
+        if (!prepared_scan_state->ready) {
+            RETURN_IF_ERROR(_reader->prepare_split_scan_open_state(_params, prepared_scan_state.get()));
+        }
+    }
     RETURN_IF_ERROR(_reader->open(_params));
     return Status::OK();
 }
@@ -1196,6 +1316,49 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
 LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
+
+StatusOr<std::shared_ptr<ResolvedLakeTabletState>> LakeDataSourceProvider::get_resolved_tablet(
+        RuntimeState* state, const TInternalScanRange& scan_range) const {
+    int64_t tablet_id = scan_range.tablet_id;
+    int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
+    ResolvedTabletKey key{tablet_id, version};
+    {
+        std::lock_guard<std::mutex> l(_resolved_tablets_lock);
+        auto it = _resolved_tablets.find(key);
+        if (it != _resolved_tablets.end()) {
+            return it->second;
+        }
+    }
+
+    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    ASSIGN_OR_RETURN(auto tablet, tablet_manager->get_tablet(tablet_id, version));
+
+    TabletSchemaCSPtr tablet_schema;
+    if (_t_lake_scan_node.__isset.schema_key) {
+        const auto& t_schema_key = _t_lake_scan_node.schema_key;
+        TableSchemaKeyPB schema_key_pb;
+        schema_key_pb.set_schema_id(t_schema_key.schema_id);
+        schema_key_pb.set_db_id(t_schema_key.db_id);
+        schema_key_pb.set_table_id(t_schema_key.table_id);
+        ASSIGN_OR_RETURN(tablet_schema,
+                         tablet_manager->table_schema_service()->get_schema_for_scan(
+                                 schema_key_pb, tablet_id, state->query_id(), state->fragment_ctx()->fe_addr(),
+                                 tablet.metadata()));
+    } else {
+        // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
+        // so fallback to the old way to get schema from tablet metadata
+        tablet_schema = tablet.get_schema();
+    }
+
+    auto resolved = std::make_shared<ResolvedLakeTabletState>();
+    resolved->tablet = std::move(tablet);
+    resolved->tablet_schema = std::move(tablet_schema);
+    {
+        std::lock_guard<std::mutex> l(_resolved_tablets_lock);
+        auto [it, _] = _resolved_tablets.emplace(key, resolved);
+        return it->second;
+    }
+}
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);

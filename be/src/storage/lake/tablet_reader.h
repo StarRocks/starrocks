@@ -14,10 +14,14 @@
 
 #pragma once
 
+#include <memory>
+#include <optional>
+
 #include "exec/pipeline/scan/morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_iterator.h"
 #include "storage/delete_predicates.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_reader_params.h"
 #include "types_fwd.h"
@@ -40,6 +44,16 @@ namespace lake {
 
 class Rowset;
 class TabletManager;
+
+struct PreparedSplitScanOpenState {
+    bool ready = false;
+    DeletePredicates delete_predicates;
+    std::vector<std::unique_ptr<ColumnPredicate>> delete_predicate_owners;
+    std::vector<SeekRange> seek_ranges;
+    MemPool seek_range_mempool;
+    Schema segment_schema;
+    std::vector<PreparedRowsetReadState> rowset_states;
+};
 
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
@@ -76,6 +90,11 @@ public:
     // Precondition: the last method called must have been `prepare()`.
     Status open(const TabletReaderParams& read_params);
 
+    Status prepare_split_scan_open_state(const TabletReaderParams& read_params, PreparedSplitScanOpenState* state);
+    void set_prepared_split_scan_open_state(std::shared_ptr<PreparedSplitScanOpenState> state) {
+        _prepared_split_scan_open_state = std::move(state);
+    }
+
     void close() override;
 
     const OlapReaderStatistics& stats() const { return _stats; }
@@ -110,6 +129,10 @@ private:
     using PredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
+    Status _build_index_pruned_physical_split_tasks(const TabletReaderParams& read_params);
+    Status _prepare_delete_predicates(DeletePredicates* dels,
+                                      std::vector<std::unique_ptr<ColumnPredicate>>* predicate_owners);
+    Status _prepare_segment_schema(const DeletePredicates& delete_predicates, Schema* segment_schema) const;
 
     Status init_predicates(const TabletReaderParams& read_params);
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
@@ -151,6 +174,7 @@ private:
     bool _need_split = false;
     bool _could_split_physically = false;
     std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
+    std::shared_ptr<PreparedSplitScanOpenState> _prepared_split_scan_open_state;
 };
 
 } // namespace lake

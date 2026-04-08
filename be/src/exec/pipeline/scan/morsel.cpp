@@ -24,6 +24,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/range.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/short_key_range_option.h"
@@ -70,10 +71,15 @@ bool ScanMorsel::has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_
 
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
+    params->short_key_ranges_option = nullptr;
+    params->skip_key_range_filter =
+            _rowid_range_option != nullptr && _rowid_range_option->key_ranges_materialized;
 }
 
 void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
+    params->rowid_range_option = nullptr;
     params->short_key_ranges_option = _short_key_ranges_option;
+    params->skip_key_range_filter = false;
 }
 
 /// MorselQueueFactory.
@@ -426,6 +432,9 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
 
         if (rowid_range == nullptr) {
             rowid_range = std::make_shared<RowidRangeOption>();
+            rowid_range->key_ranges_materialized =
+                    _tablet_idx < _tablets.size() && _tablets[_tablet_idx]->belonged_to_cloud_native() &&
+                    !_tablet_seek_ranges.empty();
         }
 
         SparseRange<> taken_range;
@@ -634,9 +643,13 @@ Status PhysicalSplitMorselQueue::_init_segment() {
         return Status::OK();
     }
 
-    // Find the rowid range of each key range in this segment.
     if (_tablet_seek_ranges.empty()) {
         _segment_scan_range.add(Range<>(0, segment->num_rows()));
+    } else if (_tablets[_tablet_idx]->belonged_to_cloud_native()) {
+        // Lake can afford to materialize precise rowid ranges once and then
+        // skip duplicate key-range filtering in every split morsel.
+        ASSIGN_OR_RETURN(_segment_scan_range,
+                         get_segment_scan_range_by_key_ranges(segment->shared_from_this(), _tablet_seek_ranges));
     } else {
         RETURN_IF_ERROR(segment->load_index());
         for (const auto& range : _tablet_seek_ranges) {
