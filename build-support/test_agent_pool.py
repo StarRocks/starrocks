@@ -36,9 +36,20 @@ SPEC.loader.exec_module(MODULE)
 
 
 class AgentPoolTest(unittest.TestCase):
-    def _run_cli(self, repo_root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    def _run_cli(
+        self,
+        repo_root: Path,
+        *args: str,
+        env_overrides: dict[str, str | None] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         env = os.environ.copy()
         env.setdefault("BUILD_TYPE", "Release")
+        if env_overrides:
+            for key, value in env_overrides.items():
+                if value is None:
+                    env.pop(key, None)
+                else:
+                    env[key] = value
         return subprocess.run(
             [sys.executable, str(MODULE_PATH), *args],
             cwd=repo_root,
@@ -74,12 +85,21 @@ class AgentPoolTest(unittest.TestCase):
             self.assertTrue((repo_root / ".worktrees" / "agent-pool" / "slot-01").is_dir())
             self.assertTrue((repo_root / ".agent-pool" / "slot-01" / "be").is_dir())
 
-            acquire = self._run_cli(repo_root, "acquire", "--base", head, "--json")
+            acquire = self._run_cli(
+                repo_root,
+                "acquire",
+                "--base",
+                head,
+                "--json",
+                env_overrides={"PYTHON": None, "STARROCKS_THIRDPARTY": None},
+            )
             self.assertEqual(0, acquire.returncode, acquire.stderr)
             acquired = json.loads(acquire.stdout)
             self.assertEqual("slot-01", acquired["slot"])
             self.assertEqual(str(repo_root.resolve()), acquired["env"]["CCACHE_BASEDIR"])
             self.assertEqual(str((repo_root / ".agent-pool" / "slot-01" / "be").resolve()), acquired["env"]["CMAKE_BUILD_PREFIX"])
+            self.assertEqual("python3", acquired["env"]["PYTHON"])
+            self.assertEqual(str((repo_root / "thirdparty").resolve()), acquired["env"]["STARROCKS_THIRDPARTY"])
 
             release = self._run_cli(repo_root, "release", "--slot", "1")
             self.assertEqual(0, release.returncode, release.stderr)

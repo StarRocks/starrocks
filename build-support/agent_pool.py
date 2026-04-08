@@ -33,6 +33,8 @@ DEFAULT_SLOT_COUNT = 4
 DEFAULT_WORKTREE_ROOT = ".worktrees/agent-pool"
 DEFAULT_STATE_ROOT = ".agent-pool"
 DEFAULT_BRANCH_PREFIX = "agent-pool"
+DEFAULT_THIRDPARTY_ROOT = "thirdparty"
+DEFAULT_PYTHON = "python3"
 DEFAULT_BUILD_TYPE = "Release"
 DEFAULT_CCACHE_SLOPPINESS = "pch_defines,time_macros,include_file_mtime,include_file_ctime"
 
@@ -330,9 +332,11 @@ def _slot_env(layout: PoolLayout, paths: SlotPaths, env: dict[str, str]) -> dict
         "CCACHE_BASEDIR": str(layout.repo_root),
         "CCACHE_NOHASHDIR": "1",
         "CCACHE_SLOPPINESS": env.get("CCACHE_SLOPPINESS") or DEFAULT_CCACHE_SLOPPINESS,
+        "PYTHON": env.get("PYTHON") or DEFAULT_PYTHON,
         "STARROCKS_AGENT_SLOT": paths.slot_name,
         "STARROCKS_AGENT_POOL_WORKTREE_ROOT": str(layout.worktree_root),
         "STARROCKS_AGENT_POOL_STATE_ROOT": str(layout.state_root),
+        "STARROCKS_THIRDPARTY": env.get("STARROCKS_THIRDPARTY") or str(layout.repo_root / DEFAULT_THIRDPARTY_ROOT),
     }
     ccache_dir = _resolve_ccache_dir(env)
     if ccache_dir:

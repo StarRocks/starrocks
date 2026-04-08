@@ -90,6 +90,7 @@ starrocks_setup_darwin_build_env() {
     export MVN_CMD
     CMAKE_CMD=${CUSTOM_CMAKE:-cmake}
     export CMAKE_CMD
+    export PYTHON="${PYTHON:-python3}"
     BUILD_SYSTEM=ninja
     export BUILD_SYSTEM
 
