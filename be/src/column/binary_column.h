@@ -383,17 +383,12 @@ private:
 
     mutable Container _slices;
     mutable bool _slices_cache = false;
-<<<<<<< HEAD
     BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
-=======
-    mutable GermanStringContainer _german_strings;
-    mutable bool _german_strings_cache = false;
 
     // True when this column holds BINARY / VARBINARY data.  Causes put_mysql_row_buffer to
     // use push_binary (hex/base64 encoding) instead of push_string when inside a
     // nested type context.
     bool _is_binary_type = false;
->>>>>>> 00fd532d3a ([BugFix] Encode VARBINARY correctly inside nested types in MySQL result sets (#71346))
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;
