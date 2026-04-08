@@ -710,9 +710,8 @@ Status ScalarColumnWriter::append(const Column& column) {
     const uint8_t* ptr;
     // TODO: Remove slice cache from column writer
     if (data_column->is_binary() || data_column->is_large_binary()) {
-        data_column->is_large_binary()
-                ? down_cast<const LargeBinaryColumn*>(data_column)->build_slices(_slice_buf)
-                : down_cast<const BinaryColumn*>(data_column)->build_slices(_slice_buf);
+        data_column->is_large_binary() ? down_cast<const LargeBinaryColumn*>(data_column)->build_slices(_slice_buf)
+                                       : down_cast<const BinaryColumn*>(data_column)->build_slices(_slice_buf);
         ptr = reinterpret_cast<const uint8_t*>(_slice_buf.data());
     } else {
         RawDataVisitor visitor;
