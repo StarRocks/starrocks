@@ -14,6 +14,8 @@
 
 #include "connector/lake_connector.h"
 
+#include "storage/rowset/rowid_range_option.h"
+
 #include <vector>
 
 #include "base/string/string_parser.hpp"
@@ -194,25 +196,9 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 }
 
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
-    int64_t tablet_id = scan_range.tablet_id;
-    int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
-    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
-    ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
-    auto& lake_scan_node = _provider->_t_lake_scan_node;
-    if (lake_scan_node.__isset.schema_key) {
-        const auto& t_schema_key = lake_scan_node.schema_key;
-        TableSchemaKeyPB schema_key_pb;
-        schema_key_pb.set_schema_id(t_schema_key.schema_id);
-        schema_key_pb.set_db_id(t_schema_key.db_id);
-        schema_key_pb.set_table_id(t_schema_key.table_id);
-        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
-                                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
-                                                 _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
-    } else {
-        // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
-        // so fallback to the old way to get schema from tablet metadata
-        _tablet_schema = _tablet.get_schema();
-    }
+    ASSIGN_OR_RETURN(auto resolved_tablet, _provider->get_resolved_tablet(_runtime_state, scan_range));
+    _tablet = resolved_tablet->tablet;
+    _tablet_schema = resolved_tablet->tablet_schema;
     return Status::OK();
 }
 
@@ -439,14 +425,20 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
 
+    _params.rowid_range_option = nullptr;
+    _params.short_key_ranges_option = nullptr;
+    _params.skip_key_range_filter = false;
     if (_split_context != nullptr) {
         auto split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
         if (_provider->could_split_physically()) {
             // physical
             _params.rowid_range_option = split_context->rowid_range;
+            _params.skip_key_range_filter =
+                    split_context->rowid_range != nullptr && split_context->rowid_range->key_ranges_materialized;
         } else {
             // logical
             _params.short_key_ranges_option = split_context->short_key_range;
+            _params.skip_key_range_filter = false;
         }
     }
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
@@ -1196,6 +1188,49 @@ void LakeDataSource::update_counter(RuntimeState* state) {
 
 LakeDataSourceProvider::LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
         : _scan_node(scan_node), _t_lake_scan_node(plan_node.lake_scan_node) {}
+
+StatusOr<std::shared_ptr<const LakeDataSourceProvider::ResolvedTabletState>> LakeDataSourceProvider::get_resolved_tablet(
+        RuntimeState* state, const TInternalScanRange& scan_range) const {
+    int64_t tablet_id = scan_range.tablet_id;
+    int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
+    ResolvedTabletKey key{tablet_id, version};
+    {
+        std::lock_guard<std::mutex> l(_resolved_tablets_lock);
+        auto it = _resolved_tablets.find(key);
+        if (it != _resolved_tablets.end()) {
+            return it->second;
+        }
+    }
+
+    auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+    ASSIGN_OR_RETURN(auto tablet, tablet_manager->get_tablet(tablet_id, version));
+
+    TabletSchemaCSPtr tablet_schema;
+    if (_t_lake_scan_node.__isset.schema_key) {
+        const auto& t_schema_key = _t_lake_scan_node.schema_key;
+        TableSchemaKeyPB schema_key_pb;
+        schema_key_pb.set_schema_id(t_schema_key.schema_id);
+        schema_key_pb.set_db_id(t_schema_key.db_id);
+        schema_key_pb.set_table_id(t_schema_key.table_id);
+        ASSIGN_OR_RETURN(tablet_schema,
+                         tablet_manager->table_schema_service()->get_schema_for_scan(
+                                 schema_key_pb, tablet_id, state->query_id(), state->fragment_ctx()->fe_addr(),
+                                 tablet.metadata()));
+    } else {
+        // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
+        // so fallback to the old way to get schema from tablet metadata
+        tablet_schema = tablet.get_schema();
+    }
+
+    auto resolved = std::make_shared<ResolvedTabletState>();
+    resolved->tablet = std::move(tablet);
+    resolved->tablet_schema = std::move(tablet_schema);
+    {
+        std::lock_guard<std::mutex> l(_resolved_tablets_lock);
+        auto [it, _] = _resolved_tablets.emplace(key, resolved);
+        return it->second;
+    }
+}
 
 DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_range) {
     return std::make_unique<LakeDataSource>(this, scan_range);

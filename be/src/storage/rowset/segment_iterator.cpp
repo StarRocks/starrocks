@@ -50,6 +50,7 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/update_manager.h"
+#include "storage/olap_common.h"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
@@ -127,6 +128,10 @@ protected:
                        std::vector<uint64_t>* rssid_rowids) override {
         return do_get_next(chunk, rssid_rowids);
     }
+
+    friend StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_ptr<Segment>& segment,
+                                                                        const std::vector<SeekRange>& ranges,
+                                                                        const LakeIOOptions& lake_io_opts);
 
 private:
     struct ScanContext {
@@ -881,7 +886,9 @@ Status SegmentIterator::_init_internal() {
     // filter by index stage
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
-    RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    if (!_opts.skip_key_range_filter) {
+        RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    }
     RETURN_IF_ERROR(_apply_tablet_range());
     bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
     if (!apply_del_vec_after_all_index_filter) {
@@ -3545,9 +3552,31 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
         if (_opts.is_first_split_of_segment) {
             _opts.stats->rows_key_range_filtered += num_rows();
         }
+        if (_opts.skip_key_range_filter) {
+            _opts.stats->rows_after_key_range += _scan_range.span_size();
+            StarRocksMetrics::instance()->segment_rows_by_short_key.increment(_scan_range.span_size());
+        }
     }
 
     return Status::OK();
+}
+
+StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_ptr<Segment>& segment,
+                                                             const std::vector<SeekRange>& ranges,
+                                                             const LakeIOOptions& lake_io_opts) {
+    DCHECK(segment != nullptr);
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions opts;
+    opts.stats = &stats;
+    opts.fs = std::shared_ptr<FileSystem>(segment->file_system(), [](FileSystem*) {});
+    opts.chunk_size = 1;
+    opts.ranges = ranges;
+    opts.tablet_schema = segment->tablet_schema_share_ptr();
+    opts.lake_io_opts = lake_io_opts;
+
+    SegmentIterator iter(segment, Schema(), opts);
+    return iter._get_row_ranges_by_key_ranges();
 }
 
 // Currently, update stats is only used for lake tablet, and numeric statistics is nullptr for local tablet.

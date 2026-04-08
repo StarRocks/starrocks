@@ -82,6 +82,7 @@ public:
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
+    bool skip_key_range_filter = false;
 
     RuntimeScanRangePruner runtime_range_pruner;
 

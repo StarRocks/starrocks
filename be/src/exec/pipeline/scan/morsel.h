@@ -86,13 +86,21 @@ public:
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
 
-    void set_rowsets(const std::vector<BaseRowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
+    void set_rowsets(const std::vector<BaseRowsetSharedPtr>& rowsets) {
+        _shared_rowsets.reset();
+        _rowsets = &rowsets;
+    }
+    void set_shared_rowsets(std::shared_ptr<const std::vector<BaseRowsetSharedPtr>> rowsets) {
+        _shared_rowsets = std::move(rowsets);
+    }
     void set_delta_rowsets(std::vector<BaseRowsetSharedPtr>&& delta_rowsets) {
         _delta_rowsets = std::move(delta_rowsets);
     }
     const std::vector<BaseRowsetSharedPtr>& rowsets() const {
         if (_delta_rowsets.has_value()) {
             return _delta_rowsets.value();
+        } else if (_shared_rowsets != nullptr) {
+            return *_shared_rowsets;
         } else {
             return *_rowsets;
         }
@@ -110,6 +118,7 @@ private:
     static const std::vector<BaseRowsetSharedPtr> kEmptyRowsets;
     // _rowsets is owned by MorselQueue, whose lifecycle is longer than that of Morsel.
     const std::vector<BaseRowsetSharedPtr>* _rowsets = &kEmptyRowsets;
+    std::shared_ptr<const std::vector<BaseRowsetSharedPtr>> _shared_rowsets;
     std::optional<std::vector<BaseRowsetSharedPtr>> _delta_rowsets;
 };
 

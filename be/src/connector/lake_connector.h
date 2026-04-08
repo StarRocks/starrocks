@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/conjunctive_predicates.h"
@@ -230,6 +232,28 @@ private:
 
 class LakeDataSourceProvider final : public DataSourceProvider {
 public:
+    struct ResolvedTabletKey {
+        int64_t tablet_id;
+        int64_t version;
+
+        bool operator==(const ResolvedTabletKey& rhs) const {
+            return tablet_id == rhs.tablet_id && version == rhs.version;
+        }
+    };
+
+    struct ResolvedTabletKeyHash {
+        size_t operator()(const ResolvedTabletKey& key) const {
+            size_t h1 = std::hash<int64_t>{}(key.tablet_id);
+            size_t h2 = std::hash<int64_t>{}(key.version);
+            return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
+        }
+    };
+
+    struct ResolvedTabletState {
+        lake::VersionedTablet tablet;
+        TabletSchemaCSPtr tablet_schema;
+    };
+
     friend class LakeDataSource;
     LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     ~LakeDataSourceProvider() override = default;
@@ -290,11 +314,17 @@ protected:
     int64_t splitted_scan_rows = 0;
 
 private:
+    StatusOr<std::shared_ptr<const ResolvedTabletState>> get_resolved_tablet(RuntimeState* state,
+                                                                             const TInternalScanRange& scan_range) const;
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
+
+    mutable std::mutex _resolved_tablets_lock;
+    mutable std::unordered_map<ResolvedTabletKey, std::shared_ptr<const ResolvedTabletState>, ResolvedTabletKeyHash>
+            _resolved_tablets;
 };
 
 } // namespace starrocks::connector
