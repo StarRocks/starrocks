@@ -34,6 +34,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.PrimitiveType;
 
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -200,58 +201,39 @@ public class JDBCScanNode extends ScanNode {
         return columnName.toLowerCase(Locale.ROOT);
     }
 
-    private static boolean isAsciiAlphaNumeric(char ch) {
-        return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9');
-    }
+    private static final int ORACLE_TIMESTAMP_WITH_LOCAL_TZ = -102;
+    private static final int ORACLE_TIMESTAMP_WITH_TZ = -101;
 
-    private static PrimitiveType inferTemporalKindFromName(String normalizedColumnName) {
-        boolean hasDateLikeToken = false;
-        boolean hasTimeLikeToken = false;
-        StringBuilder tokenBuilder = new StringBuilder(normalizedColumnName.length());
-        for (int i = 0; i < normalizedColumnName.length(); i++) {
-            char ch = normalizedColumnName.charAt(i);
-            if (isAsciiAlphaNumeric(ch)) {
-                tokenBuilder.append(Character.toLowerCase(ch));
-                continue;
-            }
-            if (tokenBuilder.length() == 0) {
-                continue;
-            }
-            String token = tokenBuilder.toString();
-            if ("date".equals(token) || "dt".equals(token)) {
-                hasDateLikeToken = true;
-            } else if ("time".equals(token) || "datetime".equals(token) || "timestamp".equals(token) ||
-                    "ts".equals(token) || "tstz".equals(token) || "tsltz".equals(token) ||
-                    "timetz".equals(token) || "timestamptz".equals(token) || "timestampltz".equals(token) ||
-                    token.startsWith("timestamp")) {
-                hasTimeLikeToken = true;
-            }
-            tokenBuilder.setLength(0);
+    private static PrimitiveType mapJdbcTypeToTemporalType(int jdbcType) {
+        switch (jdbcType) {
+            case Types.DATE:
+                return PrimitiveType.DATE;
+            case Types.TIMESTAMP:
+            case ORACLE_TIMESTAMP_WITH_LOCAL_TZ:
+            case ORACLE_TIMESTAMP_WITH_TZ:
+            case Types.TIMESTAMP_WITH_TIMEZONE:
+                return PrimitiveType.DATETIME;
+            default:
+                return null;
         }
-
-        if (tokenBuilder.length() > 0) {
-            String token = tokenBuilder.toString();
-            if ("date".equals(token) || "dt".equals(token)) {
-                hasDateLikeToken = true;
-            } else if ("time".equals(token) || "datetime".equals(token) || "timestamp".equals(token) ||
-                    "ts".equals(token) || "tstz".equals(token) || "tsltz".equals(token) ||
-                    "timetz".equals(token) || "timestamptz".equals(token) || "timestampltz".equals(token) ||
-                    token.startsWith("timestamp")) {
-                hasTimeLikeToken = true;
-            }
-        }
-
-        if (hasTimeLikeToken) {
-            return PrimitiveType.DATETIME;
-        }
-        if (hasDateLikeToken) {
-            return PrimitiveType.DATE;
-        }
-        return PrimitiveType.INVALID_TYPE;
     }
 
     private Map<String, PrimitiveType> collectOracleTemporalColumns() {
         Map<String, PrimitiveType> temporalColumns = new HashMap<>();
+
+        // Prefer original JDBC types from the cached column schema (covers TIMESTAMP -> VARCHAR mapping)
+        Map<String, Integer> originalJdbcTypes = table.getOriginalJdbcColumnTypes();
+        if (originalJdbcTypes != null && !originalJdbcTypes.isEmpty()) {
+            for (Map.Entry<String, Integer> entry : originalJdbcTypes.entrySet()) {
+                PrimitiveType temporalType = mapJdbcTypeToTemporalType(entry.getValue());
+                if (temporalType != null) {
+                    temporalColumns.put(entry.getKey(), temporalType);
+                }
+            }
+            return temporalColumns;
+        }
+
+        // Fallback: use slot descriptor types (for JDBC resource tables without cached JDBC types)
         for (SlotDescriptor slotDesc : desc.getSlots()) {
             if (slotDesc == null || slotDesc.getType() == null) {
                 continue;
@@ -266,14 +248,6 @@ public class JDBCScanNode extends ScanNode {
             PrimitiveType slotType = slotDesc.getType().getPrimitiveType();
             if (slotType == PrimitiveType.DATETIME || slotType == PrimitiveType.DATE) {
                 temporalColumns.put(normalizedColumnName, slotType);
-                continue;
-            }
-
-            if (slotType == PrimitiveType.VARCHAR || slotType == PrimitiveType.CHAR) {
-                PrimitiveType inferredTemporalType = inferTemporalKindFromName(normalizedColumnName);
-                if (inferredTemporalType != PrimitiveType.INVALID_TYPE) {
-                    temporalColumns.put(normalizedColumnName, inferredTemporalType);
-                }
             }
         }
         return temporalColumns;

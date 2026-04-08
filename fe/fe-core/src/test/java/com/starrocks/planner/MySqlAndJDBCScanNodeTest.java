@@ -37,13 +37,20 @@ import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Types;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 public class MySqlAndJDBCScanNodeTest {
 
     private JDBCScanNode createOracleScanNode(List<Column> columns, List<SlotDescriptor> slots) throws DdlException {
+        return createOracleScanNode(columns, slots, null);
+    }
+
+    private JDBCScanNode createOracleScanNode(List<Column> columns, List<SlotDescriptor> slots,
+                                              Map<String, Integer> originalJdbcTypes) throws DdlException {
         Map<String, String> properties = Maps.newHashMap();
         properties.put("user", "oracle");
         properties.put("password", "123456");
@@ -53,6 +60,9 @@ public class MySqlAndJDBCScanNodeTest {
         properties.put("driver_class", "oracle.jdbc.driver.OracleDriver");
 
         JDBCTable oracleTable = new JDBCTable(1, "orders", columns, properties);
+        if (originalJdbcTypes != null) {
+            oracleTable.setOriginalJdbcColumnTypes(originalJdbcTypes);
+        }
         TupleDescriptor tupleDesc = new TupleDescriptor(new TupleId(1));
         tupleDesc.setTable(oracleTable);
         for (SlotDescriptor slot : slots) {
@@ -247,7 +257,43 @@ public class MySqlAndJDBCScanNodeTest {
     }
 
     @Test
-    public void testOracleRewriteTemporalVarcharColumnByNameInference() throws DdlException {
+    public void testOracleRewriteTimestampMappedToVarcharWithOriginalJdbcTypes() throws DdlException {
+        // Oracle TIMESTAMP column mapped to VARCHAR (default behavior), but original JDBC type is available
+        Column varcharColumn = new Column("ts_col", VarcharType.VARCHAR);
+        SlotDescriptor varcharSlot = createSlotDescriptor(1, varcharColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
+        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(varcharColumn),
+                Collections.singletonList(varcharSlot), originalJdbcTypes);
+        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
+                new SlotRef("ts_col", varcharSlot), StringLiteral.create("2026-03-12 09:30:15")));
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains(
+                        "ts_col = TO_TIMESTAMP('2026-03-12 09:30:15', 'YYYY-MM-DD HH24:MI:SS')"),
+                nodeString);
+    }
+
+    @Test
+    public void testOracleRewriteDateColumnWithOriginalJdbcTypes() throws DdlException {
+        // Oracle DATE column with original JDBC type available
+        Column dateColumn = new Column("date_col", DateType.DATE);
+        SlotDescriptor dateSlot = createSlotDescriptor(1, dateColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("date_col", Types.DATE);
+        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(dateColumn),
+                Collections.singletonList(dateSlot), originalJdbcTypes);
+        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
+                new SlotRef("date_col", dateSlot), StringLiteral.create("2026-03-12")));
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains(
+                        "date_col = TO_DATE('2026-03-12', 'YYYY-MM-DD')"),
+                nodeString);
+    }
+
+    @Test
+    public void testOracleDoesNotRewriteTemporalVarcharColumnByName() throws DdlException {
         Column varcharColumn = new Column("tstz_col", VarcharType.VARCHAR);
         SlotDescriptor varcharSlot = createSlotDescriptor(1, varcharColumn);
         JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(varcharColumn),
@@ -257,7 +303,7 @@ public class MySqlAndJDBCScanNodeTest {
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains(
-                        "tstz_col = TO_TIMESTAMP('2026-03-12 09:30:15.123456', 'YYYY-MM-DD HH24:MI:SS.FF6')"),
+                        "tstz_col = '2026-03-12 09:30:15.123456'"),
                 nodeString);
     }
 
