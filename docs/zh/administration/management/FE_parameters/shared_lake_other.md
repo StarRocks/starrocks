@@ -551,13 +551,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 数据湖
 
-### `files_enable_insert_push_down_schema`
+### `files_enable_insert_push_down_column_type`
 
 - 默认值: true
+- 别名: `files_enable_insert_push_down_schema`
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，分析器将尝试将目标表 schema 推送到 `files()` 表函数中，用于 INSERT ... FROM files() 操作。这仅适用于源是 FileTableFunctionRelation、目标是原生表且 SELECT 列表中包含相应的 slot-ref 列（或 *）的情况。分析器会将选择的列与目标列匹配（计数必须匹配），短暂锁定目标表，并用非复杂类型（Parquet JSON 等复杂类型 `->` `array<varchar>` 会跳过）的深拷贝目标列类型替换文件列类型。原始文件表中的列名会保留。这减少了摄取期间文件类型推断引起的类型不匹配和松散性。
+- 描述: 启用后，StarRocks 会将目标表的列类型下推到 `files()` 表函数，用于 `INSERT INTO target_table SELECT ... FROM files()` 操作。仅对 files 推断出的已有列进行类型重写，不添加或删除列。复杂类型会跳过。这可减少由文件类型推断不准确引起的类型不匹配错误。如需完整的 schema 下推（列名和类型），请使用 INSERT 属性 `enable_push_down_schema`。
 - 引入版本: v3.4.0, v3.5.0
 
 ### `hdfs_read_buffer_size_kb`

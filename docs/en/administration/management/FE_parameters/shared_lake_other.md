@@ -551,13 +551,14 @@ This topic introduces the following types of FE configurations:
 
 ## Data Lake
 
-### `files_enable_insert_push_down_schema`
+### `files_enable_insert_push_down_column_type`
 
 - Default: true
+- Alias: `files_enable_insert_push_down_schema`
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, the analyzer will attempt to push the target table schema into the `files()` table function for INSERT ... FROM files() operations. This only applies when the source is a FileTableFunctionRelation, the target is a native table, and the SELECT list contains corresponding slot-ref columns (or *). The analyzer will match select columns to target columns (counts must match), lock the target table briefly, and replace file-column types with deep-copied target column types for non-complex types (complex types such as Parquet JSON `->` `array<varchar>` are skipped). Column names from the original files table are preserved. This reduces type-mismatch and looseness from file-based type inference during ingestion.
+- Description: When enabled, StarRocks pushes target table column types down to the `files()` table function for `INSERT INTO target_table SELECT ... FROM files()` operations. Only the types of columns already inferred from the files are rewritten; no columns are added or removed. Complex types are skipped. This reduces type-mismatch errors caused by imprecise file-based type inference. For full schema push-down (column names and types), use the INSERT property `enable_push_down_schema`.
 - Introduced in: v3.4.0, v3.5.0
 
 ### `hdfs_read_buffer_size_kb`
