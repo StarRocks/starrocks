@@ -65,10 +65,9 @@ bool LockFreeDriverQueue::try_take(DriverRawPtr& driver, int worker_id) {
     int best_level = _find_best_level(bitmap);
     if (best_level < 0) return false;
 
-    return _try_take_from_levels(bitmap, best_level, worker_id % QUEUE_SIZE, driver,
-                                 [this, worker_id](int level, DriverRawPtr& d) {
-                                     return _queue.try_dequeue(level, d, worker_id);
-                                 });
+    return _try_take_from_levels(
+            bitmap, best_level, worker_id % QUEUE_SIZE, driver,
+            [this, worker_id](int level, DriverRawPtr& d) { return _queue.try_dequeue(level, d, worker_id); });
 }
 
 bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {

@@ -80,8 +80,7 @@ private:
     // Try best_level first, then fallback to remaining levels in bitmap.
     // DequeueFunc: (int level, DriverRawPtr& driver) -> bool
     template <typename DequeueFunc>
-    bool _try_take_from_levels(uint8_t bitmap, int best_level, int start, DriverRawPtr& driver,
-                               DequeueFunc&& dequeue);
+    bool _try_take_from_levels(uint8_t bitmap, int best_level, int start, DriverRawPtr& driver, DequeueFunc&& dequeue);
 
     WorkStealingQueue<DriverRawPtr, QUEUE_SIZE> _queue;
 

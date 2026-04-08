@@ -61,8 +61,7 @@ bool LockFreeScanTaskQueue::try_take(ScanTask& task) {
     uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
     if (bitmap == 0) return false;
 
-    return _try_take_from_levels(bitmap, task,
-                                 [this](int level, ScanTask& t) { return _queue.try_dequeue(level, t); });
+    return _try_take_from_levels(bitmap, task, [this](int level, ScanTask& t) { return _queue.try_dequeue(level, t); });
 }
 
 template <typename DequeueFunc>
