@@ -32,6 +32,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "runtime/descriptors.h"
 #include "types/datetime_value.h"
 #include "util/arrow/row_batch.h"
 
@@ -1848,6 +1849,109 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_char) {
         ASSERT_EQ(fail_filter[i], 0);
         ASSERT_EQ(fail_col->get_slice(i).size, 0u);
     }
+}
+
+// Non-nullable converter receiving an array that actually contains nulls.
+// Exercises the needs_null_guard defensive path (lines 407, 409-410).
+PARALLEL_TEST(ArrowConverterTest, test_string_view_non_nullable_with_nulls) {
+    std::vector<std::string> values = {"hello", "world", "test"};
+    // Build array with nulls at even indices
+    auto array = create_string_view_array(values, /*with_nulls=*/true);
+    ASSERT_GT(array->null_count(), 0);
+
+    // Non-nullable, non-strict converter
+    auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_VARCHAR, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    auto col = BinaryColumn::create();
+    Filter filter;
+    filter.resize(array->length(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), col.get(), 0, nullptr, &filter, nullptr, nullptr));
+    ASSERT_EQ(col->size(), values.size());
+    // Even indices (nulls) should be filtered out
+    for (size_t i = 0; i < values.size(); ++i) {
+        if (i % 2 == 0) {
+            ASSERT_EQ(filter[i], 0);
+        } else {
+            ASSERT_EQ(filter[i], 1);
+            ASSERT_EQ(col->get_slice(i).to_string(), values[i]);
+        }
+    }
+}
+
+// Nullable + non-strict converter with oversized strings.
+// Exercises the is_nullable && !is_strict overflow path (line 421).
+PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_non_strict_overflow) {
+    // Use strings that exceed MAX_CHAR_LENGTH=255 with CHAR type
+    std::vector<std::string> values = {
+            "short",                   // fits
+            std::string(300, 'x'),     // exceeds max
+            std::string(10, 'y'),      // fits
+            std::string(500, 'z'),     // exceeds max
+    };
+    auto array = create_string_view_array(values);
+
+    // Nullable, non-strict, CHAR type (max_length = 255)
+    auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_CHAR, true, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    auto data_col = BinaryColumn::create();
+    auto null_col = NullColumn::create();
+    auto col = NullableColumn::create(std::move(data_col), std::move(null_col));
+
+    auto* nullable = down_cast<NullableColumn*>(col.get());
+    auto* bin_col = down_cast<BinaryColumn*>(nullable->data_column_raw_ptr());
+    auto* nul_col = nullable->null_column_raw_ptr();
+    fill_null_column(array.get(), 0, array->length(), nul_col, 0);
+    auto* null_data = &nul_col->get_data().front();
+    Filter filter;
+    filter.resize(array->length(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), bin_col, 0, null_data, &filter, nullptr, nullptr));
+    ASSERT_EQ(bin_col->size(), values.size());
+    // Oversized strings should be converted to NULL (not filtered)
+    ASSERT_EQ(null_data[0], DATUM_NOT_NULL);
+    ASSERT_EQ(bin_col->get_slice(0).to_string(), "short");
+    ASSERT_EQ(null_data[1], DATUM_NULL);  // overflow -> NULL
+    ASSERT_EQ(null_data[2], DATUM_NOT_NULL);
+    ASSERT_EQ(bin_col->get_slice(2).to_string(), std::string(10, 'y'));
+    ASSERT_EQ(null_data[3], DATUM_NULL);  // overflow -> NULL
+    // All rows should still pass the filter (overflow becomes NULL, not filtered)
+    for (size_t i = 0; i < values.size(); ++i) {
+        ASSERT_EQ(filter[i], 1);
+    }
+}
+
+// Strict overflow with ArrowConvertContext — exercises ctx->current_slot->type().len
+// (lines 379-380) and ctx->report_error_message() (lines 425-429).
+PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
+    // CHAR(10): strings > 10 bytes should be rejected
+    std::vector<std::string> values = {
+            "short",                   // 5 bytes, fits
+            std::string(15, 'a'),      // 15 bytes, exceeds CHAR(10)
+            "ok",                      // 2 bytes, fits
+            std::string(20, 'b'),      // 20 bytes, exceeds CHAR(10)
+    };
+    auto array = create_string_view_array(values);
+
+    // Build ArrowConvertContext with a CHAR(10) SlotDescriptor
+    SlotDescriptor slot(0, "test_col", TypeDescriptor::create_char_type(10));
+    ArrowConvertContext ctx;
+    ctx.state = nullptr;
+    ctx.current_slot = &slot;
+
+    auto conv_func = get_arrow_converter(ArrowTypeId::STRING_VIEW, TYPE_CHAR, false, true);
+    ASSERT_TRUE(conv_func != nullptr);
+    auto col = BinaryColumn::create();
+    Filter filter;
+    filter.resize(array->length(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), col.get(), 0, nullptr, &filter, &ctx, nullptr));
+    ASSERT_EQ(col->size(), values.size());
+    // Strings that fit
+    ASSERT_EQ(filter[0], 1);
+    ASSERT_EQ(col->get_slice(0).to_string(), "short");
+    ASSERT_EQ(filter[2], 1);
+    ASSERT_EQ(col->get_slice(2).to_string(), "ok");
+    // Strings that exceed CHAR(10) — filtered out
+    ASSERT_EQ(filter[1], 0);
+    ASSERT_EQ(filter[3], 0);
 }
 
 } // namespace starrocks
