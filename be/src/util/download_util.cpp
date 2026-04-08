@@ -16,7 +16,6 @@
 
 <<<<<<< HEAD
 #include <boost/algorithm/string/predicate.hpp>
-
 #include "fmt/format.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
@@ -32,21 +31,22 @@
 
 namespace starrocks {
 
-Status DownloadUtil::download(const std::string& url, const std::string& target_file,
-                              const std::string& expected_checksum, const TCloudConfiguration& cloud_configuration) {
-    auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
-    udf_downloader downloader;
-    FSOptions options(&cloud_configuration);
-    RETURN_IF_ERROR(downloader.do_download(tmp_file, url, expected_checksum, options));
-    // rename temporary file to target file
-    auto ret = rename(tmp_file.c_str(), target_file.c_str());
-    if (ret != 0) {
-        (void)remove(tmp_file.c_str());
-        auto err = fmt::format("fail to rename file {} to {}", tmp_file, target_file);
-        LOG(ERROR) << err;
-        return Status::InternalError(err);
+    Status DownloadUtil::download(const std::string& url, const std::string& target_file,
+                                  const std::string& expected_checksum,
+                                  const TCloudConfiguration& cloud_configuration) {
+        auto tmp_file = fmt::format("{}_{}", target_file, ThreadLocalUUIDGenerator::next_uuid_string());
+        udf_downloader downloader;
+        FSOptions options(&cloud_configuration);
+        RETURN_IF_ERROR(downloader.do_download(tmp_file, url, expected_checksum, options));
+        // rename temporary file to target file
+        auto ret = rename(tmp_file.c_str(), target_file.c_str());
+        if (ret != 0) {
+            (void)remove(tmp_file.c_str());
+            auto err = fmt::format("fail to rename file {} to {}", tmp_file, target_file);
+            LOG(ERROR) << err;
+            return Status::InternalError(err);
+        }
+        return Status::OK();
     }
-    return Status::OK();
-}
 
 } // namespace starrocks
