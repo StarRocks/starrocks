@@ -36,7 +36,7 @@ public final class LeaderLease {
     }
 
     public boolean isValid() {
-        return haEpoch > 0 && generation > 0;
+        return haEpoch >= 0 && generation > 0;
     }
 
     @Override
