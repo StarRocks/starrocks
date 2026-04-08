@@ -288,8 +288,14 @@ public:
 
     // Field offsets within CurrentThread, exposed for eBPF programs that locate
     // these fields via g_tls_thread_status_tpoff + g_tls_*_offset.
-    static constexpr size_t query_id_offset() { return offsetof(CurrentThread, _query_id); }
-    static constexpr size_t module_type_offset() { return offsetof(CurrentThread, _module_type); }
+    static size_t query_id_offset() {
+        static const size_t offset = field_offset(&CurrentThread::_query_id);
+        return offset;
+    }
+    static size_t module_type_offset() {
+        static const size_t offset = field_offset(&CurrentThread::_module_type);
+        return offset;
+    }
 
     void set_custom_coredump_msg(const std::string& custom_coredump_msg) { _custom_coredump_msg = custom_coredump_msg; }
 
@@ -401,6 +407,14 @@ public:
     void set_try_consume_mem_size(int64_t mem_size) { _mem_cache_manager.set_try_consume_mem_size(mem_size); }
 
 private:
+    template <typename Member>
+    static size_t field_offset(Member CurrentThread::*member) {
+        const auto* thread = &CurrentThread::current();
+        const auto* base = reinterpret_cast<const char*>(thread);
+        const auto* field = reinterpret_cast<const char*>(&(thread->*member));
+        return static_cast<size_t>(field - base);
+    }
+
     MemCacheManager _mem_cache_manager;
     // Store in TLS for diagnose coredump easier
     TUniqueId _query_id;
