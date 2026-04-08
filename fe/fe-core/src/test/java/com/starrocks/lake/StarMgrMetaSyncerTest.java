@@ -468,7 +468,7 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<ColocateTableIndex>() {
             @Mock
-            public boolean isLakeColocateTable(long tableId) {
+            public boolean isMetaGroupColocateTable(long tableId) {
                 return true;
             }
 
@@ -1048,7 +1048,7 @@ public class StarMgrMetaSyncerTest {
 
         new MockUp<ColocateTableIndex>() {
             @Mock
-            public boolean isLakeColocateTable(long tableId) {
+            public boolean isMetaGroupColocateTable(long tableId) {
                 return true;
             }
 
