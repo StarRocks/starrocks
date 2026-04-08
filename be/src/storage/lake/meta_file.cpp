@@ -76,8 +76,11 @@ static std::string delvec_cache_key(int64_t tablet_id, const DelvecPagePB& page)
     DelvecCacheKeyPB cache_key_pb;
     cache_key_pb.set_id(tablet_id);
     cache_key_pb.mutable_delvec_page()->CopyFrom(page);
-    // Do not include crc32c_gen_version in cache key
+    // Do not include crc32c_gen_version or inline_data in cache key.
+    // inline_data can be KB-sized; including it makes keys huge and destroys
+    // cache performance (serialization, comparison, memory).
     cache_key_pb.mutable_delvec_page()->clear_crc32c_gen_version();
+    cache_key_pb.mutable_delvec_page()->clear_inline_data();
     return cache_key_pb.SerializeAsString();
 }
 
