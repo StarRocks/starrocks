@@ -258,6 +258,9 @@ public class RewriteSimpleAggToMetaScanRule extends TransformationRule {
                         // so we choose to disable min/max rewrite to make sure correctness
                         // fast schema evolution don't support changing column type in shared-nothing mode,
                         // we only need to disable it in shared-data mode
+                        // But there is one case that share nothing can perform fast schema evolution:
+                        // widen varchar length, but such modification will not change the type in BE side
+                        // so it is safe for this rewrite rule.
                         if (RunMode.isSharedDataMode() && hasSchemaChange) {
                             return false;
                         }

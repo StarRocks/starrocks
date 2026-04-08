@@ -133,6 +133,7 @@ import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
@@ -148,6 +149,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -673,27 +675,43 @@ public class SchemaChangeHandler extends AlterHandler {
 
     // User can modify column type and column position
     private boolean processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
-                                        Map<Long, LinkedList<Column>> indexMetaIdToSchema) throws DdlException {
+                                        Map<Long, LinkedList<Column>> indexMetaIdToSchema,
+                                        Map<Long, Set<String>> alterIndexMetaIdToIncrVarcharLenColNames)
+            throws DdlException {
         // The fast schema evolution mechanism is only supported for modified columns in shared data mode.
+        // But fast schema evolution for widening varchar length can be performed in both shared data and share nothing.
         boolean fastSchemaEvolution = RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution();
         Column modColumn = buildColumnForModify(alterClause.getColumnDef(), olapTable);
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
-                throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
+            Column baseColumn = olapTable.getBaseColumn(modColumn.getName());
+            if (baseColumn != null) {
+                modColumn.setAggregationType(baseColumn.getAggregationType(), baseColumn.isAggregationTypeImplicit());
+                if (baseColumn.isKey()) {
+                    // backward compatibility: if user does not specify key attribute in modify column clause for pk table,
+                    // we will keep it as a key column which is the same as before.
+                    modColumn.setIsKey(baseColumn.isKey());
+                    if (!isVarcharLengthIncrease(baseColumn, modColumn)) {
+                        throw new DdlException(
+                            "Can not modify key column: " + modColumn.getName() +
+                                " for primary key table except for increasing varchar length");
+                    }
+                    if (modColumn.isAllowNull()) {
+                        throw new DdlException("primary key column[" + modColumn.getName() + "] cannot be nullable");
+                    }
+                }
             }
+
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
             if (indexMeta.getSortKeyIdxes() != null) {
                 for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                     if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
-                        throw new DdlException("Can not modify sort column in primary data model table");
+                        if (!isVarcharLengthIncrease(indexMeta.getSchema().get(sortKeyIdx), modColumn)) {
+                            throw new DdlException(
+                                "Can not modify sort column in primary data model table except for increasing varchar length");
+                        }
                     }
                 }
             }
-            if (modColumn.getAggregationType() != null && modColumn.getAggregationType() != AggregateType.REPLACE) {
-                throw new DdlException("Can not assign aggregation method on column in Primary data model table: " +
-                        modColumn.getName());
-            }
-            modColumn.setAggregationType(AggregateType.REPLACE, true);
         } else if (KeysType.AGG_KEYS == olapTable.getKeysType()) {
             if (modColumn.isKey() && null != modColumn.getAggregationType()) {
                 throw new DdlException("Can not assign aggregation method on key column: " + modColumn.getName());
@@ -847,12 +865,12 @@ public class SchemaChangeHandler extends AlterHandler {
 
         List<Column> otherIndexModifiedColumn = new ArrayList<>();
         // check if column being mod
+        List<Long> otherIndexMetaIds = new ArrayList<>();
         if (!modColumn.equals(oriColumn)) {
             // column is mod. we have to mod this column in all indices
 
             // handle other indices
             // 1 find other indices which contain this column
-            List<Long> otherIndexMetaIds = new ArrayList<>();
             for (Map.Entry<Long, List<Column>> entry : olapTable.getIndexMetaIdToSchema().entrySet()) {
                 if (entry.getKey() == indexMetaIdForFindingColumn) {
                     // skip the index we used to find column. it has been handled before
@@ -927,6 +945,52 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         } // end for handling other indices
 
+        boolean isVarcharLengthIncrease = isVarcharLengthIncrease(oriColumn, modColumn);
+        boolean isOnlyDifferentFromColumnType =
+                hasOnlyTypeChangeForVarcharLengthFastPath(oriColumn, modColumn);
+        boolean keyOrderChanged = false;
+        if (modColumn.isKey() && oriColumn.isKey()) {
+            List<String> oldKeyColumns =
+                    olapTable.getBaseSchema().stream().
+                        filter(Column::isKey).map(Column::getName).collect(Collectors.toList());
+            List<String> newKeyColumns =
+                    schemaForFinding.stream().filter(Column::isKey).
+                        map(c -> Column.removeNamePrefix(c.getName())).collect(Collectors.toList());
+            keyOrderChanged = !oldKeyColumns.equals(newKeyColumns);
+        } // sort key need not be considered here, because modify column can not change the order of sort key
+
+        alterIndexMetaIdToIncrVarcharLenColNames.putIfAbsent(indexMetaIdForFindingColumn, Sets.newHashSet());
+        for (long otherIndexMetaId : otherIndexMetaIds) {
+            alterIndexMetaIdToIncrVarcharLenColNames.putIfAbsent(otherIndexMetaId, Sets.newHashSet());
+        }
+        if (isOnlyDifferentFromColumnType && isVarcharLengthIncrease) {
+            alterIndexMetaIdToIncrVarcharLenColNames.get(indexMetaIdForFindingColumn).add(
+                    Column.removeNamePrefix(modColumn.getName()));
+            for (long otherIndexMetaId : otherIndexMetaIds) {
+                alterIndexMetaIdToIncrVarcharLenColNames.get(otherIndexMetaId).add(
+                        Column.removeNamePrefix(modColumn.getName()));
+            }
+            // This specified modify column can be perform by fast path for share nothing mode
+            if ((fastSchemaEvolution || (!RunMode.isSharedDataMode() && olapTable.getUseFastSchemaEvolution())) &&
+                    !keyOrderChanged) {
+                // In this special case, we can use fast schema evolution bypassing the key and index check.
+                return true;
+            }
+        } else {
+            alterIndexMetaIdToIncrVarcharLenColNames.get(indexMetaIdForFindingColumn).remove(
+                    Column.removeNamePrefix(modColumn.getName()));
+            for (long otherIndexMetaId : otherIndexMetaIds) {
+                alterIndexMetaIdToIncrVarcharLenColNames.get(otherIndexMetaId).remove(
+                        Column.removeNamePrefix(modColumn.getName()));
+            }
+        }
+
+        if (keyOrderChanged && KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+            // exception for pk order change
+            throw new DdlException("Can not reorder pk keys by modify column");
+        } // non pk key order change will be charged by other rule, not throw exception here
+        // which is meet the previous behavior
+
         // fast schema evolution supports the conversion of scalar types to decimal types, but does not support the conversion
         // of decimal types to other scale types, due to the fact that the precision and scale of the decimal are not recorded
         // in the segment file
@@ -943,6 +1007,7 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
 
+        // Not need for widen varchar length
         if (!SchemaChangeTypeCompatibility.canReuseZonemapIndex(oriColumn.getType(), modColumn.getType())) {
             return false;
         }
@@ -951,6 +1016,7 @@ public class SchemaChangeHandler extends AlterHandler {
         // 1. The index can be reused after type conversion, and BE has made necessary changes,
         //    such as casting new type values to old type values before querying the index.
         // 2. The index cannot be reused, and BE has made changes to skip it during queries.
+        // 3. Not need for widen varchar length
         // Currently, BLOOMFILTER and NGRAMBF indexes use rule 2 to support fast schema evolution. BE-side changes
         // for other indexes are not yet ready, so fast schema change is temporarily disabled for them. This feature
         // will be gradually enabled for these indexes once BE support is in place.
@@ -1421,7 +1487,9 @@ public class SchemaChangeHandler extends AlterHandler {
                                           Map<Long, LinkedList<Column>> indexMetaIdToSchema,
                                           Map<String, String> propertyMap,
                                           List<Index> indexes,
-                                          Set<String> modifyFieldColumns) throws StarRocksException {
+                                          Set<String> modifyFieldColumns,
+                                          Map<Long, Set<String>> alterIndexMetaIdToIncrVarcharLenColNames)
+                throws StarRocksException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1656,13 +1724,16 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 3. check partition key
-            checkPartitionColumnChange(olapTable, alterSchema, alterIndexMetaId);
+            checkPartitionColumnChange(olapTable, alterSchema, alterIndexMetaId,
+                                       alterIndexMetaIdToIncrVarcharLenColNames.get(alterIndexMetaId));
 
             // 4. check distribution key:
-            checkDistributionColumnChange(olapTable, alterSchema, alterIndexMetaId);
+            checkDistributionColumnChange(olapTable, alterSchema, alterIndexMetaId,
+                                          alterIndexMetaIdToIncrVarcharLenColNames.get(alterIndexMetaId));
 
             // 5. calc short key
-            calculateShortKey(olapTable, alterIndexMetaId, alterSchema, indexIdToProperties.get(alterIndexMetaId), dataBuilder);
+            calculateShortKey(olapTable, alterIndexMetaId, alterSchema, indexIdToProperties.get(alterIndexMetaId), dataBuilder,
+                              alterIndexMetaIdToIncrVarcharLenColNames.get(alterIndexMetaId));
 
             // 6. check the uniqueness of column unique id
             if (olapTable.getMaxColUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
@@ -1684,7 +1755,8 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void calculateShortKey(OlapTable olapTable, long alterIndexMetaId, List<Column> alterSchema,
-               Map<String, String> indexProperties, SchemaChangeData.Builder dataBuilder) throws DdlException {
+               Map<String, String> indexProperties, SchemaChangeData.Builder dataBuilder,
+               Set<String> incrVarcharLenColNames) throws DdlException {
         List<Integer> sortKeyIdxes = new ArrayList<>();
         List<Integer> sortKeyUniqueIds = new ArrayList<>();
         MaterializedIndexMeta index = olapTable.getIndexMetaByMetaId(alterIndexMetaId);
@@ -1728,7 +1800,8 @@ public class SchemaChangeHandler extends AlterHandler {
             for (int i = 0; i < newShortKeyCount; i++) {
                 newShortKeyColumns.add(alterSchema.get(sortKeyIdxes.get(i)));
             }
-            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns);
+            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns,
+                                                          incrVarcharLenColNames);
             dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
                     newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
             dataBuilder.withSortKeyIdxes(sortKeyIdxes);
@@ -1745,7 +1818,8 @@ public class SchemaChangeHandler extends AlterHandler {
             for (int i = 0; i < newShortKeyCount; i++) {
                 newShortKeyColumns.add(alterSchema.get(i));
             }
-            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns);
+            boolean isShortKeyChanged = isShortKeyChanged(originShortKeyColumns, newShortKeyColumns,
+                                                          incrVarcharLenColNames);
             dataBuilder.withNewIndexMetaIdToShortKeyCount(alterIndexMetaId,
                     newShortKeyCount, isShortKeyChanged).withNewIndexMetaIdToSchema(alterIndexMetaId, alterSchema);
         }
@@ -1776,15 +1850,21 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    private boolean isShortKeyChanged(List<Column> originShortKeyColumns, List<Column> newShortKeyColumns) {
+    private boolean isShortKeyChanged(List<Column> originShortKeyColumns, List<Column> newShortKeyColumns,
+                                      Set<String> incrVarcharLenColNames) {
         if (originShortKeyColumns.size() != newShortKeyColumns.size()) {
             return true;
         }
         for (int i = 0; i < originShortKeyColumns.size(); i++) {
             Column originColumn = originShortKeyColumns.get(i);
             Column newColumn = newShortKeyColumns.get(i);
+            if (originColumn.getName().equalsIgnoreCase(Column.removeNamePrefix(newColumn.getName())) &&
+                    incrVarcharLenColNames != null && incrVarcharLenColNames.contains(
+                        Column.removeNamePrefix(originColumn.getName()))) {
+                continue;
+            }
             if (!originColumn.getName().equalsIgnoreCase(newColumn.getName())
-                    || !originColumn.getType().equals(newColumn.getType())) {
+                    || (!originColumn.getType().equals(newColumn.getType()))) {
                 return true;
             }
         }
@@ -1827,7 +1907,8 @@ public class SchemaChangeHandler extends AlterHandler {
         }
     }
 
-    private void checkPartitionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId)
+    private void checkPartitionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId,
+                                            Set<String> incrVarcharLenColNames)
             throws DdlException {
         // Since partition key and distribution key's schema change can only happen in base index,
         // only check it in base index.There may be some trivial changes between base index and other
@@ -1839,11 +1920,15 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Column> partitionColumns = olapTable.getPartitionInfo().getPartitionColumns(olapTable.getIdToColumn());
         for (Column partitionCol : partitionColumns) {
             String colName = partitionCol.getName();
+            String normalizedColName = Column.removeNamePrefix(colName);
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
             // NOTE: partition column in partition info maybe changed(eg: str2date partition table), use original
             // table schema instead.
             Column refPartitionCol = olapTable.getColumn(partitionCol.getName());
             if (col.isPresent() && !col.get().equals(refPartitionCol)) {
+                if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
+                    continue;
+                }
                 throw new DdlException("Can not modify partition column[" + colName + "]. index["
                         + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
@@ -1857,7 +1942,8 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for partitionColumns
     }
 
-    private void checkDistributionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId)
+    private void checkDistributionColumnChange(OlapTable olapTable, List<Column> alterSchema, long alterIndexMetaId,
+                                               Set<String> incrVarcharLenColNames)
             throws DdlException {
         // Since partition key and distribution key's schema change can only happen in base index,
         // only check it in base index.There may be some trivial changes between base index and other
@@ -1870,8 +1956,17 @@ public class SchemaChangeHandler extends AlterHandler {
                 olapTable, olapTable.getDefaultDistributionInfo().getDistributionColumns());
         for (Column distributionCol : distributionColumns) {
             String colName = distributionCol.getName();
+            String normalizedColName = Column.removeNamePrefix(colName);
             Optional<Column> col = alterSchema.stream().filter(c -> c.nameEquals(colName, true)).findFirst();
             if (col.isPresent() && !col.get().equals(distributionCol)) {
+                if (incrVarcharLenColNames != null && incrVarcharLenColNames.contains(normalizedColName)) {
+                    if (GlobalStateMgr.getCurrentState().getColocateTableIndex().isColocateTable(olapTable.getId())) {
+                        throw new DdlException("Can not modify distribution column[" + colName
+                                + "] for colocate table. index["
+                                + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
+                    }
+                    continue;
+                }
                 throw new DdlException("Can not modify distribution column[" + colName + "]. index["
                         + olapTable.getIndexNameByMetaId(alterIndexMetaId) + "]");
             }
@@ -2016,6 +2111,7 @@ public class SchemaChangeHandler extends AlterHandler {
         List<Index> newIndexes = olapTable.getCopiedIndexes();
         Map<String, String> propertyMap = new HashMap<>();
         Set<String> modifyFieldColumns = new HashSet<>();
+        Map<Long, Set<String>> alterIndexMetaIdToIncrVarcharLenColNames = new HashMap<>();
         // NOTE: be very careful with the order of processing alter clauses and early return!!!
         // It is in a for-loop!
         for (AlterClause alterClause : alterClauses) {
@@ -2067,7 +2163,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 AlterMVJobExecutor.checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // modify column
-                fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema);
+                fastSchemaEvolution &= processModifyColumn(modifyColumnClause, olapTable, indexMetaIdToSchema,
+                                                           alterIndexMetaIdToIncrVarcharLenColNames);
             } else if (alterClause instanceof ModifyColumnCommentClause) {
                 // AlterTableStatementAnalyzer.checkAlterOpConflict() allows batch processing SCHEMA_CHANGE clauses.
                 if (alterClauses.size() > 1) {
@@ -2146,7 +2243,7 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for alter clauses
 
         SchemaChangeData schemaChangeData = finalAnalyze(db, olapTable, indexMetaIdToSchema, propertyMap, newIndexes,
-                modifyFieldColumns);
+                modifyFieldColumns, alterIndexMetaIdToIncrVarcharLenColNames);
         if (schemaChangeData.isShortKeyChanged()) {
             fastSchemaEvolution = false;
         }
@@ -3080,6 +3177,31 @@ public class SchemaChangeHandler extends AlterHandler {
                             newSortKeyIdxes, newSortKeyUniqueIds);
                 }
 
+                if (newSortKeyIdxes.isEmpty() && currentIndexMeta.getSortKeyIdxes() != null) {
+                    // If the old table metadata does not contain sort key unique ids, fall back to sort key indexes.
+                    // In this case, a schema-only reorder still needs to rebuild sort key indexes for the new schema.
+                    List<Column> oldIndexSchema = currentIndexMeta.getSchema();
+                    boolean useFallbackSortKeyUniqueId = true;
+                    for (Integer oldSortKeyIdx : currentIndexMeta.getSortKeyIdxes()) {
+                        Column oldSortKeyColumn = oldIndexSchema.get(oldSortKeyIdx);
+                        Optional<Column> newSortKeyColumn = indexSchema.stream()
+                                .filter(c -> c.nameEquals(oldSortKeyColumn.getName(), true))
+                                .findFirst();
+                        Preconditions.checkState(newSortKeyColumn.isPresent(),
+                                "Sort key column %s not found in new schema", oldSortKeyColumn.getName());
+                        Column col = newSortKeyColumn.get();
+                        newSortKeyIdxes.add(indexSchema.indexOf(col));
+                        if (useFallbackSortKeyUniqueId && col.getUniqueId() > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                            newSortKeyUniqueIds.add(col.getUniqueId());
+                        } else {
+                            useFallbackSortKeyUniqueId = false;
+                            newSortKeyUniqueIds = null;
+                        }
+                    }
+                    appendNewKeyColumnsToSortKey(olapTable.getKeysType(), indexSchema,
+                            newSortKeyIdxes, useFallbackSortKeyUniqueId ? newSortKeyUniqueIds : null);
+                }
+
                 currentIndexMeta.setSchema(indexSchema);
                 if (!newSortKeyIdxes.isEmpty()) {
                     currentIndexMeta.setSortKeyIdxes(newSortKeyIdxes);
@@ -3352,5 +3474,25 @@ public class SchemaChangeHandler extends AlterHandler {
             }
         }
         return Optional.empty();
+    }
+
+    private static boolean isVarcharLengthIncrease(Column oriColumn, Column modColumn) {
+        return oriColumn.getPrimitiveType() == PrimitiveType.VARCHAR
+                && modColumn.getPrimitiveType() == PrimitiveType.VARCHAR
+                && modColumn.getStrLen() > oriColumn.getStrLen();
+    }
+
+    private static boolean hasOnlyTypeChangeForVarcharLengthFastPath(Column oriColumn, Column modColumn) {
+        if (oriColumn.isGeneratedColumn() || modColumn.isGeneratedColumn()) {
+            return false;
+        }
+
+        return oriColumn.nameEquals(modColumn.getName(), true)
+                && oriColumn.getAggregationType() == modColumn.getAggregationType()
+                && Objects.equals(oriColumn.getAggStateDesc(), modColumn.getAggStateDesc())
+                && oriColumn.isAggregationTypeImplicit() == modColumn.isAggregationTypeImplicit()
+                && oriColumn.isKey() == modColumn.isKey()
+                && oriColumn.isAllowNull() == modColumn.isAllowNull()
+                && oriColumn.isHidden() == modColumn.isHidden();
     }
 }
