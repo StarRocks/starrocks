@@ -747,7 +747,8 @@ StatusOr<bool> MetaFileBuilder::find_delvec(const TabletSegmentId& tsid, DelVect
     auto data_iter = _delvec_data.find(tsid.segment_id);
     if (data_iter != _delvec_data.end()) {
         auto page_iter = _delvecs.find(tsid.segment_id);
-        int64_t ver = (page_iter != _delvecs.end() && page_iter->second.has_version()) ? page_iter->second.version() : 0;
+        int64_t ver =
+                (page_iter != _delvecs.end() && page_iter->second.has_version()) ? page_iter->second.version() : 0;
         (*pdelvec) = std::make_shared<DelVector>();
         RETURN_IF_ERROR((*pdelvec)->load(ver, data_iter->second.data(), data_iter->second.size()));
         return true;
