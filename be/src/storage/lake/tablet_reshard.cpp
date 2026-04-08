@@ -370,6 +370,8 @@ StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetada
     if (publish_tablet_info.get_publish_tablet_type() == PublishTabletInfo::SPLITTING_TABLET) {
         tablet_reshard_helper::set_all_data_files_shared(new_txn_log.get());
         RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(new_txn_log.get(), base_tablet_metadata->range()));
+        tablet_reshard_helper::update_txn_log_data_stats(new_txn_log.get(), publish_tablet_info.get_split_count(),
+                                                         publish_tablet_info.get_split_index());
     }
 
     return new_txn_log;

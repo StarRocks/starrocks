@@ -30,4 +30,7 @@ StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRan
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range);
 Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range);
 
+void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index);
+void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index);
+
 } // namespace starrocks::lake::tablet_reshard_helper
