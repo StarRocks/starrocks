@@ -263,6 +263,36 @@ public class VariableMgrTest {
     }
 
     @Test
+    public void testBinaryEncodingVariables() throws IllegalAccessException, DdlException {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable sessionVariable = variableMgr.newSessionVariable();
+
+        SystemVariable formatVar =
+                new SystemVariable(SetType.SESSION, SessionVariable.BINARY_ENCODING_FORMAT, new StringLiteral("BASE64"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(formatVar)), null);
+        variableMgr.setSystemVariable(sessionVariable, formatVar, false);
+        Assertions.assertEquals("base64", sessionVariable.getBinaryEncodingFormat());
+
+        SystemVariable levelVar =
+                new SystemVariable(SetType.SESSION, SessionVariable.BINARY_ENCODING_LEVEL, new StringLiteral("ALL"));
+        SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(levelVar)), null);
+        variableMgr.setSystemVariable(sessionVariable, levelVar, false);
+        Assertions.assertEquals("all", sessionVariable.getBinaryEncodingLevel());
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            SystemVariable invalidFormat =
+                    new SystemVariable(SetType.SESSION, SessionVariable.BINARY_ENCODING_FORMAT, new StringLiteral("foo"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(invalidFormat)), null);
+        });
+
+        Assertions.assertThrows(SemanticException.class, () -> {
+            SystemVariable invalidLevel =
+                    new SystemVariable(SetType.SESSION, SessionVariable.BINARY_ENCODING_LEVEL, new StringLiteral("foo"));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(invalidLevel)), null);
+        });
+    }
+
+    @Test
     public void testReadOnly() {
         assertThrows(DdlException.class, () -> {
             VariableMgr variableMgr = new VariableMgr();

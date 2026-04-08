@@ -140,6 +140,17 @@ enum TTimeUnit {
     MINUTE = 4;
 }
 
+enum TBinaryEncodingFormat {
+  RAW = 0;
+  HEX = 1;
+  BASE64 = 2;
+}
+
+enum TBinaryEncodingLevel {
+  ALL = 0;
+  NESTED = 1;
+}
+
 struct TQueryQueueOptions {
   1: optional bool enable_global_query_queue;
   2: optional bool enable_group_level_query_queue;
@@ -318,6 +329,8 @@ struct TQueryOptions {
   120: optional bool enable_connector_split_io_tasks = false;
   121: optional i64 connector_max_split_size = 0;
   122: optional bool enable_connector_sink_writer_scaling = true;
+  123: optional TBinaryEncodingFormat binary_encoding_format = TBinaryEncodingFormat.HEX;
+  124: optional TBinaryEncodingLevel binary_encoding_level = TBinaryEncodingLevel.NESTED;
 
   130: optional bool enable_wait_dependent_event = false;
 

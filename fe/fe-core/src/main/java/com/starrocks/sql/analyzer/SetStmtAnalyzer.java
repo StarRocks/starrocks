@@ -217,6 +217,22 @@ public class SetStmtAnalyzer {
             validateTabletInternalParallelModeValue(resolvedExpression.getStringValue());
         }
 
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_FORMAT)) {
+            try {
+                SessionVariable.BinaryEncodingFormat.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
+        if (variable.equalsIgnoreCase(SessionVariable.BINARY_ENCODING_LEVEL)) {
+            try {
+                SessionVariable.BinaryEncodingLevel.fromString(resolvedExpression.getStringValue());
+            } catch (IllegalArgumentException e) {
+                throw new SemanticException(e.getMessage());
+            }
+        }
+
         if (variable.equalsIgnoreCase(SessionVariable.DEFAULT_TABLE_COMPRESSION)) {
             String compressionName = resolvedExpression.getStringValue();
             TCompressionType compressionType = CompressionUtils.getCompressTypeByName(compressionName);
