@@ -1,0 +1,585 @@
+-- name: test_varchar_widen_native_fast_paths @native
+create database test_varchar_widen_native_fast_${uuid0};
+-- result:
+-- !result
+use test_varchar_widen_native_fast_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_part_fast (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+PARTITION BY LIST(k1) (
+    PARTITION p1 VALUES IN ("a"),
+    PARTITION p2 VALUES IN ("b")
+)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into t_part_fast values ("a", 1, 10);
+-- result:
+-- !result
+[UC]function: part_fast_job_count=get_schema_change_job_count("test_varchar_widen_native_fast_${uuid0}", "t_part_fast")
+[UC]function: part_fast_index_snapshot=get_index_identity_snapshot("test_varchar_widen_native_fast_${uuid0}", "t_part_fast")
+ALTER TABLE t_part_fast MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL;
+-- result:
+-- !result
+function: assert_sync_fast_path("test_varchar_widen_native_fast_${uuid0}", "t_part_fast", ${part_fast_job_count}, '${part_fast_index_snapshot}')
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_fast_${uuid0}", "t_part_fast", "t_part_fast", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+[ORDER]select * from t_part_fast order by k1, k2;
+-- result:
+a	1	10
+-- !result
+CREATE TABLE t_dist_fast (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into t_dist_fast values ("a", 1, 11);
+-- result:
+-- !result
+[UC]function: dist_fast_job_count=get_schema_change_job_count("test_varchar_widen_native_fast_${uuid0}", "t_dist_fast")
+[UC]function: dist_fast_index_snapshot=get_index_identity_snapshot("test_varchar_widen_native_fast_${uuid0}", "t_dist_fast")
+ALTER TABLE t_dist_fast MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL;
+-- result:
+-- !result
+function: assert_sync_fast_path("test_varchar_widen_native_fast_${uuid0}", "t_dist_fast", ${dist_fast_job_count}, '${dist_fast_index_snapshot}')
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_fast_${uuid0}", "t_dist_fast", "t_dist_fast", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+[ORDER]select * from t_dist_fast order by k1, k2;
+-- result:
+a	1	11
+-- !result
+CREATE TABLE t_short_fast (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into t_short_fast values ("a", 1, 12);
+-- result:
+-- !result
+[UC]function: short_fast_job_count=get_schema_change_job_count("test_varchar_widen_native_fast_${uuid0}", "t_short_fast")
+[UC]function: short_fast_index_snapshot=get_index_identity_snapshot("test_varchar_widen_native_fast_${uuid0}", "t_short_fast")
+ALTER TABLE t_short_fast MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL;
+-- result:
+-- !result
+function: assert_sync_fast_path("test_varchar_widen_native_fast_${uuid0}", "t_short_fast", ${short_fast_job_count}, '${short_fast_index_snapshot}')
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_fast_${uuid0}", "t_short_fast", "t_short_fast", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+[ORDER]select * from t_short_fast order by k1, k2;
+-- result:
+a	1	12
+-- !result
+CREATE TABLE t_rollup_fast (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+ROLLUP (
+    r1(k2, k1)
+)
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into t_rollup_fast values ("a", 1, 13);
+-- result:
+-- !result
+[UC]function: rollup_fast_job_count=get_schema_change_job_count("test_varchar_widen_native_fast_${uuid0}", "t_rollup_fast")
+[UC]function: rollup_fast_index_snapshot=get_index_identity_snapshot("test_varchar_widen_native_fast_${uuid0}", "t_rollup_fast")
+ALTER TABLE t_rollup_fast MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL;
+-- result:
+-- !result
+function: assert_sync_fast_path("test_varchar_widen_native_fast_${uuid0}", "t_rollup_fast", ${rollup_fast_job_count}, '${rollup_fast_index_snapshot}')
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_fast_${uuid0}", "t_rollup_fast", "t_rollup_fast", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_fast_${uuid0}", "t_rollup_fast", "r1", "k2|int|NO|true", "k1|varchar(30)|NO|true")
+-- result:
+None
+-- !result
+[ORDER]select * from t_rollup_fast order by k1, k2;
+-- result:
+a	1	13
+-- !result
+drop database test_varchar_widen_native_fast_${uuid0} force;
+-- result:
+-- !result
+
+
+-- name: test_varchar_widen_native_pk_fast_paths @native
+create database test_varchar_widen_native_pk_fast_${uuid0};
+-- result:
+-- !result
+use test_varchar_widen_native_pk_fast_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_pk_key_fast (
+    k1 VARCHAR(10) NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into t_pk_key_fast values ("pk-a", 14);
+-- result:
+-- !result
+[UC]function: pk_key_fast_job_count=get_schema_change_job_count("test_varchar_widen_native_pk_fast_${uuid0}", "t_pk_key_fast")
+[UC]function: pk_key_fast_index_snapshot=get_index_identity_snapshot("test_varchar_widen_native_pk_fast_${uuid0}", "t_pk_key_fast")
+ALTER TABLE t_pk_key_fast MODIFY COLUMN k1 VARCHAR(30);
+-- result:
+-- !result
+function: assert_sync_fast_path("test_varchar_widen_native_pk_fast_${uuid0}", "t_pk_key_fast", ${pk_key_fast_job_count}, '${pk_key_fast_index_snapshot}')
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_pk_fast_${uuid0}", "t_pk_key_fast", "t_pk_key_fast", "k1|varchar(30)|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+[ORDER]select * from t_pk_key_fast order by k1;
+-- result:
+pk-a	14
+-- !result
+CREATE TABLE t_pk_sort_fast (
+    k0 INT NOT NULL,
+    k1 VARCHAR(10),
+    v1 INT
+) ENGINE=OLAP
+PRIMARY KEY(k0)
+DISTRIBUTED BY HASH(k0) BUCKETS 1
+ORDER BY(k1)
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into t_pk_sort_fast values (1, "sort-a", 15);
+-- result:
+-- !result
+[UC]function: pk_sort_fast_job_count=get_schema_change_job_count("test_varchar_widen_native_pk_fast_${uuid0}", "t_pk_sort_fast")
+[UC]function: pk_sort_fast_index_snapshot=get_index_identity_snapshot("test_varchar_widen_native_pk_fast_${uuid0}", "t_pk_sort_fast")
+ALTER TABLE t_pk_sort_fast MODIFY COLUMN k1 VARCHAR(30);
+-- result:
+-- !result
+function: assert_sync_fast_path("test_varchar_widen_native_pk_fast_${uuid0}", "t_pk_sort_fast", ${pk_sort_fast_job_count}, '${pk_sort_fast_index_snapshot}')
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_pk_fast_${uuid0}", "t_pk_sort_fast", "t_pk_sort_fast", "k0|int|NO|true", "k1|varchar(30)|YES|false", "v1|int|YES|false")
+-- result:
+None
+-- !result
+[ORDER]select * from t_pk_sort_fast order by k0;
+-- result:
+1	sort-a	15
+-- !result
+drop database test_varchar_widen_native_pk_fast_${uuid0} force;
+-- result:
+-- !result
+
+
+-- name: test_varchar_widen_native_reject_paths @native
+create database test_varchar_widen_native_reject_${uuid0};
+-- result:
+-- !result
+use test_varchar_widen_native_reject_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_part_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+PARTITION BY LIST(k1) (
+    PARTITION p1 VALUES IN ("1"),
+    PARTITION p2 VALUES IN ("2")
+)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_part_reject MODIFY COLUMN k1 INT KEY NOT NULL", "modify partition column[k1]")
+-- result:
+None
+-- !result
+CREATE TABLE t_dist_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_dist_reject MODIFY COLUMN k1 INT KEY NOT NULL", "modify distribution column[k1]")
+-- result:
+None
+-- !result
+CREATE TABLE t_pseudo_widen_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_pseudo_widen_reject MODIFY COLUMN k1 VARCHAR(30) KEY", "modify distribution column[k1]")
+-- result:
+None
+-- !result
+CREATE TABLE t_colocate_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true",
+    "colocate_with" = "cg_varchar_widen_${uuid0}"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_colocate_reject MODIFY COLUMN k1 VARCHAR(20) KEY NOT NULL", "for colocate table")
+-- result:
+None
+-- !result
+drop database test_varchar_widen_native_reject_${uuid0} force;
+-- result:
+-- !result
+
+
+-- name: test_varchar_widen_native_pk_guard_paths @native
+create database test_varchar_widen_native_pk_${uuid0};
+-- result:
+-- !result
+use test_varchar_widen_native_pk_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_pk_key_reject (
+    k1 VARCHAR(10) NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_pk_key_reject MODIFY COLUMN k1 INT", "Can not modify key column: k1 for primary key table except for increasing varchar length")
+-- result:
+None
+-- !result
+CREATE TABLE t_pk_sort_reject (
+    k0 INT NOT NULL,
+    k1 VARCHAR(10),
+    v1 INT
+) ENGINE=OLAP
+PRIMARY KEY(k0)
+DISTRIBUTED BY HASH(k0) BUCKETS 1
+ORDER BY(k1)
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_pk_sort_reject MODIFY COLUMN k1 BIGINT", "Can not modify sort column in primary data model table except for increasing varchar length")
+-- result:
+None
+-- !result
+CREATE TABLE t_pk_reorder_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 VARCHAR(10) NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+PRIMARY KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_pk_reorder_reject MODIFY COLUMN k2 VARCHAR(30) FIRST", "Can not reorder pk keys by modify column")
+-- result:
+None
+-- !result
+CREATE TABLE t_rollup_base_non_widen_reject (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+ROLLUP (
+    r1(k2, k1)
+)
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_rollup_base_non_widen_reject MODIFY COLUMN k1 INT KEY NOT NULL", "modify distribution column[k1]")
+-- result:
+None
+-- !result
+drop database test_varchar_widen_native_pk_${uuid0} force;
+-- result:
+-- !result
+
+
+-- name: test_varchar_widen_native_slow_and_multiclause @native
+create database test_varchar_widen_native_slow_${uuid0};
+-- result:
+-- !result
+use test_varchar_widen_native_slow_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t_varchar_slow (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "false"
+);
+-- result:
+-- !result
+insert into t_varchar_slow values ("a", 1, 20);
+-- result:
+-- !result
+ALTER TABLE t_varchar_slow MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL;
+-- result:
+-- !result
+function: wait_table_schema_change_finish("test_varchar_widen_native_slow_${uuid0}", "t_varchar_slow")
+-- result:
+FINISHED
+-- !result
+function: assert_schema_change_job_count("test_varchar_widen_native_slow_${uuid0}", "t_varchar_slow", 1)
+-- result:
+None
+-- !result
+function: assert_latest_schema_change_job_path("test_varchar_widen_native_slow_${uuid0}", "t_varchar_slow", "slow")
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_slow_${uuid0}", "t_varchar_slow", "t_varchar_slow", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+[ORDER]select * from t_varchar_slow order by k1, k2;
+-- result:
+a	1	20
+-- !result
+CREATE TABLE t_short_slow (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into t_short_slow values ("1", 1, 21);
+-- result:
+-- !result
+ALTER TABLE t_short_slow MODIFY COLUMN k1 INT KEY NOT NULL;
+-- result:
+-- !result
+function: wait_table_schema_change_finish("test_varchar_widen_native_slow_${uuid0}", "t_short_slow")
+-- result:
+FINISHED
+-- !result
+function: assert_schema_change_job_count("test_varchar_widen_native_slow_${uuid0}", "t_short_slow", 1)
+-- result:
+None
+-- !result
+function: assert_latest_schema_change_job_path("test_varchar_widen_native_slow_${uuid0}", "t_short_slow", "slow")
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_slow_${uuid0}", "t_short_slow", "t_short_slow", "k1|int|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+[ORDER]select * from t_short_slow order by k1, k2;
+-- result:
+1	1	21
+-- !result
+CREATE TABLE t_multi_success (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+insert into t_multi_success values ("m", 1, 22);
+-- result:
+-- !result
+ALTER TABLE t_multi_success MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL, MODIFY COLUMN v1 BIGINT;
+-- result:
+-- !result
+function: wait_table_schema_change_finish("test_varchar_widen_native_slow_${uuid0}", "t_multi_success")
+-- result:
+FINISHED
+-- !result
+function: assert_schema_change_job_count("test_varchar_widen_native_slow_${uuid0}", "t_multi_success", 1)
+-- result:
+None
+-- !result
+function: assert_latest_schema_change_job_path("test_varchar_widen_native_slow_${uuid0}", "t_multi_success", "slow")
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_slow_${uuid0}", "t_multi_success", "t_multi_success", "k1|varchar(30)|NO|true", "k2|int|NO|true", "v1|bigint|YES|false")
+-- result:
+None
+-- !result
+[ORDER]select * from t_multi_success order by k1, k2;
+-- result:
+m	1	22
+-- !result
+CREATE TABLE t_multi_same (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k2) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_multi_same MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL, MODIFY COLUMN k1 INT KEY NOT NULL", "Column[k1] does not exists")
+-- result:
+None
+-- !result
+function: assert_schema_change_job_count("test_varchar_widen_native_slow_${uuid0}", "t_multi_same", 0)
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_slow_${uuid0}", "t_multi_same", "t_multi_same", "k1|varchar(10)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+CREATE TABLE t_multi_cross (
+    k1 VARCHAR(10) NOT NULL,
+    k2 INT NOT NULL,
+    v1 INT
+) ENGINE=OLAP
+DUPLICATE KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+ROLLUP (
+    r1(k2, k1)
+)
+PROPERTIES (
+    "replication_num" = "1",
+    "fast_schema_evolution" = "true"
+);
+-- result:
+-- !result
+function: assert_query_error_contains("ALTER TABLE t_multi_cross MODIFY COLUMN v1 BIGINT, MODIFY COLUMN k1 INT KEY NOT NULL FIRST FROM r1", "modify distribution column[k1]")
+-- result:
+None
+-- !result
+function: assert_schema_change_job_count("test_varchar_widen_native_slow_${uuid0}", "t_multi_cross", 0)
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_slow_${uuid0}", "t_multi_cross", "t_multi_cross", "k1|varchar(10)|NO|true", "k2|int|NO|true", "v1|int|YES|false")
+-- result:
+None
+-- !result
+function: assert_index_schema_columns("test_varchar_widen_native_slow_${uuid0}", "t_multi_cross", "r1", "k2|int|NO|true", "k1|varchar(10)|NO|true")
+-- result:
+None
+-- !result
+drop database test_varchar_widen_native_slow_${uuid0} force;
+-- result:
+-- !result
