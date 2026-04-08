@@ -18,6 +18,21 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.PatternMatcher;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.service.InformationSchemaDataSource;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetTablesInfoRequest;
+import com.starrocks.thrift.TGetTablesInfoResponse;
+>>>>>>> 1224bae098 ([BugFix] fix information_schema.tables not escaping special characters in equality predicates (#71273))
 import com.starrocks.thrift.TSchemaTableType;
 
 import static com.starrocks.catalog.system.SystemTable.FN_REFLEN;
@@ -53,4 +68,118 @@ public class TablesSystemTable {
                 .column("TABLE_COMMENT", ScalarType.createVarchar(2048))
                 .build(), TSchemaTableType.SCH_TABLES);
     }
+<<<<<<< HEAD
+=======
+
+    public static SystemTable create(String catalogName) {
+        return new TablesSystemTable(catalogName);
+    }
+
+    private static final Set<String> SUPPORTED_EQUAL_COLUMNS =
+            Collections.unmodifiableSet(new TreeSet<>(String.CASE_INSENSITIVE_ORDER) {
+                {
+                    add("TABLE_SCHEMA");
+                    add("TABLE_NAME");
+                }
+            });
+
+    @Override
+    public boolean supportFeEvaluation(ScalarOperator predicate) {
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        if (conjuncts.isEmpty()) {
+            return true;
+        }
+        if (!isEmptyOrOnlyEqualConstantOps(conjuncts)) {
+            return false;
+        }
+        return isSupportedEqualPredicateColumn(conjuncts, SUPPORTED_EQUAL_COLUMNS);
+    }
+
+    /**
+     * To be compatible with BE's implementation, treat some special values as constant null.
+     */
+    private static boolean isConstantNullValue(Type valueType, Object object) {
+        if (valueType.isStringType() && object == null) {
+            return true;
+        } else if (valueType.isBigint() && (Long) object == InformationSchemaDataSource.DEFAULT_EMPTY_NUM) {
+            return true;
+        }
+        return false;
+    }
+
+    public static List<ScalarOperator> infoToScalar(SystemTable systemTable,
+                                                    TTableInfo tableInfo) {
+        List<ScalarOperator> result = Lists.newArrayList();
+        for (Column column : systemTable.getBaseSchema()) {
+            String name = column.getName().toLowerCase();
+            TTableInfo._Fields field = TTableInfo._Fields.findByName(name);
+            Preconditions.checkArgument(field != null, "Unknown field: " + name);
+            FieldValueMetaData meta = TTableInfo.metaDataMap.get(field).valueMetaData;
+            Object obj = tableInfo.getFieldValue(field);
+            Type valueType = thriftToScalarType(meta.type);
+            ConstantOperator scalar;
+            if (isConstantNullValue(valueType, obj)) {
+                scalar = ConstantOperator.createNull(column.getType());
+            } else {
+                scalar = ConstantOperator.createNullableObject(obj, valueType);
+                try {
+                    scalar = mayCast(scalar, column.getType());
+                } catch (Exception e) {
+                    LOG.debug("Failed to cast scalar operator for column: {}, value: {}, type: {}",
+                            column.getName(), obj, valueType, e);
+                    scalar = ConstantOperator.createNull(column.getType());
+                }
+            }
+            result.add(scalar);
+        }
+        return result;
+    }
+
+    @Override
+    public List<List<ScalarOperator>> evaluate(ScalarOperator predicate) {
+        final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
+        TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
+        if (context.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
+            userIdentity.setCurrent_role_ids(userRoles);
+        }
+        TGetTablesInfoRequest params = new TGetTablesInfoRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setCurrent_user_ident(userIdentity);
+        authInfo.setCatalog_name(this.getCatalogName());
+        for (ScalarOperator conjunct : conjuncts) {
+            BinaryPredicateOperator binary = (BinaryPredicateOperator) conjunct;
+            ColumnRefOperator columnRef = binary.getChild(0).cast();
+            String name = columnRef.getName();
+            ConstantOperator value = binary.getChild(1).cast();
+            switch (name.toUpperCase()) {
+                case "TABLE_NAME":
+                    params.setTable_name(PatternMatcher.escapeLikeValue(value.getVarchar()));
+                    break;
+                case "TABLE_SCHEMA":
+                    authInfo.setPattern(PatternMatcher.escapeLikeValue(value.getVarchar()));
+                    break;
+                default:
+                    throw new NotImplementedException("unsupported column: " + name);
+            }
+        }
+        params.setAuth_info(authInfo);
+
+        try {
+            TGetTablesInfoResponse result = query(params);
+            return result.getTables_infos().stream()
+                    .map(t -> infoToScalar(this, t))
+                    .collect(Collectors.toList());
+        } catch (TException e) {
+            LOG.debug("Failed to get table info for table: {}, error: ", params.getTable_name(), e);
+            throw new SemanticException("Failed to get table info for table: " + params.getTable_name(), e);
+        }
+    }
+
+    public static TGetTablesInfoResponse query(TGetTablesInfoRequest request) throws TException {
+        return InformationSchemaDataSource.generateTablesInfoResponse(request);
+    }
+>>>>>>> 1224bae098 ([BugFix] fix information_schema.tables not escaping special characters in equality predicates (#71273))
 }
