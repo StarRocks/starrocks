@@ -42,10 +42,45 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "util/mysql_row_buffer.h"
 
 namespace starrocks {
+
+namespace {
+
+MysqlRowBufferOptions make_mysql_row_buffer_options(const TQueryOptions& query_options) {
+    MysqlRowBufferOptions options;
+    if (query_options.__isset.binary_encoding_format) {
+        switch (query_options.binary_encoding_format) {
+        case TBinaryEncodingFormat::RAW:
+            options.binary_encoding_format = MysqlRowBufferOptions::BinaryEncodingFormat::RAW;
+            break;
+        case TBinaryEncodingFormat::BASE64:
+            options.binary_encoding_format = MysqlRowBufferOptions::BinaryEncodingFormat::BASE64;
+            break;
+        case TBinaryEncodingFormat::HEX:
+        default:
+            options.binary_encoding_format = MysqlRowBufferOptions::BinaryEncodingFormat::HEX;
+            break;
+        }
+    }
+    if (query_options.__isset.binary_encoding_level) {
+        switch (query_options.binary_encoding_level) {
+        case TBinaryEncodingLevel::ALL:
+            options.binary_encoding_level = MysqlRowBufferOptions::BinaryEncodingLevel::ALL;
+            break;
+        case TBinaryEncodingLevel::NESTED:
+        default:
+            options.binary_encoding_level = MysqlRowBufferOptions::BinaryEncodingLevel::NESTED;
+            break;
+        }
+    }
+    return options;
+}
+
+} // namespace
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                      bool is_binary_format, RuntimeProfile* parent_profile)
@@ -64,7 +99,8 @@ Status MysqlResultWriter::init(RuntimeState* state) {
         return Status::InternalError("sinker is NULL pointer.");
     }
 
-    _row_buffer = new (std::nothrow) MysqlRowBuffer(_is_binary_format);
+    _row_buffer =
+            new (std::nothrow) MysqlRowBuffer(_is_binary_format, make_mysql_row_buffer_options(state->query_options()));
 
     if (nullptr == _row_buffer) {
         return Status::InternalError("no memory to alloc.");
