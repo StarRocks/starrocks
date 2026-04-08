@@ -1883,10 +1883,10 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_non_nullable_with_nulls) {
 PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_non_strict_overflow) {
     // Use strings that exceed MAX_CHAR_LENGTH=255 with CHAR type
     std::vector<std::string> values = {
-            "short",                   // fits
-            std::string(300, 'x'),     // exceeds max
-            std::string(10, 'y'),      // fits
-            std::string(500, 'z'),     // exceeds max
+            "short",               // fits
+            std::string(300, 'x'), // exceeds max
+            std::string(10, 'y'),  // fits
+            std::string(500, 'z'), // exceeds max
     };
     auto array = create_string_view_array(values);
 
@@ -1909,10 +1909,10 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_non_strict_overflow)
     // Oversized strings should be converted to NULL (not filtered)
     ASSERT_EQ(null_data[0], DATUM_NOT_NULL);
     ASSERT_EQ(bin_col->get_slice(0).to_string(), "short");
-    ASSERT_EQ(null_data[1], DATUM_NULL);  // overflow -> NULL
+    ASSERT_EQ(null_data[1], DATUM_NULL); // overflow -> NULL
     ASSERT_EQ(null_data[2], DATUM_NOT_NULL);
     ASSERT_EQ(bin_col->get_slice(2).to_string(), std::string(10, 'y'));
-    ASSERT_EQ(null_data[3], DATUM_NULL);  // overflow -> NULL
+    ASSERT_EQ(null_data[3], DATUM_NULL); // overflow -> NULL
     // All rows should still pass the filter (overflow becomes NULL, not filtered)
     for (size_t i = 0; i < values.size(); ++i) {
         ASSERT_EQ(filter[i], 1);
@@ -1924,10 +1924,10 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_nullable_non_strict_overflow)
 PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
     // CHAR(10): strings > 10 bytes should be rejected
     std::vector<std::string> values = {
-            "short",                   // 5 bytes, fits
-            std::string(15, 'a'),      // 15 bytes, exceeds CHAR(10)
-            "ok",                      // 2 bytes, fits
-            std::string(20, 'b'),      // 20 bytes, exceeds CHAR(10)
+            "short",              // 5 bytes, fits
+            std::string(15, 'a'), // 15 bytes, exceeds CHAR(10)
+            "ok",                 // 2 bytes, fits
+            std::string(20, 'b'), // 20 bytes, exceeds CHAR(10)
     };
     auto array = create_string_view_array(values);
 
