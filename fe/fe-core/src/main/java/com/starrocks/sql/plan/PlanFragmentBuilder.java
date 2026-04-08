@@ -59,12 +59,8 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.catalog.system.information.FeMetricsSystemTable;
 import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
-import com.starrocks.catalog.system.information.TaskRunsSystemTable;
->>>>>>> 1224bae098 ([BugFix] fix information_schema.tables not escaping special characters in equality predicates (#71273))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;

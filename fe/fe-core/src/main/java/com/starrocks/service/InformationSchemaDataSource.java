@@ -533,23 +533,14 @@ public class InformationSchemaDataSource {
             }
 
             List<BasicTable> tables = new ArrayList<>();
-<<<<<<< HEAD
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
                 List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
                 for (String tableName : tableNames) {
-                    if (request.isSetTable_name() &&
-                            !PatternMatcher.matchPattern(request.getTable_name(), tableName, matcher, caseSensitive)) {
+                    if (matcher != null && !matcher.match(tableName)) {
                         continue;
                     }
-=======
-            List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
-            for (String tableName : tableNames) {
-                if (matcher != null && !matcher.match(tableName)) {
-                    continue;
-                }
->>>>>>> 1224bae098 ([BugFix] fix information_schema.tables not escaping special characters in equality predicates (#71273))
 
                     BasicTable table = null;
                     try {
