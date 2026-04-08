@@ -138,3 +138,7 @@ select v1, if(v1='a', null, 'b') from t4 order by 1;
 None	b
 a	None
 -- !result
+select * from (select max(v1) over (partition by v2) mv1 from t1) t where mv1 != '99' order by mv1 desc limit 1;
+-- result:
+98
+-- !result
