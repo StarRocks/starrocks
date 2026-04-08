@@ -158,6 +158,12 @@ public:
     int64_t publish_sst_flush_bytes() const { return _publish_sst_flush_bytes; }
 
 private:
+    // Open all SSTables in parallel using thread pool.
+    // Returns opened SSTables in the same order as sstable_meta.sstables().
+    static StatusOr<std::vector<PersistentIndexSstableUniquePtr>> _open_sstables_parallel(
+            const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id,
+            Cache* cache, const TabletMetadataPtr& metadata);
+
     bool is_memtable_full() const;
 
     bool too_many_rebuild_files() const;
