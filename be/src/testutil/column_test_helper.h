@@ -16,8 +16,6 @@
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
-#include "types/date_value.h"
-#include "types/timestamp_value.h"
 
 namespace starrocks {
 
@@ -25,8 +23,7 @@ class ColumnTestHelper {
 public:
     template <class T>
     static MutableColumnPtr build_column(const std::vector<T>& values) {
-        if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T> || std::is_same_v<T, DateValue> ||
-                      std::is_same_v<T, TimestampValue>) {
+        if constexpr (std::is_integral_v<T> || std::is_floating_point_v<T>) {
             auto data = ColumnTraits<T>::ColumnType::create();
             data->append_numbers(values.data(), values.size() * sizeof(T));
             return data;
