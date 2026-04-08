@@ -74,4 +74,24 @@ select named_struct('bin_field', to_binary('DEADBEEF', 'hex'), 'arr_field',
 
 select map{'k1': to_binary('CAFE', 'hex'), 'k2': null};
 
+set binary_encoding_format = 'base64';
+select [to_binary('AABB', 'hex'), null];
+
+set binary_encoding_format = 'hex';
+set binary_encoding_level = 'all';
+select to_binary('AABB', 'hex');
+
+set binary_encoding_format = 'base64';
+select to_binary('AABB', 'hex');
+
+set binary_encoding_format = 'raw';
+set binary_encoding_level = 'nested';
+select [to_binary('414243', 'hex'), null];
+
+set binary_encoding_level = 'all';
+select to_binary('414243', 'hex');
+
+set binary_encoding_format = 'hex';
+set binary_encoding_level = 'nested';
+
 drop database db_${uuid0};
