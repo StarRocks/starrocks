@@ -545,7 +545,31 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                             "Invalid backup function(s), function name: " + functionName);
                 }
 
-                allFunctions.addAll(functionList);
+                // When the function is sourced from a different DB (cross-DB qualified reference),
+                // rewrite its FunctionName.db to the snapshot target DB on a shallow copy.
+                // Rewriting is required so that restore/replayCreateFunctionLog routes the
+                // function into the correct target DB rather than the qualifier DB.
+                // We copy the Function rather than mutating the live catalog object.
+                if (qualifierDbName != null && !qualifierDbName.equals(dbName)) {
+                    for (Function fn : functionList) {
+                        Function fnCopy = fn.copy();
+                        fnCopy.setFunctionName(new FunctionName(dbName, fn.getFunctionName().getFunction()));
+                        // Guard against signature collision: reject if a function with the same
+                        // name and signature is already in allFunctions (e.g. a local function
+                        // and a cross-DB function that share a signature).
+                        boolean collision = allFunctions.stream().anyMatch(
+                                existing -> fnCopy.compare(existing, Function.CompareMode.IS_IDENTICAL));
+                        if (collision) {
+                            ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                    "Backup function conflict: cross-DB function " + qualifierDbName + "."
+                                            + functionName + " has the same signature as a function already "
+                                            + "selected for backup in database " + dbName);
+                        }
+                        allFunctions.add(fnCopy);
+                    }
+                } else {
+                    allFunctions.addAll(functionList);
+                }
             }
         }
         backupJob.setBackupFunctions(allFunctions);
