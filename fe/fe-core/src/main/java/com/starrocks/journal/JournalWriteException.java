@@ -16,9 +16,14 @@ package com.starrocks.journal;
 
 public class JournalWriteException extends Exception {
     public enum Reason {
+        // The caller tried to submit leader-only journal work on a node that is not leader.
         NOT_LEADER,
+        // Local leader demotion has started, so new leader-only journal work must be rejected
+        // even if the FE type has not fully switched yet.
         ADMISSION_CLOSED,
+        // The task was accepted before, but the writer aborted it while sealing or closing.
         WRITER_ABORTED,
+        // Waiting for a journal task exceeded the caller-provided timeout.
         TIMEOUT
     }
 

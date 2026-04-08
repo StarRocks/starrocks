@@ -25,14 +25,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class JournalTask implements Future<Boolean> {
-    public enum TaskKind {
+    public enum TaskType {
+        // A normal edit log append that consumes a real journal id and writes data to the journal.
         APPEND,
+        // An internal in-memory barrier used to seal the writer and observe the last committed
+        // journal watermark. It does not write a journal entry or consume a journal id.
         BARRIER
     }
 
     // serialized JournalEntity
     private final DataOutputBuffer buffer;
-    private final TaskKind taskKind;
+    private final TaskType taskType;
     // write result
     private Boolean isSucceed = null;
     // count down latch, the producer which called logEdit() will wait on it.
@@ -46,13 +49,13 @@ public class JournalTask implements Future<Boolean> {
     private volatile long committedJournalId = -1L;
 
     public JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs) {
-        this(startTimeNano, buffer, maxWaitIntervalMs, TaskKind.APPEND);
+        this(startTimeNano, buffer, maxWaitIntervalMs, TaskType.APPEND);
     }
 
-    private JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs, TaskKind taskKind) {
+    private JournalTask(long startTimeNano, DataOutputBuffer buffer, long maxWaitIntervalMs, TaskType taskType) {
         this.startTimeNano = startTimeNano;
         this.buffer = buffer;
-        this.taskKind = taskKind;
+        this.taskType = taskType;
         this.latch = new CountDownLatch(1);
         if (maxWaitIntervalMs > 0) {
             this.betterCommitBeforeTimeInNano = System.nanoTime() + maxWaitIntervalMs * 1000000;
@@ -62,19 +65,19 @@ public class JournalTask implements Future<Boolean> {
     }
 
     public static JournalTask createBarrierTask() {
-        return new JournalTask(System.nanoTime(), null, -1, TaskKind.BARRIER);
+        return new JournalTask(System.nanoTime(), null, -1, TaskType.BARRIER);
     }
 
     public long getStartTimeNano() {
         return startTimeNano;
     }
 
-    public TaskKind getTaskKind() {
-        return taskKind;
+    public TaskType getTaskType() {
+        return taskType;
     }
 
     public boolean isBarrierTask() {
-        return taskKind == TaskKind.BARRIER;
+        return taskType == TaskType.BARRIER;
     }
 
     public void markSucceed() {

@@ -555,9 +555,16 @@ public class GlobalStateMgr {
     private final TabletReshardJobMgr tabletReshardJobMgr;
 
     enum LeaderRoleState {
+        // This FE is not serving leader-only work. It may be a follower/observer,
+        // or a previous leader activation attempt may have been rolled back.
         INACTIVE,
+        // Leader activation is in progress. Journal/open/fencing related steps are
+        // still being initialized, so leader-only work must not be admitted yet.
         ACTIVATING,
+        // Leader activation has completed and this FE can admit new leader-only work.
         ACTIVE,
+        // Leader demotion has started. New leader-only work must be rejected and
+        // in-flight work should treat the current lease as expired.
         DEMOTING
     }
 

@@ -38,15 +38,25 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class JournalWriter {
     private enum WriterState {
+        // Normal serving state. New append tasks are accepted and fatal journal failures
+        // keep the historical process-exit behavior.
         RUNNING,
+        // Demotion drain is in progress. New append tasks should be rejected/aborted and
+        // commit failures are converted into drain results instead of exiting the process.
         SEALING,
+        // The writer has finished sealing and will not process any more append tasks.
         CLOSED
     }
 
     public static class DrainResult {
         public enum Status {
+            // The barrier was observed after all earlier committed appends became durable.
             BARRIER_REACHED,
+            // The writer lost the ability to commit while sealing, so the returned watermark
+            // is only the last successfully committed journal id.
             LEADER_LOST,
+            // The caller stopped waiting before the barrier completed. The returned watermark
+            // is the latest committed journal id visible at timeout.
             TIMEOUT
         }
 
