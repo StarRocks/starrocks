@@ -118,8 +118,6 @@ Status SinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile*) {
 
     bthread::ExecutionQueueOptions options;
     auto* query_execution_services = state->query_execution_services();
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->execution != nullptr);
     _executor = std::make_unique<SinkIOExecutor>(query_execution_services->execution->pipeline_sink_io_pool);
     options.executor = _executor.get();
     auto queue_id = std::make_unique<bthread::ExecutionQueueId<QueueItemPtr>>();

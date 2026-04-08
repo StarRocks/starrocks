@@ -101,8 +101,6 @@ Status DictionaryCacheWriter::_submit() {
     _num_pending_tasks.fetch_add(1, std::memory_order_release);
     std::shared_ptr<Runnable> task(std::make_shared<RefreshDictionaryCacheTask>(this, _immutable_buffer_chunk));
     auto* query_execution_services = _state->query_execution_services();
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->execution != nullptr);
     auto st = query_execution_services->execution->dictionary_cache_pool->submit(task);
     if (!st.ok()) {
         _num_pending_tasks.fetch_sub(1, std::memory_order_release);

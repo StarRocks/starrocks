@@ -217,8 +217,6 @@ Status ESDataSource::_create_scanner() {
 
     const std::string& host = _properties.at(ESScanReader::KEY_HOST_PORT);
     auto* query_execution_services = _runtime_state->query_execution_services();
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->execution != nullptr);
     _es_reader = _pool->add(new ESScanReader(host, _properties, doc_value_mode,
                                              query_execution_services->execution->pipeline_sink_io_pool));
     RETURN_IF_ERROR(_es_reader->open());

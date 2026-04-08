@@ -96,8 +96,6 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
         sink_ctx->partition_column_indices = target_table.partition_column_ids;
     }
     auto* query_execution_services = runtime_state->query_execution_services();
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->execution != nullptr);
     sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     sink_ctx->format = target_table.file_format;
     if (target_table.__isset.target_max_file_size) {

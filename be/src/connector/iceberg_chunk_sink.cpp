@@ -112,8 +112,6 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
     if (config::enable_connector_sink_spill) {
         auto* query_execution_services = runtime_state->query_execution_services();
-        DCHECK(query_execution_services != nullptr);
-        DCHECK(query_execution_services->runtime != nullptr);
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},

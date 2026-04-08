@@ -186,8 +186,6 @@ Status IcebergTableSink::create_delete_sink_context(
     }
     delete_sink_ctx->tuple_desc_id = t_iceberg_sink.tuple_id;
     auto* query_execution_services = runtime_state->query_execution_services();
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->execution != nullptr);
     delete_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     delete_sink_ctx->fragment_context = fragment_ctx;
 
@@ -256,8 +254,6 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
     data_sink_ctx->cloud_conf = t_iceberg_sink.cloud_configuration;
     data_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
     auto* query_execution_services = runtime_state->query_execution_services();
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->execution != nullptr);
     data_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     data_sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
     data_sink_ctx->compression_type = t_iceberg_sink.compression_type;

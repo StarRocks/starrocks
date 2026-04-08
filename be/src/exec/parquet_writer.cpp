@@ -70,8 +70,6 @@ Status RollingAsyncParquetWriter::_new_file_writer(RuntimeState* state) {
     WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, new_file_location))
     auto* query_execution_services = state->query_execution_services();
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->execution != nullptr);
     _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(
             std::move(writable_file), new_file_location, _partition_location, _properties, _schema, _output_expr_ctxs,
             query_execution_services->execution->pipeline_sink_io_pool, _parent_profile, _max_file_size, state);

@@ -92,8 +92,6 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     // Disable the load spill for file sink temperarily
     if (/* config::enable_connector_sink_spill */ false) {
         auto* query_execution_services = runtime_state->query_execution_services();
-        DCHECK(query_execution_services != nullptr);
-        DCHECK(query_execution_services->runtime != nullptr);
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},

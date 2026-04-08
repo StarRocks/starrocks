@@ -76,8 +76,6 @@ Status HiveTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operators
     sink_ctx->data_column_evaluators = ColumnExprEvaluator::from_exprs(data_exprs, runtime_state);
     sink_ctx->partition_column_evaluators = ColumnExprEvaluator::from_exprs(partition_exprs, runtime_state);
     auto* query_execution_services = runtime_state->query_execution_services();
-    DCHECK(query_execution_services != nullptr);
-    DCHECK(query_execution_services->execution != nullptr);
     sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     sink_ctx->format = t_hive_sink.file_format;
     sink_ctx->compression_type = t_hive_sink.compression_type;

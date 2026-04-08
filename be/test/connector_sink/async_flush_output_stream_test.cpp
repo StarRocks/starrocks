@@ -25,6 +25,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "formats/utils.h"
 #include "fs/fs_memory.h"
+#include "testutil/runtime_state_test_util.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::connector {
@@ -38,6 +39,7 @@ protected:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        test::attach_query_execution_services(_runtime_state, ExecEnv::GetInstance());
         _io_executor = _pool.add(new PriorityThreadPool("test", 1, 100));
         _file = _fs.new_writable_file("/test.out").value();
     }

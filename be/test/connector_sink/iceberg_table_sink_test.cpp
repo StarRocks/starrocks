@@ -26,6 +26,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
+#include "testutil/runtime_state_test_util.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -36,6 +37,7 @@ protected:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        test::attach_query_execution_services(_runtime_state, ExecEnv::GetInstance());
     }
 
     void TearDown() override {}

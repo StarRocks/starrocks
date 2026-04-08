@@ -149,8 +149,6 @@ Status SchemaTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     }
     if (_table_name == "be_configs") {
         auto* query_execution_services = state->query_execution_services();
-        DCHECK(query_execution_services != nullptr);
-        DCHECK(query_execution_services->rpc != nullptr);
         return write_be_configs_table(*_nodes_info, query_execution_services->rpc->brpc_stub_cache, _be_id,
                                       result_columns);
     }

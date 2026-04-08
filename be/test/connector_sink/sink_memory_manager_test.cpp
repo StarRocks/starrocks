@@ -29,6 +29,7 @@
 #include "formats/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/utils.h"
+#include "testutil/runtime_state_test_util.h"
 
 namespace starrocks::connector {
 namespace {
@@ -41,6 +42,7 @@ protected:
         _fragment_context = std::make_shared<pipeline::FragmentContext>();
         _fragment_context->set_runtime_state(std::make_shared<RuntimeState>());
         _runtime_state = _fragment_context->runtime_state();
+        test::attach_query_execution_services(_runtime_state, ExecEnv::GetInstance());
     }
 
     void TearDown() override {}
