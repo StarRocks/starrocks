@@ -1112,6 +1112,9 @@ bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::v
 }
 
 Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletManager* tablet_mgr) {
+#ifndef USE_STAROS
+    return Status::OK();
+#else
     if (metadata == nullptr) {
         return Status::OK();
     }
@@ -1154,6 +1157,7 @@ Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletM
     }
 
     return Status::OK();
+#endif // USE_STAROS
 }
 
 // ================================
