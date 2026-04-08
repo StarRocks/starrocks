@@ -2318,7 +2318,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION)
     private boolean enableGlobalLateMaterialization = true;
     @VarAttr(name = ENABLE_INLINE_AGG_STATE)
-    private boolean enableInlineAggState = false;
+    private boolean enableInlineAggState = true;
 
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS)
     private int globalLateMaterializeMaxFetchOps = 4;
