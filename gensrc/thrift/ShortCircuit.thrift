@@ -24,7 +24,6 @@ include "PlanNodes.thrift"
 include "Planner.thrift"
 include "Data.thrift"
 include "Exprs.thrift"
-include "InternalService.thrift"
 include "DataSinks.thrift"
 include "RuntimeProfile.thrift"
 

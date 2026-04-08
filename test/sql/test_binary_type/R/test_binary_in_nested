@@ -113,6 +113,67 @@ select map{'k1': to_binary('CAFE', 'hex'), 'k2': null};
 {"k1":"cafe","k2":null}
 -- !result
 
+set binary_encoding_format = 'base64';
+-- result:
+-- !result
+
+select [to_binary('AABB', 'hex'), null];
+-- result:
+["qrs=",null]
+-- !result
+
+set binary_encoding_format = 'hex';
+-- result:
+-- !result
+
+set binary_encoding_level = 'all';
+-- result:
+-- !result
+
+select to_binary('AABB', 'hex');
+-- result:
+aabb
+-- !result
+
+set binary_encoding_format = 'base64';
+-- result:
+-- !result
+
+select to_binary('AABB', 'hex');
+-- result:
+qrs=
+-- !result
+
+set binary_encoding_format = 'raw';
+-- result:
+-- !result
+
+set binary_encoding_level = 'nested';
+-- result:
+-- !result
+
+select [to_binary('414243', 'hex'), null];
+-- result:
+["ABC",null]
+-- !result
+
+set binary_encoding_level = 'all';
+-- result:
+-- !result
+
+select to_binary('414243', 'hex');
+-- result:
+ABC
+-- !result
+
+set binary_encoding_format = 'hex';
+-- result:
+-- !result
+
+set binary_encoding_level = 'nested';
+-- result:
+-- !result
+
 drop database db_${uuid0};
 -- result:
 -- !result
