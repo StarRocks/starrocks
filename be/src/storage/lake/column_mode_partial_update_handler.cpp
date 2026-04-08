@@ -14,6 +14,8 @@
 
 #include "storage/lake/column_mode_partial_update_handler.h"
 
+#include "column/array_column.h"
+#include "column/nullable_column.h"
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
@@ -40,6 +42,61 @@
 #include "util/trace.h"
 
 namespace starrocks::lake {
+
+// [DIAG] validate ALL columns in a chunk — not just arrays
+static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tablet_id, uint32_t rssid) {
+    size_t num_rows = chunk.num_rows();
+    for (size_t col_i = 0; col_i < chunk.num_columns(); col_i++) {
+        const auto* col = chunk.get_column_by_index(col_i).get();
+        // General: every column size must match chunk num_rows
+        LOG_IF(ERROR, col->size() != num_rows)
+                << "PCU_DIAG_H: " << tag << " col size mismatch"
+                << " col=" << col_i << " col_size=" << col->size()
+                << " chunk_rows=" << num_rows
+                << " tablet=" << tablet_id << " rssid=" << rssid;
+        // Nullable: check sub-column sizes
+        if (col->is_nullable()) {
+            const auto* ncol = down_cast<const NullableColumn*>(col);
+            LOG_IF(ERROR, ncol->null_column()->size() != num_rows)
+                    << "PCU_DIAG_H: " << tag << " null_col size mismatch"
+                    << " col=" << col_i << " null_size=" << ncol->null_column()->size()
+                    << " chunk_rows=" << num_rows
+                    << " tablet=" << tablet_id << " rssid=" << rssid;
+            LOG_IF(ERROR, ncol->data_column()->size() != num_rows)
+                    << "PCU_DIAG_H: " << tag << " data_col size mismatch"
+                    << " col=" << col_i << " data_size=" << ncol->data_column()->size()
+                    << " chunk_rows=" << num_rows
+                    << " tablet=" << tablet_id << " rssid=" << rssid;
+            col = ncol->data_column().get();
+        }
+        // Array-specific: check offsets consistency
+        if (col->is_array()) {
+            const auto* arr = down_cast<const ArrayColumn*>(col);
+            const auto& offsets = arr->offsets().get_data();
+            LOG_IF(ERROR, offsets.size() != col->size() + 1)
+                    << "PCU_DIAG_H: " << tag << " array offsets size mismatch"
+                    << " col=" << col_i << " offsets_size=" << offsets.size()
+                    << " expected=" << col->size() + 1
+                    << " tablet=" << tablet_id << " rssid=" << rssid;
+            for (size_t r = 1; r < offsets.size(); r++) {
+                if (offsets[r] < offsets[r - 1]) {
+                    LOG(ERROR) << "PCU_DIAG_H: " << tag << " array corrupted offsets"
+                               << " col=" << col_i << " row=" << r - 1
+                               << " off[" << r - 1 << "]=" << offsets[r - 1]
+                               << " off[" << r << "]=" << offsets[r]
+                               << " tablet=" << tablet_id << " rssid=" << rssid;
+                    break;
+                }
+            }
+            size_t total_elems = offsets.back() - offsets.front();
+            LOG_IF(ERROR, total_elems != arr->elements().size())
+                    << "PCU_DIAG_H: " << tag << " array elements mismatch"
+                    << " col=" << col_i << " elems=" << arr->elements().size()
+                    << " expected=" << total_elems
+                    << " tablet=" << tablet_id << " rssid=" << rssid;
+        }
+    }
+}
 
 // : _tablet_metadata(std::move(tablet_metadata)) {}
 
@@ -282,6 +339,27 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
     // not use delvec loader
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(params.metadata);
     ASSIGN_OR_RETURN(auto seg_iter, segment->new_iterator(schema, seg_options));
+
+    // [DIAG-S1a] log segment & DCG metadata — always log, including when DCG is missing
+    {
+        size_t seg_num_rows = segment->num_rows();
+        auto dcg_iter = params.metadata->dcg_meta().dcgs().find(rssid);
+        bool has_dcg = (dcg_iter != params.metadata->dcg_meta().dcgs().end());
+        int dcg_files = has_dcg ? dcg_iter->second.column_files_size() : 0;
+        int dcg_versions = has_dcg ? dcg_iter->second.versions_size() : 0;
+        LOG(INFO) << "PCU_DIAG_S1a: read_source_segment"
+                << " tablet=" << params.tablet->id() << " rssid=" << rssid
+                << " txn_id=" << _txn_id
+                << " seg_rows=" << seg_num_rows
+                << " has_dcg=" << has_dcg
+                << " dcg_files=" << dcg_files << " dcg_versions=" << dcg_versions
+                << " schema_cols=" << schema.num_fields()
+                << " base_version=" << _base_version
+                << " metadata_version=" << params.metadata->version()
+                << " total_rowsets=" << params.metadata->rowsets_size()
+                << " total_dcg_entries=" << params.metadata->dcg_meta().dcgs().size();
+    }
+
     auto source_chunk_ptr = ChunkHelper::new_chunk(schema, segment->num_rows());
     auto tmp_chunk_ptr = ChunkHelper::new_chunk(schema, 1024);
     while (true) {
@@ -295,6 +373,13 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
             source_chunk_ptr->append(*tmp_chunk_ptr);
         }
     }
+
+    // [DIAG-S1d] validate row count after reading source segment
+    LOG_IF(ERROR, source_chunk_ptr->num_rows() != segment->num_rows())
+            << "PCU_DIAG_S1d: total rows mismatch"
+            << " read=" << source_chunk_ptr->num_rows() << " expected=" << segment->num_rows()
+            << " tablet=" << params.tablet->id() << " rssid=" << rssid
+            << " txn_id=" << _txn_id;
     return source_chunk_ptr;
 }
 
@@ -343,6 +428,15 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         // Sort source rowid -> upt rowid pairs by source rowid.
         split_rowid_pairs(each.second, &sorted_source_rowids, &unsorted_upt_rowids, nullptr);
         DCHECK(sorted_source_rowids.size() == unsorted_upt_rowids.size());
+
+        // [DIAG-S2] Check for duplicate source rowids
+        for (size_t i = 1; i < sorted_source_rowids.size(); i++) {
+            LOG_IF(ERROR, sorted_source_rowids[i] == sorted_source_rowids[i - 1])
+                    << "PCU_DIAG_S2: duplicate source_rowid=" << sorted_source_rowids[i]
+                    << " upt_id=" << upt_id << " idx=" << i
+                    << " total=" << sorted_source_rowids.size();
+        }
+
         auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
         TRY_CATCH_BAD_ALLOC(
                 tmp_chunk->append_selective(*upt_chunk, unsorted_upt_rowids.data(), 0, unsorted_upt_rowids.size()));
@@ -408,6 +502,36 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         TRACE_COUNTER_INCREMENT("pcu_insert_rows", _partial_update_states[upt_id].insert_rowids.size());
     }
     _partial_update_states.clear();
+
+    // [DIAG-S0] log execute() overview: columns being updated, per-segment update row counts
+    {
+        std::stringstream ss;
+        ss << "PCU_DIAG_S0: execute"
+           << " tablet=" << params.tablet->id()
+           << " txn_id=" << _txn_id
+           << " base_version=" << _base_version
+           << " metadata_version=" << params.metadata->version()
+           << " update_col_ids=[";
+        for (size_t i = 0; i < unique_update_column_ids.size(); i++) {
+            if (i > 0) ss << ",";
+            ss << unique_update_column_ids[i];
+        }
+        ss << "] segments_to_update=" << rss_upt_id_to_rowid_pairs.size()
+           << " per_seg_rows={";
+        bool first = true;
+        for (const auto& each : rss_upt_id_to_rowid_pairs) {
+            if (!first) ss << ",";
+            first = false;
+            size_t total_rows = 0;
+            for (const auto& upt : each.second) {
+                total_rows += upt.second.size();
+            }
+            ss << each.first << ":" << total_rows;
+        }
+        ss << "}";
+        LOG(INFO) << ss.str();
+    }
+
     // must record unique column id in delta column group
     // dcg_column_ids and dcg_column_files are mapped one to the other. E.g.
     // {{1,2}, {3,4}} -> {"aaa.cols", "bbb.cols"}
@@ -433,6 +557,11 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
             // 3.2 read from update segment
             RETURN_IF_ERROR(_update_source_chunk_by_upt(each.second, partial_schema, &source_chunk_ptr));
+
+            // [DIAG-S5] final validation before DCG write
+            diag_validate_chunk(*source_chunk_ptr, "before_dcg_write",
+                                        params.tablet->id(), each.first);
+
             uint64_t segment_file_size = 0;
             uint64_t index_size = 0;
             uint64_t footer_position = 0;

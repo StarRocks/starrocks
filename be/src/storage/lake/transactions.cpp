@@ -82,6 +82,12 @@ int64_t cal_new_base_version(int64_t tablet_id, TabletManager* tablet_mgr, int64
     int64_t version = base_version;
     auto metadata = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
     if (metadata != nullptr && metadata->version() <= new_version) {
+        // [DIAG-PUB] log when cached metadata causes version jump
+        LOG(INFO) << "PCU_DIAG_PUB: cal_new_base_version tablet=" << tablet_id
+                  << " base=" << base_version << " cached_ver=" << metadata->version()
+                  << " new_version=" << new_version
+                  << " cached_dcg_cnt=" << metadata->dcg_meta().dcgs().size()
+                  << " cached_rowsets=" << metadata->rowsets_size();
         version = std::max(version, metadata->version());
     }
 
@@ -193,9 +199,23 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
     int64_t ori_base_version = base_version;
     int64_t new_base_version = cal_new_base_version(tablet_id, tablet_mgr, base_version, new_version, txns);
     if (new_base_version > base_version) {
-        LOG(INFO) << "Base version has been adjusted. tablet_id=" << tablet_id << " base_version=" << base_version
-                  << " new_base_version=" << new_base_version << " new_version=" << new_version << " txns=" << txns;
+        LOG(INFO) << "PCU_DIAG_PUB: base version adjusted tablet=" << tablet_id
+                  << " ori_base=" << base_version << " new_base=" << new_base_version
+                  << " new_version=" << new_version << " txns_size=" << txns.size()
+                  << " skipping_txns=" << (new_base_version - base_version);
         base_version = new_base_version;
+    }
+    // [DIAG-PUB] log batch publish info
+    if (txns.size() > 1) {
+        auto cached_meta = tablet_mgr->get_latest_cached_tablet_metadata(tablet_id);
+        int64_t cached_ver = cached_meta ? cached_meta->version() : -1;
+        int cached_dcg_cnt = cached_meta ? cached_meta->dcg_meta().dcgs().size() : -1;
+        LOG(INFO) << "PCU_DIAG_PUB: batch_publish tablet=" << tablet_id
+                  << " ori_base=" << ori_base_version << " adjusted_base=" << base_version
+                  << " new_version=" << new_version << " txns_size=" << txns.size()
+                  << " txn_offset=" << (base_version - ori_base_version)
+                  << " cached_meta_ver=" << cached_ver
+                  << " cached_dcg_cnt=" << cached_dcg_cnt;
     }
 
     if (base_version > new_version) {
