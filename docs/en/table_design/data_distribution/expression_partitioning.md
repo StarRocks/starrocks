@@ -16,12 +16,12 @@ From v3.5 onwards, StarRocks supports merging expression partitions based on tim
 
 ## Partitioning based on a simple time function expression
 
-If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
+If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (`DATE` or `DATETIME`) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
 
 However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
 
 :::note
-Please note that `PARTITION BY date_trunc(column)` and `PARTITION BY time_slice(column)` are considered range partitioning, despite their format of expression partitioning. Therefore, you can use the `ALTER TABLE ... ADD PARTITION` statement for range partitions to add new partitions to tables use such partitioning strategies.
+`PARTITION BY date_trunc(column)` and `PARTITION BY time_slice(column)` are considered range partitioning, despite their format of expression partitioning. Therefore, you can use the `ALTER TABLE ... ADD PARTITION` statement for range partitions to add new partitions to tables using such partitioning strategies.
 :::
 
 ### Syntax
@@ -40,23 +40,27 @@ expression ::=
 
 #### `expression`
 
-**Required**: YES<br/>
-**Description**: A simple time function expression that use the [date_trunc](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) or [time_slice](../../sql-reference/sql-functions/date-time-functions/time_slice.md) functions. If you use the function `time_slice`, you do not need to pass the `boundary` parameter. It is because in this scenario, the default and valid value for this parameter is `floor`, and the value cannot be `ceil`. <br/>
+**Required**: YES\
+**Description**: A simple time function expression that use the [`date_trunc`](../../sql-reference/sql-functions/date-time-functions/date_trunc.md) or [`time_slice`](../../sql-reference/sql-functions/date-time-functions/time_slice.md) functions. If you use the function `time_slice`, you do not need to pass the `boundary` parameter. It is because in this scenario, the default and valid value for this parameter is `floor`, and the value cannot be `ceil`.
 
 #### `time_unit`
 
-**Required**: YES<br/>
-**Description**: The partition granularity, which can be `hour`, `day`, `month`, or `year`. `week` partition granularity is not supported. If partition granularity is `hour`, the partition column must be of the DATETIME data type and cannot be of the DATE data type. <br/>
+**Required**: YES\
+**Description**: The partition granularity, which can be `hour`, `day`, `week`, `month`, or `year`. If partition granularity is `hour`, the partition column must be of the `DATETIME` data type and cannot be of the `DATE` data type.
 
 #### `partition_column` 
 
-**Required**: YES<br/>
-**Description**: The name of the partition column.<br/><ul><li>The partition column can only be of the DATE or DATETIME data type. The partition column allows `NULL` values.</li><li>The partition column can be of the DATE or DATETIME data type if the `date_trunc` function is used. The partition column must be of the DATETIME data type if the `time_slice` function is used. </li><li>If the partition column is of the DATE data type, the supported range is [0000-01-01 ~ 9999-12-31]. If the partition column is of the DATETIME data type, the supported range is [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59].</li><li>Currently, you can specify only one partition column; multiple partition columns are not supported.</li></ul> <br/>
+**Required**: YES\
+**Description**: The name of the partition column.
+- The partition column can only be of the `DATE` or `DATETIME` data type. The partition column allows `NULL` values.
+- The partition column can be of the `DATE` or `DATETIME` data type if the `date_trunc` function is used. The partition column must be of the `DATETIME` data type if the `time_slice` function is used.
+- If the partition column is of the `DATE` data type, the supported range is `[0000-01-01 ~ 9999-12-31]`. If the partition column is of the `DATETIME` data type, the supported range is `[0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]`
+- Currently, you can specify only one partition column; multiple partition columns are not supported.
 
 #### `partition_live_number` 
 
-**Required**: NO<br/>
-**Description**: The number of the most recent partitions to be retained. Partitions are sorted in chronological order, **with the current date as a benchmark**; partitions older than the current date minus `partition_live_number` are deleted. StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes). Suppose that the current date is April 4, 2023, `partition_live_number` is set to `2`, and the partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`. The partitions `p20230403` and `p20230404` are retained, and other partitions are deleted. If dirty data is loaded, such as data from the future dates April 5 and April 6, partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`, and `p20230405`, and `p20230406`. Then partitions `p20230403`, `p20230404`, `p20230405`, and `p20230406` are retained, and the other partitions are deleted. <br/>
+**Required**: NO\
+**Description**: The number of the most recent partitions to be retained. Partitions are sorted in chronological order, **with the current date as a benchmark**; partitions older than the current date minus `partition_live_number` are deleted. StarRocks schedules tasks to manage the number of partitions, and the scheduling interval can be configured through the FE dynamic parameter `dynamic_partition_check_interval_seconds`, which defaults to 600 seconds (10 minutes). Suppose that the current date is April 4, 2023, `partition_live_number` is set to `2`, and the partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`. The partitions `p20230403` and `p20230404` are retained, and other partitions are deleted. If dirty data is loaded, such as data from the future dates April 5 and April 6, partitions include `p20230401`, `p20230402`, `p20230403`, `p20230404`, and `p20230405`, and `p20230406`. Then partitions `p20230403`, `p20230404`, `p20230405`, and `p20230406` are retained, and the other partitions are deleted.
 
 #### `partition_retention_condition`
 
@@ -96,17 +100,17 @@ For example, when the following two data rows are loaded, StarRocks will automat
 ```SQL
 -- insert two data rows
 INSERT INTO site_access1  
-    VALUES ("2023-02-26 20:12:04",002,"New York","Sam Smith",1),
-           ("2023-02-27 21:06:54",001,"Los Angeles","Taylor Swift",1);
+VALUES ("2023-02-26 20:12:04",002,"New York","Sam Smith",1),
+("2023-02-27 21:06:54",001,"Los Angeles","Taylor Swift",1);
 
 -- view partitions
 mysql > SHOW PARTITIONS FROM site_access1;
-+-------------+---------------+----------------+---------------------+--------------------+--------+--------------+------------------------------------------------------------------------------------------------------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
-| PartitionId | PartitionName | VisibleVersion | VisibleVersionTime  | VisibleVersionHash | State  | PartitionKey | Range                                                                                                | DistributionKey    | Buckets | ReplicationNum | StorageMedium | CooldownTime        | LastConsistencyCheckTime | DataSize | IsInMemory | RowCount |
-+-------------+---------------+----------------+---------------------+--------------------+--------+--------------+------------------------------------------------------------------------------------------------------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
-| 17138       | p20230226     | 2              | 2023-07-19 17:53:59 | 0                  | NORMAL | event_day    | [types: [DATETIME]; keys: [2023-02-26 00:00:00]; ..types: [DATETIME]; keys: [2023-02-27 00:00:00]; ) | event_day, site_id | 6       | 3              | HDD           | 9999-12-31 23:59:59 | NULL                     | 0B       | false      | 0        |
-| 17113       | p20230227     | 2              | 2023-07-19 17:53:59 | 0                  | NORMAL | event_day    | [types: [DATETIME]; keys: [2023-02-27 00:00:00]; ..types: [DATETIME]; keys: [2023-02-28 00:00:00]; ) | event_day, site_id | 6       | 3              | HDD           | 9999-12-31 23:59:59 | NULL                     | 0B       | false      | 0        |
-+-------------+---------------+----------------+---------------------+--------------------+--------+--------------+------------------------------------------------------------------------------------------------------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
++-------------+---------------+----------------+---------------------+--------------------+--------+--------------+------------------------------------------------------------------------------------------------------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+-------------+------------+----------+-------------+--------------------+----------------+----------------+
+| PartitionId | PartitionName | VisibleVersion | VisibleVersionTime  | VisibleVersionHash | State  | PartitionKey | Range                                                                                                | DistributionKey    | Buckets | ReplicationNum | StorageMedium | CooldownTime        | LastConsistencyCheckTime | DataSize | StorageSize | IsInMemory | RowCount | DataVersion | VersionEpoch       | VersionTxnType | TabletBalanced |
++-------------+---------------+----------------+---------------------+--------------------+--------+--------------+------------------------------------------------------------------------------------------------------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+-------------+------------+----------+-------------+--------------------+----------------+----------------+
+| 17138       | p20230226     | 2              | 2023-07-19 17:53:59 | 0                  | NORMAL | event_day    | [types: [DATETIME]; keys: [2023-02-26 00:00:00]; ..types: [DATETIME]; keys: [2023-02-27 00:00:00]; ) | event_day, site_id | 6       | 3              | HDD           | 9999-12-31 23:59:59 | NULL                     | 0B       | 0B          | false      | 0        | 2           | 409742105974407168 | TXN_NORMAL     | true           |
+| 17113       | p20230227     | 2              | 2023-07-19 17:53:59 | 0                  | NORMAL | event_day    | [types: [DATETIME]; keys: [2023-02-27 00:00:00]; ..types: [DATETIME]; keys: [2023-02-28 00:00:00]; ) | event_day, site_id | 6       | 3              | HDD           | 9999-12-31 23:59:59 | NULL                     | 0B       | 0B          | false      | 0        | 2           | 409742105974407169 | TXN_NORMAL     | true           |
++-------------+---------------+----------------+---------------------+--------------------+--------+--------------+------------------------------------------------------------------------------------------------------+--------------------+---------+----------------+---------------+---------------------+--------------------------+----------+-------------+------------+----------+-------------+--------------------+----------------+----------------+
 2 rows in set (0.00 sec)
 ```
 
@@ -128,7 +132,7 @@ PROPERTIES(
 );
 ```
 
-Example 3: Suppose you frequently query data by week. You can use the partition expression `time_slice()` and set the partition column as `event_day` and the partition granularity to seven days at table creation. Data of one week is stored in one partition and partition pruning can be used to significantly improve query efficiency.
+Example 3: Suppose you frequently query data by week. You can use the partition expression `time_slice()` and set the partition column as `event_day` and the partition granularity to one week at table creation. Data for one week is stored in one partition and partition pruning can be used to significantly improve query efficiency.
 
 ```SQL
 CREATE TABLE site_access(
@@ -139,8 +143,8 @@ CREATE TABLE site_access(
     pv BIGINT DEFAULT '0'
 )
 DUPLICATE KEY(event_day, site_id, city_code, user_name)
-PARTITION BY time_slice(event_day, INTERVAL 7 day)
-DISTRIBUTED BY HASH(event_day, site_id)
+PARTITION BY time_slice(event_day, INTERVAL 1 week)
+DISTRIBUTED BY HASH(event_day, site_id);
 ```
 
 ## Partitioning based on the column expression (since v3.1)
@@ -166,8 +170,10 @@ partition_columns ::=
 
 #### `partition_columns`
 
-**Required**: YES<br/>
-**Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> <br/>
+**Required**: YES\
+**Description**: The names of partition columns.
+- The partition column values can be string (`BINARY` not supported), `date` or `datetime`, `integer`, and `boolean` values. The partition column allows `NULL` values.
+- Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).
 
 :::note
 
@@ -202,10 +208,10 @@ Insert a single data row into the table.
 
 ```SQL
 INSERT INTO t_recharge_detail1 
-    VALUES (1, 1, 1, 'Houston', '2022-04-01');
+VALUES (1, 1, 1, 'Houston', '2022-04-01');
 ```
 
-View the partitions. The result shows that StarRocks automatically creates a partition `p20220401_Houston1` based on the loaded data. During subsequent loading, data with the values `2022-04-01` and `Houston` in the partition columns `dt` and `city` are stored in this partition.
+View the partitions. The result shows that StarRocks automatically creates a partition `p20220401_Houston` based on the loaded data. During subsequent loading, data with the values `2022-04-01` and `Houston` in the partition columns `dt` and `city` are stored in this partition.
 
 :::tip
 Each partition can only contain data with the specified one value for the partition column. To specify multiple values for a partition column in a partition, see [List partitions](./list_partitioning.md).
@@ -221,7 +227,7 @@ MySQL > SHOW PARTITIONS from t_recharge_detail1\G
       VisibleVersionHash: 0
                    State: NORMAL
             PartitionKey: dt, city
-                    List: (('2022-04-01', 'Houston'))
+                    List: [["2022-04-01","Houston"]]
          DistributionKey: id
                  Buckets: 6
           ReplicationNum: 3
@@ -229,22 +235,27 @@ MySQL > SHOW PARTITIONS from t_recharge_detail1\G
             CooldownTime: 9999-12-31 23:59:59
 LastConsistencyCheckTime: NULL
                 DataSize: 2.5KB
+             StorageSize: 2.5KB
               IsInMemory: false
                 RowCount: 1
+             DataVersion: 2
+            VersionEpoch: 409742188174376960
+          VersionTxnType: TXN_NORMAL
+          TabletBalanced: true
 1 row in set (0.00 sec)
 ```
 
 ## Partitioning based on a complex time function expression (since v3.4)
 
-From v3.4.0 onwards, expression partitioning supports any expressions that return DATE or DATETIME types to accommodate to even more complex partitioning scenarios. For the supported time functions, see [Appendix - Supported time functions](#supported-time-functions).
+From v3.4.0 onwards, expression partitioning supports any expressions that return `DATE` or `DATETIME` types to accommodate even more complex partitioning scenarios. For the supported time functions, see [Appendix - Supported time functions](#supported-time-functions).
 
-For example, you can define a Unix timestamp column, and use from_unixtime() directly against the column in the partition expression to define the partition key, instead of define a generated DATE or DATETIME column with the function. For more about the usage, see [Examples](#examples-2).
+For example, you can define a Unix timestamp column, and use `from_unixtime()` directly against the column in the partition expression to define the partition key, instead of define a generated `DATE` or `DATETIME` column with the function. For more about the usage, see [Examples](#examples-2).
 
-From v3.4.4 onwards, partition pruning are supported for partitions based on most DATETIME-related functions.
+From v3.4.4 onwards, partition pruning are supported for partitions based on most `DATETIME`-related functions.
 
 ### Examples
 
-Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day. You can use the timestamp column with the function from_unixtime() in the expression to define the timestamp as the partition column and the partition granularity to a day at table creation. Data of each day is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day. You can use the timestamp column with the function `from_unixtime()` in the expression to define the timestamp as the partition column and the partition granularity to a day at table creation. Data of each day is stored in one partition and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders (
@@ -255,7 +266,7 @@ CREATE TABLE orders (
 PARTITION BY from_unixtime(ts,'%Y%m%d');
 ```
 
-Example 2: Suppose you assign an INT type timestamp to each data row and store data on a monthly basis. You can use the timestamp column with the functions cast() and str_to_date() in the expression to transform the timestamp into the DATE type, set it as the partition column, and the partition granularity to a month using date_trunc() at table creation. Data of each month is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 2: Suppose you assign an `INT` type timestamp to each data row and store data on a monthly basis. You can use the timestamp column with the functions `cast()` and `str_to_date()` in the expression to transform the timestamp into the `DATE` type, set it as the partition column, and the partition granularity to a month using `date_trunc()` at table creation. Data of each month is stored in one partition and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders_new (
@@ -280,7 +291,7 @@ From v3.4.0 onwards, expression partitioning supports multiple partition columns
 
 ### Examples
 
-Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day and a specific city. You can use the timestamp column (with the from_unixtime() function) and the city column as the partition columns at table creation. Data of each day in each city is stored in one partition and partition pruning can be used to improve query efficiency.
+Example 1: Suppose you assign a Unix timestamp to each data row and frequently query data by day and a specific city. You can use the timestamp column (with the `from_unixtime()` function) and the city column as the partition columns at table creation. Data of each day in each city is stored in one partition and partition pruning can be used to improve query efficiency.
 
 ```SQL
 CREATE TABLE orders (
@@ -297,20 +308,20 @@ PARTITION BY from_unixtime(ts,'%Y%m%d'), city;
 
 During data loading, StarRocks will automatically create partitions based on the loaded data and partition rule defined by the partition expression.
 
-Note that if you use expression partitioning at table creation and need to use [INSERT OVERWRITE](../../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) to overwrite data in a specific partition, whether the partition has been created or not, you currently need to explicitly provide a partition range in `PARTITION()`. This is different from [Range Partitioning](./Data_distribution.md#range-partitioning) or [List Partitioning](./list_partitioning.md), which allow you only to provide the partition name in `PARTITION (<partition_name>)`.
+When using expression partitioning, you can use [INSERT OVERWRITE](../../loading/InsertInto.md#overwrite-data-via-insert-overwrite-select) to dynamically overwrite data without specifying the partition name. StarRocks will automatically route and overwrite the data in the corresponding partitions.
 
-If you use a time function expression at table creation and want to overwrite data in a specific partition, you need to provide the starting date or datetime of that partition (the partition granularity configured at table creation). If the partition does not exist, it can be automatically created during data loading.
+If you want to overwrite data in a *specific* partition, you can explicitly provide a partition range in `PARTITION()`. Note that for expression partitions, you need to provide the starting date or datetime of that partition (the partition granularity configured at table creation) or the specific column values, rather than just the partition name. If the partition does not exist, it will be automatically created during data loading.
 
 ```SQL
 INSERT OVERWRITE site_access1 PARTITION(event_day='2022-06-08 20:12:04')
-    SELECT * FROM site_access2 PARTITION(p20220608);
+SELECT * FROM site_access2 PARTITION(p20220608);
 ```
 
 If you use column expression at table creation and want to overwrite data in a specific partition, you need to provide the partition column values that the partition contains. If the partition does not exist, it can be automatically created during data loading.
 
 ```SQL
 INSERT OVERWRITE t_recharge_detail1 PARTITION(dt='2022-04-02',city='texas')
-    SELECT * FROM t_recharge_detail2 PARTITION(p20220402_texas);
+SELECT * FROM t_recharge_detail2 PARTITION(p20220402_texas);
 ```
 
 ### View partitions
@@ -319,13 +330,13 @@ When you want to view specific information about automatically created partition
 
 ```SQL
 MySQL > SHOW PARTITIONS FROM t_recharge_detail1;
-+-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+-----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
-| PartitionId | PartitionName     | VisibleVersion | VisibleVersionTime  | VisibleVersionHash | State  | PartitionKey | List                        | DistributionKey | Buckets | ReplicationNum | StorageMedium | CooldownTime        | LastConsistencyCheckTime | DataSize | IsInMemory | RowCount |
-+-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+-----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
-| 16890       | p20220401_Houston | 2              | 2023-07-19 17:24:53 | 0                  | NORMAL | dt, city     | (('2022-04-01', 'Houston')) | id              | 6       | 3              | HDD           | 9999-12-31 23:59:59 | NULL                     | 2.5KB    | false      | 1        |
-| 17056       | p20220402_texas   | 2              | 2023-07-19 17:27:42 | 0                  | NORMAL | dt, city     | (('2022-04-02', 'texas'))   | id              | 6       | 3              | HDD           | 9999-12-31 23:59:59 | NULL                     | 2.5KB    | false      | 1        |
-+-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+-----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+------------+----------+
-2 rows in set (0.00 sec)
++-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+-------------+------------+----------+-------------+--------------------+----------------+----------------+
+| PartitionId | PartitionName     | VisibleVersion | VisibleVersionTime  | VisibleVersionHash | State  | PartitionKey | List                       | DistributionKey | Buckets | ReplicationNum | StorageMedium | CooldownTime        | LastConsistencyCheckTime | DataSize | StorageSize | IsInMemory | RowCount | DataVersion | VersionEpoch       | VersionTxnType | TabletBalanced |
++-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+-------------+------------+----------+-------------+--------------------+----------------+----------------+
+| 11099       | p20220401_Houston | 2              | 2026-03-11 13:59:51 | 0                  | NORMAL | dt, city     | [["2022-04-01","Houston"]] | id              | 6       | 3              | HDD           | 9999-12-31 23:59:59 | NULL                     | 0B       | 0B          | false      | 0        | 2           | 409743636180238336 | TXN_NORMAL     | true           |
+| 11116       | p20220402_texas   | 2              | 2026-03-11 13:59:52 | 0                  | NORMAL | dt, city     | [["2022-04-02","texas"]]   | id              | 6       | 3              | HDD           | 9999-12-31 23:59:59 | NULL                     | 0B       | 0B          | false      | 0        | 2           | 409743639174971392 | TXN_NORMAL     | true           |
++-------------+-------------------+----------------+---------------------+--------------------+--------+--------------+----------------------------+-----------------+---------+----------------+---------------+---------------------+--------------------------+----------+-------------+------------+----------+-------------+--------------------+----------------+----------------+
+2 rows in set (0.01 sec)
 ```
 
 ### Merge expression partitions
@@ -344,12 +355,12 @@ PARTITION BY <time_expr>
 
 ##### `PARTITION BY <time_expr>`
 
-**Required**: YES<br/>
+**Required**: YES\
 **Description**: Specifies the new time granularity for the partitioning strategy, for example, `PARTITION BY date_trunc('month', dt)`.
 
 ##### `WHERE <time_range_column> BETWEEN <start_time> AND <end_time>`
 
-**Required**: YES<br/>
+**Required**: YES\
 **Description**: Specifies the time range of the partitions to be merged. Partitions within this range will be merged based on the rules defined in the `PARTITION BY` clause.
 
 #### Example
@@ -369,7 +380,7 @@ After merging:
 
 #### Usage notes
 
-- Merging is supported only for expression partitions based a time function.
+- Merging is supported only for expression partitions based on a time function.
 - Merging partitions with multiple partition columns is not supported.
 - Parallel execution of merging and Schema Change/DML operations is not supported.
 
@@ -389,28 +400,28 @@ Expression partitioning supports the following functions:
 
 **Time functions**:
 
-- timediff
-- datediff
-- to_days
-- years_add/sub
-- quarters_add/sub
-- months_add/sub
-- weeks_add/sub
-- date_add/sub
-- days_add/sub
-- hours_add/sub
-- minutes_add/sub
-- seconds_add/sub
-- milliseconds_add/sub
-- date_trunc
-- date_format(YmdHiSf/YmdHisf)
-- str2date(YmdHiSf/YmdHisf)
-- str_to_date(YmdHiSf/YmdHisf)
-- to_iso8601
-- to_date
-- unix_timestamp
-- from_unixtime(YmdHiSf/YmdHisf)
-- time_slice
+- `timediff`
+- `datediff`
+- `to_days`
+- `years_add`/`sub`
+- `quarters_add`/`sub`
+- `months_add`/`sub`
+- `weeks_add`/`sub`
+- `date_add`/`sub`
+- `days_add`/`sub`
+- `hours_add`/`sub`
+- `minutes_add`/`sub`
+- `seconds_add`/`sub`
+- `milliseconds_add`/`sub`
+- `date_trunc`
+- `date_format(YmdHiSf/YmdHisf)`
+- `str2date(YmdHiSf/YmdHisf)`
+- `str_to_date(YmdHiSf/YmdHisf)`
+- `to_iso8601`
+- `to_date`
+- `unix_timestamp`
+- `from_unixtime(YmdHiSf/YmdHisf)`
+- `time_slice`
 
 **Other functions**:
 
@@ -422,7 +433,7 @@ Expression partitioning supports the following functions:
 
 - Combined usage of multiple time functions is supported.
 - The system default time zone is used for all the time functions listed above.
-- The value format of the time function, `YmdHiSf`, must start with the roughest time granularity, `%Y`. Formats that start with a finer time granularity, for example, `%m-%d`, is not allowed.
+- The value format of the time function, `YmdHiSf`, must start with the roughest time granularity, `%Y`. Formats that start with a finer time granularity, for example, `%m-%d`, are not allowed.
 
 **Example**
 
