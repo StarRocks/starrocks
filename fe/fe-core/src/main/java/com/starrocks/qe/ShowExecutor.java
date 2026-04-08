@@ -942,7 +942,7 @@ public class ShowExecutor {
             int count = 0;
             while (iterator.hasNext()) {
                 ProfileManager.ProfileElement element = iterator.next();
-                List<String> row = element.toRow();
+                List<String> row = element.toRow(context);
                 rowSet.add(row);
                 count++;
                 if (statement.getLimit() >= 0 && count >= statement.getLimit()) {
