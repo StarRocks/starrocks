@@ -156,7 +156,8 @@ class WorkGroupDriverQueue : public FactoryMethod<DriverQueue, WorkGroupDriverQu
     friend class FactoryMethod<DriverQueue, WorkGroupDriverQueue>;
 
 public:
-    WorkGroupDriverQueue(DriverQueueMetrics* metrics) : FactoryMethod(metrics) {}
+    WorkGroupDriverQueue(DriverQueueMetrics* metrics, const workgroup::WorkGroupManager* workgroup_manager)
+            : FactoryMethod(metrics), _workgroup_manager(workgroup_manager) {}
     ~WorkGroupDriverQueue() override = default;
     void close() override;
 
@@ -224,6 +225,7 @@ private:
 
     moodycamel::ConcurrentQueue<DriverRawPtr> _local_queue;
     std::atomic_int32_t _local_queue_cntl{};
+    const workgroup::WorkGroupManager* _workgroup_manager;
 };
 
 } // namespace starrocks::pipeline

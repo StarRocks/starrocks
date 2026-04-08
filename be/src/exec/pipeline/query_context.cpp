@@ -48,6 +48,13 @@ const RuntimeServices* runtime_services(const QueryExecutionServices* query_exec
     return query_execution_services != nullptr ? query_execution_services->runtime : nullptr;
 }
 
+void unregister_pipeline_load(ProfileReportWorker* profile_report_worker, const TUniqueId& query_id,
+                              const TUniqueId& fragment_instance_id) {
+    if (profile_report_worker != nullptr) {
+        profile_report_worker->unregister_pipeline_load(query_id, fragment_instance_id);
+    }
+}
+
 } // namespace
 
 QueryContext::QueryContext()
@@ -102,6 +109,16 @@ QueryContext::~QueryContext() noexcept {
     }
 }
 
+void QueryContext::set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+    _query_execution_services = query_execution_services;
+    if (query_execution_services == nullptr || query_execution_services->execution == nullptr ||
+        query_execution_services->execution->workgroup_manager == nullptr) {
+        return;
+    }
+    _fragment_mgr->set_default_workgroup(
+            query_execution_services->execution->workgroup_manager->get_default_workgroup());
+}
+
 void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) {
     size_t old = _num_active_fragments.fetch_sub(1);
     DCHECK_GE(old, 1);
@@ -122,10 +139,10 @@ void QueryContext::count_down_fragments(QueryContextManager* query_context_mgr) 
 }
 
 void QueryContext::count_down_fragments() {
-    if (auto* services = runtime_services(_query_execution_services); services != nullptr) {
-        return this->count_down_fragments(services->query_context_mgr);
+    if (_query_context_mgr != nullptr) {
+        return this->count_down_fragments(_query_context_mgr);
     }
-    return this->count_down_fragments(ExecEnv::GetInstance()->query_context_mgr());
+    DCHECK(false) << "QueryContextManager must be set before fragment countdown";
 }
 
 FragmentContextManager* QueryContext::fragment_mgr() {
@@ -208,8 +225,9 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
     Status st;
     std::call_once(_init_spill_manager_once, [this, &st, &query_options]() {
         auto* services = runtime_services(_query_execution_services);
-        auto* g_spill_manager =
-                services != nullptr ? services->global_spill_manager : ExecEnv::GetInstance()->global_spill_manager();
+        DCHECK(services != nullptr);
+        DCHECK(services->global_spill_manager != nullptr);
+        auto* g_spill_manager = services->global_spill_manager;
         _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager);
         st = _spill_manager->init_block_manager(query_options);
     });
@@ -505,6 +523,7 @@ StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& qu
         // finally, find no query contexts, so create a new one
         auto&& ctx = std::make_shared<QueryContext>();
         auto* ctx_raw_ptr = ctx.get();
+        ctx_raw_ptr->set_query_context_manager(this);
         ctx_raw_ptr->set_query_id(query_id);
         ctx_raw_ptr->increment_num_fragments();
         context_map.emplace(query_id, std::move(ctx));
@@ -617,8 +636,9 @@ void QueryContextManager::report_fragments_with_same_host(
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
                 reported[i] = true;
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
-                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
+                unregister_pipeline_load(runtime_services(fragment_ctx->runtime_state()->query_execution_services())
+                                                 ->profile_report_worker,
+                                         fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -717,8 +737,9 @@ void QueryContextManager::report_fragments(
 
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
-                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
-                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
+                unregister_pipeline_load(runtime_services(fragment_ctx->runtime_state()->query_execution_services())
+                                                 ->profile_report_worker,
+                                         fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -787,8 +808,7 @@ void QueryContextManager::report_fragments(
     }
 
     for (const auto& key : fragment_context_non_exist) {
-        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(key.query_id,
-                                                                                             key.fragment_instance_id);
+        unregister_pipeline_load(_profile_report_worker, key.query_id, key.fragment_instance_id);
     }
 }
 

@@ -169,7 +169,8 @@ private:
 
 class WorkGroupScanTaskQueue final : public ScanTaskQueue {
 public:
-    WorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type) : _sched_entity_type(sched_entity_type) {}
+    WorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, const WorkGroupManager* workgroup_manager)
+            : _sched_entity_type(sched_entity_type), _workgroup_manager(workgroup_manager) {}
     ~WorkGroupScanTaskQueue() override = default;
 
     void close() override;
@@ -224,6 +225,7 @@ private:
     std::atomic<WorkGroupScanSchedEntity*> _min_wg_entity = nullptr;
 
     std::atomic<size_t> _num_tasks = 0;
+    const WorkGroupManager* _workgroup_manager;
 };
 
 std::unique_ptr<ScanTaskQueue> create_scan_task_queue();

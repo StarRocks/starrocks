@@ -48,6 +48,18 @@ namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_large_column);
 DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
 
+namespace {
+
+spill::GlobalSpillManager* global_spill_manager(const QueryContext* query_ctx) {
+    DCHECK(query_ctx != nullptr);
+    auto* query_execution_services = query_ctx->query_execution_services();
+    DCHECK(query_execution_services != nullptr);
+    DCHECK(query_execution_services->runtime != nullptr);
+    return query_execution_services->runtime->global_spill_manager;
+}
+
+} // namespace
+
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
@@ -669,7 +681,7 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
             request_reserved = op->estimated_memory_reserved(chunk);
         }
         request_reserved += state->spill_mem_table_num() * state->spill_mem_table_size();
-        size_t shared_reserved = ExecEnv::GetInstance()->global_spill_manager()->spill_expected_reserved_bytes();
+        size_t shared_reserved = global_spill_manager(_query_ctx)->spill_expected_reserved_bytes();
 
         bool need_spill = false;
         if (!tls_thread_status.try_mem_reserve(request_reserved, shared_reserved)) {
@@ -699,7 +711,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
         auto query_mem_limit = query_mem_tracker->lowest_limit();
         DCHECK_GT(query_mem_limit, 0);
         auto spill_mem_threshold = query_mem_limit * state->spill_mem_limit_threshold();
-        size_t shared_reserved = ExecEnv::GetInstance()->global_spill_manager()->spill_expected_reserved_bytes();
+        size_t shared_reserved = global_spill_manager(_query_ctx)->spill_expected_reserved_bytes();
         auto& current_thread = CurrentThread::current();
 
         if (query_consumption >= spill_mem_threshold * release_buffer_mem_ratio ||

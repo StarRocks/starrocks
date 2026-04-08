@@ -21,7 +21,7 @@ namespace starrocks::workgroup {
 ExecutorsManager::ExecutorsManager(WorkGroupManager* parent, PipelineExecutorSetConfig conf)
         : _parent(parent),
           _conf(std::move(conf)),
-          _shared_executors(std::make_unique<PipelineExecutorSet>(_conf, "com", _conf.total_cpuids,
+          _shared_executors(std::make_unique<PipelineExecutorSet>(_conf, _parent, "com", _conf.total_cpuids,
                                                                   std::vector<CpuUtil::CpuIds>{})) {
     _wg_to_cpuids[COMMON_WORKGROUP] = _conf.total_cpuids;
     for (auto cpuid : _conf.total_cpuids) {
@@ -118,7 +118,7 @@ std::unique_ptr<PipelineExecutorSet> ExecutorsManager::maybe_create_exclusive_ex
         return nullptr;
     }
 
-    auto executors = std::make_unique<PipelineExecutorSet>(_conf, std::to_string(wg->id()), cpuids,
+    auto executors = std::make_unique<PipelineExecutorSet>(_conf, _parent, std::to_string(wg->id()), cpuids,
                                                            std::vector<CpuUtil::CpuIds>{});
     if (const Status status = executors->start(); !status.ok()) {
         LOG(WARNING) << "[WORKGROUP] failed to start executors for workgroup "

@@ -38,15 +38,16 @@ DEFINE_FAIL_POINT(report_exec_state_failed_status);
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group, const CpuUtil::CpuIds& cpuids,
-                                           PipelineExecutorMetrics* metrics)
+                                           const workgroup::WorkGroupManager* workgroup_manager,
+                                           QueryContextManager* query_context_mgr, PipelineExecutorMetrics* metrics)
         : Base("pip_exec_" + name),
           _driver_queue(enable_resource_group
-                                ? std::unique_ptr<DriverQueue>(
-                                          std::make_unique<WorkGroupDriverQueue>(metrics->get_driver_queue_metrics()))
+                                ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>(
+                                          metrics->get_driver_queue_metrics(), workgroup_manager))
                                 : std::make_unique<QuerySharedDriverQueue>(metrics->get_driver_queue_metrics())),
           _thread_pool(std::move(thread_pool)),
-          _blocked_driver_poller(
-                  new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
+          _blocked_driver_poller(new PipelineDriverPoller(name, _driver_queue.get(), cpuids, query_context_mgr,
+                                                          metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids, metrics->get_exec_state_reporter_metrics())),
           _audit_statistics_reporter(new AuditStatisticsReporter()),
           _metrics(metrics->get_driver_executor_metrics()) {}

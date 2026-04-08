@@ -36,10 +36,11 @@ class PollerMetrics;
 class PipelineDriverPoller {
 public:
     explicit PipelineDriverPoller(std::string name, DriverQueue* driver_queue, CpuUtil::CpuIds cpuids,
-                                  PollerMetrics* metrics)
+                                  QueryContextManager* query_context_mgr, PollerMetrics* metrics)
             : _name(std::move(name)),
               _cpud_ids(std::move(cpuids)),
               _driver_queue(driver_queue),
+              _query_context_mgr(query_context_mgr),
               _polling_thread(nullptr),
               _is_polling_thread_initialized(false),
               _is_shutdown(false),
@@ -81,6 +82,7 @@ private:
     DriverList _local_blocked_drivers;
 
     DriverQueue* _driver_queue;
+    QueryContextManager* _query_context_mgr;
     scoped_refptr<Thread> _polling_thread;
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;

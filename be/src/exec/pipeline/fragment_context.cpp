@@ -258,9 +258,11 @@ void FragmentContext::set_final_status(const Status& status) {
 
         const bool finished_cancel = detailed_message == "QueryFinished" || detailed_message == "LimitReach";
         if (!_s_status.ok() && !finished_cancel) {
-            const auto* executors = _workgroup != nullptr
-                                            ? _workgroup->executors()
-                                            : ExecEnv::GetInstance()->workgroup_manager()->shared_executors();
+            DCHECK(_workgroup != nullptr || _runtime_state != nullptr);
+            const auto* executors =
+                    _workgroup != nullptr
+                            ? _workgroup->executors()
+                            : execution_services(_runtime_state.get()).workgroup_manager->shared_executors();
             auto* executor = executors->driver_executor();
             auto* query_ctx = _runtime_state->query_ctx();
             if (query_ctx != nullptr) {
@@ -346,6 +348,11 @@ void FragmentContext::cancel(const Status& status, bool cancelled_by_fe) {
     }
 }
 
+void FragmentContextManager::set_default_workgroup(workgroup::WorkGroupPtr default_workgroup) {
+    std::lock_guard<std::mutex> lock(_lock);
+    _default_workgroup = std::move(default_workgroup);
+}
+
 FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragment_id) {
     std::lock_guard<std::mutex> lock(_lock);
     auto it = _fragment_contexts.find(fragment_id);
@@ -355,7 +362,9 @@ FragmentContext* FragmentContextManager::get_or_register(const TUniqueId& fragme
         auto&& ctx = std::make_unique<FragmentContext>();
         auto* raw_ctx = ctx.get();
         _fragment_contexts.emplace(fragment_id, std::move(ctx));
-        raw_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
+        if (_default_workgroup != nullptr) {
+            raw_ctx->set_workgroup(_default_workgroup);
+        }
         return raw_ctx;
     }
 }

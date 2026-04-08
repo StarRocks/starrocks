@@ -50,6 +50,7 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
+class QueryContextManager;
 struct ConnectorScanOperatorMemShareArbitrator;
 
 // The context for all fragment of one query in one BE
@@ -57,10 +58,9 @@ class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext() noexcept;
-    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
-        _query_execution_services = query_execution_services;
-    }
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services);
     const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
+    void set_query_context_manager(QueryContextManager* query_context_mgr) { _query_context_mgr = query_context_mgr; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() const { return _query_id; }
     int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
@@ -323,6 +323,7 @@ public:
 
 private:
     const QueryExecutionServices* _query_execution_services = nullptr;
+    QueryContextManager* _query_context_mgr = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
@@ -420,6 +421,9 @@ public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
     Status init();
+    void set_profile_report_worker(ProfileReportWorker* profile_report_worker) {
+        _profile_report_worker = profile_report_worker;
+    }
     StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id, bool return_error_if_not_exist = false);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
@@ -456,6 +460,7 @@ private:
 
     std::atomic<bool> _stop{false};
     std::shared_ptr<std::thread> _clean_thread;
+    ProfileReportWorker* _profile_report_worker = nullptr;
 
     inline static const char* _metric_name = "pip_query_ctx_cnt";
     std::unique_ptr<UIntGauge> _query_ctx_cnt;

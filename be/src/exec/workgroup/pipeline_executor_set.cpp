@@ -43,7 +43,8 @@ PipelineExecutorSetConfig::PipelineExecutorSetConfig(uint32_t num_total_cores, u
                                                      uint32_t num_total_connector_scan_threads,
                                                      CpuUtil::CpuIds total_cpuids, bool enable_bind_cpus,
                                                      bool enable_cpu_borrowing,
-                                                     pipeline::PipelineExecutorMetrics* metrics)
+                                                     pipeline::PipelineExecutorMetrics* metrics,
+                                                     pipeline::QueryContextManager* query_context_mgr)
         : num_total_cores(num_total_cores),
           num_total_driver_threads(num_total_driver_threads),
           num_total_scan_threads(num_total_scan_threads),
@@ -51,7 +52,8 @@ PipelineExecutorSetConfig::PipelineExecutorSetConfig(uint32_t num_total_cores, u
           total_cpuids(limit_total_cpuids(std::move(total_cpuids), num_total_cores)),
           enable_bind_cpus(enable_bind_cpus),
           enable_cpu_borrowing(enable_cpu_borrowing && enable_bind_cpus),
-          metrics(metrics) {}
+          metrics(metrics),
+          query_context_mgr(query_context_mgr) {}
 
 std::string PipelineExecutorSetConfig::to_string() const {
     return fmt::format(
@@ -65,9 +67,11 @@ std::string PipelineExecutorSetConfig::to_string() const {
 // PipelineExecutorSet
 // ------------------------------------------------------------------------------------
 
-PipelineExecutorSet::PipelineExecutorSet(const PipelineExecutorSetConfig& conf, std::string name,
-                                         CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids)
+PipelineExecutorSet::PipelineExecutorSet(const PipelineExecutorSetConfig& conf, WorkGroupManager* workgroup_manager,
+                                         std::string name, CpuUtil::CpuIds cpuids,
+                                         std::vector<CpuUtil::CpuIds> borrowed_cpuids)
         : _conf(conf),
+          _workgroup_manager(workgroup_manager),
           _name(std::move(name)),
           _cpuids(std::move(cpuids)),
           _borrowed_cpu_ids(std::move(borrowed_cpuids)) {}
@@ -100,7 +104,8 @@ Status PipelineExecutorSet::start() {
                             .set_borrowed_cpuids(_borrowed_cpu_ids)
                             .build(&driver_executor_thread_pool));
     _driver_executor = std::make_unique<pipeline::GlobalDriverExecutor>(_name, std::move(driver_executor_thread_pool),
-                                                                        true, _cpuids, _conf.metrics);
+                                                                        true, _cpuids, _workgroup_manager,
+                                                                        _conf.query_context_mgr, _conf.metrics);
     _driver_executor->initialize(num_driver_threads());
 
     std::unique_ptr<ThreadPool> scan_thread_pool;
@@ -112,9 +117,10 @@ Status PipelineExecutorSet::start() {
                             .set_cpuids(_cpuids)
                             .set_borrowed_cpuids(_borrowed_cpu_ids)
                             .build(&scan_thread_pool));
-    _scan_executor = std::make_unique<ScanExecutor>(std::move(scan_thread_pool),
-                                                    std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::OLAP),
-                                                    _conf.metrics->get_scan_executor_metrics());
+    _scan_executor = std::make_unique<ScanExecutor>(
+            std::move(scan_thread_pool),
+            std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::OLAP, _workgroup_manager),
+            _conf.metrics->get_scan_executor_metrics());
     _scan_executor->initialize(num_scan_threads());
 
     std::unique_ptr<ThreadPool> connector_scan_thread_pool;
@@ -126,10 +132,10 @@ Status PipelineExecutorSet::start() {
                             .set_cpuids(_cpuids)
                             .set_borrowed_cpuids(_borrowed_cpu_ids)
                             .build(&connector_scan_thread_pool));
-    _connector_scan_executor =
-            std::make_unique<ScanExecutor>(std::move(connector_scan_thread_pool),
-                                           std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::CONNECTOR),
-                                           _conf.metrics->get_connector_scan_executor_metrics());
+    _connector_scan_executor = std::make_unique<ScanExecutor>(
+            std::move(connector_scan_thread_pool),
+            std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::CONNECTOR, _workgroup_manager),
+            _conf.metrics->get_connector_scan_executor_metrics());
     _connector_scan_executor->initialize(num_connector_scan_threads());
     LOG(INFO) << "[WORKGROUP] start executors " << to_string();
 

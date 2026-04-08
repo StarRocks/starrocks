@@ -21,14 +21,16 @@
 
 namespace starrocks::pipeline {
 class PipelineExecutorMetrics;
-}
+class QueryContextManager;
+} // namespace starrocks::pipeline
 namespace starrocks::workgroup {
 
 struct PipelineExecutorSetConfig {
     PipelineExecutorSetConfig(uint32_t num_total_cores, uint32_t num_total_driver_threads,
                               uint32_t num_total_scan_threads, uint32_t num_total_connector_scan_threads,
                               CpuUtil::CpuIds total_cpuids, bool enable_bind_cpus, bool enable_cpu_borrowing,
-                              pipeline::PipelineExecutorMetrics* metrics);
+                              pipeline::PipelineExecutorMetrics* metrics,
+                              pipeline::QueryContextManager* query_context_mgr);
 
     std::string to_string() const;
 
@@ -43,12 +45,13 @@ struct PipelineExecutorSetConfig {
     bool enable_cpu_borrowing;
 
     pipeline::PipelineExecutorMetrics* metrics;
+    pipeline::QueryContextManager* query_context_mgr;
 };
 
 class PipelineExecutorSet {
 public:
-    PipelineExecutorSet(const PipelineExecutorSetConfig& conf, std::string name, CpuUtil::CpuIds cpuids,
-                        std::vector<CpuUtil::CpuIds> borrowed_cpuids);
+    PipelineExecutorSet(const PipelineExecutorSetConfig& conf, WorkGroupManager* workgroup_manager, std::string name,
+                        CpuUtil::CpuIds cpuids, std::vector<CpuUtil::CpuIds> borrowed_cpuids);
     ~PipelineExecutorSet();
 
     Status start();
@@ -77,6 +80,7 @@ private:
 
 private:
     const PipelineExecutorSetConfig& _conf;
+    WorkGroupManager* const _workgroup_manager;
     const std::string _name;
 
     CpuUtil::CpuIds _cpuids;

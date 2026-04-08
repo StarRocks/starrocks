@@ -67,6 +67,18 @@ using WorkGroup = workgroup::WorkGroup;
 using WorkGroupPtr = workgroup::WorkGroupPtr;
 using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, std::vector<Pipeline*>>;
 
+namespace {
+
+const ExecutionEnv& execution_services(const QueryContext* query_ctx) {
+    DCHECK(query_ctx != nullptr);
+    auto* query_execution_services = query_ctx->query_execution_services();
+    DCHECK(query_execution_services != nullptr);
+    DCHECK(query_execution_services->execution != nullptr);
+    return *query_execution_services->execution;
+}
+
+} // namespace
+
 /// UnifiedExecPlanFragmentParams.
 const std::vector<TScanRangeParams> UnifiedExecPlanFragmentParams::_no_scan_ranges;
 const PerDriverScanRangesMap UnifiedExecPlanFragmentParams::_no_scan_ranges_per_driver_seq;
@@ -192,14 +204,16 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
 }
 
 Status FragmentExecutor::_prepare_workgroup(const UnifiedExecPlanFragmentParams& request) {
+    auto* workgroup_manager = execution_services(_query_ctx).workgroup_manager;
+    DCHECK(workgroup_manager != nullptr);
     WorkGroupPtr wg;
     if (!request.common().__isset.workgroup || request.common().workgroup.id == WorkGroup::DEFAULT_WG_ID) {
-        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup();
+        wg = workgroup_manager->get_default_workgroup();
     } else if (request.common().workgroup.id == WorkGroup::DEFAULT_MV_WG_ID) {
-        wg = ExecEnv::GetInstance()->workgroup_manager()->get_default_mv_workgroup();
+        wg = workgroup_manager->get_default_mv_workgroup();
     } else {
         wg = std::make_shared<WorkGroup>(request.common().workgroup);
-        wg = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(wg);
+        wg = workgroup_manager->add_workgroup(wg);
     }
     DCHECK(wg != nullptr);
 
@@ -753,7 +767,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     Drivers drivers;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
     auto* runtime_state = _fragment_ctx->runtime_state();
-    size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
+    size_t sink_dop = _calc_sink_dop(exec_env, request);
     // Build pipelines
     PipelineBuilderContext context(_fragment_ctx.get(), degree_of_parallelism, sink_dop, is_stream_pipeline);
     context.init_colocate_groups(std::move(_colocate_exec_groups));

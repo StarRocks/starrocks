@@ -428,6 +428,10 @@ void ExecEnv::_refresh_service_contexts() {
     _query_execution_services.lake = &_lake_services;
     _query_execution_services.runtime = &_runtime_services;
 
+    if (_query_context_mgr != nullptr) {
+        _query_context_mgr->set_profile_report_worker(_profile_report_worker);
+    }
+
     _admin_services.execution = &_execution_services;
     _admin_services.rpc = &_rpc_services;
     _admin_services.lake = &_lake_services;
@@ -582,7 +586,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
             CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
-            GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
+            GlobalMetricsRegistry::instance()->pipeline_executor_metrics(), _query_context_mgr);
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
     workgroup::DefaultWorkGroupInitialization default_workgroup_init(_workgroup_manager.get(), _max_executor_threads);

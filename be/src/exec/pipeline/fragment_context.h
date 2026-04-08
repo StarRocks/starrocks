@@ -286,6 +286,7 @@ public:
 
     FragmentContext* get_or_register(const TUniqueId& fragment_id);
     FragmentContextPtr get(const TUniqueId& fragment_id);
+    void set_default_workgroup(workgroup::WorkGroupPtr default_workgroup);
 
     Status register_ctx(const TUniqueId& fragment_id, FragmentContextPtr fragment_ctx);
     void unregister(const TUniqueId& fragment_id);
@@ -302,6 +303,7 @@ public:
 
 private:
     std::mutex _lock;
+    workgroup::WorkGroupPtr _default_workgroup;
     std::unordered_map<TUniqueId, FragmentContextPtr> _fragment_contexts;
 };
 } // namespace pipeline
