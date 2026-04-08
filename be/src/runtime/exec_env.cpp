@@ -493,11 +493,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
     // register the metrics to monitor the task queue len
-    auto task_qlen_fun = [] {
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, [] {
         auto pool = ExecEnv::GetInstance()->pipeline_prepare_pool();
         return (pool == nullptr) ? 0U : pool->get_queue_size();
-    };
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, task_qlen_fun);
+    });
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
@@ -655,11 +654,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
     _profile_report_worker = new ProfileReportWorker(_fragment_mgr, _query_context_mgr);
-    auto runtime_filter_event_func = [this] {
-        auto pool = _runtime_filter_worker;
+    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, [] {
+        auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
         return (pool == nullptr) ? 0U : pool->queue_size();
-    };
-    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
+    });
 
     _backend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "frontend");
