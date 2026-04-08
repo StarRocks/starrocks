@@ -361,7 +361,7 @@ jobs:
       - name: Compute Merge Base
         id: merge_base
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
+          git fetch origin ${{ github.base_ref }}
           base="$(git merge-base FETCH_HEAD HEAD)"
           [[ -n "${base}" ]]
           echo "base=${base}" >> "$GITHUB_OUTPUT"
