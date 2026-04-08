@@ -525,8 +525,21 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         } else {
             for (FunctionRef fnRef : stmt.getFnRefs()) {
                 String functionName = fnRef.getFunctionName();
+                String qualifierDbName = fnRef.getDbName();
 
-                List<Function> functionList = db.getFunctionsByName(functionName);
+                // When a DB qualifier is specified (e.g. fn_db2.my_func), resolve and use that DB
+                // rather than the backup target DB, mirroring the fix in FunctionNameAnalyzer.
+                Database lookupDb;
+                if (qualifierDbName != null) {
+                    lookupDb = globalStateMgr.getLocalMetastore().getDb(qualifierDbName);
+                    if (lookupDb == null) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, qualifierDbName);
+                    }
+                } else {
+                    lookupDb = db;
+                }
+
+                List<Function> functionList = lookupDb.getFunctionsByName(functionName);
                 if (functionList.isEmpty()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                             "Invalid backup function(s), function name: " + functionName);
