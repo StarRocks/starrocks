@@ -61,6 +61,8 @@ public:
     size_t size() const;
 
 private:
+    void _mark_non_empty(int level);
+
     // Scan from highest priority down to lowest, trying dequeue at each non-empty level.
     // DequeueFunc: (int level, ScanTask& task) -> bool
     template <typename DequeueFunc>

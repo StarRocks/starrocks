@@ -71,6 +71,8 @@ private:
     // higher (lower-priority) levels.
     int _compute_driver_level(DriverRawPtr driver) const;
 
+    void _mark_non_empty(int level);
+
     // Find the non-empty level with minimum weighted accu_time among bits set in bitmap.
     // Returns -1 if no candidate found.
     int _find_best_level(uint8_t bitmap) const;

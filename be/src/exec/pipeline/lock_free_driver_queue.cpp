@@ -48,21 +48,14 @@ void LockFreeDriverQueue::put_back(DriverRawPtr driver, int worker_id) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
     _queue.enqueue(driver, level, worker_id);
-    // Mark level as non-empty. Skip the RMW if bit is already set (steady-state fast path).
-    uint8_t mask = static_cast<uint8_t>(1u << level);
-    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
-        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
-    }
+    _mark_non_empty(level);
 }
 
 void LockFreeDriverQueue::put_back(DriverRawPtr driver) {
     int level = _compute_driver_level(driver);
     driver->set_driver_queue_level(level);
     _queue.enqueue(driver, level);
-    uint8_t mask = static_cast<uint8_t>(1u << level);
-    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
-        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
-    }
+    _mark_non_empty(level);
 }
 
 bool LockFreeDriverQueue::try_take(DriverRawPtr& driver, int worker_id) {
@@ -146,6 +139,13 @@ int LockFreeDriverQueue::_compute_driver_level(DriverRawPtr driver) const {
         }
     }
     return QUEUE_SIZE - 1;
+}
+
+void LockFreeDriverQueue::_mark_non_empty(int level) {
+    uint8_t mask = static_cast<uint8_t>(1u << level);
+    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
+        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
+    }
 }
 
 } // namespace starrocks::pipeline

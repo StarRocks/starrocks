@@ -22,10 +22,7 @@ bool LockFreeScanTaskQueue::try_offer(ScanTask task, int worker_id) {
     DCHECK(task.priority >= 0 && task.priority < NUM_PRIORITY_LEVELS);
     int level = task.priority;
     _queue.enqueue(std::move(task), level, worker_id);
-    uint32_t mask = 1u << level;
-    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
-        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
-    }
+    _mark_non_empty(level);
     return true;
 }
 
@@ -33,10 +30,7 @@ bool LockFreeScanTaskQueue::try_offer(ScanTask task) {
     DCHECK(task.priority >= 0 && task.priority < NUM_PRIORITY_LEVELS);
     int level = task.priority;
     _queue.enqueue(std::move(task), level);
-    uint32_t mask = 1u << level;
-    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
-        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
-    }
+    _mark_non_empty(level);
     return true;
 }
 
@@ -44,20 +38,14 @@ void LockFreeScanTaskQueue::force_put(ScanTask task, int worker_id) {
     DCHECK(task.priority >= 0 && task.priority < NUM_PRIORITY_LEVELS);
     int level = task.priority;
     _queue.enqueue(std::move(task), level, worker_id);
-    uint32_t mask = 1u << level;
-    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
-        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
-    }
+    _mark_non_empty(level);
 }
 
 void LockFreeScanTaskQueue::force_put(ScanTask task) {
     DCHECK(task.priority >= 0 && task.priority < NUM_PRIORITY_LEVELS);
     int level = task.priority;
     _queue.enqueue(std::move(task), level);
-    uint32_t mask = 1u << level;
-    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
-        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
-    }
+    _mark_non_empty(level);
 }
 
 bool LockFreeScanTaskQueue::try_take(ScanTask& task, int worker_id) {
@@ -101,6 +89,13 @@ bool LockFreeScanTaskQueue::_try_take_from_levels(uint32_t bitmap, ScanTask& tas
 
 size_t LockFreeScanTaskQueue::size() const {
     return _queue.size_approx();
+}
+
+void LockFreeScanTaskQueue::_mark_non_empty(int level) {
+    uint32_t mask = 1u << level;
+    if ((_non_empty_bitmap.load(std::memory_order_relaxed) & mask) == 0) {
+        _non_empty_bitmap.fetch_or(mask, std::memory_order_relaxed);
+    }
 }
 
 } // namespace starrocks::workgroup
