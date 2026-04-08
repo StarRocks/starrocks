@@ -43,6 +43,18 @@
 #include "types/decimalv2_value.h"
 
 namespace starrocks {
+namespace {
+
+// Test helper: sum RowsetMeta::data_disk_size() (same as former TabletMeta::tablet_data_size()).
+size_t sum_rowset_data_disk_size(const TabletMeta& tablet_meta) {
+    size_t total_size = 0;
+    for (const auto& rs : tablet_meta.all_rs_metas()) {
+        total_size += rs->data_disk_size();
+    }
+    return total_size;
+}
+
+} // namespace
 
 // NOLINTNEXTLINE
 TEST(TabletMetaTest, test_create) {
@@ -280,7 +292,7 @@ TEST(TabletMetaTest, tablet_data_size_excludes_rowset_index_disk_bytes) {
     auto rs_meta = std::make_shared<RowsetMeta>(rowset_meta_pb);
     tablet_meta->add_rs_meta(rs_meta);
 
-    ASSERT_EQ(tablet_meta->tablet_data_size(), static_cast<size_t>(kDataBytes));
+    ASSERT_EQ(sum_rowset_data_disk_size(*tablet_meta), static_cast<size_t>(kDataBytes));
     ASSERT_EQ(tablet_meta->tablet_footprint(), static_cast<size_t>(kDataBytes + kIndexBytes));
 }
 
