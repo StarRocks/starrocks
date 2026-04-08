@@ -29,6 +29,10 @@ class PipelineDriver;
 using DriverRawPtr = PipelineDriver*;
 } // namespace pipeline
 
+namespace lake {
+class TabletManager;
+} // namespace lake
+
 namespace query_cache {
 class PerLaneBuffer;
 using PerLaneBufferRawPtr = PerLaneBuffer*;
@@ -76,6 +80,7 @@ private:
                                           int64_t version);
     bool _should_passthrough(size_t num_rows, size_t num_bytes);
     ChunkPtr _pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer);
+    lake::TabletManager* _lake_tablet_manager = nullptr;
     CacheManagerRawPtr _cache_mgr;
     const CacheParam& _cache_param;
     LaneArbiterPtr _lane_arbiter;

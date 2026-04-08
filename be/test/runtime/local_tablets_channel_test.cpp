@@ -29,6 +29,7 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
@@ -67,10 +68,13 @@ protected:
         _root_profile = std::make_unique<RuntimeProfile>("LoadChannel");
         _load_channel_mgr = std::make_unique<LoadChannelMgr>(nullptr);
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), nullptr, _load_id, _txn_id, string(),
-                                                      1000, std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), nullptr,
+                                                      ExecEnv::GetInstance()->diagnose_daemon(),
+                                                      ExecEnv::GetInstance()->brpc_stub_cache(), _load_id, _txn_id,
+                                                      string(), 1000, std::move(load_mem_tracker));
         _tablets_channel = new_local_tablets_channel(_load_channel.get(), {_load_id, _sink_id, _index_id},
-                                                     _load_channel->mem_tracker(), _root_profile.get());
+                                                     _load_channel->mem_tracker(), _root_profile.get(),
+                                                     ExecEnv::GetInstance()->brpc_stub_cache());
     }
 
     void TearDown() override {

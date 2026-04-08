@@ -37,7 +37,8 @@
 namespace starrocks {
 struct TypeDescriptor;
 
-class ExecEnv;
+struct RuntimeServices;
+struct RpcServices;
 class RuntimeState;
 
 class RuntimeFilter;
@@ -121,7 +122,8 @@ public:
 // and sent merged RF to consumer nodes.
 class RuntimeFilterMerger {
 public:
-    RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
+    RuntimeFilterMerger(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
+                        const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
     Status init(const TRuntimeFilterParams& params);
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params);
     void store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params);
@@ -131,7 +133,8 @@ private:
     // filter_id -> where this filter should send to
     std::map<int32_t, std::vector<TRuntimeFilterProberParams>> _targets;
     std::map<int32_t, RuntimeFilterMergerStatus> _statuses;
-    ExecEnv* _exec_env;
+    const RuntimeServices* _runtime_services;
+    const RpcServices* _rpc_services;
     UniqueId _query_id;
     TQueryOptions _query_options;
     const bool _is_pipeline;
@@ -218,7 +221,7 @@ struct RuntimeFilterWorkerMetrics {
 
 class RuntimeFilterWorker {
 public:
-    RuntimeFilterWorker(ExecEnv* env);
+    RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services);
     ~RuntimeFilterWorker();
     void close();
     // open query for creating runtime filter merger.
@@ -260,7 +263,8 @@ private:
 
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
-    ExecEnv* _exec_env;
+    const RuntimeServices* _runtime_services;
+    const RpcServices* _rpc_services;
     std::thread _thread;
     RuntimeFilterWorkerMetrics* _metrics = nullptr;
 };

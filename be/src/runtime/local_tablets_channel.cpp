@@ -36,7 +36,6 @@
 #include "gutil/strings/join.h"
 #include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "runtime/load_channel.h"
@@ -66,9 +65,11 @@ DEFINE_FAIL_POINT(tablets_channel_abort_replica_failure);
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
 LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                         MemTracker* mem_tracker, RuntimeProfile* parent_profile)
+                                         MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                         BrpcStubCache* brpc_stub_cache)
         : TabletsChannel(),
           _load_channel(load_channel),
+          _brpc_stub_cache(brpc_stub_cache),
           _key(key),
           _mem_tracker(mem_tracker),
           _max_sliding_window_size(config::max_load_dop * 3),
@@ -424,7 +425,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             int64_t elapsed_ms = static_cast<int64_t>(watch.elapsed_time() / NANOSECS_PER_MILLIS);
             int64_t left_timeout_ms = std::max<int64_t>(0, request.timeout_ms() - elapsed_ms);
             SecondaryReplicasWaiter waiter(request.id(), _txn_id, request.sink_id(), left_timeout_ms, start_wait_time,
-                                           delta_writers);
+                                           delta_writers, _brpc_stub_cache);
             Status status = waiter.wait();
             if (status.is_time_out()) {
                 break;
@@ -623,7 +624,7 @@ void LocalTabletsChannel::_abort_replica_tablets(
             continue;
         });
 
-        auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(endpoint.host(), endpoint.port());
+        auto stub = _brpc_stub_cache->get_stub(endpoint.host(), endpoint.port());
         if (stub == nullptr) {
             auto msg =
                     fmt::format("Failed to Connect node {} {}:{} failed.", node_id, endpoint.host(), endpoint.port());
@@ -1236,20 +1237,22 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
 }
 
 std::shared_ptr<LocalTabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
-                                                               MemTracker* mem_tracker,
-                                                               RuntimeProfile* parent_profile) {
-    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile);
+                                                               MemTracker* mem_tracker, RuntimeProfile* parent_profile,
+                                                               BrpcStubCache* brpc_stub_cache) {
+    return std::make_shared<LocalTabletsChannel>(load_channel, key, mem_tracker, parent_profile, brpc_stub_cache);
 }
 
 SecondaryReplicasWaiter::SecondaryReplicasWaiter(PUniqueId load_id, int64_t txn_id, int64_t sink_id, int64_t timeout_ms,
-                                                 int64_t eos_time_ms, std::vector<AsyncDeltaWriter*> delta_writers)
+                                                 int64_t eos_time_ms, std::vector<AsyncDeltaWriter*> delta_writers,
+                                                 BrpcStubCache* brpc_stub_cache)
         : _load_id(std::move(load_id)),
           _txn_id(txn_id),
           _sink_id(sink_id),
           _timeout_ns(std::max((int64_t)0, timeout_ms) * NANOSECS_PER_MILLIS),
           _delta_writers(std::move(delta_writers)),
           _eos_time_ms(eos_time_ms),
-          _last_get_replica_status_time_ms(eos_time_ms) {}
+          _last_get_replica_status_time_ms(eos_time_ms),
+          _brpc_stub_cache(brpc_stub_cache) {}
 
 SecondaryReplicasWaiter::~SecondaryReplicasWaiter() {
     _release_replica_status_closure();
@@ -1317,7 +1320,7 @@ void SecondaryReplicasWaiter::_try_check_replica_status_on_primary(int unfinishe
 void SecondaryReplicasWaiter::_send_replica_status_request(int unfinished_tablet_start_index) {
     auto delta_writer = _delta_writers[unfinished_tablet_start_index];
     auto& primary_replica = delta_writer->writer()->replicas()[0];
-    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+    auto stub = _brpc_stub_cache->get_stub(primary_replica.host(), primary_replica.port());
     if (stub == nullptr) {
         _replica_status_fail_num += 1;
         _last_get_replica_status_time_ms = MonotonicMillis();
@@ -1429,7 +1432,7 @@ void SecondaryReplicasWaiter::_try_diagnose_stack_strace_on_primary(int unfinish
     _diagnose_triggered = true;
     auto delta_writer = _delta_writers[unfinished_tablet_start_index];
     auto& primary_replica = delta_writer->replicas()[0];
-    auto stub = ExecEnv::GetInstance()->brpc_stub_cache()->get_stub(primary_replica.host(), primary_replica.port());
+    auto stub = _brpc_stub_cache->get_stub(primary_replica.host(), primary_replica.port());
     if (stub == nullptr) {
         LOG(WARNING) << "failed to get stub to diagnose primary replica, txn_id: " << _txn_id
                      << ", load_id: " << print_id(_load_id) << ", primary_replica: [" << primary_replica.host() << ":"

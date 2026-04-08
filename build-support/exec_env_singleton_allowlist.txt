@@ -21,7 +21,6 @@ src/exec/pipeline/pipeline_driver_poller.cpp
 src/exec/pipeline/pipeline_driver_queue.cpp
 src/exec/pipeline/query_context.cpp
 src/exec/pipeline/sink/sink_io_buffer.cpp
-src/exec/query_cache/cache_operator.cpp
 src/exec/schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
 src/exec/schema_scanner/schema_be_tablets_scanner.cpp
 src/exec/spill/query_spill_manager.cpp
@@ -33,10 +32,8 @@ src/runtime/exec_env.cpp
 src/runtime/fragment_mgr.cpp
 src/runtime/hive_table_sink.cpp
 src/runtime/iceberg_table_sink.cpp
-src/runtime/load_channel.cpp
-src/runtime/local_tablets_channel.cpp
+src/runtime/load_channel_mgr.cpp
 src/runtime/logconfig.cpp
-src/runtime/runtime_filter_worker.cpp
 src/runtime/schema_table_sink.cpp
 src/runtime/table_function_table_sink.cpp
 src/script/script.cpp
@@ -53,7 +50,6 @@ src/storage/lake/metacache.cpp
 src/storage/lake/rowset.cpp
 src/storage/lake/tablet_reader.cpp
 src/storage/lake/transactions.cpp
-src/storage/lake/txn_log_applier.cpp
 src/storage/lake/update_manager.cpp
 src/storage/lake/vacuum.cpp
 src/storage/lake/vertical_compaction_task.cpp

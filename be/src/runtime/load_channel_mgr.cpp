@@ -46,6 +46,7 @@
 #include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/closure_guard.h"
+#include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/starrocks_metrics.h"
@@ -212,9 +213,10 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
             int64_t job_timeout_s = calc_job_timeout_s(timeout_in_req_s);
             auto job_mem_tracker = std::make_unique<MemTracker>(job_max_memory, load_id.to_string(), _mem_tracker);
 
-            channel = std::make_shared<LoadChannel>(this, _lake_tablet_manager, load_id, txn_id,
-                                                    request.txn_trace_parent(), job_timeout_s,
-                                                    std::move(job_mem_tracker));
+            auto* exec_env = ExecEnv::GetInstance();
+            channel = std::make_shared<LoadChannel>(
+                    this, _lake_tablet_manager, exec_env->diagnose_daemon(), exec_env->brpc_stub_cache(), load_id,
+                    txn_id, request.txn_trace_parent(), job_timeout_s, std::move(job_mem_tracker));
             if (request.has_load_channel_profile_config()) {
                 channel->set_profile_config(request.load_channel_profile_config());
             }

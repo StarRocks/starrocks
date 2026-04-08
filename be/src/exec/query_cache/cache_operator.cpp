@@ -22,7 +22,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_driver.h"
-#include "runtime/exec_env.h"
+#include "runtime/service_contexts.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/base_rowset.h"
@@ -170,6 +170,13 @@ static inline Chunks remap_chunks(const Chunks& chunks, const SlotRemapping& slo
 }
 Status CacheOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
+    if (_cache_param.is_lake) {
+        const auto* query_execution_services = state->query_execution_services();
+        _lake_tablet_manager = query_execution_services != nullptr && query_execution_services->lake != nullptr
+                                       ? query_execution_services->lake->lake_tablet_manager
+                                       : nullptr;
+        RETURN_IF(_lake_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
+    }
     _push_chunk_num_counter = ADD_COUNTER(_unique_metrics, "PushChunkNum", TUnit::UNIT);
     _cache_probe_timer = ADD_TIMER(_unique_metrics, "CacheProbeTime");
     _cache_probe_chunks_counter = ADD_COUNTER(_unique_metrics, "CacheProbeChunkNum", TUnit::UNIT);
@@ -260,8 +267,8 @@ void CacheOperator::_handle_stale_cache_value_for_non_pk(int64_t tablet_id, Cach
         rowsets_acq_rel = std::move(acq_rel);
 
     } else {
-        auto status = ExecEnv::GetInstance()->lake_tablet_manager()->capture_tablet_and_rowsets(
-                tablet_id, cache_value.version + 1, version);
+        DCHECK(_lake_tablet_manager != nullptr);
+        auto status = _lake_tablet_manager->capture_tablet_and_rowsets(tablet_id, cache_value.version + 1, version);
         // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
         if (!status.ok()) {
             buffer->state = PLBS_MISS;
@@ -354,8 +361,8 @@ void CacheOperator::_handle_stale_cache_value_for_pk(int64_t tablet_id, starrock
         }
 
     } else {
-        auto status = ExecEnv::GetInstance()->lake_tablet_manager()->capture_tablet_and_rowsets(
-                tablet_id, cache_value.version + 1, version);
+        DCHECK(_lake_tablet_manager != nullptr);
+        auto status = _lake_tablet_manager->capture_tablet_and_rowsets(tablet_id, cache_value.version + 1, version);
         // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
         if (!status.ok()) {
             buffer->state = PLBS_MISS;
