@@ -442,6 +442,10 @@
                 },
                 {
                     "type": "doc",
+                    "id": "integrations/JDBC_driver"
+                },
+                {
+                    "type": "doc",
                     "id": "integrations/airflow"
                 },
                 {
