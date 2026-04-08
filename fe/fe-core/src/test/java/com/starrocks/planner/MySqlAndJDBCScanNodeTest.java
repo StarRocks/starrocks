@@ -195,35 +195,39 @@ public class MySqlAndJDBCScanNodeTest {
     }
 
     @Test
-    public void testOracleRewriteDateColumnWithNlsFallback() throws DdlException {
+    public void testOracleRewriteDateColumnAsDateLiteral() throws DdlException {
         Column dateColumn = new Column("date_col", DateType.DATE);
         SlotDescriptor dateSlot = createSlotDescriptor(1, dateColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("date_col", Types.DATE);
         JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(dateColumn),
-                Collections.singletonList(dateSlot));
+                Collections.singletonList(dateSlot), originalJdbcTypes);
         scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
-                new SlotRef("date_col", dateSlot), StringLiteral.create("2022-01-1")));
+                new SlotRef("date_col", dateSlot), StringLiteral.create("2022-01-01")));
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
-        Assertions.assertTrue(nodeString.contains("date_col = TO_DATE('2022-01-1')"), nodeString);
+        Assertions.assertTrue(nodeString.contains("date_col = date '2022-01-01'"), nodeString);
     }
 
     @Test
     public void testOracleRewriteDatetimeColumnWithMicroseconds() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
         SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
         JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot));
+                Collections.singletonList(datetimeSlot), originalJdbcTypes);
         scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
                 new SlotRef("ts_col", datetimeSlot), StringLiteral.create("2026-03-12 09:30:15.123456")));
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains(
-                        "ts_col = TO_TIMESTAMP('2026-03-12 09:30:15.123456', 'YYYY-MM-DD HH24:MI:SS.FF6')"),
+                        "ts_col = timestamp '2026-03-12 09:30:15.123456'"),
                 nodeString);
     }
 
     @Test
-    public void testOracleRewriteLiteralColumnPredicate() throws DdlException {
+    public void testOracleDoesNotRewriteLiteralColumnPredicate() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
         SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
         JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
@@ -233,7 +237,7 @@ public class MySqlAndJDBCScanNodeTest {
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains(
-                        "TO_TIMESTAMP('2026-03-12 09:30:15', 'YYYY-MM-DD HH24:MI:SS') = ts_col"),
+                        "'2026-03-12 09:30:15' = ts_col"),
                 nodeString);
     }
 
@@ -241,8 +245,10 @@ public class MySqlAndJDBCScanNodeTest {
     public void testOracleRewriteBetweenPredicate() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
         SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
         JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot));
+                Collections.singletonList(datetimeSlot), originalJdbcTypes);
         scanNode.getConjuncts().add(new BetweenPredicate(
                 new SlotRef("ts_col", datetimeSlot),
                 StringLiteral.create("2026-03-12 00:00:00"),
@@ -251,8 +257,27 @@ public class MySqlAndJDBCScanNodeTest {
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains(
-                        "ts_col BETWEEN TO_TIMESTAMP('2026-03-12 00:00:00', 'YYYY-MM-DD HH24:MI:SS') " +
-                                "AND TO_TIMESTAMP('2026-03-13 00:00:00', 'YYYY-MM-DD HH24:MI:SS')"),
+                        "ts_col BETWEEN timestamp '2026-03-12 00:00:00' AND timestamp '2026-03-13 00:00:00'"),
+                nodeString);
+    }
+
+    @Test
+    public void testOracleRewriteInPredicate() throws DdlException {
+        Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
+        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
+        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
+                Collections.singletonList(datetimeSlot), originalJdbcTypes);
+        scanNode.getConjuncts().add(new InPredicate(
+                new SlotRef("ts_col", datetimeSlot),
+                Lists.newArrayList(StringLiteral.create("2026-03-12 09:30:15"),
+                        StringLiteral.create("2026-03-13 09:30:15")),
+                false));
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains(
+                        "ts_col IN (timestamp '2026-03-12 09:30:15', timestamp '2026-03-13 09:30:15')"),
                 nodeString);
     }
 
@@ -270,7 +295,7 @@ public class MySqlAndJDBCScanNodeTest {
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains(
-                        "ts_col = TO_TIMESTAMP('2026-03-12 09:30:15', 'YYYY-MM-DD HH24:MI:SS')"),
+                        "ts_col = timestamp '2026-03-12 09:30:15'"),
                 nodeString);
     }
 
@@ -288,7 +313,25 @@ public class MySqlAndJDBCScanNodeTest {
         scanNode.computeColumnsAndFilters();
         String nodeString = scanNode.getExplainString();
         Assertions.assertTrue(nodeString.contains(
-                        "date_col = TO_DATE('2026-03-12', 'YYYY-MM-DD')"),
+                        "date_col = date '2026-03-12'"),
+                nodeString);
+    }
+
+    @Test
+    public void testOracleOriginalJdbcDateTypeOverridesSlotType() throws DdlException {
+        // Slot is DATETIME but original JDBC type is DATE: should still use TO_DATE.
+        Column datetimeColumn = new Column("date_col", DateType.DATETIME);
+        SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("date_col", Types.DATE);
+        JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
+                Collections.singletonList(datetimeSlot), originalJdbcTypes);
+        scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.EQ,
+                new SlotRef("date_col", datetimeSlot), StringLiteral.create("2026-03-12")));
+        scanNode.computeColumnsAndFilters();
+        String nodeString = scanNode.getExplainString();
+        Assertions.assertTrue(nodeString.contains(
+                        "date_col = date '2026-03-12'"),
                 nodeString);
     }
 
@@ -311,8 +354,10 @@ public class MySqlAndJDBCScanNodeTest {
     public void testOracleRewriteFilterInThriftPayload() throws DdlException {
         Column datetimeColumn = new Column("ts_col", DateType.DATETIME);
         SlotDescriptor datetimeSlot = createSlotDescriptor(1, datetimeColumn);
+        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+        originalJdbcTypes.put("ts_col", Types.TIMESTAMP);
         JDBCScanNode scanNode = createOracleScanNode(Collections.singletonList(datetimeColumn),
-                Collections.singletonList(datetimeSlot));
+                Collections.singletonList(datetimeSlot), originalJdbcTypes);
         scanNode.getConjuncts().add(new BinaryPredicate(BinaryType.GE,
                 new SlotRef("ts_col", datetimeSlot), StringLiteral.create("2026-03-12 09:30:15")));
         scanNode.computeColumnsAndFilters();
@@ -322,7 +367,7 @@ public class MySqlAndJDBCScanNodeTest {
         Assertions.assertTrue(planNode.isSetJdbc_scan_node());
         Assertions.assertEquals(1, planNode.getJdbc_scan_node().getFiltersSize());
         Assertions.assertTrue(planNode.getJdbc_scan_node().getFilters().get(0)
-                .contains("ts_col >= TO_TIMESTAMP('2026-03-12 09:30:15', 'YYYY-MM-DD HH24:MI:SS')"));
+                .contains("ts_col >= timestamp '2026-03-12 09:30:15'"));
     }
 
     @Test
