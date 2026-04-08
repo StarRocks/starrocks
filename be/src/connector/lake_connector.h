@@ -14,6 +14,11 @@
 
 #pragma once
 
+#include <mutex>
+#include <optional>
+#include <unordered_set>
+#include <vector>
+
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/conjunctive_predicates.h"
@@ -51,6 +56,39 @@ public:
 };
 
 class LakeDataSourceProvider;
+struct PreparedSplitOpenState {
+    mutable std::mutex lock;
+    bool ready = false;
+    bool disabled = false;
+    bool predicate_trees_ready = false;
+    TabletSchemaCSPtr tablet_schema;
+    ColumnIdToGlobalDictMap global_dictmaps;
+    std::unordered_set<uint32_t> unused_output_column_ids;
+    std::vector<uint32_t> scanner_columns;
+    std::vector<uint32_t> reader_columns;
+    std::vector<SlotDescriptor*> query_slots;
+    std::vector<ExprContext*> not_push_down_conjuncts;
+    std::vector<std::unique_ptr<OlapScanRange>> key_ranges;
+    std::vector<OlapScanRange*> scanner_ranges;
+    Schema child_schema;
+    std::optional<Schema> output_schema;
+    ColumnPredicatePtrs predicate_free_pool;
+    ObjectPool predicate_obj_pool;
+    PredicateTree pushdown_pred_tree;
+    PredicateTree non_pushdown_pred_tree;
+    bool has_any_predicate = false;
+};
+struct ResolvedLakeTabletState {
+    lake::VersionedTablet tablet;
+    TabletSchemaCSPtr tablet_schema;
+    std::shared_ptr<PreparedSplitOpenState> prepared_split_open_state = std::make_shared<PreparedSplitOpenState>();
+};
+struct ReusableLakeTabletReaderState {
+    mutable std::mutex lock;
+    int64_t tablet_id = -1;
+    int64_t version = -1;
+    std::shared_ptr<lake::TabletReader> reader;
+};
 
 class LakeDataSource final : public DataSource {
 public:
@@ -84,9 +122,19 @@ private:
     Status init_unused_output_columns(const std::vector<std::string>& unused_output_columns);
     Status init_scanner_columns(std::vector<uint32_t>& scanner_columns, std::vector<uint32_t>& reader_columns);
     void decide_chunk_size(bool has_predicate);
-    Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges);
+    Status init_reader_params(const std::vector<OlapScanRange*>& key_ranges, PreparedSplitOpenState* prepared_state);
     Status init_tablet_reader(RuntimeState* state);
     Status build_scan_range(RuntimeState* state);
+    bool should_reuse_prepared_split_open_state() const;
+    bool should_reuse_split_tablet_reader() const;
+    Status _try_restore_prepared_split_open_state(const PreparedSplitOpenState& prepared,
+                                                  std::vector<uint32_t>* scanner_columns,
+                                                  std::vector<uint32_t>* reader_columns, Schema* child_schema,
+                                                  std::optional<Schema>* output_schema);
+    void _capture_prepared_split_open_state(PreparedSplitOpenState* prepared,
+                                            std::vector<uint32_t>* scanner_columns,
+                                            std::vector<uint32_t>* reader_columns, Schema* child_schema,
+                                            std::optional<Schema>* output_schema);
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
@@ -119,6 +167,7 @@ private:
     TabletSchemaCSPtr _tablet_schema;
     TabletReaderParams _params{};
     std::shared_ptr<lake::TabletReader> _reader;
+    std::shared_ptr<ResolvedLakeTabletState> _resolved_tablet_state;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
 
@@ -230,6 +279,23 @@ private:
 
 class LakeDataSourceProvider final : public DataSourceProvider {
 public:
+    struct ResolvedTabletKey {
+        int64_t tablet_id;
+        int64_t version;
+
+        bool operator==(const ResolvedTabletKey& rhs) const {
+            return tablet_id == rhs.tablet_id && version == rhs.version;
+        }
+    };
+
+    struct ResolvedTabletKeyHash {
+        size_t operator()(const ResolvedTabletKey& key) const {
+            size_t h1 = std::hash<int64_t>{}(key.tablet_id);
+            size_t h2 = std::hash<int64_t>{}(key.version);
+            return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
+        }
+    };
+
     friend class LakeDataSource;
     LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     ~LakeDataSourceProvider() override = default;
@@ -290,11 +356,20 @@ protected:
     int64_t splitted_scan_rows = 0;
 
 private:
+    StatusOr<std::shared_ptr<ResolvedLakeTabletState>> get_resolved_tablet(RuntimeState* state,
+                                                                           const TInternalScanRange& scan_range) const;
+    std::shared_ptr<ReusableLakeTabletReaderState> get_reusable_reader_state(size_t driver_sequence) const;
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
                                                    int32_t pipeline_dop, size_t num_total_scan_ranges,
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
+
+    mutable std::mutex _resolved_tablets_lock;
+    mutable std::unordered_map<ResolvedTabletKey, std::shared_ptr<ResolvedLakeTabletState>, ResolvedTabletKeyHash>
+            _resolved_tablets;
+    mutable std::mutex _reusable_readers_lock;
+    mutable std::unordered_map<size_t, std::shared_ptr<ReusableLakeTabletReaderState>> _reusable_readers;
 };
 
 } // namespace starrocks::connector

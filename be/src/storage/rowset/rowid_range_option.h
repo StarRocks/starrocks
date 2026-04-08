@@ -42,6 +42,9 @@ public:
     using SetgmentRowidRangeMap = std::unordered_map<uint64_t, SegmentSplit>;
     using RowsetRowidRangeMap = std::map<RowsetId, SetgmentRowidRangeMap>;
 
+    // True when the stored rowid ranges already fully materialize the original
+    // key ranges, so the SegmentIterator can skip re-applying key-range filtering.
+    bool key_ranges_materialized = false;
     RowsetRowidRangeMap rowid_range_per_segment_per_rowset;
 };
 

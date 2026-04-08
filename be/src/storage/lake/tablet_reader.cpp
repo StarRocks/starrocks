@@ -125,6 +125,17 @@ Status TabletReader::prepare() {
 }
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
+    if (_collect_iter != nullptr) {
+        _collect_iter->close();
+        _collect_iter.reset();
+    }
+    STLDeleteElements(&_predicate_free_list);
+    _delete_predicates = DeletePredicates();
+    _stats = OlapReaderStatistics();
+    _mempool.clear();
+    _obj_pool.clear();
+    _split_tasks.clear();
+
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
         read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
         read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
@@ -293,8 +304,13 @@ void TabletReader::close() {
         _collect_iter.reset();
     }
     STLDeleteElements(&_predicate_free_list);
-    _rowsets.clear();
     _obj_pool.clear();
+    _split_tasks.clear();
+    if (!_preserve_resources_on_close) {
+        _rowsets.clear();
+        _rowsets_inited = false;
+    }
+    _preserve_resources_on_close = false;
 }
 
 Status TabletReader::do_get_next(Chunk* chunk) {
@@ -373,6 +389,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
 
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+    rs_opts.skip_key_range_filter = params.skip_key_range_filter;
 
     rs_opts.column_access_paths = params.column_access_paths;
     rs_opts.has_preaggregation = true;

@@ -94,6 +94,7 @@ public:
     bool is_first_split_of_segment = true;
     SparseRangePtr rowid_range_option = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
+    bool skip_key_range_filter = false;
 
     RuntimeScanRangePruner runtime_range_pruner;
 

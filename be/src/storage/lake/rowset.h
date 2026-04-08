@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <mutex>
 #include <optional>
 #include <unordered_set>
 
@@ -166,6 +167,8 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
+    bool _copy_cached_segments(std::vector<SegmentPtr>* segments,
+                               const std::unordered_set<int>* skip_segment_idxs = nullptr);
     StatusOr<std::optional<SeekRange>> get_seek_range() const;
 
     TabletManager* _tablet_mgr;
@@ -175,6 +178,7 @@ private:
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    mutable std::mutex _segments_lock;
     bool _parallel_load;
     // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
     // default is 0 means every segment will be used.

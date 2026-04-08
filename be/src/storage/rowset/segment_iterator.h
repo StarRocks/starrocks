@@ -18,6 +18,10 @@
 #include <vector>
 
 #include "storage/chunk_iterator.h"
+#include "common/statusor.h"
+#include "storage/options.h"
+#include "storage/range.h"
+#include "storage/seek_range.h"
 
 namespace starrocks {
 class Segment;
@@ -28,5 +32,9 @@ class SegmentReadOptions;
 
 ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
                                       const SegmentReadOptions& options);
+
+StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_ptr<Segment>& segment,
+                                                             const std::vector<SeekRange>& ranges,
+                                                             const LakeIOOptions& lake_io_opts = {});
 
 } // namespace starrocks

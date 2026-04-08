@@ -905,6 +905,12 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
                           << ", split_tasks = " << split_tasks.size();
 
             std::vector<MorselPtr> split_morsels;
+            std::shared_ptr<const std::vector<BaseRowsetSharedPtr>> shared_rowsets;
+            if (!current_morsel->rowsets().empty()) {
+                shared_rowsets =
+                        std::make_shared<const std::vector<BaseRowsetSharedPtr>>(current_morsel->rowsets().begin(),
+                                                                                 current_morsel->rowsets().end());
+            }
 
             if (current_morsel->is_last_split()) {
                 split_tasks.back()->set_last_split(true);
@@ -913,6 +919,10 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             for (auto& t : split_tasks) {
                 std::unique_ptr<ScanMorsel> m = std::make_unique<ScanMorsel>(current_morsel->get_plan_node_id(),
                                                                              *current_morsel->get_scan_range());
+                m->set_from_version(current_morsel->from_version());
+                if (shared_rowsets != nullptr) {
+                    m->set_shared_rowsets(shared_rowsets);
+                }
                 m->set_split_context(std::move(t));
                 split_morsels.emplace_back(std::move(m));
             }

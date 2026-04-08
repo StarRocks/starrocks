@@ -364,7 +364,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 
     std::vector<SegmentPtr> segments;
     const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
-    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+    if (!_copy_cached_segments(&segments, skip_ptr)) {
+        RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+    }
 
     // Update segments_read_count after filtering
     if (options.stats) {
@@ -395,10 +397,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
             }
             seg_options.rowid_range_option = std::move(rowid_range);
             seg_options.is_first_split_of_segment = is_first_split_of_segment;
+            seg_options.skip_key_range_filter = options.skip_key_range_filter;
         } else if (options.short_key_ranges_option != nullptr) { // logical split.
             seg_options.is_first_split_of_segment = options.short_key_ranges_option->is_first_split_of_tablet;
+            seg_options.skip_key_range_filter = false;
         } else {
             seg_options.is_first_split_of_segment = true;
+            seg_options.skip_key_range_filter = false;
         }
 
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
@@ -425,7 +430,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 
 StatusOr<size_t> Rowset::get_read_iterator_num() {
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    if (!_copy_cached_segments(&segments)) {
+        RETURN_IF_ERROR(load_segments(&segments, false));
+    }
 
     size_t segment_num = 0;
     for (auto& seg_ptr : segments) {
@@ -446,7 +453,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
                                                                           OlapReaderStatistics* stats) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_us");
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
+    if (!_copy_cached_segments(&segments)) {
+        RETURN_IF_ERROR(load_segments(&segments, file_data_cache));
+    }
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
@@ -480,7 +489,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
         const std::vector<SparseRangePtr>* rowid_range_per_segment) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_iterator_with_delvec_us");
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments, false));
+    if (!_copy_cached_segments(&segments)) {
+        RETURN_IF_ERROR(load_segments(&segments, false));
+    }
     auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
     std::vector<ChunkIteratorPtr> seg_iterators;
     seg_iterators.reserve(segments.size());
@@ -531,16 +542,24 @@ RowsetId Rowset::rowset_id() const {
 }
 
 std::vector<SegmentSharedPtr> Rowset::get_segments() {
-    if (!_segments.empty()) {
-        return _segments;
+    {
+        std::lock_guard<std::mutex> l(_segments_lock);
+        if (!_segments.empty()) {
+            return _segments;
+        }
     }
 
     auto segments_or = segments(true);
     if (!segments_or.ok()) {
         return {};
     }
-    _segments = std::move(segments_or.value());
-    return _segments;
+    {
+        std::lock_guard<std::mutex> l(_segments_lock);
+        if (_segments.empty()) {
+            _segments = std::move(segments_or.value());
+        }
+        return _segments;
+    }
 }
 
 StatusOr<std::vector<SegmentPtr>> Rowset::segments(bool fill_cache) {
@@ -562,6 +581,23 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache,
     seg_options.lake_io_opts.fill_metadata_cache = fill_cache;
     seg_options.lake_io_opts.buffer_size = buffer_size;
     return load_segments(segments, seg_options, nullptr);
+}
+
+bool Rowset::_copy_cached_segments(std::vector<SegmentPtr>* segments, const std::unordered_set<int>* skip_segment_idxs) {
+    std::lock_guard<std::mutex> l(_segments_lock);
+    if (_segments.empty()) {
+        return false;
+    }
+
+    segments->reserve(segments->size() + _segments.size());
+    for (size_t i = 0; i < _segments.size(); ++i) {
+        if (skip_segment_idxs != nullptr && skip_segment_idxs->count(i) > 0) {
+            segments->emplace_back(nullptr);
+        } else {
+            segments->emplace_back(_segments[i]);
+        }
+    }
+    return true;
 }
 
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,

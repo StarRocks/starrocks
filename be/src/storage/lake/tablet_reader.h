@@ -76,6 +76,8 @@ public:
     // Precondition: the last method called must have been `prepare()`.
     Status open(const TabletReaderParams& read_params);
 
+    void set_preserve_resources_on_close(bool preserve) { _preserve_resources_on_close = preserve; }
+
     void close() override;
 
     const OlapReaderStatistics& stats() const { return _stats; }
@@ -151,6 +153,7 @@ private:
     bool _need_split = false;
     bool _could_split_physically = false;
     std::vector<pipeline::ScanSplitContextPtr> _split_tasks;
+    bool _preserve_resources_on_close = false;
 };
 
 } // namespace lake

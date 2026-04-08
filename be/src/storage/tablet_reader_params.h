@@ -88,6 +88,7 @@ struct TabletReaderParams {
 
     RowidRangeOptionPtr rowid_range_option = nullptr;
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
+    bool skip_key_range_filter = false;
 
     bool sorted_by_keys_per_tablet = false;
     RuntimeScanRangePruner runtime_range_pruner;
