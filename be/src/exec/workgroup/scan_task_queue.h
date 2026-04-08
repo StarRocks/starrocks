@@ -155,6 +155,8 @@ public:
     void close() override { _queue.shutdown(); }
 
     StatusOr<ScanTask> take() override;
+    // Non-blocking variant: returns false if empty.
+    bool try_take(ScanTask* task);
     bool try_offer(ScanTask task) override;
     void force_put(ScanTask task) override;
 

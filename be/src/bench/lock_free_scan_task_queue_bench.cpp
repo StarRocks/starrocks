@@ -31,7 +31,7 @@ static ScanTask make_bench_task(int priority) {
 }
 
 static void BM_ThreadArgs(benchmark::internal::Benchmark* b) {
-    for (int threads : {1, 2, 4, 8, 16, 32, 64}) {
+    for (int threads : {1, 2, 4, 8, 16, 32}) {
         b->Arg(threads);
     }
 }
@@ -131,9 +131,9 @@ static void BM_PriorityScanTaskQueue_SustainedMixed(benchmark::State& state) {
                 }
                 int64_t ops = 0;
                 for (int i = 0; i < OPS_PER_THREAD; ++i) {
-                    auto result = queue.take();
-                    if (result.ok()) {
-                        queue.force_put(std::move(result).value());
+                    ScanTask task;
+                    if (queue.try_take(&task)) {
+                        queue.force_put(std::move(task));
                         ++ops;
                     } else {
                         ++local_fail_ops[t];
@@ -297,23 +297,13 @@ static void BM_PriorityScanTaskQueue_DequeueOnly(benchmark::State& state) {
                 while (!start.load(std::memory_order_acquire)) {
                     std::this_thread::yield();
                 }
-                while (true) {
-                    auto r = queue.take();
-                    if (!r.ok()) break;
+                ScanTask task;
+                while (queue.try_take(&task)) {
                 }
             });
         }
         state.ResumeTiming();
         start.store(true, std::memory_order_release);
-
-        // PriorityScanTaskQueue::take() blocks when empty.
-        // Close the queue so blocked threads wake up and exit.
-        while (queue.size() > 0) {
-            std::this_thread::yield();
-        }
-        state.PauseTiming();
-        queue.close();
-        state.ResumeTiming();
 
         for (auto& th : threads) th.join();
     }

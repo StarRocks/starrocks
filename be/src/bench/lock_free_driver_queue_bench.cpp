@@ -42,8 +42,15 @@ static std::vector<PipelineDriver*> make_simple_drivers(int count, int level_str
     return drivers;
 }
 
+static void free_drivers(std::vector<PipelineDriver*>& drivers) {
+    for (auto* d : drivers) {
+        delete d;
+    }
+    drivers.clear();
+}
+
 static void BM_ThreadArgs(benchmark::internal::Benchmark* b) {
-    for (int threads : {1, 2, 4, 8, 16, 32, 64}) {
+    for (int threads : {1, 2, 4, 8, 16, 32}) {
         b->Arg(threads);
     }
 }
@@ -122,6 +129,7 @@ static void BM_LockFreeDriverQueue_SustainedMixed(benchmark::State& state) {
     }
     state.SetItemsProcessed(cumulative_ops);
     state.counters["fail_ops"] = benchmark::Counter(cumulative_failed_ops);
+    free_drivers(drivers);
 }
 
 BENCHMARK(BM_LockFreeDriverQueue_SustainedMixed)->Apply(BM_ThreadArgs)->UseRealTime();
@@ -183,6 +191,7 @@ static void BM_QuerySharedDriverQueue_SustainedMixed(benchmark::State& state) {
     }
     state.SetItemsProcessed(cumulative_ops);
     state.counters["fail_ops"] = benchmark::Counter(cumulative_failed_ops);
+    free_drivers(drivers);
 }
 
 BENCHMARK(BM_QuerySharedDriverQueue_SustainedMixed)->Apply(BM_ThreadArgs)->UseRealTime();
@@ -231,6 +240,7 @@ static void BM_LockFreeDriverQueue_EnqueueOnly(benchmark::State& state) {
     }
 
     state.SetItemsProcessed(state.iterations() * num_threads * OPS_PER_THREAD);
+    for (auto& v : all_drivers) free_drivers(v);
 }
 
 BENCHMARK(BM_LockFreeDriverQueue_EnqueueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
@@ -278,6 +288,7 @@ static void BM_QuerySharedDriverQueue_EnqueueOnly(benchmark::State& state) {
     }
 
     state.SetItemsProcessed(state.iterations() * num_threads * OPS_PER_THREAD);
+    for (auto& v : all_drivers) free_drivers(v);
 }
 
 BENCHMARK(BM_QuerySharedDriverQueue_EnqueueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
@@ -327,6 +338,7 @@ static void BM_LockFreeDriverQueue_DequeueOnly(benchmark::State& state) {
     }
 
     state.SetItemsProcessed(state.iterations() * total_ops);
+    free_drivers(drivers);
 }
 
 BENCHMARK(BM_LockFreeDriverQueue_DequeueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
@@ -375,6 +387,7 @@ static void BM_QuerySharedDriverQueue_DequeueOnly(benchmark::State& state) {
     }
 
     state.SetItemsProcessed(state.iterations() * total_ops);
+    free_drivers(drivers);
 }
 
 BENCHMARK(BM_QuerySharedDriverQueue_DequeueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
