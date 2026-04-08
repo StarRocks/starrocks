@@ -24,15 +24,8 @@ namespace starrocks::workgroup {
 LockFreeWorkGroupScanTaskQueue::LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers)
         : _sched_entity_type(sched_entity_type), _num_workers(num_workers) {}
 
-bool LockFreeWorkGroupScanTaskQueue::try_offer(ScanTask task, int worker_id) {
-    auto* wg_queue = _get_or_create_wg_queue(task.workgroup.get());
-    wg_queue->try_offer(std::move(task), worker_id);
-    _num_tasks.fetch_add(1, std::memory_order_relaxed);
-    _sema.signal();
-    return true;
-}
-
 bool LockFreeWorkGroupScanTaskQueue::try_offer(ScanTask task) {
+    _set_wg_in_queue(task);
     auto* wg_queue = _get_or_create_wg_queue(task.workgroup.get());
     wg_queue->try_offer(std::move(task));
     _num_tasks.fetch_add(1, std::memory_order_relaxed);
@@ -40,38 +33,30 @@ bool LockFreeWorkGroupScanTaskQueue::try_offer(ScanTask task) {
     return true;
 }
 
-void LockFreeWorkGroupScanTaskQueue::force_put(ScanTask task, int worker_id) {
-    auto* wg_queue = _get_or_create_wg_queue(task.workgroup.get());
-    wg_queue->force_put(std::move(task), worker_id);
-    _num_tasks.fetch_add(1, std::memory_order_relaxed);
-    _sema.signal();
-}
-
 void LockFreeWorkGroupScanTaskQueue::force_put(ScanTask task) {
+    _set_wg_in_queue(task);
     auto* wg_queue = _get_or_create_wg_queue(task.workgroup.get());
     wg_queue->force_put(std::move(task));
     _num_tasks.fetch_add(1, std::memory_order_relaxed);
     _sema.signal();
 }
 
-bool LockFreeWorkGroupScanTaskQueue::take(ScanTask& task, bool blocking) {
+StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take() {
     while (true) {
         if (_closed.load(std::memory_order_acquire)) {
-            return false;
+            return Status::Cancelled("Shutdown");
         }
 
         // Try ALL workgroups in ascending vruntime order before blocking.
         auto candidates = _pick_sorted_wgs();
         for (auto& [vruntime, wg_queue] : candidates) {
+            ScanTask task;
             if (wg_queue->try_take(task)) {
                 _num_tasks.fetch_sub(1, std::memory_order_relaxed);
-                return true;
+                return std::move(task);
             }
         }
 
-        if (!blocking) {
-            return false;
-        }
         _sema.wait();
     }
 }
@@ -166,6 +151,13 @@ const WorkGroupScanSchedEntity* LockFreeWorkGroupScanTaskQueue::_sched_entity(co
         return wg->connector_scan_sched_entity();
     }
     return wg->scan_sched_entity();
+}
+
+void LockFreeWorkGroupScanTaskQueue::_set_wg_in_queue(const ScanTask& task) {
+    if (task.workgroup) {
+        auto* entity = const_cast<WorkGroupScanSchedEntity*>(_sched_entity(task.workgroup.get()));
+        entity->set_in_queue(this);
+    }
 }
 
 } // namespace starrocks::workgroup

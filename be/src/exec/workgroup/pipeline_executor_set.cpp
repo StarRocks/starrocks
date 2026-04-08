@@ -20,7 +20,7 @@
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_metrics.h"
-#include "exec/workgroup/lock_free_scan_task_queue_adapter.h"
+#include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 
@@ -117,7 +117,7 @@ Status PipelineExecutorSet::start() {
     _scan_executor = std::make_unique<ScanExecutor>(
             std::move(scan_thread_pool),
             config::enable_lock_free_queue
-                    ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeScanTaskQueueAdapter>(
+                    ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeWorkGroupScanTaskQueue>(
                               ScanSchedEntityType::OLAP, num_scan_threads()))
                     : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::OLAP),
             _conf.metrics->get_scan_executor_metrics());
@@ -135,7 +135,7 @@ Status PipelineExecutorSet::start() {
     _connector_scan_executor = std::make_unique<ScanExecutor>(
             std::move(connector_scan_thread_pool),
             config::enable_lock_free_queue
-                    ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeScanTaskQueueAdapter>(
+                    ? std::unique_ptr<ScanTaskQueue>(std::make_unique<LockFreeWorkGroupScanTaskQueue>(
                               ScanSchedEntityType::CONNECTOR, num_connector_scan_threads()))
                     : std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::CONNECTOR),
             _conf.metrics->get_connector_scan_executor_metrics());

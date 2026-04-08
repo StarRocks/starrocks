@@ -22,7 +22,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/master_info.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/lock_free_driver_queue_adapter.h"
+#include "exec/pipeline/lock_free_work_group_driver_queue.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/schedule/event_scheduler.h"
@@ -44,7 +44,7 @@ DEFINE_FAIL_POINT(report_exec_state_failed_status);
 static std::unique_ptr<DriverQueue> create_driver_queue(bool enable_resource_group, DriverQueueMetrics* queue_metrics,
                                                         int num_workers) {
     if (enable_resource_group && config::enable_lock_free_queue) {
-        return std::make_unique<LockFreeDriverQueueAdapter>(queue_metrics, num_workers);
+        return std::make_unique<LockFreeWorkGroupDriverQueue>(queue_metrics, num_workers);
     } else if (enable_resource_group) {
         return std::make_unique<WorkGroupDriverQueue>(queue_metrics);
     } else {

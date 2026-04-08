@@ -14,50 +14,46 @@
 
 #pragma once
 
-#include <algorithm>
 #include <atomic>
-#include <cassert>
 #include <memory>
 #include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
-#include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "base/concurrency/moodycamel/lightweightsemaphore.h"
 #include "exec/workgroup/lock_free_scan_task_queue.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks::workgroup {
 
-/// LockFreeWorkGroupScanTaskQueue is the cross-workgroup composition layer for scan tasks.
-/// Same pattern as LockFreeWorkGroupDriverQueue but adapted for ScanTask.
+/// LockFreeWorkGroupScanTaskQueue implements the ScanTaskQueue interface using
+/// lock-free per-workgroup queues. Same pattern as LockFreeWorkGroupDriverQueue
+/// but adapted for ScanTask.
 /// No cancel mechanism — scan tasks handle cancellation at execution level.
-class LockFreeWorkGroupScanTaskQueue {
+class LockFreeWorkGroupScanTaskQueue : public ScanTaskQueue {
 public:
     LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers);
-    ~LockFreeWorkGroupScanTaskQueue() = default;
+    ~LockFreeWorkGroupScanTaskQueue() override = default;
 
     LockFreeWorkGroupScanTaskQueue(const LockFreeWorkGroupScanTaskQueue&) = delete;
     LockFreeWorkGroupScanTaskQueue& operator=(const LockFreeWorkGroupScanTaskQueue&) = delete;
 
-    bool try_offer(ScanTask task, int worker_id);
-    bool try_offer(ScanTask task);
-    void force_put(ScanTask task, int worker_id);
-    void force_put(ScanTask task);
+    void close() override;
 
-    /// Tries ALL workgroups in ascending vruntime order before blocking.
-    bool take(ScanTask& task, bool blocking);
+    StatusOr<ScanTask> take() override;
+    bool try_offer(ScanTask task) override;
+    void force_put(ScanTask task) override;
 
-    void update_statistics(ScanTask& task, int64_t runtime_ns);
+    size_t size() const override;
 
-    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const;
-
-    ScanSchedEntityType sched_entity_type() const { return _sched_entity_type; }
-    void close();
-    size_t size() const;
+    void update_statistics(ScanTask& task, int64_t runtime_ns) override;
+    bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
 
 private:
     using CandidateList = std::vector<std::pair<int64_t, LockFreeScanTaskQueue*>>;
+
+    void _set_wg_in_queue(const ScanTask& task);
 
     LockFreeScanTaskQueue* _get_or_create_wg_queue(WorkGroup* wg);
     CandidateList _pick_sorted_wgs();

@@ -27,12 +27,15 @@
 #include "base/phmap/phmap.h"
 #include "exec/pipeline/lock_free_driver_queue.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_queue.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks::pipeline {
 
-/// LockFreeWorkGroupDriverQueue is the cross-workgroup composition layer.
-/// It manages per-workgroup LockFreeDriverQueue instances and provides:
+/// LockFreeWorkGroupDriverQueue implements the DriverQueue interface using
+/// lock-free per-workgroup queues. It manages per-workgroup LockFreeDriverQueue
+/// instances and provides:
 ///   - Workgroup selection by scanning vruntimes (sorted candidate list)
 ///   - Blocking via LightweightSemaphore
 ///   - Cancel via phmap::parallel_flat_hash_set
@@ -40,32 +43,34 @@ namespace starrocks::pipeline {
 /// The wg_queues map uses a shared_mutex for read-heavy access: lookups
 /// are concurrent (shared lock), creation is exclusive. The hot path (take)
 /// takes a single shared lock snapshot, then operates lock-free.
-class LockFreeWorkGroupDriverQueue {
+class LockFreeWorkGroupDriverQueue : public DriverQueue {
 public:
-    explicit LockFreeWorkGroupDriverQueue(int num_workers);
-    ~LockFreeWorkGroupDriverQueue() = default;
+    LockFreeWorkGroupDriverQueue(DriverQueueMetrics* metrics, int num_workers);
+    ~LockFreeWorkGroupDriverQueue() override = default;
 
     LockFreeWorkGroupDriverQueue(const LockFreeWorkGroupDriverQueue&) = delete;
     LockFreeWorkGroupDriverQueue& operator=(const LockFreeWorkGroupDriverQueue&) = delete;
 
-    void put_back(DriverRawPtr driver, int worker_id);
-    void put_back(DriverRawPtr driver);
+    void close() override;
 
-    /// Dequeue. Tries ALL workgroups in ascending vruntime order before blocking.
-    bool take(DriverRawPtr& driver, bool blocking);
+    void put_back(const DriverRawPtr driver) override;
+    void put_back(const std::vector<DriverRawPtr>& drivers) override;
+    void put_back_from_executor(const DriverRawPtr driver) override;
 
-    void cancel(DriverRawPtr driver);
+    StatusOr<DriverRawPtr> take(const bool block) override;
 
-    void update_statistics(const DriverRawPtr driver);
+    void cancel(DriverRawPtr driver) override;
 
-    void close();
+    void update_statistics(const DriverRawPtr driver) override;
 
-    size_t size() const;
+    size_t size() const override;
 
-    bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const;
+    bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const override;
 
 private:
     using CandidateList = std::vector<std::pair<int64_t, LockFreeDriverQueue*>>;
+
+    void _enqueue_driver(const DriverRawPtr driver);
 
     LockFreeDriverQueue* _get_or_create_wg_queue(workgroup::WorkGroup* wg);
 

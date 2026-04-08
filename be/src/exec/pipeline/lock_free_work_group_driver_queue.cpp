@@ -21,43 +21,52 @@
 
 namespace starrocks::pipeline {
 
-LockFreeWorkGroupDriverQueue::LockFreeWorkGroupDriverQueue(int num_workers) : _num_workers(num_workers) {}
+LockFreeWorkGroupDriverQueue::LockFreeWorkGroupDriverQueue(DriverQueueMetrics* metrics, int num_workers)
+        : DriverQueue(metrics), _num_workers(num_workers) {}
 
-void LockFreeWorkGroupDriverQueue::put_back(DriverRawPtr driver, int worker_id) {
-    auto* wg_queue = _get_or_create_wg_queue(driver->workgroup());
-    wg_queue->put_back(driver, worker_id);
-    _num_drivers.fetch_add(1, std::memory_order_relaxed);
-    _sema.signal();
-}
-
-void LockFreeWorkGroupDriverQueue::put_back(DriverRawPtr driver) {
+void LockFreeWorkGroupDriverQueue::put_back(const DriverRawPtr driver) {
+    _enqueue_driver(driver);
     auto* wg_queue = _get_or_create_wg_queue(driver->workgroup());
     wg_queue->put_back(driver);
     _num_drivers.fetch_add(1, std::memory_order_relaxed);
+    _metrics->driver_queue_len.increment(1);
     _sema.signal();
 }
 
-bool LockFreeWorkGroupDriverQueue::take(DriverRawPtr& driver, bool blocking) {
+void LockFreeWorkGroupDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
+    for (auto* d : drivers) {
+        put_back(d);
+    }
+}
+
+void LockFreeWorkGroupDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
+    put_back(driver);
+}
+
+StatusOr<DriverRawPtr> LockFreeWorkGroupDriverQueue::take(const bool block) {
     while (true) {
         if (_closed.load(std::memory_order_acquire)) {
-            return false;
+            return Status::Cancelled("Shutdown");
         }
 
         // Collect all workgroup candidates sorted by vruntime, then try each.
-        // This ensures we try ALL workgroups before blocking (fix for I3).
+        // This ensures we try ALL workgroups before blocking.
         auto candidates = _pick_sorted_wgs();
         for (auto& [vruntime, wg_queue] : candidates) {
+            DriverRawPtr driver = nullptr;
             if (wg_queue->try_take(driver)) {
                 _num_drivers.fetch_sub(1, std::memory_order_relaxed);
                 if (_cancel_set.erase(driver)) {
                     driver->set_driver_state(DriverState::CANCELED);
                 }
-                return true;
+                driver->set_in_ready(false);
+                _metrics->driver_queue_len.increment(-1);
+                return driver;
             }
         }
 
-        if (!blocking) {
-            return false;
+        if (!block) {
+            return nullptr;
         }
         _sema.wait();
     }
@@ -100,6 +109,16 @@ bool LockFreeWorkGroupDriverQueue::should_yield(const DriverRawPtr driver, int64
     auto* min_entity = _min_wg_entity.load();
     return min_entity != wg_entity && min_entity &&
            min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_weight();
+}
+
+void LockFreeWorkGroupDriverQueue::_enqueue_driver(const DriverRawPtr driver) {
+    DCHECK(!driver->is_in_ready());
+    driver->set_in_ready(true);
+    driver->set_in_queue(this);
+    driver->update_peak_driver_queue_size_counter(size());
+    if (driver->workgroup()) {
+        driver->workgroup()->driver_sched_entity()->set_in_queue(this);
+    }
 }
 
 LockFreeDriverQueue* LockFreeWorkGroupDriverQueue::_get_or_create_wg_queue(workgroup::WorkGroup* wg) {
