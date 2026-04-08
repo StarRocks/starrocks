@@ -59,7 +59,7 @@ static TWorkGroupOp make_create_op(const TWorkGroup& twg) {
 TEST(ExecutorsManagerTest, for_each_executors_visits_only_shared_when_no_exclusive_workgroups) {
     // With null metrics and empty CPUIDs, no exclusive executor can be created,
     // so for_each_executors should visit exactly the one shared executor set.
-    PipelineExecutorSetConfig config(8, 2, 2, 4, CpuUtil::CpuIds{}, false, false, nullptr);
+    PipelineExecutorSetConfig config(8, 2, 2, 4, CpuUtil::CpuIds{}, false, false, nullptr, nullptr);
     auto manager = std::make_unique<WorkGroupManager>(config);
 
     int visit_count = 0;
@@ -73,7 +73,7 @@ TEST(ExecutorsManagerTest, for_each_executors_visits_only_shared_when_no_exclusi
 TEST(ExecutorsManagerTest, for_each_executors_still_one_when_shared_workgroups_exist) {
     // Workgroups that cannot obtain exclusive CPUs (empty total_cpuids) use the
     // shared executor set, so the visit count stays 1.
-    PipelineExecutorSetConfig config(8, 2, 2, 4, CpuUtil::CpuIds{}, false, false, nullptr);
+    PipelineExecutorSetConfig config(8, 2, 2, 4, CpuUtil::CpuIds{}, false, false, nullptr, nullptr);
     auto manager = std::make_unique<WorkGroupManager>(config);
 
     // Add two workgroups that would request exclusive cores but cannot get them.
@@ -119,7 +119,7 @@ protected:
         // enable_bind_cpus=false → thread pools are created without CPU pinning,
         // which avoids requiring actual core-binding privileges in CI.
         _config = std::make_unique<PipelineExecutorSetConfig>(kTotalCores, 2, 2, kInitConnScanThreads, cpuids, false,
-                                                              false, _metrics.get());
+                                                              false, _metrics.get(), nullptr);
         _manager = std::make_unique<WorkGroupManager>(*_config);
         ASSERT_OK(_manager->start());
     }

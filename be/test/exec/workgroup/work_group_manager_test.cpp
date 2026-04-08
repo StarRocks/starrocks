@@ -39,7 +39,7 @@ TWorkGroupOp make_twg_op(const TWorkGroup& twg, const TWorkGroupOpType::type op_
 }
 
 PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_different_mem_pools) {
-    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr, nullptr};
     auto _manager = std::make_unique<WorkGroupManager>(config);
 
     {
@@ -66,7 +66,7 @@ PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_different_mem_pools) {
 }
 
 PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_same_mem_pools) {
-    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr, nullptr};
     auto _manager = std::make_unique<WorkGroupManager>(config);
 
     {
@@ -92,7 +92,7 @@ PARALLEL_TEST(WorkGroupManagerTest, add_workgroups_same_mem_pools) {
 }
 
 PARALLEL_TEST(WorkGroupManagerTest, test_if_unused_memory_pools_are_cleaned_up) {
-    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr};
+    PipelineExecutorSetConfig config{10, 1, 1, 1, CpuUtil::CpuIds{}, false, false, nullptr, nullptr};
     auto _manager = std::make_unique<WorkGroupManager>(config);
     _manager->set_workgroup_expiration_time(std::chrono::seconds(0));
     {

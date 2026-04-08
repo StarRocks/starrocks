@@ -26,33 +26,33 @@ PARALLEL_TEST(PipelineExecutorSetConfigTest, test_constructor) {
     CpuUtil::CpuIds cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     /// check enable_cpu_borrowing
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, false, true, nullptr);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, false, true, nullptr, nullptr);
         ASSERT_FALSE(config.enable_cpu_borrowing);
     }
 
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, true, false, nullptr);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, true, false, nullptr, nullptr);
         ASSERT_FALSE(config.enable_cpu_borrowing);
     }
 
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, true, true, nullptr);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, true, true, nullptr, nullptr);
         ASSERT_TRUE(config.enable_cpu_borrowing);
     }
 
     /// check cpuids
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, false, true, nullptr);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, empty_cpuids, false, true, nullptr, nullptr);
         ASSERT_EQ(0, config.total_cpuids.size());
     }
 
     {
-        PipelineExecutorSetConfig config(0, 2, 2, 2, cpuids, false, true, nullptr);
+        PipelineExecutorSetConfig config(0, 2, 2, 2, cpuids, false, true, nullptr, nullptr);
         ASSERT_EQ(0, config.total_cpuids.size());
     }
 
     {
-        PipelineExecutorSetConfig config(2, 2, 2, 2, cpuids, false, true, nullptr);
+        PipelineExecutorSetConfig config(2, 2, 2, 2, cpuids, false, true, nullptr, nullptr);
         ASSERT_EQ(2, config.total_cpuids.size());
         for (int i = 0; i < 2; i++) {
             ASSERT_EQ(i, config.total_cpuids[i]);
@@ -60,7 +60,7 @@ PARALLEL_TEST(PipelineExecutorSetConfigTest, test_constructor) {
     }
 
     {
-        PipelineExecutorSetConfig config(8, 2, 2, 2, cpuids, false, true, nullptr);
+        PipelineExecutorSetConfig config(8, 2, 2, 2, cpuids, false, true, nullptr, nullptr);
         ASSERT_EQ(8, config.total_cpuids.size());
         for (int i = 0; i < 8; i++) {
             ASSERT_EQ(i, config.total_cpuids[i]);
@@ -68,7 +68,7 @@ PARALLEL_TEST(PipelineExecutorSetConfigTest, test_constructor) {
     }
 
     {
-        PipelineExecutorSetConfig config(100, 2, 2, 2, cpuids, false, true, nullptr);
+        PipelineExecutorSetConfig config(100, 2, 2, 2, cpuids, false, true, nullptr, nullptr);
         ASSERT_EQ(8, config.total_cpuids.size());
         for (int i = 0; i < 8; i++) {
             ASSERT_EQ(i, config.total_cpuids[i]);
@@ -85,10 +85,10 @@ PARALLEL_TEST(PipelineExecutorSetConfigTest, test_constructor) {
 TEST(PipelineExecutorSetTest, test_calculate_num_threads_proportional) {
     CpuUtil::CpuIds all_cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     // 8 total cores, 16 total connector-scan threads.
-    PipelineExecutorSetConfig conf(8, 8, 8, 16, all_cpuids, false, false, nullptr);
+    PipelineExecutorSetConfig conf(8, 8, 8, 16, all_cpuids, false, false, nullptr, nullptr);
 
     // Executor covering 2 out of 8 CPUs, no borrowed CPUs → 8 * 2/8 = 2 for driver/scan, 16 * 2/8 = 4 for connector scan
-    PipelineExecutorSet exec(conf, "test_shared", CpuUtil::CpuIds{0, 1}, /*borrowed=*/{});
+    PipelineExecutorSet exec(conf, nullptr, "test_shared", CpuUtil::CpuIds{0, 1}, /*borrowed=*/{});
     EXPECT_EQ(4u, exec.num_connector_scan_threads());
     EXPECT_EQ(2u, exec.num_driver_threads());
     EXPECT_EQ(2u, exec.num_scan_threads());
@@ -100,10 +100,10 @@ TEST(PipelineExecutorSetTest, test_calculate_num_threads_proportional) {
 TEST(PipelineExecutorSetTest, test_calculate_num_threads_full_when_borrowed) {
     CpuUtil::CpuIds all_cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     // 8 total cores, 16 total connector-scan threads.
-    PipelineExecutorSetConfig conf(8, 8, 8, 16, all_cpuids, false, false, nullptr);
+    PipelineExecutorSetConfig conf(8, 8, 8, 16, all_cpuids, false, false, nullptr, nullptr);
 
     // Executor with 2 own CPUs but also borrows {2,3,4,5} → returns num_total_driver_threads -> 8.
-    PipelineExecutorSet exec(conf, "test_borrowed", CpuUtil::CpuIds{0, 1},
+    PipelineExecutorSet exec(conf, nullptr, "test_borrowed", CpuUtil::CpuIds{0, 1},
                              /*borrowed=*/{{2, 3, 4, 5}});
     EXPECT_EQ(16u, exec.num_connector_scan_threads());
     EXPECT_EQ(8u, exec.num_driver_threads());
@@ -115,10 +115,10 @@ TEST(PipelineExecutorSetTest, test_calculate_num_threads_full_when_borrowed) {
 TEST(PipelineExecutorSetTest, test_calculate_num_threads_minimum_one) {
     CpuUtil::CpuIds all_cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     // 8 total cores, only 1 total connector-scan thread configured.
-    PipelineExecutorSetConfig conf(8, 1, 1, 1, all_cpuids, false, false, nullptr);
+    PipelineExecutorSetConfig conf(8, 1, 1, 1, all_cpuids, false, false, nullptr, nullptr);
 
     // 1 out of 8 CPUs → 1 * 1/8 = 0, but floor is 1.
-    PipelineExecutorSet exec(conf, "test_min", CpuUtil::CpuIds{0}, /*borrowed=*/{});
+    PipelineExecutorSet exec(conf, nullptr, "test_min", CpuUtil::CpuIds{0}, /*borrowed=*/{});
     EXPECT_EQ(1u, exec.num_connector_scan_threads());
     EXPECT_EQ(1u, exec.num_driver_threads());
     EXPECT_EQ(1u, exec.num_scan_threads());
@@ -129,9 +129,9 @@ TEST(PipelineExecutorSetTest, test_calculate_num_threads_minimum_one) {
 TEST(PipelineExecutorSetTest, test_calculate_num_threads_reflects_config_update) {
     CpuUtil::CpuIds all_cpuids{0, 1, 2, 3, 4, 5, 6, 7};
     // Mutable config: num_total_connector_scan_threads starts at 4.
-    PipelineExecutorSetConfig conf(8, 4, 4, 4, all_cpuids, false, false, nullptr);
+    PipelineExecutorSetConfig conf(8, 4, 4, 4, all_cpuids, false, false, nullptr, nullptr);
 
-    PipelineExecutorSet exec(conf, "test_update", CpuUtil::CpuIds{0, 1, 2, 3}, /*borrowed=*/{});
+    PipelineExecutorSet exec(conf, nullptr, "test_update", CpuUtil::CpuIds{0, 1, 2, 3}, /*borrowed=*/{});
     // 4 * 4/8 = 2 initially.
     EXPECT_EQ(2u, exec.num_connector_scan_threads());
 
