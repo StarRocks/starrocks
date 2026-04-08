@@ -37,14 +37,22 @@
 #include <column/column_helper.h>
 
 #include "column/chunk.h"
+<<<<<<< HEAD
 #include "column/const_column.h"
+=======
+#include "column/mysql_row_buffer.h"
+>>>>>>> 00fd532d3a ([BugFix] Encode VARBINARY correctly inside nested types in MySQL result sets (#71346))
 #include "common/statusor.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"
 #include "types/logical_type.h"
+<<<<<<< HEAD
 #include "util/mysql_row_buffer.h"
+=======
+#include "types/type_descriptor.h"
+>>>>>>> 00fd532d3a ([BugFix] Encode VARBINARY correctly inside nested types in MySQL result sets (#71346))
 
 namespace starrocks {
 
@@ -118,6 +126,9 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
                          : column;
+        // Mark BinaryColumns that carry VARBINARY data so that push_binary is
+        // used when they appear inside nested types (ARRAY / MAP / STRUCT).
+        ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
         result_columns.emplace_back(std::move(column));
     }
 
@@ -160,6 +171,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
                          : column;
+        ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
         result_columns.emplace_back(std::move(column));
     }
 
