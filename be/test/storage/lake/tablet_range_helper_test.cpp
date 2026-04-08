@@ -381,7 +381,8 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_rejects_min_max_in_
     auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
     ASSERT_FALSE(res.ok());
     ASSERT_TRUE(res.status().is_invalid_argument());
-    ASSERT_THAT(res.status().to_string(), testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
+    ASSERT_THAT(res.status().to_string(),
+                testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
 }
 
 TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_only_lower_bound) {
@@ -565,7 +566,8 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_rejects_min_max) {
         auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
         ASSERT_FALSE(res.ok());
         ASSERT_TRUE(res.status().is_invalid_argument());
-        ASSERT_THAT(res.status().to_string(), testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
+        ASSERT_THAT(res.status().to_string(),
+                    testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
     }
 
     {
@@ -580,7 +582,8 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_rejects_min_max) {
         auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
         ASSERT_FALSE(res.ok());
         ASSERT_TRUE(res.status().is_invalid_argument());
-        ASSERT_THAT(res.status().to_string(), testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
+        ASSERT_THAT(res.status().to_string(),
+                    testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
     }
 }
 
