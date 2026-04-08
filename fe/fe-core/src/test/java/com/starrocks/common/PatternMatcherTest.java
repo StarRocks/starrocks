@@ -102,4 +102,73 @@ public class PatternMatcherTest {
             Assertions.fail(e.getMessage());
         }
     }
+
+    @Test
+    public void testBackslashFollowedByUnderscore() {
+        // LIKE pattern "a\\_a" means: a, literal \, any single char, a
+        // This is the pattern that results from SQL: LIKE 'a\\\\_a'
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("a\\\\_a", true);
+        Assertions.assertTrue(matcher.match("a\\_a"));
+        Assertions.assertTrue(matcher.match("a\\1a"));
+        Assertions.assertTrue(matcher.match("a\\%a"));
+        Assertions.assertFalse(matcher.match("a_a"));
+        Assertions.assertFalse(matcher.match("a\\a"));
+        Assertions.assertFalse(matcher.match("a\\_ab"));
+
+        // LIKE pattern "a\\_" means: a, literal \, any single char
+        matcher = PatternMatcher.createMysqlPattern("a\\\\_", true);
+        Assertions.assertTrue(matcher.match("a\\x"));
+        Assertions.assertTrue(matcher.match("a\\_"));
+        Assertions.assertFalse(matcher.match("a_"));
+
+        // LIKE pattern "a\\%" means: a, literal \, followed by any sequence
+        matcher = PatternMatcher.createMysqlPattern("a\\\\%", true);
+        Assertions.assertTrue(matcher.match("a\\"));
+        Assertions.assertTrue(matcher.match("a\\anything"));
+        Assertions.assertFalse(matcher.match("a_anything"));
+    }
+
+    @Test
+    public void testRegexMetacharactersInPattern() {
+        // Table names with regex metacharacters like (, ), +, *, ? should work
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern("a(b)c", true);
+        Assertions.assertTrue(matcher.match("a(b)c"));
+        Assertions.assertFalse(matcher.match("abc"));
+
+        matcher = PatternMatcher.createMysqlPattern("a+b", true);
+        Assertions.assertTrue(matcher.match("a+b"));
+        Assertions.assertFalse(matcher.match("aab"));
+
+        matcher = PatternMatcher.createMysqlPattern("a[0]b", true);
+        Assertions.assertTrue(matcher.match("a[0]b"));
+        Assertions.assertFalse(matcher.match("a0b"));
+    }
+
+    @Test
+    public void testEscapeLikeValue() {
+        Assertions.assertNull(PatternMatcher.escapeLikeValue(null));
+        Assertions.assertEquals("abc", PatternMatcher.escapeLikeValue("abc"));
+        Assertions.assertEquals("a\\_a", PatternMatcher.escapeLikeValue("a_a"));
+        Assertions.assertEquals("a\\%a", PatternMatcher.escapeLikeValue("a%a"));
+        Assertions.assertEquals("a\\\\a", PatternMatcher.escapeLikeValue("a\\a"));
+        Assertions.assertEquals("a\\\\\\_a", PatternMatcher.escapeLikeValue("a\\_a"));
+    }
+
+    @Test
+    public void testEscapeLikeValueRoundTrip() {
+        // Escaping a value and then using it as a LIKE pattern should match only the original value
+        String[] testValues = {"a_a", "a%b", "a\\b", "a\\_a", "hello", "test(1)+2"};
+        for (String value : testValues) {
+            String escaped = PatternMatcher.escapeLikeValue(value);
+            PatternMatcher matcher = PatternMatcher.createMysqlPattern(escaped, true);
+            Assertions.assertTrue(matcher.match(value),
+                    "Escaped pattern for '" + value + "' should match itself");
+        }
+
+        // Escaped "a_a" should NOT match "aba" (the underscore is not a wildcard)
+        String escaped = PatternMatcher.escapeLikeValue("a_a");
+        PatternMatcher matcher = PatternMatcher.createMysqlPattern(escaped, true);
+        Assertions.assertFalse(matcher.match("aba"));
+        Assertions.assertFalse(matcher.match("a1a"));
+    }
 }

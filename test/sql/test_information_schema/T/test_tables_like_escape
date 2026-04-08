@@ -11,3 +11,30 @@ select table_name from information_schema.tables
 where table_schema='db_${uuid0}' and table_name like 'a\\_a';
 
 drop database if exists db_${uuid0};
+
+-- name: test_table_name_escape_underscore_and_backslash
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `a\_a` (`c1` int) DISTRIBUTED BY HASH(`c1`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+CREATE TABLE `a_a` (`c1` int) DISTRIBUTED BY HASH(`c1`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+CREATE TABLE `aba` (`c1` int) DISTRIBUTED BY HASH(`c1`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+CREATE TABLE `a\ba` (`c1` int) DISTRIBUTED BY HASH(`c1`) BUCKETS 1 PROPERTIES ("replication_num" = "1");
+
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name = 'a_a';
+
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name = 'a\_a';
+
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name = 'a\\_a';
+
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a_a' order by table_name;
+
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a\_a';
+
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a\\_a';
+
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a\\\\_a' order by table_name;
+
+select table_name from information_schema.tables where table_schema='db_${uuid0}' and table_name like 'a\\\\\\_a';
+
+drop database if exists db_${uuid0};
