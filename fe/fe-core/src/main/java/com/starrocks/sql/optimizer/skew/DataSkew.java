@@ -163,10 +163,6 @@ public class DataSkew {
             return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.INACCURATE_ROW_COUNT);
         }
 
-        if (columnStatistic.isUnknown()) {
-            return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.UNKNOWN_STATS);
-        }
-
         final var nullSkewInfo = getNullSkewInfo(columnStatistic, thresholds);
         final var mcvSkewInfo = getMcvSkewInfo(statistics, columnStatistic, thresholds);
 
@@ -181,6 +177,10 @@ public class DataSkew {
             return new SkewInfo(SkewType.SKEWED_NULL);
         } else if (mcvSkewInfo.skewed) {
             return new SkewInfo(SkewType.SKEWED_MCV, mcvSkewInfo.additionalInfo, mcvSkewInfo.mcvs);
+        }
+
+        if (columnStatistic.isUnknown()) {
+            return new SkewInfo(SkewType.NOT_SKEWED, AdditionalInfo.UNKNOWN_STATS);
         }
 
         // Can not deduce skew.
