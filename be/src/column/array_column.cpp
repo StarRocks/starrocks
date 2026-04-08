@@ -187,12 +187,12 @@ void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     for (size_t i = 0; i < replace_num; ++i) {
         LOG_IF(ERROR, indexes[i] >= _offsets->size() - 1)
                 << "PCU_DIAG_A2: update_rows index out of bounds"
-                << " i=" << i << " indexes[i]=" << indexes[i]
-                << " num_rows=" << (_offsets->size() - 1) << " replace_num=" << replace_num;
+                << " i=" << i << " indexes[i]=" << indexes[i] << " num_rows=" << (_offsets->size() - 1)
+                << " replace_num=" << replace_num;
         LOG_IF(ERROR, i > 0 && indexes[i] <= indexes[i - 1])
                 << "PCU_DIAG_A2: update_rows indexes not strictly increasing"
-                << " i=" << i << " indexes[i-1]=" << indexes[i - 1]
-                << " indexes[i]=" << indexes[i] << " replace_num=" << replace_num;
+                << " i=" << i << " indexes[i-1]=" << indexes[i - 1] << " indexes[i]=" << indexes[i]
+                << " replace_num=" << replace_num;
     }
 
     bool need_resize = false;
@@ -219,10 +219,9 @@ void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
         size_t idx_begin = 0;
         for (size_t i = 0; i < replace_num; ++i) {
             // [DIAG-A3] detect underflow
-            LOG_IF(ERROR, indexes[i] < idx_begin)
-                    << "PCU_DIAG_A3: update_rows underflow"
-                    << " i=" << i << " indexes[i]=" << indexes[i]
-                    << " idx_begin=" << idx_begin << " replace_num=" << replace_num;
+            LOG_IF(ERROR, indexes[i] < idx_begin) << "PCU_DIAG_A3: update_rows underflow"
+                                                  << " i=" << i << " indexes[i]=" << indexes[i]
+                                                  << " idx_begin=" << idx_begin << " replace_num=" << replace_num;
             size_t count = (indexes[i] >= idx_begin) ? (indexes[i] - idx_begin) : 0;
             new_array_column->append(*this, idx_begin, count);
             new_array_column->append(src, i, 1);
@@ -236,8 +235,8 @@ void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
         auto* new_arr = down_cast<ArrayColumn*>(new_array_column.get());
         LOG_IF(ERROR, new_arr->offsets().size() != _offsets->size())
                 << "PCU_DIAG_A3: update_rows row count mismatch"
-                << " new=" << new_arr->offsets().size()
-                << " old=" << _offsets->size() << " replace_num=" << replace_num;
+                << " new=" << new_arr->offsets().size() << " old=" << _offsets->size()
+                << " replace_num=" << replace_num;
         swap_column(*new_array_column.get());
     }
 }
