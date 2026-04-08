@@ -1445,7 +1445,7 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_sets_rowset_range_in_txn_
 
     EXPECT_OK(_tablet_manager->put_txn_log(log));
 
-    lake::PublishTabletInfo tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet_id, new_tablet_id);
+    lake::PublishTabletInfo tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet_id, new_tablet_id, 2, 0);
     TxnInfoPB txn_info;
     txn_info.set_txn_id(100);
     txn_info.set_txn_type(TXN_NORMAL);
@@ -1526,7 +1526,7 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for
     fill_sstable(op_parallel_compaction->add_output_sstables(), "op_parallel_compaction_1.sst");
 
     lake::PublishTabletInfo publish_tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, txn_log->tablet_id(),
-                                                next_id());
+                                                next_id(), 2, 0);
     ASSIGN_OR_ABORT(auto converted, convert_txn_log(txn_log, base_metadata, publish_tablet_info));
 
     EXPECT_EQ(publish_tablet_info.get_tablet_id_in_metadata(), converted->tablet_id());
@@ -3439,6 +3439,190 @@ TEST_F(LakeTabletReshardTest, test_union_range_unequal_bounds) {
     VariantTuple expected_upper;
     ASSERT_OK(expected_upper.from_proto(generate_sort_key(25)));
     EXPECT_EQ(0, upper.compare(expected_upper));
+}
+
+TEST_F(LakeTabletReshardTest, test_update_rowset_data_stats_basic) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    // Split into 3, index 0: gets remainder
+    lake::tablet_reshard_helper::update_rowset_data_stats(&rowset, 3, 0);
+    EXPECT_EQ(34, rowset.num_rows());   // 100/3=33, 100%3=1, index 0 < 1 => +1
+    EXPECT_EQ(334, rowset.data_size()); // 1000/3=333, 1000%3=1, index 0 < 1 => +1
+}
+
+TEST_F(LakeTabletReshardTest, test_update_rowset_data_stats_remainder_distribution) {
+    // Verify that splitting 10 rows into 3 tablets gives 4+3+3 = 10
+    int64_t total_rows = 0;
+    int64_t total_size = 0;
+    for (int32_t i = 0; i < 3; i++) {
+        RowsetMetadataPB rowset;
+        rowset.set_num_rows(10);
+        rowset.set_data_size(100);
+        lake::tablet_reshard_helper::update_rowset_data_stats(&rowset, 3, i);
+        total_rows += rowset.num_rows();
+        total_size += rowset.data_size();
+    }
+    EXPECT_EQ(10, total_rows);
+    EXPECT_EQ(100, total_size);
+}
+
+TEST_F(LakeTabletReshardTest, test_update_rowset_data_stats_exact_division) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(9);
+    rowset.set_data_size(300);
+
+    lake::tablet_reshard_helper::update_rowset_data_stats(&rowset, 3, 0);
+    EXPECT_EQ(3, rowset.num_rows());
+    EXPECT_EQ(100, rowset.data_size());
+}
+
+TEST_F(LakeTabletReshardTest, test_update_rowset_data_stats_split_count_one) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    lake::tablet_reshard_helper::update_rowset_data_stats(&rowset, 1, 0);
+    EXPECT_EQ(100, rowset.num_rows());
+    EXPECT_EQ(1000, rowset.data_size());
+}
+
+TEST_F(LakeTabletReshardTest, test_update_rowset_data_stats_split_count_zero) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(100);
+    rowset.set_data_size(1000);
+
+    lake::tablet_reshard_helper::update_rowset_data_stats(&rowset, 0, 0);
+    EXPECT_EQ(100, rowset.num_rows());
+    EXPECT_EQ(1000, rowset.data_size());
+}
+
+TEST_F(LakeTabletReshardTest, test_update_txn_log_data_stats_all_op_types) {
+    TxnLogPB txn_log;
+    txn_log.set_tablet_id(1);
+    txn_log.set_txn_id(1000);
+
+    // op_write
+    auto* op_write_rowset = txn_log.mutable_op_write()->mutable_rowset();
+    op_write_rowset->set_num_rows(10);
+    op_write_rowset->set_data_size(100);
+
+    // op_compaction
+    auto* op_compaction_rowset = txn_log.mutable_op_compaction()->mutable_output_rowset();
+    op_compaction_rowset->set_num_rows(20);
+    op_compaction_rowset->set_data_size(200);
+
+    // op_schema_change
+    auto* schema_change_rowset = txn_log.mutable_op_schema_change()->add_rowsets();
+    schema_change_rowset->set_num_rows(30);
+    schema_change_rowset->set_data_size(300);
+
+    // op_replication
+    auto* repl_rowset = txn_log.mutable_op_replication()->add_op_writes()->mutable_rowset();
+    repl_rowset->set_num_rows(40);
+    repl_rowset->set_data_size(400);
+
+    // op_parallel_compaction
+    auto* parallel_rowset =
+            txn_log.mutable_op_parallel_compaction()->add_subtask_compactions()->mutable_output_rowset();
+    parallel_rowset->set_num_rows(50);
+    parallel_rowset->set_data_size(500);
+
+    // split_count=3, split_index=0 (gets extra remainder)
+    lake::tablet_reshard_helper::update_txn_log_data_stats(&txn_log, 3, 0);
+
+    EXPECT_EQ(4, txn_log.op_write().rowset().num_rows());               // 10/3=3 + (0<1?1:0) = 4
+    EXPECT_EQ(34, txn_log.op_write().rowset().data_size());             // 100/3=33 + (0<1?1:0) = 34
+    EXPECT_EQ(7, txn_log.op_compaction().output_rowset().num_rows());   // 20/3=6 + (0<2?1:0) = 7
+    EXPECT_EQ(67, txn_log.op_compaction().output_rowset().data_size()); // 200/3=66 + (0<2?1:0) = 67
+    EXPECT_EQ(10, txn_log.op_schema_change().rowsets(0).num_rows());
+    EXPECT_EQ(100, txn_log.op_schema_change().rowsets(0).data_size());
+    EXPECT_EQ(14, txn_log.op_replication().op_writes(0).rowset().num_rows());   // 40/3=13 + (0<1?1:0) = 14
+    EXPECT_EQ(134, txn_log.op_replication().op_writes(0).rowset().data_size()); // 400/3=133 + (0<1?1:0) = 134
+    EXPECT_EQ(17, txn_log.op_parallel_compaction()
+                          .subtask_compactions(0)
+                          .output_rowset()
+                          .num_rows()); // 50/3=16 + (0<2?1:0) = 17
+    EXPECT_EQ(167, txn_log.op_parallel_compaction()
+                           .subtask_compactions(0)
+                           .output_rowset()
+                           .data_size()); // 500/3=166 + (0<2?1:0) = 167
+}
+
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_adjusts_data_stats_for_splitting) {
+    auto base_metadata = std::make_shared<TabletMetadataPB>();
+    base_metadata->set_id(next_id());
+    base_metadata->set_version(1);
+    base_metadata->set_next_rowset_id(1);
+    base_metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(10));
+    base_metadata->mutable_range()->set_lower_bound_included(true);
+    base_metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(20));
+    base_metadata->mutable_range()->set_upper_bound_included(false);
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    txn_log->set_tablet_id(base_metadata->id());
+    txn_log->set_txn_id(1000);
+
+    auto* rowset = txn_log->mutable_op_write()->mutable_rowset();
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(100);
+    rowset->set_data_size(1000);
+    rowset->add_segments("seg.dat");
+    rowset->add_segment_size(1000);
+    auto* range = rowset->mutable_range();
+    range->mutable_lower_bound()->CopyFrom(generate_sort_key(5));
+    range->set_lower_bound_included(true);
+    range->mutable_upper_bound()->CopyFrom(generate_sort_key(25));
+    range->set_upper_bound_included(false);
+
+    // Simulate 3-way split, this is tablet index 0
+    lake::PublishTabletInfo info0(lake::PublishTabletInfo::SPLITTING_TABLET, txn_log->tablet_id(), next_id(), 3, 0);
+    ASSIGN_OR_ABORT(auto converted0, lake::convert_txn_log(txn_log, base_metadata, info0));
+    EXPECT_EQ(34, converted0->op_write().rowset().num_rows());   // 100/3=33 + (0<1?1:0) = 34
+    EXPECT_EQ(334, converted0->op_write().rowset().data_size()); // 1000/3=333 + (0<1?1:0) = 334
+
+    // tablet index 1
+    lake::PublishTabletInfo info1(lake::PublishTabletInfo::SPLITTING_TABLET, txn_log->tablet_id(), next_id(), 3, 1);
+    ASSIGN_OR_ABORT(auto converted1, lake::convert_txn_log(txn_log, base_metadata, info1));
+    EXPECT_EQ(33, converted1->op_write().rowset().num_rows());
+    EXPECT_EQ(333, converted1->op_write().rowset().data_size());
+
+    // tablet index 2
+    lake::PublishTabletInfo info2(lake::PublishTabletInfo::SPLITTING_TABLET, txn_log->tablet_id(), next_id(), 3, 2);
+    ASSIGN_OR_ABORT(auto converted2, lake::convert_txn_log(txn_log, base_metadata, info2));
+    EXPECT_EQ(33, converted2->op_write().rowset().num_rows());
+    EXPECT_EQ(333, converted2->op_write().rowset().data_size());
+
+    // Verify total equals original
+    EXPECT_EQ(100, converted0->op_write().rowset().num_rows() + converted1->op_write().rowset().num_rows() +
+                           converted2->op_write().rowset().num_rows());
+    EXPECT_EQ(1000, converted0->op_write().rowset().data_size() + converted1->op_write().rowset().data_size() +
+                            converted2->op_write().rowset().data_size());
+
+    // Verify ranges are still adjusted (shared and intersected with base range)
+    ASSERT_TRUE(converted0->op_write().rowset().shared_segments_size() > 0);
+    EXPECT_TRUE(converted0->op_write().rowset().shared_segments(0));
+}
+
+TEST_F(LakeTabletReshardTest, test_convert_txn_log_normal_publish_no_stats_change) {
+    auto base_metadata = std::make_shared<TabletMetadataPB>();
+    base_metadata->set_id(next_id());
+    base_metadata->set_version(1);
+
+    auto txn_log = std::make_shared<TxnLogPB>();
+    txn_log->set_tablet_id(base_metadata->id());
+    txn_log->set_txn_id(1000);
+    txn_log->mutable_op_write()->mutable_rowset()->set_num_rows(100);
+    txn_log->mutable_op_write()->mutable_rowset()->set_data_size(1000);
+
+    lake::PublishTabletInfo info(base_metadata->id());
+    ASSIGN_OR_ABORT(auto converted, lake::convert_txn_log(txn_log, base_metadata, info));
+
+    // Normal publish returns the same txn_log pointer, no changes
+    EXPECT_EQ(txn_log.get(), converted.get());
+    EXPECT_EQ(100, converted->op_write().rowset().num_rows());
+    EXPECT_EQ(1000, converted->op_write().rowset().data_size());
 }
 
 } // namespace starrocks
