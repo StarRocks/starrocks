@@ -41,6 +41,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
@@ -714,7 +715,9 @@ Status ScalarColumnWriter::append(const Column& column) {
                 : down_cast<const BinaryColumn*>(data_column)->build_slices(_slice_buf);
         ptr = reinterpret_cast<const uint8_t*>(_slice_buf.data());
     } else {
-        ptr = column.raw_data();
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(data_column->accept(&visitor));
+        ptr = visitor.result();
     }
     return _append(ptr, null, column.size(), column.has_null());
 }
