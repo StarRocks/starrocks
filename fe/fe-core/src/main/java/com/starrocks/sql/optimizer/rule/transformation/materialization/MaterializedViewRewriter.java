@@ -1019,6 +1019,27 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         return true;
     }
 
+    private boolean hasForeignKeyConstraintInMv(Table childTable, MaterializedView materializedView,
+                                                List<String> childKeys) {
+        if (materializedView.getForeignKeyConstraints() == null) {
+            return false;
+        }
+        Set<String> childKeySet = Sets.newHashSet(childKeys);
+
+        for (ForeignKeyConstraint foreignKeyConstraint : materializedView.getForeignKeyConstraints()) {
+            if (foreignKeyConstraint.getChildTableInfo() != null &&
+                    MvUtils.getTableChecked(foreignKeyConstraint.getChildTableInfo()).equals(childTable)) {
+                List<Pair<String, String>> columnPairs = foreignKeyConstraint.getColumnNameRefPairs(materializedView);
+                Set<String> mvChildKeySet = columnPairs.stream().map(pair -> pair.first)
+                        .map(String::toLowerCase).collect(Collectors.toSet());
+                if (childKeySet.equals(mvChildKeySet)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private boolean extraJoinCheck(
             TableScanDesc parentTableScanDesc, TableScanDesc tableScanDesc,
             List<Pair<String, String>> columnPairs, List<String> childKeys, List<String> parentKeys,
@@ -1039,11 +1060,15 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 return false;
             }
             // Foreign key columns must be NOT NULL for the inner join to be lossless.
-            // A foreign-key constraint declaration on the MV does NOT imply the columns are
-            // non-null: FK columns can still be declared NULL in the schema, and NULL values
-            // will not match any parent row in an INNER JOIN, causing rows to be silently
-            // dropped if we treat such a join as lossless.
-            if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull())) {
+            // For native (internal) tables: a FK constraint declaration on the MV does NOT imply
+            // the columns are non-null; FK columns can still be declared NULL in the schema, and
+            // NULL values will not match any parent row in an INNER JOIN, causing rows to be
+            // silently dropped if we treat such a join as lossless.
+            // For external tables (e.g. Hive): column nullability is not schema-enforced, so a
+            // declared FK constraint on the MV serves as a valid semantic non-null guarantee.
+            if (childKeys.stream().anyMatch(column -> childTable.getColumn(column).isAllowNull()) &&
+                    (childTable.isNativeTableOrMaterializedView() ||
+                            !hasForeignKeyConstraintInMv(childTable, materializedView, childKeys))) {
                 logMVRewrite(mvRewriteContext, "FKs {} are not totally not-null in child table {}",
                         childKeys, childTable.getName());
                 return false;
