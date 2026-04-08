@@ -150,7 +150,7 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
         workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
 
         self.assertIn('name: Compute Merge Base', workflow_text)
-        self.assertIn('git fetch origin ${{ github.base_ref }} --depth=1', workflow_text)
+        self.assertIn('git fetch origin ${{ github.base_ref }}', workflow_text)
         self.assertIn('base="$(git merge-base FETCH_HEAD HEAD)"', workflow_text)
         self.assertIn('[[ -n "${base}" ]]', workflow_text)
         self.assertIn('echo "base=${base}" >> "$GITHUB_OUTPUT"', workflow_text)
