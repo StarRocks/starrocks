@@ -7,3 +7,4 @@ Use these pages for repo-local operating rules that should remain stable, discov
 - [Reliability First](reliability-first.md): optimize for trustworthy signals before throughput.
 - [Internal vs Public Docs](internal-vs-public-docs.md): decide whether guidance belongs in `handbook/` or `docs/`.
 - [Agent Change Flow](agent-change-flow.md): expected loop for repo-local planning, validation, and human merge authority.
+- [Agent Pool Workflow](agent-pool-workflow.md): pooled backend build worktrees, shared ccache policy, and skill delegation rules.

@@ -40,6 +40,7 @@ cd test && python3 run.py -v
 - Protobuf fields must stay optional/repeated; never add `required` and never reuse ordinals.
 - Thrift fields must stay optional/repeated; never add `required` and never reuse ordinals.
 - User-facing config or metric changes must update the matching docs in `docs/en/` and `docs/zh/` when applicable.
+- Parallel backend build or backend unit-test work in agent-owned worktrees must use the repo-local agent-pool workflow in [`handbook/policies/agent-pool-workflow.md`](./handbook/policies/agent-pool-workflow.md) and [`build-support/README.md`](./build-support/README.md).
 
 ## PR Contract
 
@@ -53,6 +54,7 @@ cd test && python3 run.py -v
 - [`handbook/index.md`](./handbook/index.md)
 - [`handbook/domains/index.md`](./handbook/domains/index.md)
 - [`handbook/policies/index.md`](./handbook/policies/index.md)
+- [`handbook/policies/agent-pool-workflow.md`](./handbook/policies/agent-pool-workflow.md)
 - [`handbook/quality/index.md`](./handbook/quality/index.md)
 - [`be/AGENTS.md`](./be/AGENTS.md)
 - [`fe/AGENTS.md`](./fe/AGENTS.md)

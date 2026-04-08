@@ -107,6 +107,7 @@ CMakeLists.txt
 .clangd
 .cursor/
 .worktrees/
+.agent-pool/
 handbook/plans/local/
 
 
