@@ -27,6 +27,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.journal.CheckpointException;
 import com.starrocks.journal.CheckpointWorker;
@@ -36,6 +37,7 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -49,6 +51,7 @@ import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.thrift.TBrokerFD;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -56,6 +59,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -135,6 +143,21 @@ public class ClusterSnapshotTest {
             public void deletePath(String path, Map<String, String> loadProperties) {
                 return;
             } // IOException
+
+            @Mock
+            public TBrokerFD openWriter(String path, Map<String, String> loadProperties) {
+                return new TBrokerFD();
+            }
+
+            @Mock
+            public void pwrite(TBrokerFD fd, long offset, byte[] data) {
+                return;
+            }
+
+            @Mock
+            public void closeWriter(TBrokerFD fd) {
+                return;
+            }
         };
 
         setAutomatedSnapshotOff(false);
@@ -224,6 +247,146 @@ public class ClusterSnapshotTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job));
         setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testUploadWritesMetaFile() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.UPLOADING);
+
+        List<String> writeFilePaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) {
+                return;
+            }
+
+            @Mock
+            public void writeFile(byte[] data, String destFilePath, Map<String, String> properties) {
+                writeFilePaths.add(destFilePath);
+            }
+        };
+
+        ClusterSnapshotUtils.uploadClusterSnapshotToRemote(job);
+
+        Assertions.assertEquals(1, writeFilePaths.size());
+        Assertions.assertTrue(writeFilePaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testClearDeletesMetaFileFirst() throws Exception {
+        setAutomatedSnapshotOn(false);
+        ClusterSnapshotJob job = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().createAutomatedSnapshotJob();
+        job.setState(ClusterSnapshotJobState.FINISHED);
+
+        List<String> deletedPaths = new ArrayList<>();
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void deletePath(String path, Map<String, String> loadProperties) {
+                deletedPaths.add(path);
+            }
+        };
+
+        ClusterSnapshotUtils.clearClusterSnapshotFromRemote(job);
+
+        Assertions.assertEquals(2, deletedPaths.size());
+        // First deletion should be the meta file
+        Assertions.assertTrue(deletedPaths.get(0).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        // Second deletion should be the snapshot directory
+        Assertions.assertFalse(deletedPaths.get(1).endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME));
+        setAutomatedSnapshotOff(false);
+    }
+
+    @Test
+    public void testCheckSnapshotMetaFileExist() throws Exception {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public boolean checkPathExist(String remotePath, Map<String, String> properties) {
+                return remotePath.endsWith(ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            }
+        };
+
+        Assertions.assertTrue(ClusterSnapshotUtils.checkSnapshotMetaFileExist(
+                "s3://bucket/path/snapshot1", new HashMap<>()));
+        Assertions.assertEquals("s3://bucket/path/snapshot1/" + ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME,
+                ClusterSnapshotUtils.getSnapshotMetaFilePath("s3://bucket/path/snapshot1"));
+    }
+
+    @Test
+    public void testDeleteSnapshotMetaFileException() {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void deletePath(String path, Map<String, String> properties) throws StarRocksException {
+                throw new StarRocksException("delete failed");
+            }
+        };
+
+        // Should not throw, just log warning
+        ExceptionChecker.expectThrowsNoException(
+                () -> ClusterSnapshotUtils.deleteSnapshotMetaFile("s3://bucket/path/snapshot1", new HashMap<>()));
+    }
+
+    @Test
+    public void testReadLocalSnapshotMetaFile() throws Exception {
+        Path tempDir = Files.createTempDirectory("snapshot_read_test");
+        try {
+            // Case 1: file does not exist — returns null
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 2: valid meta file — returns ClusterSnapshot
+            ClusterSnapshot snapshot = new ClusterSnapshot(1L, "test_snapshot",
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 100L, 200L);
+            File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(snapshot).getBytes(StandardCharsets.UTF_8));
+
+            ClusterSnapshot result = ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString());
+            Assertions.assertNotNull(result);
+            Assertions.assertEquals("test_snapshot", result.getSnapshotName());
+            Assertions.assertEquals(100L, result.getFeJournalId());
+            Assertions.assertEquals(200L, result.getStarMgrJournalId());
+
+            // Case 3: corrupted file — returns null
+            Files.write(metaFile.toPath(), "invalid json".getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 4: valid JSON but missing snapshotName — returns null
+            ClusterSnapshot incomplete = new ClusterSnapshot(1L, null,
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 100L, 200L);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(incomplete).getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+
+            // Case 5: valid JSON but zero journalId — returns null
+            ClusterSnapshot zeroJournal = new ClusterSnapshot(1L, "test",
+                    ClusterSnapshot.ClusterSnapshotType.AUTOMATED, "sv", 1000L, 2000L, 0L, 200L);
+            Files.write(metaFile.toPath(),
+                    GsonUtils.GSON.toJson(zeroJournal).getBytes(StandardCharsets.UTF_8));
+            Assertions.assertNull(ClusterSnapshotUtils.readLocalSnapshotMetaFile(tempDir.toString()));
+        } finally {
+            File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+            metaFile.delete();
+            tempDir.toFile().delete();
+        }
+    }
+
+    @Test
+    public void testDeleteLocalSnapshotMetaFile() throws Exception {
+        // Create a temp directory and a snapshot_meta.json file
+        Path tempDir = Files.createTempDirectory("snapshot_test");
+        File metaFile = new File(tempDir.toFile(), ClusterSnapshotUtils.SNAPSHOT_META_FILE_NAME);
+        Assertions.assertTrue(metaFile.createNewFile());
+        Assertions.assertTrue(metaFile.exists());
+
+        ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(tempDir.toString());
+        Assertions.assertFalse(metaFile.exists());
+
+        // Call again on non-existing file — should be a no-op
+        ClusterSnapshotUtils.deleteLocalSnapshotMetaFile(tempDir.toString());
+
+        tempDir.toFile().delete();
     }
 
     @Test
