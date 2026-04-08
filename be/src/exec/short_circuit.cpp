@@ -73,6 +73,7 @@ public:
             column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                              ? ColumnHelper::convert_time_column_from_double_to_str(column)
                              : column;
+            ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
             result_columns.emplace_back(std::move(column));
         }
 

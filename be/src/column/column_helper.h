@@ -513,6 +513,8 @@ public:
         }
     }
 
+    static void mark_binary_columns(const ColumnPtr& column, const TypeDescriptor& type);
+
     static BinaryColumn* get_binary_column(Column* column) { return down_cast<BinaryColumn*>(get_data_column(column)); }
 
     static const BinaryColumn* get_binary_column(const Column* column) {
