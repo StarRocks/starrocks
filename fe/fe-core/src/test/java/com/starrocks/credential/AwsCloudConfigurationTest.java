@@ -15,9 +15,9 @@
 package com.starrocks.credential;
 
 import com.staros.proto.FileStoreInfo;
-import com.starrocks.connector.share.credential.provider.OverwriteAwsDefaultCredentialsProvider;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudCredential;
+import com.starrocks.credential.provider.OverwriteAwsDefaultCredentialsProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.s3a.AWSCredentialProviderList;
@@ -86,7 +86,7 @@ public class AwsCloudConfigurationTest {
         cloudConfiguration.applyToConfiguration(configuration);
         Assertions.assertEquals(OverwriteAwsDefaultCredentialsProvider.class.getName(),
                 configuration.get("fs.s3a.assumed.role.credentials.provider"));
-        Assertions.assertEquals("com.starrocks.connector.share.credential.provider.AssumedRoleCredentialProvider",
+        Assertions.assertEquals("com.starrocks.credential.provider.AssumedRoleCredentialProvider",
                 configuration.get("fs.s3a.aws.credentials.provider"));
         Assertions.assertEquals("smith", configuration.get("fs.s3a.assumed.role.arn"));
     }

@@ -165,10 +165,14 @@ public class CloudConfigurationApplier {
             conf.set(Constants.ASSUMED_ROLE_STS_ENDPOINT_REGION, stsRegion);
         }
         if (!stsEndpoint.isEmpty()) {
+            // Hadoop is using aws sdk v1. If the user provides the sts endpoint,
+            // the sts region must also be specified.
+            if (stsRegion.isEmpty()) {
+                throw new IllegalArgumentException(
+                        String.format("STS endpoint is set to %s but no signing region was provided", stsEndpoint));
+            }
             conf.set(Constants.ASSUMED_ROLE_STS_ENDPOINT, stsEndpoint);
         }
-        if (externalId != null) {
-            conf.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
-        }
+        conf.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
     }
 }
