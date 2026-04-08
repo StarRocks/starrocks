@@ -2146,6 +2146,12 @@ public:
         const ColumnPtr& array_column = columns[0];
         const ColumnPtr& target_column = columns[1];
 
+        // When target is only_null, its internal data column is Int8Column (from create_const_null_column)
+        // which doesn't match the expected element type. Handle this upfront by searching for NULL in arrays.
+        if (target_column->only_null()) {
+            return _process_only_null_target(array_column);
+        }
+
         bool is_const_array = array_column->is_constant();
         ColumnPtr array_data_column = FunctionHelper::get_data_column_of_const(array_column);
         bool is_nullable_array = array_data_column->is_nullable();
@@ -2215,6 +2221,61 @@ public:
 private:
     static constexpr bool is_supported(LogicalType type) {
         return is_scalar_logical_type(type) || type == TYPE_ARRAY || type == TYPE_MAP || type == TYPE_STRUCT;
+    }
+
+    // Handle the case where target is only_null (all NULLs).
+    // We search for NULL elements in each array.
+    static StatusOr<ColumnPtr> _process_only_null_target(const ColumnPtr& array_column) {
+        bool is_const_array = array_column->is_constant();
+        ColumnPtr array_data_column = FunctionHelper::get_data_column_of_const(array_column);
+        bool is_nullable_array = array_data_column->is_nullable();
+        NullColumnPtr array_null_column;
+        const NullColumn::ValueType* array_null_data = nullptr;
+        if (is_nullable_array) {
+            const auto* nullable_col = down_cast<const NullableColumn*>(array_data_column.get());
+            array_null_column = nullable_col->null_column();
+            array_null_data = nullable_col->immutable_null_column_data().data();
+            array_data_column = nullable_col->data_column();
+        }
+
+        const auto* arr_col = down_cast<const ArrayColumn*>(array_data_column.get());
+        const auto& elements_column = arr_col->elements_column();
+        const NullColumn::ValueType* elements_null_data =
+                down_cast<const NullableColumn*>(elements_column.get())->immutable_null_column_data().data();
+        const auto& offsets_column = arr_col->offsets_column();
+        const auto offsets_data = offsets_column->immutable_data();
+
+        size_t num_rows = is_const_array ? 1 : arr_col->size();
+        auto result_column = ReturnType::create();
+        result_column->resize(num_rows);
+        auto* result_data = result_column->get_data().data();
+
+        for (size_t i = 0; i < num_rows; i++) {
+            if (is_nullable_array && array_null_data[is_const_array ? 0 : i]) {
+                result_data[i] = 0;
+                continue;
+            }
+            size_t offset = is_const_array ? offsets_data[0] : offsets_data[i];
+            size_t array_size =
+                    is_const_array ? offsets_data[1] - offsets_data[0] : offsets_data[i + 1] - offsets_data[i];
+            size_t position = 0;
+            for (size_t j = 0; j < array_size; j++) {
+                if (elements_null_data[offset + j]) {
+                    position = j + 1;
+                    break;
+                }
+            }
+            result_data[i] = PositionEnabled ? position : (position != 0);
+        }
+
+        ColumnPtr result = result_column;
+        if (is_nullable_array) {
+            result = NullableColumn::create(std::move(result), array_null_column->clone());
+        }
+        if (is_const_array) {
+            result = ConstColumn::create(std::move(result), array_column->size());
+        }
+        return result;
     }
 
     static void _build_hash_table(const ColumnPtr& column, ArrayContainsState* state) {
