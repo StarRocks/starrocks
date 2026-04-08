@@ -437,8 +437,6 @@ public class RuleSet {
                     new MinMaxOptOnScanRule()
             ));
 
-<<<<<<< HEAD
-=======
     // Unified IVM delta/version rewrite rules.
     public static final Rule IVM_DELTA_REWRITE_RULES =
             new CombinationRule(RuleType.GP_IVM_DELTA_REWRITE, ImmutableList.of(
@@ -450,7 +448,6 @@ public class RuleSet {
                     new IvmVersionProjectRule()
             ));
 
->>>>>>> 7d01c2547e ([Enhancement] Add IvmRewriter and Iceberg scan/filter/project rules for unified IVM framework (#71292))
     public static final Rule TVR_REWRITE_RULES =
             new CombinationRule(RuleType.GP_TVR_REWRITE, ImmutableList.of(
                     new TvrTableScanRule(),
