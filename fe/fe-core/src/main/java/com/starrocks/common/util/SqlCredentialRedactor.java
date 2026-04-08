@@ -144,6 +144,24 @@ public class SqlCredentialRedactor {
     private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";
 
     /**
+     * Cheap check for whether {@link #redact(String)} might change the SQL. Used on hot paths (e.g. query profiles)
+     * to skip full redaction when the text has no credential-related markers.
+     */
+    public static boolean mayNeedCredentialRedaction(String sql) {
+        if (sql == null || sql.isEmpty()) {
+            return false;
+        }
+        String lower = sql.toLowerCase();
+        for (String key : CREDENTIAL_KEYS_LOWERCASE) {
+            if (lower.indexOf(key) >= 0) {
+                return true;
+            }
+        }
+        return lower.contains("identified by") || lower.contains("identified with")
+                || lower.contains("set password");
+    }
+
+    /**
      * Redact sensitive credentials from SQL string.
      *
      * @param sql the SQL string that may contain credentials

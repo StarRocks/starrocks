@@ -434,8 +434,11 @@ public class StmtExecutor {
         if (AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
                     SqlCredentialRedactor.redact(AstToSQLBuilder.toSQLOrDefault(parsedStmt, originStmt.originStmt)));
-        } else {
+        } else if (Config.enable_sql_desensitize_in_log
+                || SqlCredentialRedactor.mayNeedCredentialRedaction(sql)) {
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, SqlCredentialRedactor.redact(sql));
+        } else {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, sql);
         }
         summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getWarehouseComputeResourceName(context.getCurrentComputeResource()));

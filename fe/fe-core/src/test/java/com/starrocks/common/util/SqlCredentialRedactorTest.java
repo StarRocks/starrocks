@@ -56,6 +56,24 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testMayNeedCredentialRedactionSkipsPlainSql() {
+        Assertions.assertFalse(SqlCredentialRedactor.mayNeedCredentialRedaction(null));
+        Assertions.assertFalse(SqlCredentialRedactor.mayNeedCredentialRedaction(""));
+        Assertions.assertFalse(SqlCredentialRedactor.mayNeedCredentialRedaction("SELECT 1"));
+        Assertions.assertFalse(SqlCredentialRedactor.mayNeedCredentialRedaction("SELECT * FROM t0 WHERE id = 1"));
+    }
+
+    @Test
+    public void testMayNeedCredentialRedactionDetectsMarkers() {
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "\"aws.s3.secret_key\" = \"x\""));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "CREATE USER u IDENTIFIED BY 'secret'"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "SET PASSWORD FOR u = PASSWORD('p')"));
+    }
+
+    @Test
     public void testRedactInsertIntoFilesCredentials() {
         String sql = "INSERT INTO FILES(\n" +
                 "        \"path\" = \"s3://bucket/output/\",\n" +
