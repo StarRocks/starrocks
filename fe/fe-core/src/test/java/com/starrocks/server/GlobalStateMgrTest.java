@@ -253,6 +253,19 @@ public class GlobalStateMgrTest {
     }
 
     @Test
+    public void testLeaderLeaseActivationAllowsEpochZero() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(0L);
+
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+        Assertions.assertEquals(0L, lease.getHaEpoch());
+        Assertions.assertTrue(lease.isValid());
+        Assertions.assertTrue(globalStateMgr.isLeaderLeaseValid(lease));
+    }
+
+    @Test
     public void testLeaderLeaseInvalidatedByDemotionSkeleton() {
         GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
         globalStateMgr.beginLeaderActivation();

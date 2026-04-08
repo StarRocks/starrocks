@@ -105,6 +105,52 @@ public class JournalWriterSealTest {
                 ((JournalWriteException) abortException.getCause()).getReason());
     }
 
+    @Test
+    public void testSealTimeoutReturnsLatestCommittedWatermark() throws Exception {
+        TestJournal journal = new TestJournal();
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
+        JournalWriter writer = new JournalWriter(journal, queue);
+        writer.init(7L);
+
+        JournalWriter.DrainResult result = writer.sealAndGetCommittedWatermark(1L);
+
+        Assertions.assertEquals(JournalWriter.DrainResult.Status.TIMEOUT, result.getStatus());
+        Assertions.assertEquals(7L, result.getLastCommittedJournalId());
+    }
+
+    @Test
+    public void testSealOnClosedWriterReturnsCachedResult() throws Exception {
+        TestJournal journal = new TestJournal();
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
+        JournalWriter writer = new JournalWriter(journal, queue);
+        writer.init(3L);
+
+        CompletableFuture<JournalWriter.DrainResult> resultFuture = runSeal(writer, 5000L);
+        waitUntilQueueSize(queue, 1);
+        writer.writeOneBatch();
+
+        JournalWriter.DrainResult first = resultFuture.get(5, TimeUnit.SECONDS);
+        JournalWriter.DrainResult second = writer.sealAndGetCommittedWatermark(100L);
+
+        Assertions.assertEquals(first.getStatus(), second.getStatus());
+        Assertions.assertEquals(first.getLastCommittedJournalId(), second.getLastCommittedJournalId());
+    }
+
+    @Test
+    public void testForceRollJournalTriggersManualRollReason() throws Exception {
+        TestJournal journal = new TestJournal();
+        BlockingQueue<JournalTask> queue = new ArrayBlockingQueue<>(16);
+        JournalWriter writer = new JournalWriter(journal, queue);
+        writer.init(3L);
+        journal.clearRollJournalIds();
+
+        queue.put(new JournalTask(System.nanoTime(), makeBuffer(10), -1));
+        writer.setForceRollJournal();
+        writer.writeOneBatch();
+
+        Assertions.assertEquals(List.of(5L), journal.getRollJournalIds());
+    }
+
     private CompletableFuture<JournalWriter.DrainResult> runSeal(JournalWriter writer, long timeoutMs) {
         CompletableFuture<JournalWriter.DrainResult> future = new CompletableFuture<>();
         Thread thread = new Thread(() -> {
@@ -138,6 +184,7 @@ public class JournalWriterSealTest {
         private boolean commitFailure;
         private final List<Long> stagingJournalIds = new ArrayList<>();
         private final List<Long> committedJournalIds = new ArrayList<>();
+        private final List<Long> rollJournalIds = new ArrayList<>();
 
         @Override
         public void open() {
@@ -145,6 +192,7 @@ public class JournalWriterSealTest {
 
         @Override
         public void rollJournal(long journalId) throws JournalException {
+            rollJournalIds.add(journalId);
         }
 
         @Override
@@ -211,6 +259,14 @@ public class JournalWriterSealTest {
 
         public List<Long> getCommittedJournalIds() {
             return committedJournalIds;
+        }
+
+        public void clearRollJournalIds() {
+            rollJournalIds.clear();
+        }
+
+        public List<Long> getRollJournalIds() {
+            return rollJournalIds;
         }
     }
 }
