@@ -1091,9 +1091,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                         auto range = std::make_shared<SparseRange<>>();
                         range->add(Range<>(start_rowid, std::numeric_limits<rowid_t>::max()));
                         rowid_ranges[si] = std::move(range);
+                    } else {
+                        // low_rowid == UINT32_MAX means the entire segment is covered by SSTables,
+                        // set an empty range so the segment iterator skips all rows.
+                        rowid_ranges[si] = std::make_shared<SparseRange<>>();
                     }
-                    // If low_rowid == UINT32_MAX, the entire segment is covered,
-                    // and will be skipped by the rssid < rebuild_rss_id check below.
                     break;
                 }
             }
