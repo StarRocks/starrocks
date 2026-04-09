@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Deployment prerequisites
+# Deployment Prerequisites
 
 This topic describes the hardware and software requirements that your servers must meet before deploying StarRocks. For recommended hardware specifications of your StarRocks cluster, see [Plan your StarRocks cluster](../deployment/plan_cluster.md).
 
@@ -34,7 +34,7 @@ If your applications involve [Primary Key tables](../table_design/table_types/pr
 
 We recommend that you use 10 Gigabit Ethernet networking to ensure stable data transmission across nodes within your StarRocks cluster.
 
-## Operating system
+## Operating System
 
 StarRocks supports deployments on Red Hat Enterprise Linux 7.9, CentOS Linux 7.9 or Ubuntu Linux 22.04.
 
@@ -43,8 +43,8 @@ StarRocks supports deployments on Red Hat Enterprise Linux 7.9, CentOS Linux 7.9
 You must install the corresponding JDK version on the server to run StarRocks.
 
 - For StarRocks v3.3 and v3.4, use JDK 11 or later.
-- For StarRocks v3.5, use JDK 17 or later.
+- For StarRocks v3.5 and later, use JDK 17 or later.
 
-> **CAUTION**
->
-> StarRocks does not support JRE.
+:::important
+StarRocks does not support JRE.
+:::

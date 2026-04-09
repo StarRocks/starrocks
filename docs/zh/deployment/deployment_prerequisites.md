@@ -32,7 +32,7 @@ StarRocks 支持 HDD 和 SSD 作为存储介质。
 
 ### 网络
 
-建议使用万兆网络连接（10 Gigabit Ethernet，简称 10 GE）确保 StarRocks 集群内数据能够跨节点高效传输。
+建议使用万兆网络连接（10 Gigabit Ethernet）确保 StarRocks 集群内数据能够跨节点高效传输。
 
 ## 操作系统
 
@@ -43,8 +43,8 @@ StarRocks 支持在 Red Hat Enterprise Linux 7.9、CentOS Linux 7.9 或 Ubuntu L
 您必须在服务器上安装对应的 JDK 版本以运行 StarRocks。
 
 - StarRocks v3.3, v3.4 请使用 JDK 11 及以上。
-- StarRocks v3.5 请使用 JDK 17 及以上。
+- StarRocks v3.5 及以上请使用 JDK 17 及以上。
 
-> **注意**
->
-> StarRocks 不支持 JRE。
+:::important
+StarRocks 不支持 JRE。
+:::
