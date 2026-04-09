@@ -19,6 +19,8 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
@@ -1214,6 +1216,44 @@ TEST_F(LakeRowsetTest, test_segment_range_mode_segment_ids) {
     // The segment ID is stored in the segment's metadata
     EXPECT_EQ(1, segments[0]->id());
     EXPECT_EQ(2, segments[1]->id());
+}
+
+// Verify that DeferOp in load_segments waits for all parallel tasks
+// before returning on error, preventing use-after-free of captured |this|.
+TEST_F(LakeRowsetTest, test_parallel_load_error_waits_all_futures) {
+    create_rowsets_for_testing();
+
+    ConfigResetGuard<bool> guard(&config::enable_load_segment_parallel, true);
+
+    std::atomic<int> total_hits{0};
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([] {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->ClearTrace();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // First call injects error; subsequent calls succeed normally.
+    // total_hits >= 2 proves DeferOp waited for all tasks before returning.
+    SyncPoint::GetInstance()->SetCallBack("Rowset::load_segments::parallel_load", [&](void* arg) {
+        if (total_hits.fetch_add(1) == 0) {
+            *static_cast<Status*>(arg) = Status::IOError("injected");
+        }
+    });
+
+    // Create rowset after config is set (Rowset captures _parallel_load in constructor)
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+
+    RowsetReadOptions rs_opts;
+    OlapReaderStatistics stats;
+    rs_opts.stats = &stats;
+    rs_opts.tablet_schema = _tablet_schema;
+    auto input_schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    auto rs = rowset->read(input_schema, rs_opts);
+    ASSERT_FALSE(rs.ok());
+    ASSERT_GE(total_hits.load(), 2);
 }
 
 } // namespace starrocks::lake
