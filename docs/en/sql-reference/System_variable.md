@@ -172,41 +172,6 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
-<<<<<<< HEAD
-=======
-### array_low_cardinality_optimize
-
-* **Scope**: Session
-* **Description**: Controls whether the optimizer will consider ARRAY&lt;VARCHAR&gt; columns for low-cardinality (dictionary-based) decoding and related optimizations. When enabled, the optimizer's low-cardinality rules (for example, `DecodeCollector`) may define dictionary columns and apply dictionary decoding to expressions whose type is VARCHAR or ARRAY&lt;VARCHAR&gt;. When disabled, only scalar VARCHAR columns are eligible and ARRAY&lt;VARCHAR&gt; types are ignored by those low-cardinality optimizations.
-* **Default**: true
-* **Data Type**: boolean
-* **Introduced in**: v3.3.0, v3.4.0, v3.5.0
-
-### authentication_policy
-
-* **Scope**: Session
-* **Description**: Session-level variable that holds the raw authentication policy string (kept for MySQL 8.0 compatibility). It is declared and stored on the FE as part of the session state and exposed under the name `authentication_policy`. In the current codebase snapshot the value is stored as an opaque comma-separated string and there is no other usage or internal parsing of this field in FE (it is not referenced elsewhere). It is related to the `default_authentication_plugin` session variable: `authentication_policy` represents per-session authentication policy data while `default_authentication_plugin` indicates the default authentication plugin. Administrators or clients can set this variable per session (for example with `SET authentication_policy = '...'`) to preserve compatibility with MySQL clients or tooling.
-* **Default**: `*,,`
-* **Data Type**: String
-* **Introduced in**: -
-
-### binary_encoding_format
-
-* **Scope**: Session
-* **Description**: Controls how `BINARY` / `VARBINARY` values are encoded when StarRocks serializes MySQL text results. Valid values are `raw`, `hex`, and `base64`. The default is `hex`. This variable works together with `binary_encoding_level`. MySQL clients can already handle top-level binary values, but nested binary values inside `ARRAY`, `MAP`, or `STRUCT` are returned through JSON-like strings, so they may need extra encoding to stay printable and well-formed. Set this variable to `base64` if you prefer a denser printable representation, or `raw` to disable extra encoding entirely.
-* **Default**: `hex`
-* **Data Type**: String
-* **Introduced in**: v4.1
-
-### binary_encoding_level
-
-* **Scope**: Session
-* **Description**: Controls which binary values are encoded for MySQL text results. Valid values are `nested` and `all`. The default is `nested`, which preserves historical behavior for top-level binary columns while still encoding nested binary values inside `ARRAY`, `MAP`, or `STRUCT`, where the result is rendered as a JSON-like string. Set this variable to `all` if your team wants a uniform convention and prefers top-level binary values to be encoded as well. If `binary_encoding_format = raw`, no additional binary encoding is applied even when this variable is set to `nested` or `all`, which may make nested output less readable.
-* **Default**: `nested`
-* **Data Type**: String
-* **Introduced in**: v4.1
-
->>>>>>> abe4e15067 ([Enhancement] Add session variables for MySQL binary result encoding (#71415))
 ### auto_increment_increment
 
 Used for MySQL client compatibility. No practical usage.

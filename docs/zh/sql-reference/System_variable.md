@@ -174,7 +174,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1
 * 类型：Int
 
-<<<<<<< HEAD
 ### autocommit
 
 * 描述：用于兼容 MySQL 客户端。无实际作用。
@@ -183,23 +182,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 ### chunk_size
 
 用于指定在查询执行过程中，各个节点传输的单个数据包的行数。默认一个数据包的行数为 4096 行，即源端节点每产生 4096 行数据后，打包发给目的节点。较大的行数，会在扫描大数据量场景下提升查询的吞吐率，但可能会在小查询场景下增加查询延迟。同时，也会增加查询的内存开销。建议设置范围 1024 至 4096。
-=======
-### binary_encoding_format
-
-* **作用域**: Session
-* **描述**: 控制 StarRocks 在 MySQL 文本结果中如何编码 `BINARY` / `VARBINARY` 值。可选值为 `raw`、`hex` 和 `base64`，默认值为 `hex`。该变量需要结合 `binary_encoding_level` 一起理解。对于顶层二进制列，MySQL 客户端通常可以直接处理；但当二进制值出现在 `ARRAY`、`MAP`、`STRUCT` 等嵌套类型中时，结果会以类 JSON 字符串的形式返回，此时为了保证内容可打印且格式稳定，往往需要额外编码。若希望结果更紧凑可读，可以使用 `base64`；若希望完全保留原始字节，可以设置为 `raw`。
-* **默认值**: `hex`
-* **数据类型**: String
-* **引入版本**: v4.1
-
-### binary_encoding_level
-
-* **作用域**: Session
-* **描述**: 控制 MySQL 文本结果中哪些二进制值需要编码。可选值为 `nested` 和 `all`，默认值为 `nested`。`nested` 用于兼容历史行为，即仅对 `ARRAY`、`MAP`、`STRUCT` 等嵌套类型中的二进制值进行编码，而顶层二进制列保持原有行为。若团队希望所有二进制输出都遵循统一的编码规范，可以设置为 `all`，此时顶层二进制值也会一起编码。若 `binary_encoding_format = raw`，则不会额外执行二进制编码，即使这里设置为 `nested` 或 `all`，嵌套输出的可读性也可能下降。
-* **默认值**: `nested`
-* **数据类型**: String
-* **引入版本**: v4.1
->>>>>>> abe4e15067 ([Enhancement] Add session variables for MySQL binary result encoding (#71415))
 
 ### big_query_profile_threshold
 
