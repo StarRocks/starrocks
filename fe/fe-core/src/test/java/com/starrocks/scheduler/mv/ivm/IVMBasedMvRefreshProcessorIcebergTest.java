@@ -797,4 +797,54 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                             "Expected >1 but got: " + mvPartitionsToRefresh);
         }
     }
+
+    @Test
+    public void testIVMAggregatePlanContainsStateUnionAndMvScan() throws Exception {
+        doTestWith3Runs("SELECT date, sum(id), approx_count_distinct(data) " +
+                        "FROM `iceberg0`.`partitioned_db`.`t1` as a group by date;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    // Verify incremental scan
+                    PlanTestBase.assertContains(planStr,
+                            "TABLE VERSION: Delta@[MIN,1]");
+                    // Verify LEFT/RIGHT OUTER JOIN with __ROW_ID__
+                    PlanTestBase.assertContains(planStr, "HASH JOIN");
+                    PlanTestBase.assertContains(planStr, "equal join conjunct:");
+                    PlanTestBase.assertContains(planStr, "from_binary");
+                    // Verify MV scan exists (scan existing aggregate state)
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                    // Verify state_union is in the plan
+                    PlanTestBase.assertContains(planStr, "state_union");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    // Verify delta version advanced
+                    PlanTestBase.assertContains(planStr,
+                            "TABLE VERSION: Delta@[1,2]");
+                    // Verify state_union still present on incremental refresh
+                    PlanTestBase.assertContains(planStr, "state_union");
+                    // Verify MV scan still present
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                }
+        );
+    }
+
+    @Test
+    public void testIVMAggregatePlanWithMultiGroupByKeys() throws Exception {
+        doTestWith3RunsNoCheckRewrite("SELECT date, id, sum(id), count(data) " +
+                        "FROM `iceberg0`.`partitioned_db`.`t1` as a group by date, id;",
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE VERSION: Delta@[MIN,1]");
+                    PlanTestBase.assertContains(planStr, "HASH JOIN");
+                    PlanTestBase.assertContains(planStr, "state_union");
+                    PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                },
+                plan -> {
+                    String planStr = plan.getExplainString(TExplainLevel.NORMAL);
+                    PlanTestBase.assertContains(planStr, "TABLE VERSION: Delta@[1,2]");
+                    PlanTestBase.assertContains(planStr, "state_union");
+                }
+        );
+    }
 }
