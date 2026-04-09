@@ -18,7 +18,7 @@ StarRocks 的部署通常遵循以下步骤：
 
 2. [规划集群规模](../deployment/plan_cluster.md)。
 
-   规划集群中 FE 节点和 BE 节点的数量，以及服务器的硬件规格。
+   规划集群中 FE 节点和 BE/CN 节点的数量，以及服务器的硬件规格。
 
 3. [检查环境配置](../deployment/environment_configurations.md)。
 
