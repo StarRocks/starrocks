@@ -51,21 +51,18 @@ static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tab
         // General: every column size must match chunk num_rows
         LOG_IF(ERROR, col->size() != num_rows)
                 << "PCU_DIAG_H: " << tag << " col size mismatch"
-                << " col=" << col_i << " col_size=" << col->size()
-                << " chunk_rows=" << num_rows
+                << " col=" << col_i << " col_size=" << col->size() << " chunk_rows=" << num_rows
                 << " tablet=" << tablet_id << " rssid=" << rssid;
         // Nullable: check sub-column sizes
         if (col->is_nullable()) {
             const auto* ncol = down_cast<const NullableColumn*>(col);
             LOG_IF(ERROR, ncol->null_column()->size() != num_rows)
                     << "PCU_DIAG_H: " << tag << " null_col size mismatch"
-                    << " col=" << col_i << " null_size=" << ncol->null_column()->size()
-                    << " chunk_rows=" << num_rows
+                    << " col=" << col_i << " null_size=" << ncol->null_column()->size() << " chunk_rows=" << num_rows
                     << " tablet=" << tablet_id << " rssid=" << rssid;
             LOG_IF(ERROR, ncol->data_column()->size() != num_rows)
                     << "PCU_DIAG_H: " << tag << " data_col size mismatch"
-                    << " col=" << col_i << " data_size=" << ncol->data_column()->size()
-                    << " chunk_rows=" << num_rows
+                    << " col=" << col_i << " data_size=" << ncol->data_column()->size() << " chunk_rows=" << num_rows
                     << " tablet=" << tablet_id << " rssid=" << rssid;
             col = ncol->data_column().get();
         }
@@ -75,24 +72,20 @@ static void diag_validate_chunk(const Chunk& chunk, const char* tag, int64_t tab
             const auto& offsets = arr->offsets().get_data();
             LOG_IF(ERROR, offsets.size() != col->size() + 1)
                     << "PCU_DIAG_H: " << tag << " array offsets size mismatch"
-                    << " col=" << col_i << " offsets_size=" << offsets.size()
-                    << " expected=" << col->size() + 1
+                    << " col=" << col_i << " offsets_size=" << offsets.size() << " expected=" << col->size() + 1
                     << " tablet=" << tablet_id << " rssid=" << rssid;
             for (size_t r = 1; r < offsets.size(); r++) {
                 if (offsets[r] < offsets[r - 1]) {
                     LOG(ERROR) << "PCU_DIAG_H: " << tag << " array corrupted offsets"
-                               << " col=" << col_i << " row=" << r - 1
-                               << " off[" << r - 1 << "]=" << offsets[r - 1]
-                               << " off[" << r << "]=" << offsets[r]
-                               << " tablet=" << tablet_id << " rssid=" << rssid;
+                               << " col=" << col_i << " row=" << r - 1 << " off[" << r - 1 << "]=" << offsets[r - 1]
+                               << " off[" << r << "]=" << offsets[r] << " tablet=" << tablet_id << " rssid=" << rssid;
                     break;
                 }
             }
             size_t total_elems = offsets.back() - offsets.front();
             LOG_IF(ERROR, total_elems != arr->elements().size())
                     << "PCU_DIAG_H: " << tag << " array elements mismatch"
-                    << " col=" << col_i << " elems=" << arr->elements().size()
-                    << " expected=" << total_elems
+                    << " col=" << col_i << " elems=" << arr->elements().size() << " expected=" << total_elems
                     << " tablet=" << tablet_id << " rssid=" << rssid;
         }
     }
@@ -348,16 +341,12 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
         int dcg_files = has_dcg ? dcg_iter->second.column_files_size() : 0;
         int dcg_versions = has_dcg ? dcg_iter->second.versions_size() : 0;
         LOG(INFO) << "PCU_DIAG_S1a: read_source_segment"
-                << " tablet=" << params.tablet->id() << " rssid=" << rssid
-                << " txn_id=" << _txn_id
-                << " seg_rows=" << seg_num_rows
-                << " has_dcg=" << has_dcg
-                << " dcg_files=" << dcg_files << " dcg_versions=" << dcg_versions
-                << " schema_cols=" << schema.num_fields()
-                << " base_version=" << _base_version
-                << " metadata_version=" << params.metadata->version()
-                << " total_rowsets=" << params.metadata->rowsets_size()
-                << " total_dcg_entries=" << params.metadata->dcg_meta().dcgs().size();
+                  << " tablet=" << params.tablet->id() << " rssid=" << rssid << " txn_id=" << _txn_id
+                  << " seg_rows=" << seg_num_rows << " has_dcg=" << has_dcg << " dcg_files=" << dcg_files
+                  << " dcg_versions=" << dcg_versions << " schema_cols=" << schema.num_fields()
+                  << " base_version=" << _base_version << " metadata_version=" << params.metadata->version()
+                  << " total_rowsets=" << params.metadata->rowsets_size()
+                  << " total_dcg_entries=" << params.metadata->dcg_meta().dcgs().size();
     }
 
     auto source_chunk_ptr = ChunkHelper::new_chunk(schema, segment->num_rows());
@@ -378,8 +367,7 @@ StatusOr<ChunkPtr> ColumnModePartialUpdateHandler::_read_from_source_segment(con
     LOG_IF(ERROR, source_chunk_ptr->num_rows() != segment->num_rows())
             << "PCU_DIAG_S1d: total rows mismatch"
             << " read=" << source_chunk_ptr->num_rows() << " expected=" << segment->num_rows()
-            << " tablet=" << params.tablet->id() << " rssid=" << rssid
-            << " txn_id=" << _txn_id;
+            << " tablet=" << params.tablet->id() << " rssid=" << rssid << " txn_id=" << _txn_id;
     return source_chunk_ptr;
 }
 
@@ -432,9 +420,8 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
         // [DIAG-S2] Check for duplicate source rowids
         for (size_t i = 1; i < sorted_source_rowids.size(); i++) {
             LOG_IF(ERROR, sorted_source_rowids[i] == sorted_source_rowids[i - 1])
-                    << "PCU_DIAG_S2: duplicate source_rowid=" << sorted_source_rowids[i]
-                    << " upt_id=" << upt_id << " idx=" << i
-                    << " total=" << sorted_source_rowids.size();
+                    << "PCU_DIAG_S2: duplicate source_rowid=" << sorted_source_rowids[i] << " upt_id=" << upt_id
+                    << " idx=" << i << " total=" << sorted_source_rowids.size();
         }
 
         auto tmp_chunk = ChunkHelper::new_chunk(partial_schema, unsorted_upt_rowids.size());
@@ -507,17 +494,13 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     {
         std::stringstream ss;
         ss << "PCU_DIAG_S0: execute"
-           << " tablet=" << params.tablet->id()
-           << " txn_id=" << _txn_id
-           << " base_version=" << _base_version
-           << " metadata_version=" << params.metadata->version()
-           << " update_col_ids=[";
+           << " tablet=" << params.tablet->id() << " txn_id=" << _txn_id << " base_version=" << _base_version
+           << " metadata_version=" << params.metadata->version() << " update_col_ids=[";
         for (size_t i = 0; i < unique_update_column_ids.size(); i++) {
             if (i > 0) ss << ",";
             ss << unique_update_column_ids[i];
         }
-        ss << "] segments_to_update=" << rss_upt_id_to_rowid_pairs.size()
-           << " per_seg_rows={";
+        ss << "] segments_to_update=" << rss_upt_id_to_rowid_pairs.size() << " per_seg_rows={";
         bool first = true;
         for (const auto& each : rss_upt_id_to_rowid_pairs) {
             if (!first) ss << ",";
@@ -559,8 +542,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             RETURN_IF_ERROR(_update_source_chunk_by_upt(each.second, partial_schema, &source_chunk_ptr));
 
             // [DIAG-S5] final validation before DCG write
-            diag_validate_chunk(*source_chunk_ptr, "before_dcg_write",
-                                        params.tablet->id(), each.first);
+            diag_validate_chunk(*source_chunk_ptr, "before_dcg_write", params.tablet->id(), each.first);
 
             uint64_t segment_file_size = 0;
             uint64_t index_size = 0;
