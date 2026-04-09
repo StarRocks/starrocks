@@ -60,9 +60,11 @@ import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaAggregateRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaFilterRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaIcebergScanRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaProjectRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionAggregateRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionFilterRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionIcebergScanRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionProjectRule;
@@ -442,9 +444,11 @@ public class RuleSet {
     // Unified IVM delta/version rewrite rules.
     public static final Rule IVM_DELTA_REWRITE_RULES =
             new CombinationRule(RuleType.GP_IVM_DELTA_REWRITE, ImmutableList.of(
+                    new IvmDeltaAggregateRule(),
                     new IvmDeltaIcebergScanRule(),
                     new IvmDeltaFilterRule(),
                     new IvmDeltaProjectRule(),
+                    new IvmVersionAggregateRule(),
                     new IvmVersionIcebergScanRule(),
                     new IvmVersionFilterRule(),
                     new IvmVersionProjectRule()
