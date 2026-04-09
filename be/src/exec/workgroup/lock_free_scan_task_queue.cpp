@@ -51,16 +51,17 @@ void LockFreeScanTaskQueue::force_put(ScanTask task) {
 bool LockFreeScanTaskQueue::try_take(ScanTask& task, int worker_id) {
     uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_acquire);
     if (bitmap != 0) {
-        if (_try_take_from_levels(bitmap, task,
-                                  [this, worker_id](int level, ScanTask& t) { return _queue.try_dequeue(level, t, worker_id); })) {
+        if (_try_take_from_levels(bitmap, task, [this, worker_id](int level, ScanTask& t) {
+                return _queue.try_dequeue(level, t, worker_id);
+            })) {
             return true;
         }
     }
 
     // Bitmap may be stale due to a concurrent clear racing with an enqueue's
     // _mark_non_empty. Fall back to scanning all levels directly.
-    return _fallback_try_take(task,
-                              [this, worker_id](int level, ScanTask& t) { return _queue.try_dequeue(level, t, worker_id); });
+    return _fallback_try_take(
+            task, [this, worker_id](int level, ScanTask& t) { return _queue.try_dequeue(level, t, worker_id); });
 }
 
 bool LockFreeScanTaskQueue::try_take(ScanTask& task) {

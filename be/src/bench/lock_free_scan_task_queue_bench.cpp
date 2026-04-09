@@ -159,7 +159,9 @@ static void BM_LockFreeScanTaskQueue_SustainedMixed_ImplicitProducerExplicitCons
     state.counters["fail_ops"] = benchmark::Counter(cumulative_failed_ops);
 }
 
-BENCHMARK(BM_LockFreeScanTaskQueue_SustainedMixed_ImplicitProducerExplicitConsumer)->Apply(BM_ThreadArgs)->UseRealTime();
+BENCHMARK(BM_LockFreeScanTaskQueue_SustainedMixed_ImplicitProducerExplicitConsumer)
+        ->Apply(BM_ThreadArgs)
+        ->UseRealTime();
 
 static void BM_PriorityScanTaskQueue_SustainedMixed(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));

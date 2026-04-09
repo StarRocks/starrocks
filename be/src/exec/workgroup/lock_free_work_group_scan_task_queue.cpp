@@ -125,8 +125,8 @@ LockFreeScanTaskQueue* LockFreeWorkGroupScanTaskQueue::_get_or_create_wg_queue(W
     }
     auto [inserted_it, ok] = _wg_queues.emplace(wg, std::make_unique<LockFreeScanTaskQueue>(_num_workers));
     LOG(INFO) << "[SCAN_QUEUE] create per-workgroup LockFreeScanTaskQueue"
-              << " sched_entity_type=" << sched_entity_type_to_string(_sched_entity_type)
-              << " wg_id=" << wg->id() << " wg_name=" << wg->name() << " num_workers=" << _num_workers;
+              << " sched_entity_type=" << sched_entity_type_to_string(_sched_entity_type) << " wg_id=" << wg->id()
+              << " wg_name=" << wg->name() << " num_workers=" << _num_workers;
     return inserted_it->second.get();
 }
 

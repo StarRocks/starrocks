@@ -49,12 +49,12 @@ static Operators gen_wg_ops() {
 class LockFreeWorkGroupDriverQueueTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _wg1 = std::make_shared<workgroup::WorkGroup>("wg_lf1", 1001, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5,
-                                                       10, 1.0, workgroup::WorkGroupType::WG_NORMAL,
-                                                       workgroup::WorkGroup::DEFAULT_MEM_POOL);
-        _wg2 = std::make_shared<workgroup::WorkGroup>("wg_lf2", 1002, workgroup::WorkGroup::DEFAULT_VERSION, 2, 0.5,
-                                                       10, 1.0, workgroup::WorkGroupType::WG_NORMAL,
-                                                       workgroup::WorkGroup::DEFAULT_MEM_POOL);
+        _wg1 = std::make_shared<workgroup::WorkGroup>("wg_lf1", 1001, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL,
+                                                      workgroup::WorkGroup::DEFAULT_MEM_POOL);
+        _wg2 = std::make_shared<workgroup::WorkGroup>("wg_lf2", 1002, workgroup::WorkGroup::DEFAULT_VERSION, 2, 0.5, 10,
+                                                      1.0, workgroup::WorkGroupType::WG_NORMAL,
+                                                      workgroup::WorkGroup::DEFAULT_MEM_POOL);
         _wg1 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg1);
         _wg2 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(_wg2);
     }
