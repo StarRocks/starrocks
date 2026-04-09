@@ -69,6 +69,8 @@ The following variables only take effect globally. They cannot take effect for a
 * activate_all_roles_on_login
 * character_set_database
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
 * enable_query_queue_select
 * enable_query_queue_statistic
 * enable_query_queue_load
@@ -520,6 +522,20 @@ Default value: `true`.
 * **Default**: 64
 * **Data Type**: int
 * **Introduced in**: v3.5.13
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* **Description**: Whether to preserve the target `VARCHAR(N)` length when `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast. Enable this variable to keep prepare and execute result-set metadata consistent for statements such as `CAST(col AS VARCHAR(N))`.
+* **Default**: false
+* **Data Type**: Boolean
+* **Introduced in**: v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* **Description**: Whether to synchronize the reused planner `Expr` type and origin type with the rewritten `VARCHAR(N)` type after `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast.
+* **Default**: true
+* **Data Type**: Boolean
+* **Introduced in**: v4.0.9
 
 ### enable_metadata_profile
 

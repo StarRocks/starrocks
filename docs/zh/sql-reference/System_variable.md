@@ -63,6 +63,8 @@ SET GLOBAL query_mem_limit = 137438953472;
 * activate_all_roles_on_login
 * character_set_database
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
 * enable_query_queue_select
 * enable_query_queue_statistic
 * enable_query_queue_load
@@ -509,6 +511,20 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：64
 * 数据类型：Int
 * 引入版本：v3.5.13
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* 描述：当 `ReduceCastRule` 消除同类型的 `VARCHAR -> VARCHAR` cast 时，是否保留目标 `VARCHAR(N)` 的长度信息。开启后，可使 `CAST(col AS VARCHAR(N))` 这类语句在 prepare 和 execute 阶段返回一致的结果集元数据。
+* 默认值：false
+* 数据类型：Boolean
+* 引入版本：v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* 描述：当 `ReduceCastRule` 消除同类型的 `VARCHAR -> VARCHAR` cast 后，是否将复用的 planner `Expr` 的 `type` 和 `originType` 同步为改写后的 `VARCHAR(N)` 类型。
+* 默认值：true
+* 数据类型：Boolean
+* 引入版本：v4.0.9
 
 ### enable_metadata_profile
 
