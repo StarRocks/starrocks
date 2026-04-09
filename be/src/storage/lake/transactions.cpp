@@ -24,7 +24,6 @@
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
-#include "storage/options.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
@@ -34,6 +33,7 @@
 #include "storage/lake/txn_log_applier.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
+#include "storage/options.h"
 
 namespace {
 
@@ -218,8 +218,8 @@ void prefetch_compaction_delvecs(TabletManager* tablet_mgr, int64_t tablet_id, i
         }
     }
     VLOG(1) << "prefetch_compaction_delvecs: tablet=" << tablet_id << " version=" << base_version
-            << " input_rowsets=" << op_compaction.input_rowsets_size()
-            << " input_segments=" << input_segment_ids.size() << " prefetched_delvecs=" << prefetched;
+            << " input_rowsets=" << op_compaction.input_rowsets_size() << " input_segments=" << input_segment_ids.size()
+            << " prefetched_delvecs=" << prefetched;
 }
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
@@ -257,8 +257,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             if (txn_log_st.ok() && !txn_log_st.value()[0].empty()) {
                 for (const auto& log : txn_log_st.value()[0]) {
                     if (log->has_op_compaction() && log->op_compaction().input_rowsets_size() > 0) {
-                        prefetch_compaction_delvecs(tablet_mgr, tablet_id, base_version,
-                                                    log->op_compaction());
+                        prefetch_compaction_delvecs(tablet_mgr, tablet_id, base_version, log->op_compaction());
                     }
                 }
             }
