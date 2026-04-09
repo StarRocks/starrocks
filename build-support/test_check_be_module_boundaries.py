@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -92,6 +94,44 @@ class CheckBeModuleBoundariesTest(unittest.TestCase):
 
         self.assertEqual({"src/column/hash_set.h"}, extra_paths)
         self.assertEqual({"src/exec/old.cpp"}, stale_paths)
+
+    def test_print_path_allowlist_diff_highlights_allowlist_and_action_for_new_paths(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            MODULE._print_path_allowlist_diff(
+                "exec-env-include",
+                {"test/testutil/runtime_state_test_util.h"},
+                set(),
+                "build-support/exec_env_header_include_allowlist.txt",
+            )
+
+        output = stdout.getvalue()
+        self.assertIn("ERROR: new exec-env-include paths require allowlist review", output)
+        self.assertIn("allowlist: build-support/exec_env_header_include_allowlist.txt", output)
+        self.assertIn(
+            "action: remove the new dependency or add the path to build-support/exec_env_header_include_allowlist.txt if it is intentional.",
+            output,
+        )
+        self.assertIn("[exec-env-include] new path=test/testutil/runtime_state_test_util.h", output)
+
+    def test_print_path_allowlist_diff_highlights_allowlist_and_action_for_stale_paths(self) -> None:
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            MODULE._print_path_allowlist_diff(
+                "exec-env-singleton",
+                set(),
+                {"src/exec/old.cpp"},
+                "build-support/exec_env_singleton_allowlist.txt",
+            )
+
+        output = stdout.getvalue()
+        self.assertIn("ERROR: stale exec-env-singleton allowlist entries should be removed", output)
+        self.assertIn("allowlist: build-support/exec_env_singleton_allowlist.txt", output)
+        self.assertIn(
+            "action: delete the stale entries from build-support/exec_env_singleton_allowlist.txt.",
+            output,
+        )
+        self.assertIn("[exec-env-singleton] stale path=src/exec/old.cpp", output)
 
     def test_ci_architecture_filter_covers_checker_code_extensions(self) -> None:
         workflow_path = Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml"

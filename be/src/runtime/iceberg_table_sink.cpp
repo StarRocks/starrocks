@@ -22,8 +22,8 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -185,7 +185,8 @@ Status IcebergTableSink::create_delete_sink_context(
         delete_sink_ctx->max_file_size = t_iceberg_sink.target_max_file_size;
     }
     delete_sink_ctx->tuple_desc_id = t_iceberg_sink.tuple_id;
-    delete_sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
+    auto* query_execution_services = runtime_state->query_execution_services();
+    delete_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     delete_sink_ctx->fragment_context = fragment_ctx;
 
     // Delete files have columns: file_path and pos (row_position)
@@ -252,7 +253,8 @@ Status IcebergTableSink::create_data_sink_context(const TDataSink& thrift_sink, 
                                   : t_iceberg_sink.location + connector::IcebergUtils::DATA_DIRECTORY;
     data_sink_ctx->cloud_conf = t_iceberg_sink.cloud_configuration;
     data_sink_ctx->partition_column_names = iceberg_table_desc->partition_column_names();
-    data_sink_ctx->executor = ExecEnv::GetInstance()->pipeline_sink_io_pool();
+    auto* query_execution_services = runtime_state->query_execution_services();
+    data_sink_ctx->executor = query_execution_services->execution->pipeline_sink_io_pool;
     data_sink_ctx->format = t_iceberg_sink.file_format; // iceberg sink only supports parquet
     data_sink_ctx->compression_type = t_iceberg_sink.compression_type;
     if (t_iceberg_sink.__isset.target_max_file_size) {

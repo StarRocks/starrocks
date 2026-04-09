@@ -38,6 +38,8 @@ class FragmentContext;
 
 namespace starrocks::connector {
 
+class ConnectorSinkSpillExecutor;
+
 using CommitResult = formats::FileWriter::CommitResult;
 using CommitFunc = std::function<void(const CommitResult& result)>;
 using ErrorHandleFunc = std::function<void(const Status& status)>;
@@ -61,6 +63,7 @@ struct BufferPartitionChunkWriterContext : PartitionChunkWriterContext {};
 struct SpillPartitionChunkWriterContext : PartitionChunkWriterContext {
     std::shared_ptr<FileSystem> fs;
     pipeline::FragmentContext* fragment_context = nullptr;
+    ConnectorSinkSpillExecutor* spill_executor = nullptr;
     TupleDescriptor* tuple_desc = nullptr;
     std::shared_ptr<std::vector<std::unique_ptr<ColumnEvaluator>>> column_evaluators;
     std::shared_ptr<SortOrdering> sort_ordering;

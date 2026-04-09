@@ -24,6 +24,7 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -215,7 +216,9 @@ Status ESDataSource::_create_scanner() {
             ESScrollQueryBuilder::build(_properties, _column_names, _predicates, _docvalue_context, &doc_value_mode);
 
     const std::string& host = _properties.at(ESScanReader::KEY_HOST_PORT);
-    _es_reader = _pool->add(new ESScanReader(host, _properties, doc_value_mode));
+    auto* query_execution_services = _runtime_state->query_execution_services();
+    _es_reader = _pool->add(new ESScanReader(host, _properties, doc_value_mode,
+                                             query_execution_services->execution->pipeline_sink_io_pool));
     RETURN_IF_ERROR(_es_reader->open());
     return Status::OK();
 }

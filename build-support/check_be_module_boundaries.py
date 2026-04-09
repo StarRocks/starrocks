@@ -652,15 +652,19 @@ def _print_baseline_expansions(expansions: dict[str, set[tuple[str, str, str]]])
             print(f"[baseline] kind={label} module={module} path={path} edge={edge}")
 
 
-def _print_path_allowlist_diff(label: str, extra_paths: set[str], stale_paths: set[str]) -> None:
+def _print_path_allowlist_diff(label: str, extra_paths: set[str], stale_paths: set[str], allowlist_path: str) -> None:
     if extra_paths:
-        print(f"New {label} paths require allowlist review:")
+        print(f"ERROR: new {label} paths require allowlist review")
+        print(f"  allowlist: {allowlist_path}")
+        print(f"  action: remove the new dependency or add the path to {allowlist_path} if it is intentional.")
         for path in sorted(extra_paths):
-            print(f"[{label}] new path={path}")
+            print(f"  [{label}] new path={path}")
     if stale_paths:
-        print(f"Remove stale {label} allowlist entries that no longer exist in code:")
+        print(f"ERROR: stale {label} allowlist entries should be removed")
+        print(f"  allowlist: {allowlist_path}")
+        print(f"  action: delete the stale entries from {allowlist_path}.")
         for path in sorted(stale_paths):
-            print(f"[{label}] stale path={path}")
+            print(f"  [{label}] stale path={path}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -714,8 +718,18 @@ def main(argv: list[str] | None = None) -> int:
         exec_env_singleton_allowlist,
     )
     if exec_env_include_extra or exec_env_include_stale or exec_env_singleton_extra or exec_env_singleton_stale:
-        _print_path_allowlist_diff("exec-env-include", exec_env_include_extra, exec_env_include_stale)
-        _print_path_allowlist_diff("exec-env-singleton", exec_env_singleton_extra, exec_env_singleton_stale)
+        _print_path_allowlist_diff(
+            "exec-env-include",
+            exec_env_include_extra,
+            exec_env_include_stale,
+            DEFAULT_EXEC_ENV_HEADER_ALLOWLIST,
+        )
+        _print_path_allowlist_diff(
+            "exec-env-singleton",
+            exec_env_singleton_extra,
+            exec_env_singleton_stale,
+            DEFAULT_EXEC_ENV_SINGLETON_ALLOWLIST,
+        )
         return 1
 
     checked = "all modules" if selected_modules is None else ", ".join(sorted(selected_modules))

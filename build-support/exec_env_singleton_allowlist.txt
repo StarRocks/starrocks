@@ -5,12 +5,7 @@ src/agent/publish_version.cpp
 src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
 src/cache/peer_cache_engine.cpp
-src/connector/partition_chunk_writer.cpp
-src/exec/arrow_flight_batch_reader.cpp
-src/exec/dictionary_cache_writer.cpp
-src/exec/es/es_scan_reader.cpp
 src/exec/exec_node.cpp
-src/exec/parquet_writer.cpp
 src/exec/pipeline/fragment_context.cpp
 src/exec/pipeline/fragment_executor.cpp
 src/exec/pipeline/lookup/tablet_adaptor.cpp
@@ -20,7 +15,6 @@ src/exec/pipeline/pipeline_driver.cpp
 src/exec/pipeline/pipeline_driver_poller.cpp
 src/exec/pipeline/pipeline_driver_queue.cpp
 src/exec/pipeline/query_context.cpp
-src/exec/pipeline/sink/sink_io_buffer.cpp
 src/exec/schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
 src/exec/schema_scanner/schema_be_tablets_scanner.cpp
 src/exec/spill/query_spill_manager.cpp
@@ -30,12 +24,8 @@ src/fs/fs_broker.cpp
 src/http/action/update_config_action.cpp
 src/runtime/exec_env.cpp
 src/runtime/fragment_mgr.cpp
-src/runtime/hive_table_sink.cpp
-src/runtime/iceberg_table_sink.cpp
 src/runtime/load_channel_mgr.cpp
 src/runtime/logconfig.cpp
-src/runtime/schema_table_sink.cpp
-src/runtime/table_function_table_sink.cpp
 src/script/script.cpp
 src/service/internal_service.cpp
 src/service/service_be/arrow_flight_sql_service.cpp

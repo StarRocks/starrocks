@@ -152,7 +152,11 @@ public:
     const TUniqueId& query_id() const { return _query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
     const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+        _query_execution_services = query_execution_services;
+    }
     ExecEnv* exec_env() { return _exec_env; }
+    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     MemTracker* instance_mem_tracker() { return _instance_mem_tracker.get(); }
     MemPool* instance_mem_pool() { return _instance_mem_pool.get(); }
 

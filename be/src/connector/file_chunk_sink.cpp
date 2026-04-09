@@ -27,6 +27,7 @@
 #include "formats/utils.h"
 #include "fs/fs_factory.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "utils.h"
 
 namespace starrocks::connector {
@@ -90,11 +91,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> FileChunkSinkProvider::create_chun
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
     // Disable the load spill for file sink temperarily
     if (/* config::enable_connector_sink_spill */ false) {
+        auto* query_execution_services = runtime_state->query_execution_services();
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
                         fs,
                         ctx->fragment_context,
+                        query_execution_services->runtime->connector_sink_spill_executor,
                         nullptr,
                         nullptr});
         partition_chunk_writer_factory = std::make_unique<SpillPartitionChunkWriterFactory>(partition_chunk_writer_ctx);

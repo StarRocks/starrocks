@@ -18,7 +18,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "exec/tablet_info.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
+#include "runtime/service_contexts.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
@@ -100,7 +100,8 @@ Status DictionaryCacheWriter::append_chunk(const ChunkPtr& chunk,
 Status DictionaryCacheWriter::_submit() {
     _num_pending_tasks.fetch_add(1, std::memory_order_release);
     std::shared_ptr<Runnable> task(std::make_shared<RefreshDictionaryCacheTask>(this, _immutable_buffer_chunk));
-    auto st = ExecEnv::GetInstance()->dictionary_cache_pool()->submit(task);
+    auto* query_execution_services = _state->query_execution_services();
+    auto st = query_execution_services->execution->dictionary_cache_pool->submit(task);
     if (!st.ok()) {
         _num_pending_tasks.fetch_sub(1, std::memory_order_release);
         DCHECK(_num_pending_tasks.load(std::memory_order_acquire) >= 0);
