@@ -107,6 +107,11 @@ TabletWarmupManager::~TabletWarmupManager() {
 }
 
 void TabletWarmupManager::init() {
+    if (config::tablet_warmup_max_threads <= 0) {
+        LOG(WARNING) << "tablet_warmup_max_threads is invalid: " << config::tablet_warmup_max_threads
+                     << ", use 4 instead";
+        config::tablet_warmup_max_threads = 4;
+    }
     int max_threads = config::tablet_warmup_max_threads;
     auto st = ThreadPoolBuilder("cloud_native_warmup")
                       .set_min_threads(max_threads)
@@ -135,6 +140,9 @@ void TabletWarmupManager::stop() {
 }
 
 Status TabletWarmupManager::update_max_threads(int max_threads) {
+    if (max_threads <= 0) {
+        return Status::InvalidArgument("tablet_warmup_max_threads must be greater than 0");
+    }
     if (_thread_pool != nullptr) {
         return _thread_pool->update_max_threads(max_threads);
     } else {
