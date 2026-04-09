@@ -14,10 +14,16 @@
 
 package com.starrocks.sql.optimizer.rule.ivm;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.JsonSyntaxException;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.load.Load;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
@@ -165,6 +171,30 @@ public class IvmRewriter {
                 .setPerPipeline(true);
         LogicalTopNOperator topN = topNBuilder.build();
         return OptExpression.create(topN, projectExpr);
+    }
+
+    static MaterializedView loadTargetMv(OptimizerContext optimizerContext) {
+        String strMvId = optimizerContext.getSessionVariable().getTvrTargetMvId();
+        if (Strings.isNullOrEmpty(strMvId)) {
+            return null;
+        }
+        MvId mvId;
+        try {
+            mvId = GsonUtils.GSON.fromJson(strMvId, MvId.class);
+        } catch (JsonSyntaxException e) {
+            return null;
+        }
+        if (mvId == null) {
+            return null;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+        if (db == null) {
+            return null;
+        }
+        if (!(db.getTable(mvId.getId()) instanceof MaterializedView mv)) {
+            return null;
+        }
+        return mv;
     }
 
     static void deriveLogicalProperty(OptExpression root) {
