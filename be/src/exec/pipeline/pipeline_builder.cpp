@@ -39,7 +39,7 @@
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
-#include "runtime/exec_env.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 
@@ -547,7 +547,9 @@ OpFactories PipelineBuilderContext::interpolate_cache_operator(
         upstream_pipeline[i] = std::move(ml_op);
     }
 
-    auto cache_mgr = ExecEnv::GetInstance()->cache_mgr();
+    auto* runtime_state = _fragment_context->runtime_state();
+    auto* query_execution_services = runtime_state->query_execution_services();
+    auto cache_mgr = query_execution_services->runtime->cache_mgr;
     auto cache_op = std::make_shared<query_cache::CacheOperatorFactory>(next_operator_id(), plan_node_id, cache_mgr,
                                                                         cache_param);
     upstream_pipeline.push_back(cache_op);
