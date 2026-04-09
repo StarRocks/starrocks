@@ -58,13 +58,20 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
-    public List<Column> convertToSRTable(ResultSet columnSet) throws SQLException {
+    public List<Column> convertToSRTable(ResultSet columnSet, java.util.Map<String, Integer> originalJdbcTypes)
+            throws SQLException {
         List<Column> fullSchema = Lists.newArrayList();
         while (columnSet.next()) {
-            Type type = convertColumnType(columnSet.getInt("DATA_TYPE"),
+            int dataType = columnSet.getInt("DATA_TYPE");
+            String columnName = columnSet.getString("COLUMN_NAME");
+            Type type = convertColumnType(dataType,
                     columnSet.getString("TYPE_NAME"),
                     columnSet.getInt("COLUMN_SIZE"),
                     columnSet.getInt("DECIMAL_DIGITS"));
+
+            if (originalJdbcTypes != null) {
+                originalJdbcTypes.put(columnName.toLowerCase(java.util.Locale.ROOT), dataType);
+            }
 
             String comment = "";
             // Add try-cache to prevent exceptions when the metadata of some databases does not contain REMARKS
@@ -74,7 +81,6 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 }
             } catch (SQLException ignored) { }
 
-            String columnName = columnSet.getString("COLUMN_NAME");
             if (!columnName.equals(columnName.toLowerCase())) {
                 columnName = "\"" + columnName + "\"";
             }
