@@ -14,6 +14,8 @@
 
 #include "storage/lake/tablet_splitter.h"
 
+#include <bvar/bvar.h>
+
 #include <algorithm>
 #include <set>
 #include <unordered_map>
@@ -24,6 +26,8 @@
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/tablet_range.h"
 #include "storage/variant_tuple.h"
+
+extern bvar::Adder<int64_t> g_tablet_reshard_split_fallback_total;
 
 namespace starrocks::lake {
 
@@ -275,6 +279,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     std::vector<TabletRangeInfo> split_ranges;
     Status status = get_tablet_split_ranges(old_tablet_metadata, splitting_tablet.new_tablet_ids_size(), &split_ranges);
     if (!status.ok()) {
+        g_tablet_reshard_split_fallback_total << 1;
         LOG(WARNING) << "Failed to get tablet split ranges, will not split this tablet: " << old_tablet_metadata->id()
                      << ", version: " << old_tablet_metadata->version() << ", txn_id: " << txn_info.txn_id()
                      << ", status: " << status;
