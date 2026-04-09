@@ -92,6 +92,7 @@ public class PlanTuningAdvisor {
 
         if (matchingKeys.isEmpty()) {
             cache.put(key, tuningGuides);
+            tuningGuides.getAllTuningGuides().forEach(PlanAdvisorMetrics::increaseGuideGenerated);
         } else {
             for (PlanTuningCacheKey matchingKey : matchingKeys) {
                 OperatorTuningGuides existingGuides = cache.getIfPresent(matchingKey);
