@@ -513,6 +513,7 @@ if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-parquet-map-key.patch
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-use-zstd-1.5.7.patch
         patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-flight-types-clang.patch
+        patch -p1 < $TP_PATCH_DIR/arrow-19.0.1-thrift.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -621,9 +622,9 @@ fi
 # libhdfs is build by -fhidden. we need access hidden symbol getJNIEnv
 if [[ -d $TP_SOURCE_DIR/$HADOOPSRC_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$HADOOPSRC_SOURCE
-    if [ ! -f "$PATCHED_MARK" ] && [[ $HADOOPSRC_SOURCE == "hadoop-3.4.2-src" ]] ; then
-        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src.patch"
-        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.2-src-jni-crash.patch"
+    if [ ! -f "$PATCHED_MARK" ] && [[ $HADOOPSRC_SOURCE == "hadoop-3.4.3-src" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.3-src.patch"
+        patch -p1 < "$TP_PATCH_DIR/hadoop-3.4.3-src-jni-crash.patch"
         touch "$PATCHED_MARK"
     fi
     cd -

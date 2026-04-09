@@ -41,6 +41,7 @@ public:
     void submit(DriverRawPtr driver) override { (void)_tp->submit(std::make_shared<GroupTaskRunner>(_group)); }
     void cancel(DriverRawPtr driver) override {}
     void close() override { _tp->shutdown(); }
+    void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) override {}
 
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override {}
@@ -51,8 +52,7 @@ public:
 
     size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) override { return 0; }
 
-    void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx,
-                      std::vector<FragmentContext*> fragment_ctxs) override {}
+    void report_epoch(QueryContext* query_ctx, std::vector<FragmentContext*> fragment_ctxs) override {}
 
     size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const override { return 0; }
 

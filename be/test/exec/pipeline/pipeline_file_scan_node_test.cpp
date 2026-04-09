@@ -83,9 +83,9 @@ public:
         _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
         _fragment_ctx->set_query_id(query_id);
         _fragment_ctx->set_fragment_instance_id(fragment_id);
-        _fragment_ctx->set_runtime_state(
-                std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
-                                               _request.query_options, _request.query_globals, _exec_env));
+        _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+                _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+                _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
 
         _fragment_future = _fragment_ctx->finish_future();
         _runtime_state = _fragment_ctx->runtime_state();
@@ -413,7 +413,9 @@ TEST_F(PipeLineFileScanNodeTest, CSVBasic) {
 
     exec_group = ExecutionGroupBuilder::create_normal_exec_group();
 
-    OpFactories op_factories = file_scan_node->decompose_to_pipeline(_context);
+    auto op_factories_result = file_scan_node->decompose_to_pipeline(_context);
+    ASSERT_TRUE(op_factories_result.ok()) << op_factories_result.status().message();
+    OpFactories op_factories = std::move(op_factories_result).value();
 
     op_factories.push_back(std::make_shared<starrocks::pipeline::TestFileScanSinkOperatorFactory>(
             _context->next_operator_id(), 0, sinkCounter));

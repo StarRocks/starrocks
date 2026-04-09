@@ -41,7 +41,6 @@
 #include <vector>
 
 #include "agent/agent_task.h"
-#include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
 #include "base/phmap/phmap.h"
@@ -52,6 +51,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"

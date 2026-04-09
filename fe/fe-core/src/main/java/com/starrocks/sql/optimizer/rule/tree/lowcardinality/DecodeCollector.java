@@ -134,7 +134,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     FunctionSet.LTRIM, FunctionSet.REGEXP_EXTRACT, FunctionSet.REGEXP_REPLACE, FunctionSet.REPEAT,
                     FunctionSet.REPLACE, FunctionSet.REVERSE, FunctionSet.RIGHT, FunctionSet.RPAD, FunctionSet.RTRIM,
                     FunctionSet.SPLIT_PART, FunctionSet.SUBSTR, FunctionSet.SUBSTRING, FunctionSet.SUBSTRING_INDEX,
-                    FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF, FunctionSet.LENGTH, FunctionSet.CHAR_LENGTH);
+                    FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF, FunctionSet.LENGTH, FunctionSet.CHAR_LENGTH,
+                    FunctionSet.COALESCE, FunctionSet.XX_HASH3_64, FunctionSet.XX_HASH3_128, FunctionSet.STR_TO_DATE,
+                    FunctionSet.MURMUR_HASH3_32);
 
     public static final Set<String> LOW_CARD_STRUCT_FUNCTIONS =
             ImmutableSet.of(FunctionSet.NAMED_STRUCT, FunctionSet.STRUCT, FunctionSet.ROW);
@@ -637,12 +639,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalFilter(OptExpression optExpression, DecodeInfo context) {
-        if (optExpression.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator) {
-            // PhysicalFilter->PhysicalOlapScan is a special pattern, the Filter's predicate is extracted from OlapScan,
-            // we should keep the DecodeInfo from it's input.
-            return context.createOutputInfo();
-        }
-        return context.createDecodeInfo();
+        return context.createOutputInfo();
     }
 
     private boolean tryHandleJoinEqPredicate(DecodeInfo decodeInfo,

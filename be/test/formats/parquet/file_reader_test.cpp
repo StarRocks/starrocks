@@ -34,6 +34,7 @@
 #include "common/logging.h"
 #include "common/util/thrift_util.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "exec/runtime_filter/runtime_filter_helper.h"
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
@@ -51,7 +52,6 @@
 #include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter.h"
-#include "runtime/runtime_filter/runtime_filter_helper.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
@@ -970,7 +970,7 @@ HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_prune_and_no_o
     TupleDescriptor* tupleDescriptor = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     SlotDescriptor* slot = tupleDescriptor->slots()[1];
     TSlotDescriptorBuilder builder;
-    builder.column_name(slot->col_name())
+    builder.column_name(std::string(slot->col_name()))
             .type(slot->type())
             .id(slot->id())
             .nullable(slot->is_nullable())

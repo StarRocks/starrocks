@@ -165,6 +165,7 @@ protected:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
     Status _report_split_source_morsel_finished_once();
+    void _update_catalog_metrics();
 
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 

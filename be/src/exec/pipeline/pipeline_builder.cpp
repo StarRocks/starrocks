@@ -47,14 +47,17 @@ void PipelineBuilderContext::init_colocate_groups(std::unordered_map<int32_t, Ex
     _group_id_to_colocate_groups = std::move(colocate_groups);
     for (auto& [group_id, group] : _group_id_to_colocate_groups) {
         _execution_groups.emplace_back(group);
+        // Build reverse mapping for O(1) lookup in find_exec_group_by_plan_node_id.
+        for (int32_t node_id : group->plan_node_ids()) {
+            _plan_node_to_colocate_group[node_id] = group.get();
+        }
     }
 }
 
 ExecutionGroupRawPtr PipelineBuilderContext::find_exec_group_by_plan_node_id(int32_t plan_node_id) {
-    for (auto& [group_id, group] : _group_id_to_colocate_groups) {
-        if (group->contains(plan_node_id)) {
-            return group.get();
-        }
+    auto it = _plan_node_to_colocate_group.find(plan_node_id);
+    if (it != _plan_node_to_colocate_group.end()) {
+        return it->second;
     }
     return _normal_exec_group;
 }
@@ -605,8 +608,9 @@ void PipelineBuilderContext::_subscribe_pipeline_event(Pipeline* pipeline) {
     }
 }
 
-OpFactories PipelineBuilder::decompose_exec_node_to_pipeline(const FragmentContext& fragment, ExecNode* exec_node) {
-    pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
+StatusOr<OpFactories> PipelineBuilder::decompose_exec_node_to_pipeline(const FragmentContext& fragment,
+                                                                       ExecNode* exec_node) {
+    ASSIGN_OR_RETURN(pipeline::OpFactories operators, exec_node->decompose_to_pipeline(&_context));
     operators = _context.maybe_interpolate_grouped_exchange(exec_node->id(), operators);
     return operators;
 }

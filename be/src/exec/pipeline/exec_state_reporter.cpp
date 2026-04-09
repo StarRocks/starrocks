@@ -19,12 +19,12 @@
 
 #include <memory>
 
-#include "agent/master_info.h"
 #include "base/network/network_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/query_context.h"
@@ -160,8 +160,7 @@ std::unique_ptr<TReportExecStatusParams> ExecStateReporter::create_report_exec_s
 }
 
 // including the final status when execution finishes.
-Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
-                                             const TNetworkAddress& fe_addr) {
+Status ExecStateReporter::report_exec_status(const TReportExecStatusParams& params, const TNetworkAddress& fe_addr) {
     TReportExecStatusResult res;
     Status rpc_status;
 
@@ -245,8 +244,7 @@ TMVMaintenanceTasks ExecStateReporter::create_report_epoch_params(const QueryCon
 }
 
 // including the final status when execution finishes.
-Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, ExecEnv* exec_env,
-                                       const TNetworkAddress& fe_addr) {
+Status ExecStateReporter::report_epoch(const TMVMaintenanceTasks& params, const TNetworkAddress& fe_addr) {
     Status fe_status;
     TMVReportEpochResponse res;
     Status rpc_status;

@@ -114,7 +114,8 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
             }
         }
 
-        auto* prepare_thread_pool = state->exec_env()->pipeline_prepare_pool();
+        auto* query_execution_services = state->query_execution_services();
+        auto* prepare_thread_pool = query_execution_services->execution->pipeline_prepare_pool;
         DCHECK(prepare_thread_pool != nullptr);
 
         std::vector<DriverPtr> all_drivers;

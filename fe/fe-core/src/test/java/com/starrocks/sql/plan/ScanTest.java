@@ -20,6 +20,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.PatternMatcher;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import org.junit.jupiter.api.Assertions;
@@ -386,8 +387,10 @@ public class ScanTest extends PlanTestBase {
         String sql = "select column_name, table_name from information_schema.columns" +
                 " where table_schema = 'information_schema' and table_name = 'columns'";
         ExecPlan plan = getExecPlan(sql);
-        Assertions.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaDb().equals("information_schema"));
-        Assertions.assertTrue(((SchemaScanNode) plan.getScanNodes().get(0)).getSchemaTable().equals("columns"));
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        // Equality values are escaped for LIKE-style pushdown; '_' in database names must be literal.
+        Assertions.assertEquals(PatternMatcher.escapeLikeValue("information_schema"), scanNode.getSchemaDb());
+        Assertions.assertEquals(PatternMatcher.escapeLikeValue("columns"), scanNode.getSchemaTable());
     }
 
     @Test

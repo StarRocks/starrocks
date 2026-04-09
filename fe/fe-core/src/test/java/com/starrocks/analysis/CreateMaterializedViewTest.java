@@ -2736,9 +2736,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assertions.assertEquals(1, partitionExpr.size());
         Assertions.assertTrue(partitionExpr.get(0) instanceof SlotRef);
         SlotRef slotRef = (SlotRef) partitionExpr.get(0);
-        Assertions.assertNotNull(slotRef.getSlotDescriptorWithoutCheck());
-        SlotDescriptor slotDescriptor = slotRef.getSlotDescriptorWithoutCheck();
-        Assertions.assertEquals(1, slotDescriptor.getId().asInt());
+        Assertions.assertEquals("k1", slotRef.getColumnName());
+        Assertions.assertFalse(slotRef.getType().isInvalid());
     }
 
     @Test
@@ -6049,19 +6048,16 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Column column = new Column("c1", com.starrocks.type.IntegerType.INT);
         ColumnRefOperator colRef = new ColumnRefOperator(1, com.starrocks.type.IntegerType.INT, "c1", true);
 
-        org.apache.iceberg.BaseTable nativeTable = Mockito.mock(org.apache.iceberg.BaseTable.class);
         org.apache.iceberg.Schema schema =
                 new org.apache.iceberg.Schema(org.apache.iceberg.types.Types.NestedField.required(
                         1, "c1", org.apache.iceberg.types.Types.IntegerType.get()));
         org.apache.iceberg.PartitionSpec spec =
                 org.apache.iceberg.PartitionSpec.builderFor(schema).identity("c1").build();
-        org.apache.iceberg.TableMetadata meta = Mockito.mock(org.apache.iceberg.TableMetadata.class);
+        org.apache.iceberg.TableMetadata meta = org.apache.iceberg.TableMetadata.newTableMetadata(
+                schema, spec, "/tmp/iceberg-test", java.util.Collections.emptyMap());
         org.apache.iceberg.TableOperations ops = Mockito.mock(org.apache.iceberg.TableOperations.class);
-        Mockito.when(nativeTable.schema()).thenReturn(schema);
-        Mockito.when(nativeTable.spec()).thenReturn(spec);
-        Mockito.when(nativeTable.operations()).thenReturn(ops);
         Mockito.when(ops.current()).thenReturn(meta);
-        Mockito.when(meta.uuid()).thenReturn("uuid-1234");
+        org.apache.iceberg.BaseTable nativeTable = new org.apache.iceberg.BaseTable(ops, "t");
 
         IcebergTable icebergTable = IcebergTable.builder()
                 .setId(1)

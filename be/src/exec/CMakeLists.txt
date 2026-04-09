@@ -20,6 +20,20 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
+set(EXEC_CORE_FILES
+    runtime_filter/runtime_filter_descriptor.cpp
+    runtime_filter/runtime_filter_probe.cpp
+    runtime_filter/runtime_filter_probe_wait.cpp
+    runtime_filter/runtime_filter_registry.cpp
+    runtime_filter/runtime_filter_helper.cpp
+)
+
+ADD_BE_LIB(ExecCore
+    ${EXEC_CORE_FILES}
+)
+
+target_link_libraries(ExecCore PUBLIC ExprCore RuntimeCore)
+
 set(EXEC_FILES
     fetch_node.cpp
     lookup_node.cpp
@@ -387,3 +401,5 @@ ADD_BE_LIB(Exec
     ${EXEC_FILES}
     $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )
+
+target_link_libraries(Exec PUBLIC ExecCore)

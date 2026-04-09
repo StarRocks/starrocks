@@ -22,7 +22,8 @@
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
+#include "common/statusor.h"
 #include "exec/olap_common.h"
 #include "exec/pipeline_node.h"
 #include "exprs/expr_context.h"
@@ -41,8 +42,7 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state = nullptr) override;
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     int64_t _desired_num_rows;

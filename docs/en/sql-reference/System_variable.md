@@ -73,6 +73,8 @@ The following variables only take effect globally. They cannot take effect for a
 * cngroup_resource_usage_fresh_ratio
 * cngroup_schedule_mode
 * default_rowset_type
+* enable_reduce_cast_varchar_expr_sync_type
+* enable_reduce_cast_varchar_length_inheritance
 * enable_group_level_query_queue
 * enable_query_history
 * enable_query_queue_load
@@ -201,6 +203,22 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 * **Default**: `*,,`
 * **Data Type**: String
 * **Introduced in**: -
+
+### binary_encoding_format
+
+* **Scope**: Session
+* **Description**: Controls how `BINARY` / `VARBINARY` values are encoded when StarRocks serializes MySQL text results. Valid values are `raw`, `hex`, and `base64`. The default is `hex`. This variable works together with `binary_encoding_level`. MySQL clients can already handle top-level binary values, but nested binary values inside `ARRAY`, `MAP`, or `STRUCT` are returned through JSON-like strings, so they may need extra encoding to stay printable and well-formed. Set this variable to `base64` if you prefer a denser printable representation, or `raw` to disable extra encoding entirely.
+* **Default**: `hex`
+* **Data Type**: String
+* **Introduced in**: v4.1
+
+### binary_encoding_level
+
+* **Scope**: Session
+* **Description**: Controls which binary values are encoded for MySQL text results. Valid values are `nested` and `all`. The default is `nested`, which preserves historical behavior for top-level binary columns while still encoding nested binary values inside `ARRAY`, `MAP`, or `STRUCT`, where the result is rendered as a JSON-like string. Set this variable to `all` if your team wants a uniform convention and prefers top-level binary values to be encoded as well. If `binary_encoding_format = raw`, no additional binary encoding is applied even when this variable is set to `nested` or `all`, which may make nested output less readable.
+* **Default**: `nested`
+* **Data Type**: String
+* **Introduced in**: v4.1
 
 ### auto_increment_increment
 
@@ -700,7 +718,21 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Fallback length for string columns in query result metadata when the max length is unknown. Clients that rely on the metadata may return empty values or truncation if the reported length is smaller than actual values. Valid range is `1` to `1048576`.
 * **Default**: 64
 * **Data Type**: int
-* **Introduced in**: v3.5.12
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_length_inheritance (global)
+
+* **Description**: Whether to preserve the target `VARCHAR(N)` length when `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast. Enable this variable to keep prepare and execute result-set metadata consistent for statements such as `CAST(col AS VARCHAR(N))`.
+* **Default**: false
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
+
+### enable_reduce_cast_varchar_expr_sync_type (global)
+
+* **Description**: Whether to synchronize the reused planner `Expr` type and origin type with the rewritten `VARCHAR(N)` type after `ReduceCastRule` eliminates a same-type `VARCHAR -> VARCHAR` cast.
+* **Default**: true
+* **Data Type**: Boolean
+* **Introduced in**: v3.5.16, v4.0.9
 
 ### enable_load_profile
 

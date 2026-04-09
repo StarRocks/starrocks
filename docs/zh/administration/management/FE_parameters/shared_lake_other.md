@@ -551,13 +551,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 数据湖
 
-### `files_enable_insert_push_down_schema`
+### `files_enable_insert_push_down_column_type`
 
 - 默认值: true
+- 别名: `files_enable_insert_push_down_schema`
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 启用后，分析器将尝试将目标表 schema 推送到 `files()` 表函数中，用于 INSERT ... FROM files() 操作。这仅适用于源是 FileTableFunctionRelation、目标是原生表且 SELECT 列表中包含相应的 slot-ref 列（或 *）的情况。分析器会将选择的列与目标列匹配（计数必须匹配），短暂锁定目标表，并用非复杂类型（Parquet JSON 等复杂类型 `->` `array<varchar>` 会跳过）的深拷贝目标列类型替换文件列类型。原始文件表中的列名会保留。这减少了摄取期间文件类型推断引起的类型不匹配和松散性。
+- 描述: 启用后，StarRocks 会将目标表的列类型下推到 `files()` 表函数，用于 `INSERT INTO target_table SELECT ... FROM files()` 操作。仅对 files 推断出的已有列进行类型重写，不添加或删除列。复杂类型会跳过。这可减少由文件类型推断不准确引起的类型不匹配错误。如需完整的 schema 下推（列名和类型），请使用 INSERT 属性 `enable_push_down_schema`。
 - 引入版本: v3.4.0, v3.5.0
 
 ### `hdfs_read_buffer_size_kb`
@@ -667,6 +668,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 每个 Iceberg 表待处理提交操作的最大数量。当使用提交队列 (`enable_iceberg_commit_queue=true`) 时，这限制了可以为一个表排队的提交操作的数量。当达到限制时，额外的提交操作将在调用者线程中执行（阻塞直到容量可用）。此配置在 FE 启动时读取，并应用于新创建的表执行器。需要重启 FE 才能生效。如果您预期对同一表有许多并发提交，请增加此值。如果此值过低，在高并发期间提交可能会在调用者线程中阻塞。
 - 引入版本: v4.1.0
+
+### lake_balance_tablets_threshold
+
+- 默认值：0.15
+- 类型：Double
+- 单位：-
+- 是否可变：Yes
+- 描述：系统用于判断存算分离集群中 Worker 之间 Tablet 分布平衡的阈值，不平衡因子的计算公式为 `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`。如果该因子大于 `lake_balance_tablets_threshold`，则会触发节点间 Tablet 调度。此配置项仅在 `lake_enable_balance_tablets_between_workers` 设为 `true`时生效。
+- 引入版本：v3.3.4
 
 ## 其他
 

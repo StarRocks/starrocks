@@ -625,7 +625,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     // _query_ctx uses lazy initialization, maybe it is not initialized
     // under certain circumstance
     if (query_ctx == nullptr) {
-        query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+        auto* query_execution_services = state->query_execution_services();
+        query_ctx = query_execution_services->runtime->query_context_mgr->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
     if (!query_ctx->enable_profile()) {

@@ -29,7 +29,7 @@ toc_max_heading_level: 5
 
 ## `FILES()` 用于导入
 
-从 v3.1.0 开始，StarRocks 支持使用表函数 `FILES()` 定义远端存储中的只读文件。它可以通过文件的路径相关属性访问远端存储，推断文件中的表结构，并返回数据行。您可以直接使用 [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT.md) 查询数据行，使用 [`INSERT`](../../sql-statements/loading_unloading/INSERT.md) 将数据行导入到现有表中，或使用 [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 创建新表并将数据行导入其中。从 v3.3.4 开始，您还可以使用 `FILES()` 和 [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md) 查看数据文件的结构。
+从 v3.1.0 开始，StarRocks 支持使用表函数 `FILES()` 定义远端存储中的只读文件。它可以通过文件的路径相关属性访问远端存储，推断文件中的表结构，并返回数据行。您可以直接使用 [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT/SELECT.md) 查询数据行，使用 [`INSERT`](../../sql-statements/loading_unloading/INSERT.md) 将数据行导入到现有表中，或使用 [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 创建新表并将数据行导入其中。从 v3.3.4 开始，您还可以使用 `FILES()` 和 [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md) 查看数据文件的结构。
 
 ### 语法
 
@@ -238,13 +238,26 @@ CSV 格式示例：
 单批中的所有数据文件必须具有相同的文件格式。
 :::
 
-##### 推送目标表结构检查
+##### 目标表类型/Schema 下推
 
-从 v3.4.0 开始，系统支持将目标表结构检查推送到 `FILES()` 的扫描阶段。
+从 v3.4.0 开始，系统支持将目标表的列类型下推到 `FILES()` 的扫描阶段，以提升类型推断精度。
 
-`FILES()` 的结构检测并不完全严格。例如，CSV 文件中的任何整数列在函数读取文件时被推断和检查为 BIGINT 类型。在这种情况下，如果目标表中的相应列是 `TINYINT` 类型，CSV 数据记录中超过 BIGINT 类型的数据将不会被过滤。相反，它们将被隐式填充为 `NULL`。
+`FILES()` 的结构检测并不完全严格。例如，CSV 文件中的任何整数列在函数读取文件时被推断为 BIGINT 类型。在这种情况下，如果目标表中的相应列是 `TINYINT` 类型，CSV 数据记录中超过 TINYINT 范围的数据将不会被过滤。相反，它们将被隐式填充为 `NULL`。
 
-为了解决此问题，系统引入了动态 FE 配置项 `files_enable_insert_push_down_schema`，用于控制是否将目标表结构检查推送到 `FILES()` 的扫描阶段。通过将 `files_enable_insert_push_down_schema` 设置为 `true`，系统将在文件读取时过滤掉未通过目标表结构检查的数据记录。
+为了解决此问题，系统引入了动态 FE 配置项 `files_enable_insert_push_down_column_type`（别名：`files_enable_insert_push_down_schema`），用于控制是否将目标表列类型下推到 `FILES()` 的扫描阶段。通过将 `files_enable_insert_push_down_column_type` 设置为 `true`，系统将在文件读取阶段用目标表列类型重写已推断出的匹配列的类型。仅影响文件推断 schema 中已存在的列，不增加或删除列。
+
+如需完整的 schema 下推（列名和列类型均下推），可在 INSERT 语句中设置属性 `enable_push_down_schema` 为 `true`。该属性是 INSERT 属性，不是 `FILES()` 的属性：
+
+```sql
+INSERT INTO target_table
+PROPERTIES ("enable_push_down_schema" = "true")
+SELECT * FROM FILES(
+    "path" = "s3://...",
+    "format" = "parquet"
+);
+```
+
+设置 `enable_push_down_schema` 为 `true` 后，StarRocks 会将 `FILES()` 的 schema 重塑为目标表列 —— 补充推断 schema 中缺失的列，并将 schema 裁剪为 SELECT 列表实际读取的列。需要注意的是，当使用 `BY NAME` 模式且 SELECT 为 `*` 时，`*` 会展开为目标表的列名而非文件的原始列名，因此文件中多余的列即使使用 `SELECT *` 也会被排除。
 
 ##### 联合化具有不同结构的文件
 

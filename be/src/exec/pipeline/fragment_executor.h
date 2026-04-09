@@ -21,10 +21,10 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/macros.h"
+#include "runtime/exec_env_fwd.h"
 
 namespace starrocks {
 class DataSink;
-class ExecEnv;
 class RuntimeProfile;
 class TPlanFragmentExecParams;
 class RuntimeState;

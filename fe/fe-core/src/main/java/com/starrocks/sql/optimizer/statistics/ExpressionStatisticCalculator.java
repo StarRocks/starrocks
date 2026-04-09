@@ -26,10 +26,12 @@ import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.spm.SPMFunctions;
 import com.starrocks.type.Type;
+import com.starrocks.type.VarcharType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,6 +41,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.IsoFields;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,7 +94,9 @@ public class ExpressionStatisticCalculator {
         @Override
         public ColumnStatistic visitConstant(ConstantOperator operator, Void context) {
             if (operator.isNull()) {
-                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0, 1, 1);
+                // NULL has no distinct non-null values and is always null.
+                return new ColumnStatistic(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 1.0,
+                        operator.getType().getTypeSize(), 0);
             }
             OptionalDouble value = ConstantOperatorUtils.doubleValueFromConstant(operator);
             if (value.isPresent()) {
@@ -115,17 +120,69 @@ public class ExpressionStatisticCalculator {
             }
             if (caseWhenOperator.hasElse()) {
                 childrenColumnStatistics.add(caseWhenOperator.getElseClause().accept(this, context));
+            } else {
+                // A missing ELSE is an implicit ELSE that returns NULL.
+                childrenColumnStatistics.add(ColumnStatistic.builder() //
+                        .setNullsFraction(1.0) //
+                        .setDistinctValuesCount(0) //
+                        .build());
             }
-            // 2. use sum of then clause and else clause's distinct values as column distinctValues
-            double distinctValues = childrenColumnStatistics.stream().mapToDouble(
-                    ColumnStatistic::getDistinctValuesCount).sum();
+            // 2. use sum of then clause and else clause's distinct values as column distinctValues.
+            // NULL branches should only contribute to nullsFraction, not to distinctValues.
+            double distinctValues = childrenColumnStatistics.stream()
+                    .mapToDouble(childStat -> childStat.getNullsFraction() >= 1.0 ? 0 : childStat.getDistinctValuesCount()) //
+                    .sum();
+            // 3. Use the average null fraction of all branches.
+            double nullFractions = childrenColumnStatistics.stream().mapToDouble(ColumnStatistic::getNullsFraction).sum()
+                    / childrenColumnStatistics.size();
             return ColumnStatistic.builder()
                     .setMinValue(Double.NEGATIVE_INFINITY)
                     .setMaxValue(Double.POSITIVE_INFINITY)
-                    .setNullsFraction(0)
+                    .setNullsFraction(nullFractions)
                     .setAverageRowSize(caseWhenOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
                     .build();
+        }
+
+        @Override
+        public ColumnStatistic visitIsNullPredicate(IsNullPredicateOperator operator, Void context) {
+            final var inputStat = operator.getChild(0).accept(this, context);
+
+            Map<String, Long> mcvs = new HashMap<>();
+            if (!inputStat.isUnknown()) {
+                double inputNullFraction = inputStat.isUnknown() ? 0.0 : inputStat.getNullsFraction();
+                // Calculate amount of rows satisfying / not satisfying the predicate
+                long nullRows = Math.round(rowCount * inputNullFraction);
+                long nonNullRows = Math.round(rowCount) - nullRows;
+
+                long trueRows = operator.isNotNull() ? nonNullRows : nullRows;
+                long falseRows = operator.isNotNull() ? nullRows : nonNullRows;
+                // Add MCV for each branch
+                if (trueRows > 0) {
+                    final var castedMcv = ConstantOperator.createBoolean(true).castTo(VarcharType.VARCHAR);
+                    castedMcv.ifPresent(trueOp -> mcvs.put(trueOp.toString(), trueRows));
+                }
+                if (falseRows > 0) {
+                    final var castedMcv = ConstantOperator.createBoolean(false).castTo(VarcharType.VARCHAR);
+                    castedMcv.ifPresent(falseOp -> mcvs.put(falseOp.toString(), falseRows));
+                }
+            }
+
+            final var builder = ColumnStatistic.builder() //
+                    .setMinValue(0) //
+                    .setMaxValue(1) //
+                    .setNullsFraction(0) //
+                    .setAverageRowSize(operator.getType().getTypeSize());
+
+            if (mcvs.isEmpty()) {
+                // True and false
+                builder.setDistinctValuesCount(2);
+            } else {
+                builder.setDistinctValuesCount(mcvs.size());
+                builder.setHistogram(new Histogram(Collections.emptyList(), mcvs));
+            }
+
+            return builder.build();
         }
 
         @Override

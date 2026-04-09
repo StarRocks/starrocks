@@ -35,10 +35,11 @@
 #pragma once
 
 #include "column/column.h"
+#include "column/raw_data_visitor.h"
 #include "storage/rowset/options.h"      // for PageBuilderOptions/PageDecoderOptions
 #include "storage/rowset/page_builder.h" // for PageBuilder
 #include "storage/rowset/page_decoder.h" // for PageDecoder
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 #include "util/frame_of_reference_coding.h"
 
 namespace starrocks {
@@ -102,7 +103,7 @@ public:
     }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
     PageBuilderOptions _options;
     uint32_t _count{0};
     bool _finished{false};
@@ -195,7 +196,9 @@ public:
             Range<> r = iter.next(to_read);
             const size_t ori_size = dst->size();
             dst->resize(ori_size + r.span_size());
-            auto* p = reinterpret_cast<CppType*>(dst->mutable_raw_data()) + ori_size;
+            MutableRawDataVisitor visitor;
+            RETURN_IF_ERROR(dst->accept_mutable(&visitor));
+            auto* p = reinterpret_cast<CppType*>(visitor.result()) + ori_size;
             bool res = _decoder.get_batch(p, r.span_size());
             DCHECK(res);
             _cur_index += r.span_size();
@@ -211,7 +214,7 @@ public:
     EncodingTypePB encoding_type() const override { return FOR_ENCODING; }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
+    using CppType = StorageCppType<Type>;
 
     bool _parsed{false};
     Slice _data;

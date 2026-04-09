@@ -57,6 +57,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergTimeTravelQueryAnalyzer;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -112,9 +113,11 @@ import java.nio.channels.AsynchronousCloseException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -247,6 +250,14 @@ public class ConnectProcessor {
         if (ctx.getState().isQuery()) {
             if (ctx.getState().getErrType() != QueryState.ErrType.BLACKLISTED) {
                 MetricRepo.COUNTER_QUERY_ALL.increase(1L);
+                EnumSet<IcebergTimeTravelQueryAnalyzer.TimeTravelType> timeTravelQueryTypes =
+                        IcebergTimeTravelQueryAnalyzer.collectTimeTravelTypes(parsedStmt);
+                if (!timeTravelQueryTypes.isEmpty()) {
+                    MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL.increase(1L);
+                    timeTravelQueryTypes.forEach(type ->
+                            MetricRepo.COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE.getMetric(type.getMetricLabel())
+                                    .increase(1L));
+                }
                 ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
                 if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                     // err query
@@ -267,6 +278,30 @@ public class ConnectProcessor {
                     ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
                     if (elapseMs > Config.qe_slow_log_ms) {
                         MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                    }
+                }
+
+                // Catalog-type metrics
+                if (executor != null) {
+                    Set<String> catalogTypes = executor.getCatalogTypesInvolved();
+                    for (String catalogType : catalogTypes) {
+                        MetricRepo.COUNTER_CATALOG_QUERY_TOTAL.getMetric(catalogType).increase(1L);
+                        if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
+                            MetricRepo.COUNTER_CATALOG_QUERY_ERR.getMetric(catalogType).increase(1L);
+                            if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
+                                MetricRepo.COUNTER_CATALOG_QUERY_ANALYSIS_ERR.getMetric(catalogType).increase(1L);
+                            } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
+                                MetricRepo.COUNTER_CATALOG_QUERY_TIMEOUT.getMetric(catalogType).increase(1L);
+                            } else {
+                                MetricRepo.COUNTER_CATALOG_QUERY_INTERNAL_ERR.getMetric(catalogType).increase(1L);
+                            }
+                        } else {
+                            MetricRepo.COUNTER_CATALOG_QUERY_SUCCESS.getMetric(catalogType).increase(1L);
+                            MetricRepo.getOrCreateCatalogQueryLatencyHistogram(catalogType).update(elapseMs);
+                            if (elapseMs > Config.qe_slow_log_ms) {
+                                MetricRepo.COUNTER_CATALOG_SLOW_QUERY.getMetric(catalogType).increase(1L);
+                            }
+                        }
                     }
                 }
             }

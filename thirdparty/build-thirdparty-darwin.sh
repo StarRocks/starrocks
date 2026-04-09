@@ -322,6 +322,44 @@ ensure_java_home() {
     export PATH="${JAVA_HOME}/bin:${PATH}"
 }
 
+detect_java_jni_platform_include() {
+    local java_home_root="$1"
+    local candidate
+
+    for candidate in darwin linux; do
+        if [[ -f "${java_home_root}/include/${candidate}/jni_md.h" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+
+    for candidate in "${java_home_root}"/include/*; do
+        [[ -d "${candidate}" ]] || continue
+        if [[ -f "${candidate}/jni_md.h" ]]; then
+            basename "${candidate}"
+            return 0
+        fi
+    done
+
+    echo "Unable to locate jni_md.h under ${java_home_root}/include" >&2
+    return 1
+}
+
+ensure_hadoop_libhdfs_makefile_uses_platform_include() {
+    local makefile="$1"
+
+    if ! grep -Fq 'JNI_PLATFORM_INCLUDE ?= linux' "${makefile}"; then
+        perl -0pi -e 's@CC\s+:=\s+gcc@JNI_PLATFORM_INCLUDE ?= linux\n\nCC      := gcc@' "${makefile}"
+    fi
+
+    perl -0pi -e 's@-I\$\(JAVA_HOME\)/include/linux@-I\$(JAVA_HOME)/include/\$(JNI_PLATFORM_INCLUDE)@g' "${makefile}"
+
+    if ! grep -Fq -- '-I$(JAVA_HOME)/include/$(JNI_PLATFORM_INCLUDE)' "${makefile}"; then
+        echo "Failed to update ${makefile} to use JNI_PLATFORM_INCLUDE" >&2
+        return 1
+    fi
+}
+
 restore_env_var() {
     local name="$1"
     local value="$2"
@@ -1387,6 +1425,12 @@ build_formula_aws_cpp_sdk() {
     link_children_if_missing "${prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${crt_prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${HOMEBREW_PREFIX}/include/aws" "${TP_INCLUDE_DIR}/aws"
+    if [[ -L "${TP_INCLUDE_DIR}/smithy" ]]; then
+        rm -f "${TP_INCLUDE_DIR}/smithy"
+    fi
+    mkdir -p "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${prefix}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${HOMEBREW_PREFIX}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libaws"*.a "${prefix}/lib/libaws"*.dylib
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${crt_prefix}/lib/libaws-crt-cpp"*.a "${crt_prefix}/lib/libaws-crt-cpp"*.dylib
     link_formula_metadata "${prefix}"
@@ -1432,13 +1476,73 @@ build_formula_jansson() {
     sync_lib64_links
 }
 
-build_formula_poco() {
-    ensure_formula poco
-    local prefix
-    prefix="$(formula_prefix poco)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libPoco"*.a "${prefix}/lib/libPoco"*.dylib
-    link_formula_metadata "${prefix}"
+clean_poco_install_artifacts() {
+    rm -rf "${TP_INCLUDE_DIR}/Poco" \
+        "${TP_INSTALL_DIR}/lib/cmake/Poco" \
+        "${TP_INSTALL_DIR}/share/cmake/Poco"
+    safe_remove_glob "${TP_INSTALL_DIR}/lib/libPoco"* "${TP_INSTALL_DIR}/lib64/libPoco"*
+}
+
+remove_stale_homebrew_poco_symlinks() {
+    find "${TP_INSTALL_DIR}/lib" "${TP_INSTALL_DIR}/lib64" \
+        -maxdepth 1 \
+        -type l \
+        -name 'libPoco*' \
+        -lname "${HOMEBREW_PREFIX%/}/*" \
+        -exec rm -f {} +
+}
+
+build_poco() {
+    remove_stale_homebrew_poco_symlinks
+    if [[ -f "${TP_INSTALL_DIR}/lib/libPocoNet.a" &&
+          -f "${TP_INSTALL_DIR}/lib/libPocoNetSSL.a" &&
+          -f "${TP_INCLUDE_DIR}/Poco/Net/HTTPResponse.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${POCO_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${POCO_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
+    clean_poco_install_artifacts
+    cd "${BUILD_DIR}"
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DPOCO_UNBUNDLED=ON \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DZLIB_ROOT="${TP_INSTALL_DIR}" \
+        -DPCRE2_ROOT_DIR="${HOMEBREW_PREFIX}/opt/pcre2" \
+        -DENABLE_XML=OFF \
+        -DENABLE_JSON=OFF \
+        -DENABLE_NET=ON \
+        -DENABLE_NETSSL=ON \
+        -DENABLE_CRYPTO=OFF \
+        -DENABLE_JWT=OFF \
+        -DENABLE_DATA=OFF \
+        -DENABLE_DATA_SQLITE=OFF \
+        -DENABLE_DATA_MYSQL=OFF \
+        -DENABLE_DATA_POSTGRESQL=OFF \
+        -DENABLE_DATA_ODBC=OFF \
+        -DENABLE_MONGODB=OFF \
+        -DENABLE_REDIS=OFF \
+        -DENABLE_UTIL=OFF \
+        -DENABLE_ZIP=OFF \
+        -DENABLE_APACHECONNECTOR=OFF \
+        -DENABLE_ENCODINGS=OFF \
+        -DENABLE_PAGECOMPILER=OFF \
+        -DENABLE_PAGECOMPILER_FILE2PAGE=OFF \
+        -DENABLE_ACTIVERECORD=OFF \
+        -DENABLE_ACTIVERECORD_COMPILER=OFF \
+        -DENABLE_PROMETHEUS=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
     sync_lib64_links
 }
 
@@ -1558,10 +1662,18 @@ build_s2() {
 }
 
 build_hadoop_src() {
+    local libhdfs_dir
+    local jni_platform_include
+
     ensure_java_home
     check_if_source_exist "${HADOOPSRC_SOURCE}"
-    cd "${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs"
-    make
+    libhdfs_dir="${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs"
+    jni_platform_include="$(detect_java_jni_platform_include "${JAVA_HOME}")"
+    ensure_hadoop_libhdfs_makefile_uses_platform_include "${libhdfs_dir}/Makefile"
+
+    cd "${libhdfs_dir}"
+    make clean >/dev/null 2>&1 || true
+    make JNI_PLATFORM_INCLUDE="${jni_platform_include}"
     mkdir -p "${TP_INSTALL_DIR}/include/hdfs"
     cp "${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/include/hdfs/hdfs.h" "${TP_INSTALL_DIR}/include/hdfs/"
     cp "${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/libhdfs.a" "${TP_INSTALL_DIR}/lib/"
@@ -1620,11 +1732,10 @@ build_benchmark() {
         -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF \
         -DBENCHMARK_ENABLE_TESTING=OFF \
         -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
+        -DBENCHMARK_INSTALL_DOCS=OFF \
+        -DBENCHMARK_INSTALL_TOOLS=OFF \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DCMAKE_INSTALL_LIBDIR=lib64 \
-        -DRUN_HAVE_STD_REGEX=0 \
-        -DRUN_HAVE_POSIX_REGEX=0 \
-        -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     "${BUILD_SYSTEM}" -j"${PARALLEL}"
@@ -2076,7 +2187,7 @@ for package in "${packages[@]}"; do
             build_formula_llvm
             ;;
         poco)
-            build_formula_poco
+            build_poco
             ;;
         xsimd)
             build_formula_xsimd

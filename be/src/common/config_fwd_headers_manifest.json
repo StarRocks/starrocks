@@ -137,6 +137,7 @@
       "configs": [
         "compress_rowbatches",
         "rpc_compress_ratio_threshold",
+        "enable_rpc_compress_overflow_skip",
         "exchg_node_buffer_size_bytes",
         "result_buffer_cancelled_interval_time",
         "es_scroll_keepalive",
@@ -798,6 +799,7 @@
         "lake_replication_slow_log_ms",
         "lake_replication_read_buffer_size",
         "lake_replication_max_file_copy_retry",
+        "lake_replication_parallel_copy_min_file_count",
         "enable_lake_segment_metadata_filter",
         "lake_flush_thread_num_per_store",
         "lake_tablet_rows_splitted_ratio",
@@ -825,7 +827,8 @@
         "lake_metadata_cache_limit",
         "lake_cache_select_in_physical_way",
         "lake_enable_publish_version_trace_log",
-        "lake_service_max_concurrency"
+        "lake_service_max_concurrency",
+        "lake_enable_orphan_delvec_cleanup_on_compaction"
       ]
     },
     {

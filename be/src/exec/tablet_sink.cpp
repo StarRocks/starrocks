@@ -39,7 +39,6 @@
 #include <sstream>
 #include <utility>
 
-#include "agent/master_info.h"
 #include "agent/utils.h"
 #include "base/simd/simd.h"
 #include "base/uid_util.h"
@@ -52,6 +51,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/tracer.h"
 #include "exec/pipeline/query_context.h"
@@ -154,8 +154,9 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     }
     _enable_automatic_partition = _vectorized_partition->enable_automatic_partition();
     if (_enable_automatic_partition) {
-        _automatic_partition_token =
-                state->exec_env()->automatic_partition_pool()->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+        auto* query_execution_services = state->query_execution_services();
+        _automatic_partition_token = query_execution_services->execution->automatic_partition_pool->new_token(
+                ThreadPool::ExecutionMode::CONCURRENT);
     }
     // init _colocate_mv_index: Only use colocate mv when both FE/BE's config are set true.
     if (table_sink.__isset.enable_colocate_mv_index) {

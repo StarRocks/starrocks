@@ -37,6 +37,26 @@ starrocks_detect_parallelism() {
     echo "${cpu_count}"
 }
 
+starrocks_default_ut_thin_archive() {
+    if starrocks_is_darwin; then
+        echo "OFF"
+    else
+        echo "ON"
+    fi
+}
+
+starrocks_collect_test_binaries() {
+    local test_dir="$1"
+    local module_pattern="$2"
+
+    find "${test_dir}" -type f -perm -111 -name "*test" \
+        | grep -v starrocks_test \
+        | grep -v starrocks_dw_test \
+        | grep -v bench_test \
+        | grep -v builtin_functions_fuzzy_test \
+        | grep -i -e "${module_pattern}" || true
+}
+
 starrocks_resolve_java_home() {
     local java_home_candidate="$1"
 
@@ -79,6 +99,37 @@ starrocks_setup_darwin_build_env() {
     elif [[ -d "${bundled_java_home}" ]]; then
         export JAVA_HOME="$(starrocks_resolve_java_home "${bundled_java_home}")"
     fi
+}
+
+starrocks_reset_stale_darwin_cmake_cache() {
+    local build_dir="$1"
+    local cache_path=""
+    local cached_tool_paths=""
+    local tool_path=""
+
+    if ! starrocks_is_darwin; then
+        return 0
+    fi
+
+    cache_path="${build_dir}/CMakeCache.txt"
+    if [[ ! -f "${cache_path}" ]]; then
+        return 0
+    fi
+
+    cached_tool_paths="$(
+        sed -n -E \
+            's/^(CMAKE_AR|CMAKE_RANLIB|CMAKE_C_COMPILER_AR|CMAKE_C_COMPILER_RANLIB|CMAKE_CXX_COMPILER_AR|CMAKE_CXX_COMPILER_RANLIB):FILEPATH=(.*)$/\2/p' \
+            "${cache_path}"
+    )"
+
+    while IFS= read -r tool_path; do
+        if [[ -n "${tool_path}" && ! -e "${tool_path}" ]]; then
+            echo "[INFO] Reset stale CMake cache in ${build_dir} because ${tool_path} is missing"
+            rm -rf "${build_dir}"
+            mkdir -p "${build_dir}"
+            return 0
+        fi
+    done <<< "${cached_tool_paths}"
 }
 
 starrocks_validate_darwin_thirdparty() {

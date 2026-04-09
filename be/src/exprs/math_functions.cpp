@@ -25,7 +25,9 @@
 
 #include "base/hash/murmur_hash3.h"
 #include "column/array_column.h"
+#include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/column_viewer.h"
 #include "exprs/expr.h"
 #include "exprs/function_helper.h"
 #include "exprs/math_functions.h"
@@ -326,49 +328,41 @@ DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan2, TYPE_DOUBLE, TYPE_D
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
-    int64_t width = c1->get(0).get_int32();
-    auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
-    const int32_t original_scale = decimalv3_col->scale();
-    const int32_t original_precision = decimalv3_col->precision();
-    auto& null_data = null_flags->get_data();
-    uint8_t* raw_null_flags = null_data.data();
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    const int32_t original_scale = viewer.column()->scale();
+    const int32_t original_precision = viewer.column()->precision();
     RunTimeCppType<Type> max_val = 1;
-    int32 pow = original_precision;
-    while (pow > 0) {
+    for (int32_t p = original_precision; p > 0; p--) {
         max_val *= 10;
-        pow--;
     }
 
-    const RunTimeCppType<Type>* raw_c0 = decimalv3_col->get_data().data();
-    MutableColumnPtr res = RunTimeColumnType<Type>::create(original_precision, original_scale);
-    res->resize_uninitialized(size);
-
-    // result column is mutable, use non-const raw pointer
-    RunTimeCppType<Type>* raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data().data();
-    for (auto i = 0; i < size; i++) {
-        raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
-    }
 #define ABS(x) ((x) < 0 ? -(x) : (x))
+    ColumnBuilder<Type> builder(size, original_precision, original_scale);
     for (int i = 0; i < size; i++) {
-        if (raw_null_flags[i] != 1 && ABS(raw_res[i]) >= max_val) {
-            std::stringstream error;
-            error << "Truncate to decimal(" << original_precision << ", " << original_scale
-                  << ") failed, because the result is overflow.";
-            context->set_error(error.str().c_str());
-            return Status::RuntimeError(error.str());
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            RunTimeCppType<Type> val = viewer.value(i);
+            RunTimeCppType<Type> res = val - ((val % width) + width) % width;
+            if (ABS(res) >= max_val) {
+                std::stringstream error;
+                error << "Truncate to decimal(" << original_precision << ", " << original_scale
+                      << ") failed, because the result is overflow.";
+                context->set_error(error.str().c_str());
+                return Status::RuntimeError(error.str());
+            }
+            builder.append(res);
         }
     }
 #undef ABS
-    if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
-    }
-    return res;
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMAL32>(FunctionContext*, const Columns&);
@@ -377,157 +371,136 @@ template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMA
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
-    int64_t width = c1->get(0).get_int32();
-
-    const auto& raw_null_flags = null_flags->immutable_data();
-    auto int_col = ColumnHelper::cast_to_raw<Type>(c0);
-    const auto& raw_c0 = int_col->immutable_data();
-    MutableColumnPtr res = RunTimeColumnType<Type>::create();
-    res->resize_uninitialized(size);
-
-    // result column is mutable, use non-const raw pointer
-    auto& raw_res = ColumnHelper::cast_to_raw<Type>(res.get())->get_data();
-    for (auto i = 0; i < size; i++) {
-        raw_res[i] = raw_c0[i] - ((raw_c0[i] % width) + width) % width;
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
     }
+
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
 #define haveDifferentSigns(x, y) (((x) ^ (y)) < 0)
+    ColumnBuilder<Type> builder(size);
     for (int i = 0; i < size; i++) {
-        if (raw_null_flags[i] != 1 && haveDifferentSigns(raw_res[i], raw_c0[i])) {
-            std::stringstream error;
-            error << "Truncate to integer failed, because the result is overflow.";
-            context->set_error(error.str().c_str());
-            return Status::RuntimeError(error.str());
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            RunTimeCppType<Type> val = viewer.value(i);
+            RunTimeCppType<Type> res = val - ((val % width) + width) % width;
+            if (haveDifferentSigns(res, val)) {
+                std::stringstream error;
+                error << "Truncate to integer failed, because the result is overflow.";
+                context->set_error(error.str().c_str());
+                return Status::RuntimeError(error.str());
+            }
+            builder.append(res);
         }
     }
 #undef haveDifferentSigns
-    if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
-    }
-    return res;
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_INT>(FunctionContext*, const Columns&);
 template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
-    int64_t width = c1->get(0).get_int32();
-
-    auto col = ColumnHelper::cast_to_raw<Type>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
-    res->resize_uninitialized(size);
-    const auto& raw_c0 = col->immutable_data();
-    // result column is mutable, use non-const raw pointer
-    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
-    for (auto i = 0; i < size; i++) {
-        int64_t val = raw_c0[i];
-        murmur_hash3_x86_32(&val, sizeof(val), 0, (void*)&raw_res[i]);
-        raw_res[i] = (raw_res[i] & INT_MAX) % width;
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
     }
 
-    if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = viewer.value(i);
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(val), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
     }
-    return res;
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_INT>(FunctionContext*, const Columns&);
 template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
 
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
-    int64_t width = c1->get(0).get_int32();
-
-    auto col = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
-    res->resize_uninitialized(size);
-    auto raw_c0 = col->immutable_data();
-    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
-
-    for (auto i = 0; i < size; i++) {
-        murmur_hash3_x86_32(raw_c0[i].data, raw_c0[i].size, 0, &raw_res[i]);
-        raw_res[i] = (raw_res[i] & INT_MAX) % width;
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
     }
 
-    if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            auto val = viewer.value(i);
+            int32_t hash;
+            murmur_hash3_x86_32(val.data, val.size, 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
     }
-    return res;
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
-    int64_t width = c1->get(0).get_int32();
-
-    auto col = ColumnHelper::cast_to_raw<TYPE_DATE>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
-    res->resize_uninitialized(size);
-    const auto& raw_c0 = col->immutable_data();
-    // result column is mutable, use non-const raw pointer
-    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
-
-    for (auto i = 0; i < size; i++) {
-        int64_t val = raw_c0[i].julian() - date::UNIX_EPOCH_JULIAN;
-        murmur_hash3_x86_32(&val, sizeof(int64_t), 0, (void*)&raw_res[i]);
-        raw_res[i] = (raw_res[i] & INT_MAX) % width;
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
     }
 
-    if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATE> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            int64_t val = viewer.value(i).julian() - date::UNIX_EPOCH_JULIAN;
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
     }
-    return res;
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
-    int64_t width = c1->get(0).get_int32();
-
-    auto col = ColumnHelper::cast_to_raw<TYPE_DATETIME>(c0);
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
-    res->resize_uninitialized(size);
-    const auto& raw_c0 = col->immutable_data();
-    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
-
-    for (auto i = 0; i < size; i++) {
-        int64_t result = timestamp::to_julian(raw_c0[i].timestamp());
-        result *= SECS_PER_DAY;
-        result -= timestamp::UNIX_EPOCH_SECONDS;
-        result *= 1000000L;
-        result += timestamp::to_time(raw_c0[i].timestamp());
-        murmur_hash3_x86_32(&result, sizeof(int64_t), 0, (void*)&raw_res[i]);
-        raw_res[i] = (raw_res[i] & INT_MAX) % width;
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
     }
 
-    if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    const int size = columns[0]->size();
+    ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            auto ts = viewer.value(i).timestamp();
+            int64_t val = timestamp::to_julian(ts);
+            val *= SECS_PER_DAY;
+            val -= timestamp::UNIX_EPOCH_SECONDS;
+            val *= 1000000L;
+            val += timestamp::to_time(ts);
+            int32_t hash;
+            murmur_hash3_x86_32(&val, sizeof(int64_t), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
     }
-    return res;
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 template <typename T>
@@ -554,30 +527,27 @@ template vector<uint8_t> MathFunctions::int_to_byte_array<int128_t>(int128_t val
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* context, const Columns& columns) {
-    ColumnPtr c0 = columns[0];
-    ColumnPtr c1 = columns[1];
-    NullColumn::MutablePtr null_flags;
-    bool has_null = false;
-    PREPARE_COLUMN_WITH_CONST_AND_NULL_FOR_ICEBERG_FUNC(c0, c1);
-    const int size = c0->size();
-    int64_t width = c1->get(0).get_int32();
-    auto decimalv3_col = ColumnHelper::cast_to_raw<Type>(c0);
-
-    MutableColumnPtr res = RunTimeColumnType<TYPE_INT>::create();
-    res->resize_uninitialized(size);
-    const auto& raw_c0 = decimalv3_col->immutable_data();
-    auto& raw_res = ColumnHelper::cast_to_raw<TYPE_INT>(res.get())->get_data();
-    for (auto i = 0; i < size; i++) {
-        auto result = raw_c0[i];
-        auto byte_array = int_to_byte_array(result);
-        murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, (void*)&raw_res[i]);
-        raw_res[i] = (raw_res[i] & INT_MAX) % width;
+    if (columns[0]->only_null() || columns[1]->only_null()) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
     }
 
-    if (has_null) {
-        res = NullableColumn::create(std::move(res), std::move(null_flags));
+    const int size = columns[0]->size();
+    ColumnViewer<Type> viewer(columns[0]);
+    int64_t width = ColumnViewer<TYPE_INT>(columns[1]).value(0);
+
+    ColumnBuilder<TYPE_INT> builder(size);
+    for (int i = 0; i < size; i++) {
+        if (viewer.is_null(i)) {
+            builder.append_null();
+        } else {
+            auto val = viewer.value(i);
+            auto byte_array = int_to_byte_array(val);
+            int32_t hash;
+            murmur_hash3_x86_32(byte_array.data(), byte_array.size(), 0, &hash);
+            builder.append(static_cast<int32_t>((hash & INT_MAX) % width));
+        }
     }
-    return res;
+    return builder.build(ColumnHelper::is_all_const(columns));
 }
 
 template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal<TYPE_DECIMAL32>(FunctionContext*, const Columns&);

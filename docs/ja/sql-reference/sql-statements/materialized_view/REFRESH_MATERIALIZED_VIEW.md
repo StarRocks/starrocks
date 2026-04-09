@@ -35,6 +35,7 @@ REFRESH MATERIALIZED VIEW [database.]mv_name
 > **注意**
 >
 > external catalog に基づいて作成されたマテリアライズドビューをリフレッシュする場合、StarRocks はマテリアライズドビュー内のすべてのパーティションをリフレッシュします。
+> `refresh_mode = AUTO` のマテリアライズドビューでは、`REFRESH MATERIALIZED VIEW` でパーティションを指定できません。代わりにマテリアライズドビュー全体をリフレッシュしてください。
 
 ## モニタリング
 

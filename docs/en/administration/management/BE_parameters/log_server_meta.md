@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: docs
+sidebar_label: "Logging, Server, and Metadata"
 ---
 
 import BEConfigMethod from '../../../_assets/commonMarkdown/BE_config_method.mdx'
@@ -10,19 +11,18 @@ import PostBEConfig from '../../../_assets/commonMarkdown/BE_dynamic_note.mdx'
 
 import StaticBEConfigNote from '../../../_assets/commonMarkdown/StaticBE_config_note.mdx'
 
-# BE Configuration
+# BE Configuration - Logging, Server, and Metadata
 
 <BEConfigMethod />
 
 <CNConfigMethod />
-
 
 ## View BE configuration items
 
 You can view the BE configuration items using the following command:
 
 ```SQL
-SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
+SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 ```
 
 ## Configure BE parameters
@@ -459,6 +459,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: Threshold (uncompressed_size / compressed_size) used when deciding whether to send serialized row-batches over the network in compressed form. When compression is attempted (e.g., in DataStreamSender, exchange sink, tablet sink index channel, dictionary cache writer), StarRocks computes compress_ratio = uncompressed_size / compressed_size; it uses the compressed payload only if compress_ratio `>` rpc_compress_ratio_threshold. With the default 1.1, compressed data must be at least ~9.1% smaller than uncompressed to be used. Lower the value to prefer compression (more CPU for smaller bandwidth savings); raise it to avoid compression overhead unless it yields larger size reductions. Note: this applies to RPC/shuffle serialization and is effective only when row-batch compression is enabled (compress_rowbatches).
 - Introduced in: v3.2.0
+
+### enable_rpc_compress_overflow_skip
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls the behavior when the serialized chunk size exceeds the compression codec's maximum allowed input size. When set to `true` (default), StarRocks logs a warning and skips compression, sending the data uncompressed instead. When set to `false`, StarRocks returns an `InternalError` and aborts the RPC.
+- Introduced in: -
 
 ### ssl_private_key_path
 

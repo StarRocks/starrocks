@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -60,14 +61,14 @@ public:
 
     int slot_size() const { return _slot_size; }
 
-    const std::string& col_name() const { return _col_name; }
+    std::string_view col_name() const { return _col_name; }
 
     void to_protobuf(PSlotDescriptor* pslot) const;
 
     std::string debug_string() const;
 
     int32_t col_unique_id() const { return _col_unique_id; }
-    const std::string& col_physical_name() const { return _col_physical_name; }
+    std::string_view col_physical_name() const { return _col_physical_name; }
 
     SlotDescriptor(const TSlotDescriptor& tdesc);
 
@@ -147,6 +148,7 @@ public:
 private:
     friend class DescriptorTbl;
     friend class OlapTableSchemaParam;
+    friend class ObjectPool;
 
     const TupleId _id;
     TableDescriptor* _table_desc;
@@ -189,6 +191,8 @@ private:
     SlotDescriptorMap _slot_with_column_name_map;
 
     DescriptorTbl() = default;
+
+    friend class ObjectPool;
 };
 
 // Records positions of tuples within row produced by ExecNode.

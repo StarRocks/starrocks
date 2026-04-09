@@ -42,6 +42,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.reshard.TabletReshardJob;
+import com.starrocks.alter.reshard.TabletReshardJobMgr;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -97,6 +99,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.SortedMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -116,6 +119,8 @@ public final class MetricRepo {
 
     public static final String TABLET_NUM = "tablet_num";
     public static final String TABLET_MAX_COMPACTION_SCORE = "tablet_max_compaction_score";
+    private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME = "iceberg_time_travel_query_total";
+    private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC = "total iceberg time travel query";
 
     public static LongCounterMetric COUNTER_REQUEST_ALL;
     public static LongCounterMetric COUNTER_QUERY_ALL;
@@ -123,7 +128,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_TIMEOUT;
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
     public static LongCounterMetric COUNTER_SLOW_QUERY;
-
+    public static LongCounterMetric COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
@@ -133,6 +138,47 @@ public final class MetricRepo {
 
     public static LongCounterMetric COUNTER_QUERY_ANALYSIS_ERR;
     public static LongCounterMetric COUNTER_QUERY_INTERNAL_ERR;
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL_BY_TYPE =
+            new MetricWithLabelGroup<>("time_travel_type",
+                    () -> new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
+
+    // Per-catalog-type query counters
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TOTAL =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_total", MetricUnit.REQUESTS,
+                            "total query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_SUCCESS =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_success", MetricUnit.REQUESTS,
+                            "total success query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_ERR =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_err", MetricUnit.REQUESTS,
+                            "total error query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TIMEOUT =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_timeout", MetricUnit.REQUESTS,
+                            "total timeout query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_ANALYSIS_ERR =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_analysis_err", MetricUnit.REQUESTS,
+                            "total analysis error query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_INTERNAL_ERR =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_query_internal_err", MetricUnit.REQUESTS,
+                            "total internal error query by catalog type"));
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_SLOW_QUERY =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new LongCounterMetric("catalog_slow_query", MetricUnit.REQUESTS,
+                            "total slow query by catalog type"));
 
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_QUERY_QUEUE_CATEGORY_SLOT_PENDING =
             new MetricWithLabelGroup<>("category",
@@ -158,6 +204,10 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("category",
                     () -> new LongCounterMetric("query_queue_v2_category_state", MetricUnit.REQUESTS,
                             "the current state of each category"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_ICEBERG_METADATA_TABLE_QUERY_TOTAL =
+            new MetricWithLabelGroup<>("metadata_table",
+                    () -> new LongCounterMetric("iceberg_metadata_table_query_total", MetricUnit.REQUESTS,
+                            "the total number of iceberg metadata table queries by metadata table"));
 
 
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_RUNNING_STATS_COLLECT_JOB =
@@ -236,13 +286,36 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_VACUUM_FILES_NUMBER;
     public static LongCounterMetric COUNTER_VACUUM_FILES_BYTES;
 
+    // tablet reshard metrics
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED;
+    public static LongCounterMetric COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED;
+
     public static Histogram HISTO_QUERY_LATENCY;
+
+    // Per-catalog-type query latency histograms
+    private static final Map<String, HistogramMetric> HISTO_CATALOG_QUERY_LATENCY_MAP = new ConcurrentHashMap<>();
+
+    public static HistogramMetric getOrCreateCatalogQueryLatencyHistogram(String catalogType) {
+        return HISTO_CATALOG_QUERY_LATENCY_MAP.computeIfAbsent(catalogType, k -> {
+            HistogramMetric histogram = new HistogramMetric("catalog_query_latency_ms");
+            histogram.addLabel(new MetricLabel("catalog_type", catalogType));
+            METRIC_REGISTER.register(
+                    MetricRegistry.name("catalog_query", "latency", "ms", catalogType), histogram);
+            return histogram;
+        });
+    }
+
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_BATCH;
     public static Histogram HISTO_JOURNAL_WRITE_BYTES;
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
     public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
+    public static Histogram HISTO_TABLET_RESHARD_JOB_DURATION;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -251,6 +324,27 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Double> GAUGE_QUERY_INTERNAL_ERR_RATE;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_ANALYSIS_ERR_RATE;
     public static GaugeMetricImpl<Double> GAUGE_QUERY_TIMEOUT_RATE;
+
+    // Per-catalog-type rate gauges
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Double>> GAUGE_CATALOG_QUERY_ERR_RATE =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new GaugeMetricImpl<>("catalog_query_err_rate", MetricUnit.NOUNIT,
+                            "query error rate by catalog type"));
+
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Double>> GAUGE_CATALOG_QUERY_TIMEOUT_RATE =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new GaugeMetricImpl<>("catalog_query_timeout_rate", MetricUnit.NOUNIT,
+                            "query timeout rate by catalog type"));
+
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Double>> GAUGE_CATALOG_QUERY_ANALYSIS_ERR_RATE =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new GaugeMetricImpl<>("catalog_query_analysis_err_rate", MetricUnit.NOUNIT,
+                            "query analysis error rate by catalog type"));
+
+    public static final MetricWithLabelGroup<GaugeMetricImpl<Double>> GAUGE_CATALOG_QUERY_INTERNAL_ERR_RATE =
+            new MetricWithLabelGroup<>("catalog_type",
+                    () -> new GaugeMetricImpl<>("catalog_query_internal_err_rate", MetricUnit.NOUNIT,
+                            "query internal error rate by catalog type"));
 
     // these query latency is different from HISTO_QUERY_LATENCY, for these only summarize the latest queries, but HISTO_QUERY_LATENCY summarizes all queries.
     public static GaugeMetricImpl<Double> GAUGE_QUERY_LATENCY_MEAN;
@@ -353,6 +447,41 @@ public final class MetricRepo {
                     .addLabel(new MetricLabel("type", jobType.name()))
                     .addLabel(new MetricLabel("state", "running"));
             STARROCKS_METRIC_REGISTER.addMetric(gauge);
+        }
+
+        // tablet reshard jobs
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        if (tabletReshardJobMgr != null) {
+            for (TabletReshardJob.JobType reshardJobType : TabletReshardJob.JobType.values()) {
+                for (TabletReshardJob.JobState reshardJobState : TabletReshardJob.JobState.values()) {
+                    Metric<Long> gauge = new LeaderAwareGaugeMetricLong("job",
+                            MetricUnit.NOUNIT, "job statistics") {
+                        @Override
+                        public Long getValueLeader() {
+                            long count = 0;
+                            for (TabletReshardJob job : tabletReshardJobMgr.getTabletReshardJobs().values()) {
+                                if (job.getJobType() == reshardJobType && job.getJobState() == reshardJobState) {
+                                    count++;
+                                }
+                            }
+                            return count;
+                        }
+                    };
+                    gauge.addLabel(new MetricLabel("job", "tablet_reshard"))
+                            .addLabel(new MetricLabel("type", reshardJobType.name()))
+                            .addLabel(new MetricLabel("state", reshardJobState.name()));
+                    STARROCKS_METRIC_REGISTER.addMetric(gauge);
+                }
+            }
+
+            Metric<Long> parallelTabletsGauge = new LeaderAwareGaugeMetricLong("tablet_reshard_parallel_tablets",
+                    MetricUnit.NOUNIT, "number of tablets being resharded") {
+                @Override
+                public Long getValueLeader() {
+                    return tabletReshardJobMgr.getTotalParallelTablets();
+                }
+            };
+            STARROCKS_METRIC_REGISTER.addMetric(parallelTabletsGauge);
         }
 
         // capacity
@@ -576,6 +705,9 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_SUCCESS);
         COUNTER_SLOW_QUERY = new LongCounterMetric("slow_query", MetricUnit.REQUESTS, "total slow query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SLOW_QUERY);
+        COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL = new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME,
+                MetricUnit.REQUESTS, ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL);
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);
@@ -704,6 +836,33 @@ public final class MetricRepo {
                 "total file bytes have been vacuumed");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_VACUUM_FILES_BYTES);
 
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL = new LongCounterMetric("tablet_reshard_job_total",
+                MetricUnit.REQUESTS, "total tablet reshard split jobs created");
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL.addLabel(new MetricLabel("type", "split"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_SPLIT_JOB_TOTAL);
+        COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL = new LongCounterMetric("tablet_reshard_job_total",
+                MetricUnit.REQUESTS, "total tablet reshard merge jobs created");
+        COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL.addLabel(new MetricLabel("type", "merge"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_TOTAL);
+
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED = new LongCounterMetric("tablet_reshard_job_finished",
+                MetricUnit.REQUESTS, "total tablet reshard split jobs finished");
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED.addLabel(new MetricLabel("type", "split"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_SPLIT_JOB_FINISHED);
+        COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED = new LongCounterMetric("tablet_reshard_job_finished",
+                MetricUnit.REQUESTS, "total tablet reshard merge jobs finished");
+        COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED.addLabel(new MetricLabel("type", "merge"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_FINISHED);
+
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED = new LongCounterMetric("tablet_reshard_job_aborted",
+                MetricUnit.REQUESTS, "total tablet reshard split jobs aborted");
+        COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED.addLabel(new MetricLabel("type", "split"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_SPLIT_JOB_ABORTED);
+        COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED = new LongCounterMetric("tablet_reshard_job_aborted",
+                MetricUnit.REQUESTS, "total tablet reshard merge jobs aborted");
+        COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED.addLabel(new MetricLabel("type", "merge"));
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TABLET_RESHARD_MERGE_JOB_ABORTED);
+
         // 3. histogram
         HISTO_QUERY_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("query", "latency", "ms"));
         HISTO_EDIT_LOG_WRITE_LATENCY =
@@ -717,6 +876,8 @@ public final class MetricRepo {
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
         HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
                 MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
+        HISTO_TABLET_RESHARD_JOB_DURATION = METRIC_REGISTER.histogram(
+                MetricRegistry.name("tablet_reshard_job", "duration", "ms"));
 
         // init system metrics
         initSystemMetrics();

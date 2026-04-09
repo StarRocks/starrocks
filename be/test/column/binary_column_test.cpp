@@ -21,6 +21,7 @@
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -667,5 +668,87 @@ TEST_P(BinaryColumnAppendSelectiveTestFixture, test_append_selective) {
 INSTANTIATE_TEST_SUITE_P(BinaryColumnAppendSelectiveTest, BinaryColumnAppendSelectiveTestFixture,
                          ::testing::Values(std::make_tuple(2048), std::make_tuple(4096), std::make_tuple(40960),
                                            std::make_tuple(4 * 1024 * 1024 + 10)));
+
+// BinaryImmContainer::immutable_bytes_size
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_empty) {
+    auto col = BinaryColumn::create();
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 0);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_binary_column) {
+    auto col = BinaryColumn::create();
+    col->append_string("hello"); // 5 bytes
+    col->append_string("world"); // 5 bytes
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 10);
+}
+
+PARALLEL_TEST(BinaryColumnTest, test_immutable_bytes_size_large_binary_column) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("foo"); // 3 bytes
+    col->append_string("bar"); // 3 bytes
+    EXPECT_EQ(col->immutable_data().immutable_bytes_size(), 6);
+}
+
+// ---- append(const Column& src, size_t offset, size_t count) ----
+
+// Same type: BinaryColumn -> BinaryColumn
+PARALLEL_TEST(BinaryColumnTest, test_append_same_type_binary) {
+    auto src = ColumnTestHelper::build_column<Slice>({"aa", "bb", "cc", "dd"});
+    auto dst = ColumnTestHelper::build_column<Slice>({"xx"});
+    dst->append(*src, 1, 2); // append "bb", "cc"
+
+    EXPECT_EQ("['xx', 'bb', 'cc']", dst->debug_string());
+}
+
+// Same type: LargeBinaryColumn -> LargeBinaryColumn
+PARALLEL_TEST(BinaryColumnTest, test_append_same_type_large_binary) {
+    auto src = LargeBinaryColumn::create();
+    src->append_string("aa");
+    src->append_string("bb");
+    src->append_string("cc");
+
+    auto dst = LargeBinaryColumn::create();
+    dst->append_string("xx");
+    dst->append(*src, 0, 2); // append "aa", "bb"
+
+    EXPECT_EQ("['xx', 'aa', 'bb']", dst->debug_string());
+}
+
+// Cross type: BinaryColumn -> LargeBinaryColumn
+PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_binary_to_large) {
+    auto src = ColumnTestHelper::build_column<Slice>({"hello", "world", "foo"});
+    auto dst = LargeBinaryColumn::create();
+    dst->append_string("bar");
+    dst->append(*src, 1, 2); // append "world", "foo"
+
+    EXPECT_EQ("['bar', 'world', 'foo']", dst->debug_string());
+}
+
+// Append from offset=0 into an empty dst
+PARALLEL_TEST(BinaryColumnTest, test_append_into_empty_dst) {
+    auto src = ColumnTestHelper::build_column<Slice>({"x", "y"});
+    auto dst = BinaryColumn::create();
+    dst->append(*src, 0, 2);
+
+    EXPECT_EQ("['x', 'y']", dst->debug_string());
+}
+
+// Append with count=0 is a no-op
+PARALLEL_TEST(BinaryColumnTest, test_append_zero_count) {
+    auto src = ColumnTestHelper::build_column<Slice>({"x"});
+    auto dst = ColumnTestHelper::build_column<Slice>({"y"});
+    dst->append(*src, 0, 0);
+
+    EXPECT_EQ("['y']", dst->debug_string());
+}
+
+// Cross type (unsupported): LargeBinaryColumn -> BinaryColumn must be rejected.
+PARALLEL_TEST(BinaryColumnTest, test_append_cross_type_large_to_binary_unsupported) {
+    auto src = LargeBinaryColumn::create();
+    src->append_string("hello");
+    auto dst = BinaryColumn::create();
+    dst->append_string("bar");
+    ASSERT_DEATH_IF_SUPPORTED(dst->append(*src, 0, 1), "incompatible column type");
+}
 
 } // namespace starrocks

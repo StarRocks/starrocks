@@ -133,11 +133,13 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             try {
-                updatePCTToRefreshMetas(taskRunContext);
+                // IVM refreshes all changed partitions via TVR delta (not limited by partition_refresh_number),
+                // so pass skipBatchFilter=true to record complete PCT metadata without truncation.
+                updatePCTToRefreshMetas(taskRunContext, /* skipBatchFilter */ true);
             } catch (Exception e) {
                 // if the check failed, we should not throw exception here
-                // because this check only affects mv refresh rather than mv refresh.
-                logger.warn("Failed to check PCT partitions for materialized view: {}, error: {}",
+                // because this check only affects pct-based refresh rather than ivm-based mv refresh.
+                logger.warn("Failed to collect PCT metadata for materialized view: {}, error: {}",
                         mv.getName(), e.getMessage(), e);
             }
         }
@@ -192,18 +194,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
                                                          MaterializedView.RefreshMode refreshMode) {
         final BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
         final Table snapshotTable = snapshotInfo.getBaseTable();
-
-        Optional<Table> optTable = MvUtils.getTableWithIdentifier(baseTableInfo);
-        if (optTable.isEmpty()) {
-            throw new SemanticException("Base table %s.%s does not exist",
-                    baseTableInfo.getDbName(), baseTableInfo.getTableName());
-        }
-        if (!IVMAnalyzer.isTableTypeIVMSupported(snapshotTable.getType())) {
-            throw new SemanticException(String.format("Only support %s tables for MVIVMBasedRefreshProcessor, " +
-                    "but got: %s", Joiner.on(",").join(IVMAnalyzer.SUPPORTED_TABLE_TYPES),
-                    snapshotTable.getType()));
-        }
-        final TvrTableDelta maxTvrDelta = getMaxBaseTableChangedDelta(baseTableInfo, snapshotTable, mvTvrVersionRangeMap);
+        final TvrTableDelta maxTvrDelta = getBaseTableMaxChangedDelta(snapshotInfo, mvTvrVersionRangeMap);
         // if no change, return empty
         if (maxTvrDelta.isEmpty()) {
             return maxTvrDelta;
@@ -249,23 +240,24 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         }
     }
 
-    public boolean isGenerateNextTaskRun() {
-        if (Config.mv_max_rows_per_refresh <= 0) {
-            return false;
+    public TvrTableDelta getBaseTableMaxChangedDelta(BaseTableSnapshotInfo snapshotInfo,
+                                                     Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap) {
+        Table snapshotTable = snapshotInfo.getBaseTable();
+        BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
+        Optional<Table> optTable = MvUtils.getTableWithIdentifier(baseTableInfo);
+        if (optTable.isEmpty()) {
+            throw new SemanticException("Base table %s.%s does not exist",
+                    baseTableInfo.getDbName(), baseTableInfo.getTableName());
         }
-        // for sync refresh, we always use the max changed delta
-        ExecuteOption executeOption = mvContext.getExecuteOption();
-        boolean isSyncRefresh = executeOption != null && executeOption.getIsSync();
-        return !isSyncRefresh;
-    }
-
-    private TvrTableDelta getMaxBaseTableChangedDelta(BaseTableInfo baseTableInfo,
-                                                      Table table,
-                                                      Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap) {
+        if (!IVMAnalyzer.isTableTypeIVMSupported(snapshotTable.getType())) {
+            throw new SemanticException(String.format("Only support %s tables for MVIVMBasedRefreshProcessor, " +
+                            "but got: %s", Joiner.on(",").join(IVMAnalyzer.SUPPORTED_TABLE_TYPES),
+                    snapshotTable.getType()));
+        }
         // For now, we always refresh the latest snapshot from the last refresh.
         // current tvr snapshot
         TvrVersionRange currentTvrSnapshot = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getCurrentTvrSnapshot(baseTableInfo.getDbName(), table);
+                .getCurrentTvrSnapshot(baseTableInfo.getDbName(), snapshotTable);
         if (currentTvrSnapshot == null || !(currentTvrSnapshot instanceof TvrTableSnapshot)) {
             logger.warn("Current tvr snapshot is null for base table: {}, db: {}",
                     baseTableInfo.getTableName(), baseTableInfo.getDbName());
@@ -300,6 +292,16 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
             return TvrTableDelta.of(beforeVersion, currentVersion);
         }
         return TvrTableDelta.of(beforeVersion, currentVersion);
+    }
+
+    public boolean isGenerateNextTaskRun() {
+        if (Config.mv_max_rows_per_refresh <= 0) {
+            return false;
+        }
+        // for sync refresh, we always use the max changed delta
+        ExecuteOption executeOption = mvContext.getExecuteOption();
+        boolean isSyncRefresh = executeOption != null && executeOption.getIsSync();
+        return !isSyncRefresh;
     }
 
     // TODO: We may introduce a smarter way to determine which incremental snapshot to refresh later.

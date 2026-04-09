@@ -315,6 +315,7 @@ public class WarehouseManager implements Writable {
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getPrimaryComputeNodeIdByShard(tabletId, computeResource.getWorkerGroupId());
         } catch (StarRocksException e) {
+            LOG.warn("get primary compute node id for tablet {} fail {}.", tabletId, e.getMessage());
             return null;
         }
     }

@@ -397,12 +397,13 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
     bool submitted = true;
     for (int i = 0; i < unique_requests.size(); ++i) {
         PromiseStatusSharedPtr ms = std::make_shared<PromiseStatus>();
-        submitted = _exec_env->pipeline_prepare_pool()->try_offer([ms, i, fragment_executors, t_batch_requests, this] {
-            auto& unique_requests = t_batch_requests->unique_param_per_instance;
-            auto& req = unique_requests[i];
-            auto& fragment_executor = fragment_executors->at(i);
-            ms->set_value(fragment_executor.prepare(_exec_env, req, req));
-        });
+        submitted = _exec_env->pipeline_prepare_pool()->try_offer(
+                [ms, i, fragment_executors, t_batch_requests, exec_env = _exec_env] {
+                    auto& unique_requests = t_batch_requests->unique_param_per_instance;
+                    auto& req = unique_requests[i];
+                    auto& fragment_executor = fragment_executors->at(i);
+                    ms->set_value(fragment_executor.prepare(exec_env, req, req));
+                });
         if (!submitted) {
             failed_idx = i;
             break;
@@ -597,6 +598,7 @@ template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
     SCOPED_SET_TRACE_INFO({}, t_common_param.params.query_id, t_unique_request.params.fragment_instance_id);
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     DUMP_TRACE_IF_TIMEOUT(config::pipeline_prepare_timeout_guard_ms);
     pipeline::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);

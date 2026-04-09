@@ -248,6 +248,7 @@ public:
 
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
+    lake::TabletManager* tablet_manager() const { return _tablet_manager; }
 
     // possiable physical distribution optimize of data source
     bool sorted_by_keys_per_tablet() const override {
@@ -283,7 +284,7 @@ protected:
     const TLakeScanNode _t_lake_scan_node;
 
     // for ut
-    lake::TabletManager* _tablet_manager;
+    lake::TabletManager* _tablet_manager = nullptr;
 
     bool _could_split = false;
     bool _could_split_physically = false;

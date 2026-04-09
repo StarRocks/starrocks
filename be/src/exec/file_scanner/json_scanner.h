@@ -122,7 +122,7 @@ private:
     Status _construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk);
 
     Status _construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
-                             const std::string& col_name);
+                             std::string_view col_name);
 
     Status _check_ndjson();
 

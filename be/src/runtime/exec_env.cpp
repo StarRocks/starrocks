@@ -39,7 +39,6 @@
 #include <thread>
 
 #include "agent/agent_server.h"
-#include "agent/master_info.h"
 #include "base/string/parse_util.h"
 #include "base/time/time.h"
 #include "base/utility/pretty_printer.h"
@@ -49,6 +48,7 @@
 #include "common/mem_chunk.h"
 #include "common/process_exit.h"
 #include "common/system/cpu_info.h"
+#include "common/system/master_info.h"
 #include "common/system/mem_info.h"
 #include "common/thread/threadpool.h"
 #include "connector/connector_sink_executor.h"
@@ -356,8 +356,84 @@ ExecEnv* ExecEnv::GetInstance() {
     return &s_exec_env;
 }
 
-ExecEnv::ExecEnv() = default;
+ExecEnv::ExecEnv() {
+    _refresh_service_contexts();
+}
 ExecEnv::~ExecEnv() = default;
+
+void ExecEnv::_refresh_service_contexts() {
+    _execution_services.thread_pool = _thread_pool;
+    _execution_services.streaming_load_thread_pool = _streaming_load_thread_pool;
+    _execution_services.load_rowset_thread_pool = _load_rowset_thread_pool;
+    _execution_services.load_segment_thread_pool = _load_segment_thread_pool;
+    _execution_services.put_combined_txn_log_thread_pool = _put_combined_txn_log_thread_pool;
+    _execution_services.udf_call_pool = _udf_call_pool;
+    _execution_services.pipeline_prepare_pool = _pipeline_prepare_pool;
+    _execution_services.pipeline_sink_io_pool = _pipeline_sink_io_pool;
+    _execution_services.query_rpc_pool = _query_rpc_pool;
+    _execution_services.datacache_rpc_pool = _datacache_rpc_pool;
+    _execution_services.load_rpc_pool = _load_rpc_pool.get();
+    _execution_services.dictionary_cache_pool = _dictionary_cache_pool.get();
+    _execution_services.automatic_partition_pool = _automatic_partition_pool.get();
+    _execution_services.workgroup_manager = _workgroup_manager.get();
+    _execution_services.driver_limiter = _driver_limiter;
+    _execution_services.pipeline_timer = _pipeline_timer;
+    _execution_services.max_executor_threads = _max_executor_threads;
+
+    _rpc_services.backend_client_cache = _backend_client_cache;
+    _rpc_services.frontend_client_cache = _frontend_client_cache;
+    _rpc_services.broker_client_cache = _broker_client_cache;
+    _rpc_services.broker_mgr = _broker_mgr;
+    _rpc_services.brpc_stub_cache = _brpc_stub_cache;
+
+    _lake_services.lake_tablet_manager = _lake_tablet_manager;
+    _lake_services.lake_update_manager = _lake_update_manager;
+    _lake_services.lake_replication_txn_manager = _lake_replication_txn_manager;
+    _lake_services.put_aggregate_metadata_thread_pool = _put_aggregate_metadata_thread_pool.get();
+    _lake_services.lake_metadata_fetch_thread_pool = _lake_metadata_fetch_thread_pool.get();
+    _lake_services.parallel_compact_mgr = _parallel_compact_mgr.get();
+    _lake_services.pk_index_execution_thread_pool = _pk_index_execution_thread_pool.get();
+    _lake_services.pk_index_memtable_flush_thread_pool = _pk_index_memtable_flush_thread_pool.get();
+
+    _runtime_services.external_scan_context_mgr = _external_scan_context_mgr;
+    _runtime_services.stream_mgr = _stream_mgr;
+    _runtime_services.lookup_dispatcher_mgr = _lookup_dispatcher_mgr;
+    _runtime_services.result_mgr = _result_mgr;
+    _runtime_services.result_queue_mgr = _result_queue_mgr;
+    _runtime_services.fragment_mgr = _fragment_mgr;
+    _runtime_services.load_path_mgr = _load_path_mgr;
+    _runtime_services.load_channel_mgr = _load_channel_mgr;
+    _runtime_services.load_stream_mgr = _load_stream_mgr;
+    _runtime_services.stream_context_mgr = _stream_context_mgr;
+    _runtime_services.transaction_mgr = _transaction_mgr;
+    _runtime_services.batch_write_mgr = _batch_write_mgr;
+    _runtime_services.stream_load_executor = _stream_load_executor;
+    _runtime_services.routine_load_task_executor = _routine_load_task_executor;
+    _runtime_services.small_file_mgr = _small_file_mgr;
+    _runtime_services.runtime_filter_worker = _runtime_filter_worker;
+    _runtime_services.runtime_filter_cache = _runtime_filter_cache;
+    _runtime_services.profile_report_worker = _profile_report_worker;
+    _runtime_services.query_context_mgr = _query_context_mgr;
+    _runtime_services.cache_mgr = _cache_mgr;
+    _runtime_services.spill_dir_mgr = _spill_dir_mgr.get();
+    _runtime_services.global_spill_manager = _global_spill_manager.get();
+    _runtime_services.connector_sink_spill_executor = _connector_sink_spill_executor;
+    _runtime_services.diagnose_daemon = _diagnose_daemon;
+
+    _agent_services.agent_server = _agent_server;
+    _agent_services.heartbeat_flags = _heartbeat_flags;
+
+    _query_execution_services.execution = &_execution_services;
+    _query_execution_services.rpc = &_rpc_services;
+    _query_execution_services.lake = &_lake_services;
+    _query_execution_services.runtime = &_runtime_services;
+
+    _admin_services.execution = &_execution_services;
+    _admin_services.rpc = &_rpc_services;
+    _admin_services.lake = &_lake_services;
+    _admin_services.runtime = &_runtime_services;
+    _admin_services.agent = &_agent_services;
+}
 
 Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _store_paths = store_paths;
@@ -417,11 +493,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
     // register the metrics to monitor the task queue len
-    auto task_qlen_fun = [] {
+    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, [] {
         auto pool = ExecEnv::GetInstance()->pipeline_prepare_pool();
         return (pool == nullptr) ? 0U : pool->get_queue_size();
-    };
-    REGISTER_GAUGE_STARROCKS_METRIC(pipe_prepare_pool_queue_len, task_qlen_fun);
+    });
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
@@ -478,6 +553,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _pipeline_timer = new pipeline::PipelineTimer();
     RETURN_IF_ERROR(_pipeline_timer->start());
+    HttpBrpcStubCache::initialize(_pipeline_timer);
+#ifndef __APPLE__
+    LakeServiceBrpcStubCache::initialize(_pipeline_timer);
+#endif
 
     const int num_io_threads = config::pipeline_scan_thread_pool_thread_num <= 0
                                        ? CpuInfo::num_cores()
@@ -506,7 +585,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             GlobalMetricsRegistry::instance()->pipeline_executor_metrics());
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
-    workgroup::DefaultWorkGroupInitialization default_workgroup_init;
+    workgroup::DefaultWorkGroupInitialization default_workgroup_init(_workgroup_manager.get(), _max_executor_threads);
 
     if (store_paths.empty() && as_cn) {
         _load_path_mgr = new DummyLoadPathMgr();
@@ -544,9 +623,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&put_combined_txn_log_thread_pool));
     _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
 
-    _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
-    _brpc_stub_cache = new BrpcStubCache(this);
+    _brpc_stub_cache = new BrpcStubCache(_pipeline_timer);
     _stream_load_executor = new StreamLoadExecutor(this);
     _stream_context_mgr = new StreamContextMgr();
     _transaction_mgr = new TransactionMgr(this);
@@ -571,16 +649,15 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _connector_sink_spill_executor = new connector::ConnectorSinkSpillExecutor();
     RETURN_IF_ERROR(_connector_sink_spill_executor->init());
 
-    _small_file_mgr = new SmallFileMgr(this, config::small_file_dir);
-    _runtime_filter_worker = new RuntimeFilterWorker(this);
+    _small_file_mgr = new SmallFileMgr(config::small_file_dir);
+    _runtime_filter_worker = new RuntimeFilterWorker(&_runtime_services, &_rpc_services);
     _runtime_filter_cache = new RuntimeFilterCache(8);
     RETURN_IF_ERROR(_runtime_filter_cache->init());
-    _profile_report_worker = new ProfileReportWorker(this);
-    auto runtime_filter_event_func = [] {
+    _profile_report_worker = new ProfileReportWorker(_fragment_mgr, _query_context_mgr);
+    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, [] {
         auto pool = ExecEnv::GetInstance()->runtime_filter_worker();
         return (pool == nullptr) ? 0U : pool->queue_size();
-    };
-    REGISTER_GAUGE_STARROCKS_METRIC(runtime_filter_event_queue_len, runtime_filter_event_func);
+    });
 
     _backend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "backend");
     _frontend_client_cache->init_metrics(GlobalMetricsRegistry::instance()->metrics(), "frontend");
@@ -670,6 +747,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_pk_index_memtable_flush_thread_pool));
 #endif
 
+    _load_channel_mgr = new LoadChannelMgr(_lake_tablet_manager);
+
     RETURN_IF_ERROR(ThreadPoolBuilder("lake_metadata_fetch")
                             .set_min_threads(0)
                             .set_max_threads(std::max(1, (int)config::lake_metadata_fetch_thread_count))
@@ -707,17 +786,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     RETURN_IF_ERROR(PythonEnvManager::getInstance().init(config::python_envs));
     PythonEnvManager::getInstance().start_background_cleanup_thread();
 
+    _refresh_service_contexts();
+
     return Status::OK();
 }
 
 std::string ExecEnv::token() const {
     return get_master_token();
-}
-
-void ExecEnv::add_rf_event(const RfTracePoint& pt) {
-    std::string msg =
-            strings::Substitute("$0($1)", pt.msg, pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
-    _runtime_filter_cache->add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
 }
 
 void ExecEnv::stop() {

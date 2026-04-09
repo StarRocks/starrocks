@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "base/orlp/pdqsort.h"
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -221,6 +222,11 @@ public:
         DCHECK(false) << "not support object column sort_and_tie";
 
         return Status::NotSupported("not support object column sort_and_tie");
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("not support AdaptiveNullableColumn sort_and_tie");
     }
 
     Status do_visit(const JsonColumn& column) {

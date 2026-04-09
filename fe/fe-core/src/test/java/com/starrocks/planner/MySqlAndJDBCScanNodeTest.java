@@ -109,6 +109,12 @@ public class MySqlAndJDBCScanNodeTest {
                 "AND (col = 'ABC') AND " +
                 "((col NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) OR " +
                 "(col = 'ABC'))"), nodeString);
+
+        TPlanNode thriftNode = new TPlanNode();
+        scanNode.toThrift(thriftNode);
+        Assertions.assertNotNull(thriftNode.getConnector_scan_node());
+        Assertions.assertEquals(StmtExecutor.toCatalogType(mysqlTable.getType()),
+                thriftNode.getConnector_scan_node().getCatalog_type());
     }
 
     @Test

@@ -22,7 +22,7 @@
 
 namespace starrocks::avrocpp {
 
-ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string& col_name,
+ColumnReaderUniquePtr ColumnReader::get_nullable_column_reader(const std::string_view col_name,
                                                                const TypeDescriptor& type_desc,
                                                                const cctz::time_zone& timezone, bool invalid_as_null) {
     ColumnReaderUniquePtr reader = nullptr;

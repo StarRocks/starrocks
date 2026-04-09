@@ -1,0 +1,16 @@
+{
+  "include_violations": [
+    {
+      "module": "columncore",
+      "path": "be/src/column/hash_set.h",
+      "edge": "runtime/memory/counting_allocator.h"
+    },
+    {
+      "module": "runtimecore",
+      "path": "be/src/runtime/memory/counting_allocator.h",
+      "edge": "exprs/expr_context.h"
+    }
+  ],
+  "target_link_violations": [],
+  "test_link_violations": []
+}

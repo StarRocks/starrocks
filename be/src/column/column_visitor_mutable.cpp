@@ -20,6 +20,7 @@ namespace starrocks {
     Status ColumnVisitorMutable::visit(ClassName* column) { return Status::NotSupported(#ClassName); }
 
 VISIT_IMPL(NullableColumn)
+VISIT_IMPL(AdaptiveNullableColumn)
 VISIT_IMPL(ConstColumn)
 VISIT_IMPL(ArrayColumn)
 VISIT_IMPL(MapColumn)
