@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -89,7 +90,7 @@ public class SqlCredentialRedactor {
 
     static {
         for (String key : CREDENTIAL_KEYS) {
-            CREDENTIAL_KEYS_LOWERCASE.add(key.toLowerCase());
+            CREDENTIAL_KEYS_LOWERCASE.add(key.toLowerCase(Locale.ROOT));
         }
     }
 
@@ -151,7 +152,7 @@ public class SqlCredentialRedactor {
         if (sql == null || sql.isEmpty()) {
             return false;
         }
-        String lower = sql.toLowerCase();
+        String lower = sql.toLowerCase(Locale.ROOT);
         for (String key : CREDENTIAL_KEYS_LOWERCASE) {
             if (lower.indexOf(key) >= 0) {
                 return true;
@@ -193,7 +194,7 @@ public class SqlCredentialRedactor {
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
 
             // Check if this key should be redacted (case-insensitive)
-            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase())) {
+            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase(Locale.ROOT))) {
                 // Append text before the match
                 result.append(sql, lastEnd, matcher.start());
 

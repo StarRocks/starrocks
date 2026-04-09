@@ -290,7 +290,7 @@ public class StmtExecutorTest {
     }
 
     @Test
-    public void testRetryPathLogsRedactedSql() {
+    public void testGetRedactedOriginStmtInStringRedactsFilesCredentials() {
         StatementBase stmt = SqlParser.parseSingleStatement(
                 "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
                         "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
