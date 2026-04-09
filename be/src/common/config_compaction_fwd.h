@@ -162,6 +162,11 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 // Skip get from pk index when light pk compaction publish is enabled
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
+// Pre-fetch delvec data for compaction publishes before acquiring the per-tablet lock.
+// This reduces lock hold time from seconds to milliseconds, preventing compaction publishes
+// from blocking stream load publishes on the same tablet.
+CONF_mBool(lake_enable_compaction_delvec_prefetch, "true");
+
 // if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
 // for now, only support non-pk LAKE compaction in size tierd compaction.
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");

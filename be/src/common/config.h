@@ -1772,6 +1772,9 @@ CONF_mInt32(olap_string_max_length, "1048576");
 // Skip get from pk index when light pk compaction publish is enabled
 CONF_mBool(enable_light_pk_compaction_publish, "true");
 
+// Pre-fetch delvec data for compaction publishes before acquiring the per-tablet lock.
+CONF_mBool(lake_enable_compaction_delvec_prefetch, "true");
+
 // jit LRU object cache size for total 32 shards, it will be an auto value if it < 0
 // mem_limit = system memory or process memory limit if set.
 // if mem_limit < 16 GB, disable JIT.
