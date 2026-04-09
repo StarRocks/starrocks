@@ -663,10 +663,16 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         st = _thread_pool_replicate_snapshot->update_max_threads(
                 calc_real_num_threads(new_val, REPLICATION_CPU_CORES_MULTIPLIER));
         break;
-    case TTaskType::CLONE:
-        st = _thread_pool_clone->update_max_threads(
-                calc_clone_thread_pool_size(_exec_env->store_paths().size(), new_val));
+    case TTaskType::CLONE: {
+        ThreadPool* thread_pool = get_thread_pool(type);
+        if (thread_pool) {
+            st = thread_pool->update_max_threads(calc_clone_thread_pool_size(_exec_env->store_paths().size(), new_val));
+        } else {
+            LOG(WARNING) << "Failed to update max thread, cannot get thread pool by task type: "
+                         << to_string((TTaskType::type)type);
+        }
         break;
+    }
     default: {
         ThreadPool* thread_pool = get_thread_pool(type);
         if (thread_pool) {
