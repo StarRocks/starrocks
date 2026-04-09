@@ -27,27 +27,10 @@
 #include "storage/datum_variant.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/types.h"
-<<<<<<< HEAD
-=======
-#include "types/storage_type_traits.h"
-#include "types/type_descriptor.h"
->>>>>>> bdd4c8c3e0 ([Enhancement] Handle NULL variant as type-minimum for non-nullable PK columns in SstSeekRange (#71269))
 
 namespace starrocks::lake {
 
 // Produce a Datum holding the minimum value for the given logical type.
-// Uses TypeInfo::set_to_min() which calls std::numeric_limits<CppType>::lowest().
-// Covers all PK-supported types (APPLY_FOR_ALL_PK_SUPPORT_TYPE in logical_type_infra.h).
-template <LogicalType TYPE>
-static Datum datum_from_type_min_impl() {
-    using CppType = StorageCppType<TYPE>;
-    CppType value{};
-    get_type_info(TYPE)->set_to_min(&value);
-    Datum d;
-    d.set(value);
-    return d;
-}
-
 static StatusOr<Datum> datum_from_type_min(LogicalType type) {
     switch (type) {
     case TYPE_BOOLEAN: {
@@ -57,20 +40,55 @@ static StatusOr<Datum> datum_from_type_min(LogicalType type) {
         d.set_int8(v);
         return d;
     }
-    case TYPE_TINYINT:
-        return datum_from_type_min_impl<TYPE_TINYINT>();
-    case TYPE_SMALLINT:
-        return datum_from_type_min_impl<TYPE_SMALLINT>();
-    case TYPE_INT:
-        return datum_from_type_min_impl<TYPE_INT>();
-    case TYPE_BIGINT:
-        return datum_from_type_min_impl<TYPE_BIGINT>();
-    case TYPE_LARGEINT:
-        return datum_from_type_min_impl<TYPE_LARGEINT>();
-    case TYPE_DATE:
-        return datum_from_type_min_impl<TYPE_DATE>();
-    case TYPE_DATETIME:
-        return datum_from_type_min_impl<TYPE_DATETIME>();
+    case TYPE_TINYINT: {
+        int8_t v{};
+        get_type_info(TYPE_TINYINT)->set_to_min(&v);
+        Datum d;
+        d.set_int8(v);
+        return d;
+    }
+    case TYPE_SMALLINT: {
+        int16_t v{};
+        get_type_info(TYPE_SMALLINT)->set_to_min(&v);
+        Datum d;
+        d.set_int16(v);
+        return d;
+    }
+    case TYPE_INT: {
+        int32_t v{};
+        get_type_info(TYPE_INT)->set_to_min(&v);
+        Datum d;
+        d.set_int32(v);
+        return d;
+    }
+    case TYPE_BIGINT: {
+        int64_t v{};
+        get_type_info(TYPE_BIGINT)->set_to_min(&v);
+        Datum d;
+        d.set_int64(v);
+        return d;
+    }
+    case TYPE_LARGEINT: {
+        int128_t v{};
+        get_type_info(TYPE_LARGEINT)->set_to_min(&v);
+        Datum d;
+        d.set_int128(v);
+        return d;
+    }
+    case TYPE_DATE: {
+        int32_t v{};
+        get_type_info(TYPE_DATE)->set_to_min(&v);
+        Datum d;
+        d.set_int32(v);
+        return d;
+    }
+    case TYPE_DATETIME: {
+        int64_t v{};
+        get_type_info(TYPE_DATETIME)->set_to_min(&v);
+        Datum d;
+        d.set_int64(v);
+        return d;
+    }
     case TYPE_VARCHAR: {
         Datum d;
         d.set_slice(Slice("", 0));

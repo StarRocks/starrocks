@@ -461,13 +461,8 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
     EXPECT_EQ(VariantTypePB::NULL_VALUE, pb_range.lower_bound().values(0).variant_type());
 }
 
-<<<<<<< HEAD
-TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
-    auto fs = FileSystem::Default();
-=======
 // MINIMUM/MAXIMUM variants should be rejected — FE must map them to NULL_VALUE.
 TEST_F(LakeTabletManagerTest, create_tablet_with_range_rejects_min_max) {
->>>>>>> bdd4c8c3e0 ([Enhancement] Handle NULL variant as type-minimum for non-nullable PK columns in SstSeekRange (#71269))
     auto tablet_id = next_id();
     auto schema_id = next_id();
 

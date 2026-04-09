@@ -17,40 +17,35 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-#include "gen_cpp/AgentService_types.h"
-#include "runtime/types.h"
-=======
-#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "gen_cpp/AgentService_types.h"
+#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
->>>>>>> bdd4c8c3e0 ([Enhancement] Handle NULL variant as type-minimum for non-nullable PK columns in SstSeekRange (#71269))
-        #include "storage/tablet_range.h"
+#include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 
-        namespace starrocks::lake {
+namespace starrocks::lake {
 
-    namespace {
+namespace {
 
-    static VariantTuple make_int_tuple(int32_t value) {
-        VariantTuple tuple;
-        tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(value)));
-        return tuple;
-    }
+static VariantTuple make_int_tuple(int32_t value) {
+    VariantTuple tuple;
+    tuple.append(DatumVariant(get_type_info(LogicalType::TYPE_INT), Datum(value)));
+    return tuple;
+}
 
-    static TuplePB make_int_tuple_pb(int32_t value) {
-        TuplePB tuple_pb;
-        make_int_tuple(value).to_proto(&tuple_pb);
-        return tuple_pb;
-    }
+static TuplePB make_int_tuple_pb(int32_t value) {
+    TuplePB tuple_pb;
+    make_int_tuple(value).to_proto(&tuple_pb);
+    return tuple_pb;
+}
 
-    } // namespace
+} // namespace
 
-    TEST(TabletRangeHelperTest, test_tablet_range_intersect) {
+TEST(TabletRangeHelperTest, test_tablet_range_intersect) {
         TabletRange lhs(make_int_tuple(1), make_int_tuple(10), true, false);
         TabletRange rhs(make_int_tuple(5), make_int_tuple(12), true, false);
         ASSIGN_OR_ABORT(auto r1, lhs.intersect(rhs));
