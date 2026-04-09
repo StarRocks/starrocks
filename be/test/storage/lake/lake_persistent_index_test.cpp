@@ -109,6 +109,14 @@ protected:
         var.set_value(v);
         return var;
     }
+
+    VariantPB make_null_variant_pb(LogicalType ltype) {
+        VariantPB var;
+        TypeDescriptor type_desc(ltype);
+        var.mutable_type()->CopyFrom(type_desc.to_protobuf());
+        var.set_variant_type(VariantTypePB::NULL_VALUE);
+        return var;
+    }
 };
 
 TEST_F(LakePersistentIndexTest, test_basic_api) {
@@ -802,6 +810,53 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_infinite_bounds) {
 
     ASSERT_TRUE(sst_seek_range.seek_key.empty());
     ASSERT_TRUE(sst_seek_range.stop_key.empty());
+}
+
+// NULL on non-nullable PK columns is treated as type-minimum (MIN sentinel from FE).
+TEST_F(LakePersistentIndexTest, test_tablet_range_null_as_min_on_non_nullable_pk) {
+    auto schema_pb = create_tablet_schema_pb({{"pk1", "INT"}, {"pk2", "INT"}, {"v1", "INT"}}, 2);
+    auto schema = std::make_shared<const TabletSchema>(schema_pb);
+
+    TabletRangePB range_pb;
+    auto* lower = range_pb.mutable_lower_bound();
+    lower->add_values()->CopyFrom(make_int_variant_pb(100));
+    lower->add_values()->CopyFrom(make_null_variant_pb(TYPE_INT));
+    range_pb.set_lower_bound_included(true);
+
+    auto* upper = range_pb.mutable_upper_bound();
+    upper->add_values()->CopyFrom(make_int_variant_pb(200));
+    upper->add_values()->CopyFrom(make_null_variant_pb(TYPE_INT));
+    range_pb.set_upper_bound_included(false);
+
+    ASSIGN_OR_ABORT(auto sst_seek_range, TabletRangeHelper::create_sst_seek_range_from(range_pb, schema));
+
+    // Encode expected: (100, INT_MIN) and (200, INT_MIN).
+    std::vector<ColumnId> pk_columns = {0, 1};
+    auto pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
+
+    auto encode_key = [&](int32_t v1, int32_t v2) {
+        auto chunk = std::make_unique<Chunk>();
+        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col1->append_datum(Datum(v1));
+        chunk->append_column(std::move(col1), (SlotId)0);
+        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col2->append_datum(Datum(v2));
+        chunk->append_column(std::move(col2), (SlotId)1);
+
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        if (pk_column->is_binary()) {
+            return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
+        } else {
+            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+        }
+    };
+
+    ASSERT_EQ(sst_seek_range.seek_key, encode_key(100, std::numeric_limits<int32_t>::lowest()));
+    ASSERT_EQ(sst_seek_range.stop_key, encode_key(200, std::numeric_limits<int32_t>::lowest()));
 }
 
 // Helper: build a RowsetMetadataPB with given id, per-segment row counts (segment_metas populated),

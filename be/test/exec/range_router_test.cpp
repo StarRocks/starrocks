@@ -630,8 +630,8 @@ TEST_F(RangeRouterTest, InitRejectsInvalidBoundVariantType) {
     RangeRouter router;
     auto status = router.init(ranges, 1);
     ASSERT_FALSE(status.ok());
-    ASSERT_TRUE(status.is_internal_error());
-    ASSERT_EQ("Invalid value in range bound", status.message());
+    ASSERT_TRUE(status.is_invalid_argument());
+    ASSERT_NE(std::string::npos, status.message().find("MINIMUM/MAXIMUM variant is not supported in range bound"));
 }
 
 TEST_F(RangeRouterTest, ValidateRangeRejectsInvalidVariantValue) {
