@@ -1040,47 +1040,7 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1
 * 类型：Int
 
-<<<<<<< HEAD
-### prefer_compute_node
-
-* 描述：将部分执行计划调度到 CN 节点执行。
-* 默认值：false
-* 引入版本：v2.4
-
 ### query_cache_size (global)
-=======
-### pipeline_sink_dop
-
-* 描述：用于向 Iceberg 表、Hive 表导入数据以及通过 INSERT INTO FILES() 导出数据的 Sink 并行数量。该参数用于调整这些导入作业的并发性。默认值为 0，即系统自适应调整并行度。您也可以将此变量设置为大于 0 的值。
-* 默认值：0
-* 类型：Int
-
-### plan_mode
-
-* 描述：Iceberg Catalog 元数据获取方案模式。详细信息，参考 [Iceberg Catalog 元数据获取方案](../data_source/catalog/iceberg/iceberg_catalog.md#附录元数据周期性后台刷新方案)。有效值：
-  * `auto`：系统自动选择方案。
-  * `local`：使用本地缓存方案。
-  * `distributed`：使用分布式方案。
-* 默认值：auto
-* 引入版本：v3.3.3
-
-#### enable_iceberg_column_statistics
-
-* 描述：是否获取列统计信息，例如 `min`、`max`、`null count`、`row size` 和 `ndv`（如果存在 puffin 文件）。当此项设置为 `false` 时，仅收集行数信息。
-* 默认值：false
-* 引入版本：v3.4
-
-### populate_datacache_mode
-
-* 描述：StarRocks 从外部存储系统读取数据时，控制数据缓存填充行为。有效值包括：
-  * `auto`（默认）：系统自动根据查询的特点，选择性进行缓存。
-  * `always`：总是缓存数据。 
-  * `never` 永不缓存数据。
-* 默认值：auto
-* 引入版本：v3.3.2
-
-### query_cache_agg_cardinality_limit
->>>>>>> 4454cd118e ([Doc] Refactor Deployment Chapter (#71474))
 
 用于兼容 MySQL 客户端。无实际作用。
 
@@ -1318,14 +1278,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 
 用于兼容 MySQL 客户端，无实际作用。别名 `transaction_isolation`。
 
-<<<<<<< HEAD
-### use_compute_nodes
-
-* 描述：用于设置使用 CN 节点的数量上限。该设置只会在 `prefer_compute_node=true` 时才会生效。`-1`，表示使用所有 CN 节点。`0` 表示不使用 CN 节点。
-* 默认值：-1
-* 类型：Int
-* 引入版本：v2.4
-
 ### use_v2_rollup
 
 用于控制查询使用 segment v2 存储格式的 Rollup 索引获取数据。该变量用于上线 segment v2 的时进行验证使用。其他情况不建议使用。
@@ -1333,15 +1285,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 ### vectorized_engine_enable (2.4 版本开始弃用)
 
 用于控制是否使用向量化引擎执行查询。值为 true 时表示使用向量化引擎，否则使用非向量化引擎。默认值为 true。2.4 版本开始默认打开，所以弃用该变量。
-=======
-### tx_visible_wait_timeout
-
-* **描述**: 会话范围的超时时间（秒），控制服务器在提交事务后等待该事务变为可见（published）再继续处理的最长时间。如果可见等待超时，事务将被视为已 COMMITTED 但尚未 VISIBLE。物化视图刷新逻辑（`MVTaskRunProcessor`）会临时将此变量设置为 `Long.MAX_VALUE / 1000` 以有效地无限期等待可见性，并在刷新后恢复原值。当启用 `enable_sync_publish` 时，该变量被忽略，因为 publish 等待时间将由作业截止时间推导。
-* **范围**: Session
-* **默认值**: `10`
-* **类型**: long
-* **引入版本**: v3.2.0
->>>>>>> 4454cd118e ([Doc] Refactor Deployment Chapter (#71474))
 
 ### version (global)
 
