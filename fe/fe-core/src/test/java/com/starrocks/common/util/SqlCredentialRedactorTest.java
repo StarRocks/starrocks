@@ -74,6 +74,18 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testMayNeedCredentialRedactionHandlesWhitespaceVariations() {
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "CREATE USER u IDENTIFIED\nBY 'secret'"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "CREATE USER u IDENTIFIED\t BY 'secret'"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "ALTER USER u IDENTIFIED\n  WITH mysql_native_password BY 'x'"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "SET\n PASSWORD FOR u = PASSWORD('p')"));
+    }
+
+    @Test
     public void testRedactInsertIntoFilesCredentials() {
         String sql = "INSERT INTO FILES(\n" +
                 "        \"path\" = \"s3://bucket/output/\",\n" +

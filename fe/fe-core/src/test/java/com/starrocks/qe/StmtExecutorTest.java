@@ -262,6 +262,17 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testGetRedactedOriginStmtInStringSkipsRedactionForPlainSql() {
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM t0 WHERE id = 1",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), stmt);
+
+        String result = executor.getRedactedOriginStmtInString();
+        Assertions.assertEquals("SELECT * FROM t0 WHERE id = 1", result);
+    }
+
+    @Test
     public void testGetRedactedOriginStmtInStringWithFilesCredentials() {
         StatementBase stmt = SqlParser.parseSingleStatement(
                 "INSERT INTO t0 SELECT * FROM FILES(" +

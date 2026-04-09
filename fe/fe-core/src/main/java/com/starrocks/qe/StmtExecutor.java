@@ -3742,8 +3742,11 @@ public class StmtExecutor {
 
     @VisibleForTesting
     String getRedactedOriginStmtInString() {
-        // Keep sensitive properties masked before they enter logs/query metadata sinks.
-        return SqlCredentialRedactor.redact(getOriginStmtInString());
+        String sql = getOriginStmtInString();
+        if (!SqlCredentialRedactor.mayNeedCredentialRedaction(sql)) {
+            return sql;
+        }
+        return SqlCredentialRedactor.redact(sql);
     }
 
     public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {

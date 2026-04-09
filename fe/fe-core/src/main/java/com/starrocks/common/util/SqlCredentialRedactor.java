@@ -157,8 +157,11 @@ public class SqlCredentialRedactor {
                 return true;
             }
         }
-        return lower.contains("identified by") || lower.contains("identified with")
-                || lower.contains("set password");
+        // "password" is already in CREDENTIAL_KEYS_LOWERCASE, so "set password"
+        // (with any whitespace) is caught by the loop above. Only "identified"
+        // needs a separate check — a single keyword avoids false negatives from
+        // whitespace variations like IDENTIFIED\nBY or IDENTIFIED\tWITH.
+        return lower.contains("identified");
     }
 
     /**
