@@ -59,26 +59,37 @@ void LockFreeDriverQueue::put_back(DriverRawPtr driver) {
 }
 
 bool LockFreeDriverQueue::try_take(DriverRawPtr& driver, int worker_id) {
-    uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
-    if (bitmap == 0) return false;
+    uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_acquire);
+    if (bitmap != 0) {
+        int best_level = _find_best_level(bitmap);
+        if (best_level >= 0 &&
+            _try_take_from_levels(bitmap, best_level, worker_id % QUEUE_SIZE, driver,
+                                  [this, worker_id](int level, DriverRawPtr& d) {
+                                      return _queue.try_dequeue(level, d, worker_id);
+                                  })) {
+            return true;
+        }
+    }
 
-    int best_level = _find_best_level(bitmap);
-    if (best_level < 0) return false;
-
-    return _try_take_from_levels(
-            bitmap, best_level, worker_id % QUEUE_SIZE, driver,
-            [this, worker_id](int level, DriverRawPtr& d) { return _queue.try_dequeue(level, d, worker_id); });
+    // Bitmap may be stale due to a concurrent clear racing with an enqueue's
+    // _mark_non_empty (which saw the bit already set and skipped the fetch_or).
+    // Fall back to scanning all levels directly to avoid orphaning items.
+    return _fallback_try_take(driver,
+                              [this, worker_id](int level, DriverRawPtr& d) { return _queue.try_dequeue(level, d, worker_id); });
 }
 
 bool LockFreeDriverQueue::try_take(DriverRawPtr& driver) {
-    uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
-    if (bitmap == 0) return false;
+    uint8_t bitmap = _non_empty_bitmap.load(std::memory_order_acquire);
+    if (bitmap != 0) {
+        int best_level = _find_best_level(bitmap);
+        if (best_level >= 0 &&
+            _try_take_from_levels(bitmap, best_level, 0, driver,
+                                  [this](int level, DriverRawPtr& d) { return _queue.try_dequeue(level, d); })) {
+            return true;
+        }
+    }
 
-    int best_level = _find_best_level(bitmap);
-    if (best_level < 0) return false;
-
-    return _try_take_from_levels(bitmap, best_level, 0, driver,
-                                 [this](int level, DriverRawPtr& d) { return _queue.try_dequeue(level, d); });
+    return _fallback_try_take(driver, [this](int level, DriverRawPtr& d) { return _queue.try_dequeue(level, d); });
 }
 
 template <typename DequeueFunc>
@@ -103,6 +114,17 @@ bool LockFreeDriverQueue::_try_take_from_levels(uint8_t bitmap, int best_level, 
     }
 
     _non_empty_bitmap.fetch_and(static_cast<uint8_t>(~to_clear), std::memory_order_relaxed);
+    return false;
+}
+
+template <typename DequeueFunc>
+bool LockFreeDriverQueue::_fallback_try_take(DriverRawPtr& driver, DequeueFunc&& dequeue) {
+    for (int i = 0; i < QUEUE_SIZE; ++i) {
+        if (dequeue(i, driver)) {
+            _mark_non_empty(i);
+            return true;
+        }
+    }
     return false;
 }
 

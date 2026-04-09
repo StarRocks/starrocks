@@ -82,6 +82,11 @@ private:
     template <typename DequeueFunc>
     bool _try_take_from_levels(uint8_t bitmap, int best_level, int start, DriverRawPtr& driver, DequeueFunc&& dequeue);
 
+    // Fallback: scan all levels directly, ignoring bitmap.
+    // Used when bitmap-guided dequeue fails to guard against stale bitmap bits.
+    template <typename DequeueFunc>
+    bool _fallback_try_take(DriverRawPtr& driver, DequeueFunc&& dequeue);
+
     WorkStealingQueue<DriverRawPtr, QUEUE_SIZE> _queue;
 
     // Bitmap of levels that are known to be non-empty.

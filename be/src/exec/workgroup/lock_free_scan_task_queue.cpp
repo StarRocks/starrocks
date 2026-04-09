@@ -49,19 +49,30 @@ void LockFreeScanTaskQueue::force_put(ScanTask task) {
 }
 
 bool LockFreeScanTaskQueue::try_take(ScanTask& task, int worker_id) {
-    uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
-    if (bitmap == 0) return false;
+    uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_acquire);
+    if (bitmap != 0) {
+        if (_try_take_from_levels(bitmap, task,
+                                  [this, worker_id](int level, ScanTask& t) { return _queue.try_dequeue(level, t, worker_id); })) {
+            return true;
+        }
+    }
 
-    return _try_take_from_levels(bitmap, task, [this, worker_id](int level, ScanTask& t) {
-        return _queue.try_dequeue(level, t, worker_id);
-    });
+    // Bitmap may be stale due to a concurrent clear racing with an enqueue's
+    // _mark_non_empty. Fall back to scanning all levels directly.
+    return _fallback_try_take(task,
+                              [this, worker_id](int level, ScanTask& t) { return _queue.try_dequeue(level, t, worker_id); });
 }
 
 bool LockFreeScanTaskQueue::try_take(ScanTask& task) {
-    uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_relaxed);
-    if (bitmap == 0) return false;
+    uint32_t bitmap = _non_empty_bitmap.load(std::memory_order_acquire);
+    if (bitmap != 0) {
+        if (_try_take_from_levels(bitmap, task,
+                                  [this](int level, ScanTask& t) { return _queue.try_dequeue(level, t); })) {
+            return true;
+        }
+    }
 
-    return _try_take_from_levels(bitmap, task, [this](int level, ScanTask& t) { return _queue.try_dequeue(level, t); });
+    return _fallback_try_take(task, [this](int level, ScanTask& t) { return _queue.try_dequeue(level, t); });
 }
 
 template <typename DequeueFunc>
@@ -83,6 +94,17 @@ bool LockFreeScanTaskQueue::_try_take_from_levels(uint32_t bitmap, ScanTask& tas
 
     // All attempted levels were empty — batch clear.
     _non_empty_bitmap.fetch_and(~to_clear, std::memory_order_relaxed);
+    return false;
+}
+
+template <typename DequeueFunc>
+bool LockFreeScanTaskQueue::_fallback_try_take(ScanTask& task, DequeueFunc&& dequeue) {
+    for (int level = NUM_PRIORITY_LEVELS - 1; level >= 0; --level) {
+        if (dequeue(level, task)) {
+            _mark_non_empty(level);
+            return true;
+        }
+    }
     return false;
 }
 
