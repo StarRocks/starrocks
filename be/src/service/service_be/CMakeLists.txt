@@ -33,3 +33,4 @@ endif()
 ADD_BE_LIB(ServiceBE
     ${SERVICE_BE_FILES}
 )
+target_link_libraries(ServiceBE PUBLIC Webserver)
