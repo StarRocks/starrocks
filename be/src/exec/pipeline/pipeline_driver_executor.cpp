@@ -43,7 +43,7 @@ DEFINE_FAIL_POINT(report_exec_state_failed_status);
 
 static std::unique_ptr<DriverQueue> create_driver_queue(bool enable_resource_group, DriverQueueMetrics* queue_metrics,
                                                         int num_workers) {
-    if (enable_resource_group && config::enable_lock_free_queue) {
+    if (enable_resource_group && config::enable_lock_free_driver_queue) {
         return std::make_unique<LockFreeWorkGroupDriverQueue>(queue_metrics, num_workers);
     } else if (enable_resource_group) {
         return std::make_unique<WorkGroupDriverQueue>(queue_metrics);
