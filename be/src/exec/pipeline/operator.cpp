@@ -26,10 +26,10 @@
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 
@@ -415,11 +415,11 @@ void OperatorFactory::acquire_runtime_filter(RuntimeState* state) {
             continue;
         }
         auto* query_execution_services = state->query_execution_services();
-        auto grf = query_execution_services->runtime->runtime_filter_cache->get(state->query_id(), filter_id);
-        ExecEnv::GetInstance()->runtime_filter_cache()->add_rf_event(
-                {state->query_id(), filter_id, BackendOptions::get_localhost(),
-                 strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1", this->_plan_node_id,
-                                     grf != nullptr)});
+        auto* runtime_filter_cache = query_execution_services->runtime->runtime_filter_cache;
+        auto grf = runtime_filter_cache->get(state->query_id(), filter_id);
+        runtime_filter_cache->add_rf_event({state->query_id(), filter_id, BackendOptions::get_localhost(),
+                                            strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
+                                                                this->_plan_node_id, grf != nullptr)});
 
         if (grf == nullptr) {
             continue;

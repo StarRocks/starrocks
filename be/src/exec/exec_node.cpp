@@ -55,9 +55,9 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -132,7 +132,8 @@ void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state, Ru
 void ExecNode::register_runtime_filter_descriptor(RuntimeState* state, RuntimeFilterProbeDescriptor* rf_desc) {
     rf_desc->set_probe_plan_node_id(_id);
     _runtime_filter_collector.add_descriptor(rf_desc);
-    ExecEnv::GetInstance()->runtime_filter_cache()->add_rf_event(
+    auto* query_execution_services = state->query_execution_services();
+    query_execution_services->runtime->runtime_filter_cache->add_rf_event(
             {state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
              strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
     state->runtime_filter_registry()->register_descriptor(rf_desc);

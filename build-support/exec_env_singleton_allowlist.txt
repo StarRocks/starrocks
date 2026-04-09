@@ -5,12 +5,9 @@ src/agent/publish_version.cpp
 src/agent/resource_group_usage_recorder.cpp
 src/agent/task_worker_pool.cpp
 src/cache/peer_cache_engine.cpp
-src/exec/exec_node.cpp
 src/exec/pipeline/fragment_context.cpp
 src/exec/pipeline/fragment_executor.cpp
 src/exec/pipeline/lookup/tablet_adaptor.cpp
-src/exec/pipeline/operator.cpp
-src/exec/pipeline/pipeline_builder.cpp
 src/exec/pipeline/pipeline_driver.cpp
 src/exec/pipeline/pipeline_driver_poller.cpp
 src/exec/pipeline/pipeline_driver_queue.cpp
@@ -31,7 +28,6 @@ src/service/internal_service.cpp
 src/service/service_be/arrow_flight_sql_service.cpp
 src/service/service_be/lake_service.cpp
 src/service/service_be/starrocks_be.cpp
-src/storage/column_aggregate_func.cpp
 src/storage/lake/compaction_policy.cpp
 src/storage/lake/lake_persistent_index.cpp
 src/storage/lake/lake_replication_txn_manager.cpp
@@ -45,7 +41,6 @@ src/storage/lake/vacuum.cpp
 src/storage/lake/vertical_compaction_task.cpp
 src/storage/load_chunk_spiller.cpp
 src/storage/load_spill_block_manager.cpp
-src/storage/metadata_util.cpp
 src/storage/olap_server.cpp
 src/storage/push_utils.cpp
 src/storage/replication_utils.cpp

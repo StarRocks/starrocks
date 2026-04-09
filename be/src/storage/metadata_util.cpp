@@ -28,7 +28,6 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_common.h"
@@ -460,11 +459,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& t_schema, TabletSchema
 
 // Helper function to create a minimal RuntimeState for constant expression evaluation
 static std::unique_ptr<RuntimeState> create_temp_runtime_state() {
-    TUniqueId dummy_query_id;
-    dummy_query_id.hi = 0;
-    dummy_query_id.lo = 0;
-
-    TQueryOptions query_options;
     TQueryGlobals query_globals;
     auto now = std::chrono::system_clock::now();
     auto now_time_t = std::chrono::system_clock::to_time_t(now);
@@ -479,7 +473,7 @@ static std::unique_ptr<RuntimeState> create_temp_runtime_state() {
     query_globals.timestamp_ms = now_ms;
     query_globals.time_zone = "UTC";
 
-    auto state = std::make_unique<RuntimeState>(dummy_query_id, query_options, query_globals, ExecEnv::GetInstance());
+    auto state = std::make_unique<RuntimeState>(query_globals);
     state->init_instance_mem_tracker();
 
     return state;
