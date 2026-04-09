@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -244,7 +245,8 @@ public class JDBCMetadata implements ConnectorMetadata {
                 k -> {
                     try (Connection connection = getConnection();
                             ResultSet columnSet = schemaResolver.getColumns(connection, dbName, tblName)) {
-                        List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet);
+                        Map<String, Integer> originalJdbcTypes = new HashMap<>();
+                        List<Column> fullSchema = schemaResolver.convertToSRTable(columnSet, originalJdbcTypes);
                         List<Column> partitionColumns = Lists.newArrayList();
                         if (schemaResolver.isSupportPartitionInformation()) {
                             partitionColumns = listPartitionColumns(dbName, tblName, fullSchema);
@@ -259,6 +261,9 @@ public class JDBCMetadata implements ConnectorMetadata {
                                 partitionColumns, dbName, catalogName, properties);
                         if (table != null) {
                             table.setComment(schemaResolver.getTableComment(connection, dbName, tblName));
+                            if (table instanceof JDBCTable && !originalJdbcTypes.isEmpty()) {
+                                ((JDBCTable) table).setOriginalJdbcColumnTypes(originalJdbcTypes);
+                            }
                         }
                         return table;
                     } catch (SQLException | DdlException e) {
