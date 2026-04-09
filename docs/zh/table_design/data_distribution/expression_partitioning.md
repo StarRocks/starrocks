@@ -380,12 +380,11 @@ BETWEEN '2024-01-01' AND '2024-03-31';
 
 ## 使用限制
 
-- 自 v3.1.0 起，StarRocks [存算分离模式](../../deployment/shared_data/shared_data.mdx)支持[时间函数表达式分区](#简单时间函数表达式分区)。并且自 v3.1.1 起 StarRocks 存算分离模式支持[列表达式分区](#列表达式分区自-v31)。
-- 使用 CTAS 建表时暂时不支持表达式分区。
-- 暂时不支持使用 Spark Load 导入数据至表达式分区的表。
-- 使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 删除列表达式分区时，分区直接被删除并且不能被恢复。
-- 自 v3.4.0、v3.3.8、v3.2.13 以及 v3.1.16 起，StarRocks 支持[备份与恢复](../../administration/management/Backup_and_restore.md)表达式分区表。
-- 如果使用表达式分区，则仅支持回滚到 2.5.4 及以后的版本。
+- 从 v3.1.0 开始，StarRocks 的存算分离模式支持[时间函数表达式](#partitioning-based-on-a-simple-time-function-expression)。从 v3.1.1 开始，StarRocks 的共享数据模式进一步支持[列表达式](#partitioning-based-on-the-column-expression-since-v31)。
+- 目前，不支持使用 CTAS 创建配置了表达式分区的表。
+- 目前，不支持使用 Spark Load 向使用表达式分区的表加载数据。
+- 当使用 `ALTER TABLE <table_name> DROP PARTITION <partition_name>` 语句删除通过列表达式创建的分区时，分区中的数据将直接删除且无法恢复。
+- 从 v3.4.0、v3.3.8、v3.2.13 和 v3.1.16 版本开始，StarRocks 支持[备份和恢复](../../administration/management/Backup_and_restore.md)使用表达式分区策略创建的表。
 
 ## 附录
 

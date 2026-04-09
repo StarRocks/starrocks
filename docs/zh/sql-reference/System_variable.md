@@ -1047,12 +1047,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：1
 * 类型：Int
 
-### prefer_compute_node
-
-* 描述：将部分执行计划调度到 CN 节点执行。
-* 默认值：false
-* 引入版本：v2.4
-
 ### query_cache_size (global)
 
 用于兼容 MySQL 客户端。无实际作用。
@@ -1290,13 +1284,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 ### tx_isolation
 
 用于兼容 MySQL 客户端，无实际作用。别名 `transaction_isolation`。
-
-### use_compute_nodes
-
-* 描述：用于设置使用 CN 节点的数量上限。该设置只会在 `prefer_compute_node=true` 时才会生效。`-1`，表示使用所有 CN 节点。`0` 表示不使用 CN 节点。
-* 默认值：-1
-* 类型：Int
-* 引入版本：v2.4
 
 ### use_v2_rollup
 
