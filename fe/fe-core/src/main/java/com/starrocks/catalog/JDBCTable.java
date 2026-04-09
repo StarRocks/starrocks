@@ -55,6 +55,10 @@ public class JDBCTable extends Table {
     private String dbName;
     private List<Column> partitionColumns;
 
+    // Transient: original JDBC column types (java.sql.Types) from the external database.
+    // Used for Oracle datetime predicate pushdown to determine TO_DATE/TO_TIMESTAMP wrapping.
+    private transient Map<String, Integer> originalJdbcColumnTypes;
+
     public JDBCTable() {
         super(TableType.JDBC);
     }
@@ -104,6 +108,14 @@ public class JDBCTable extends Table {
     @Override
     public List<Column> getPartitionColumns() {
         return partitionColumns;
+    }
+
+    public Map<String, Integer> getOriginalJdbcColumnTypes() {
+        return originalJdbcColumnTypes;
+    }
+
+    public void setOriginalJdbcColumnTypes(Map<String, Integer> originalJdbcColumnTypes) {
+        this.originalJdbcColumnTypes = originalJdbcColumnTypes;
     }
 
     public Map<String, String> getConnectInfo() {
