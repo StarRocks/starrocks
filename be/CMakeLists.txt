@@ -562,17 +562,17 @@ set(STARROCKS_LINK_LIBS
     Cache
     orc
     ${WL_END_GROUP}
-    ${WL_WHOLE_ARCHIVE_PREFIX} ExprCore ${WL_WHOLE_ARCHIVE_SUFFIX}
+    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     RuntimeCore
-    ChunkCore
-    ColumnCore
-    TypesCore
-    FSCore
-    IOCore
-    Common
-    Base
-    Gutil
-    StarRocksGen
+    $<TARGET_FILE:ChunkCore>
+    $<TARGET_FILE:ColumnCore>
+    $<TARGET_FILE:TypesCore>
+    $<TARGET_FILE:FSCore>
+    $<TARGET_FILE:IOCore>
+    $<TARGET_FILE:Common>
+    $<TARGET_FILE:Base>
+    $<TARGET_FILE:Gutil>
+    $<TARGET_FILE:StarRocksGen>
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}

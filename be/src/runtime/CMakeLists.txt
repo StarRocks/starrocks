@@ -41,7 +41,7 @@ ADD_BE_LIB(RuntimeCore
     ${RUNTIME_CORE_FILES}
 )
 
-target_link_libraries(RuntimeCore PUBLIC
+target_link_libraries(RuntimeCore PRIVATE
     ChunkCore
     ColumnCore
     TypesCore
