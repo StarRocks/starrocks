@@ -124,6 +124,10 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public abstract boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException;
 
+    protected final void publishTopology(PCTPartitionTopology topology) {
+        mvContext.setPartitionTopology(topology);
+    }
+
     /**
      * Generate partition predicate for mv refresh according ref base table changed partitions.
      *
@@ -240,10 +244,11 @@ public abstract class MVPCTRefreshPartitioner {
             // should calculate the candidate partitions recursively.
             logger.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
                     " baseChangedPartitionNames: {}", result, baseChangedPCellsSortedSet);
+            PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
             SyncPartitionUtils.calcPotentialRefreshPartition(result,
                     baseChangedPartitionNames,
-                    mvContext.getRefBaseTableMVIntersectedPartitions(),
-                    mvContext.getMvRefBaseTableIntersectedPartitions(),
+                    partitionTopology.getRefBaseTableMVIntersectedPartitions(),
+                    partitionTopology.getMvRefBaseTableIntersectedPartitions(),
                     mvToRefreshPotentialPartitions);
             result.addAll(mvToRefreshPotentialPartitions);
             logger.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
@@ -257,6 +262,11 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public void filterMVToRefreshPartitionsByProperty(PCellSortedSet mvToRefreshedPartitions) {
         // do nothing by default
+    }
+
+    @VisibleForTesting
+    public PCellSortedSet getMVToRefreshPotentialPartitions() {
+        return PCellSortedSet.of(mvToRefreshPotentialPartitions);
     }
 
     /**
@@ -451,10 +461,12 @@ public abstract class MVPCTRefreshPartitioner {
             return toRefreshPartitions.size();
         }
 
-        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
+        PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs = partitionTopology.getMvRefBaseTableIntersectedPartitions();
         MVRefreshPartitionSelector mvRefreshPartitionSelector =
                 new MVRefreshPartitionSelector(Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh,
-                        Config.mv_max_partitions_num_per_refresh, mvContext.getExternalRefBaseTableMVPartitionMap());
+                        Config.mv_max_partitions_num_per_refresh,
+                        partitionTopology.getExternalRefBaseTableMVPartitionMap());
         int adaptiveRefreshNumber = 0;
         for (PCellWithName pCellWithName : toRefreshPartitions.getPartitions()) {
             String mvRefreshPartition = pCellWithName.name();
@@ -487,7 +499,9 @@ public abstract class MVPCTRefreshPartitioner {
     protected PCellSortedSet getMvPartitionNamesToRefresh(Table refBaseTable,
                                                           PCellSortedSet baseTablePartitionNames) {
         PCellSortedSet result = PCellSortedSet.of();
-        Map<Table, PCellSetMapping> refBaseTableMVPartitionMaps = mvContext.getRefBaseTableMVIntersectedPartitions();
+        PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
+        Map<Table, PCellSetMapping> refBaseTableMVPartitionMaps =
+                partitionTopology == null ? null : partitionTopology.getRefBaseTableMVIntersectedPartitions();
         if (refBaseTableMVPartitionMaps == null || !refBaseTableMVPartitionMaps.containsKey(refBaseTable)) {
             logger.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
                     "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
@@ -647,8 +661,9 @@ public abstract class MVPCTRefreshPartitioner {
      */
     protected Map<Table, PCellSortedSet> getBasePartitionNamesByMVPartitionNames(PCellSortedSet toRefreshPartitions) {
         Map<Table, PCellSortedSet> result = new HashMap<>();
+        PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
         Map<String, Map<Table, PCellSortedSet>> mvRefBaseTablePartitionMaps =
-                mvContext.getMvRefBaseTableIntersectedPartitions();
+                partitionTopology == null ? null : partitionTopology.getMvRefBaseTableIntersectedPartitions();
         for (PCellWithName pCell : toRefreshPartitions.getPartitions()) {
             String mvPartitionName = pCell.name();
             if (mvRefBaseTablePartitionMaps == null || !mvRefBaseTablePartitionMaps.containsKey(mvPartitionName)) {
@@ -732,7 +747,9 @@ public abstract class MVPCTRefreshPartitioner {
 
     protected Map<Table, PCellSortedSet> toBaseTableWithSortedSet(Map<Table, PCellSortedSet> baseToPartitionNames) {
         Map<Table, PCellSortedSet> result = new HashMap<>();
-        Map<Table, PCellSortedSet> refBaseTableRangePartitionMap = mvContext.getRefBaseTableToCellMap();
+        PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
+        Map<Table, PCellSortedSet> refBaseTableRangePartitionMap =
+                partitionTopology == null ? Map.of() : partitionTopology.getRefBaseTableToCellMap();
         for (Map.Entry<Table, PCellSortedSet> entry : baseToPartitionNames.entrySet()) {
             Table baseTable = entry.getKey();
             if (!refBaseTableRangePartitionMap.containsKey(baseTable)) {

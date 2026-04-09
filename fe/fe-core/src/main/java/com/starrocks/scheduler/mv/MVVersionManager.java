@@ -24,6 +24,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -267,7 +268,9 @@ public class MVVersionManager {
     private void updateAssociatedPartitionMeta(MaterializedView.AsyncRefreshContext refreshContext,
                                                PCellSortedSet mvRefreshedPartitions,
                                                Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs = mvTaskRunContext.getMvRefBaseTableIntersectedPartitions();
+        PCTPartitionTopology partitionTopology = mvTaskRunContext.getPartitionTopology();
+        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs =
+                partitionTopology == null ? null : partitionTopology.getMvRefBaseTableIntersectedPartitions();
         if (Objects.isNull(mvToBaseNameRefs) || Objects.isNull(refTableAndPartitionNames) ||
                 refTableAndPartitionNames.isEmpty()) {
             return;
