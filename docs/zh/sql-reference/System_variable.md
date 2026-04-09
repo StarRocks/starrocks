@@ -1258,12 +1258,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：auto
 * 引入版本：v3.3.2
 
-### prefer_compute_node
-
-* 描述：将部分执行计划调度到 CN 节点执行。
-* 默认值：false
-* 引入版本：v2.4
-
 ### query_cache_agg_cardinality_limit
 
 * 描述：GROUP BY 聚合的高基数上限。GROUP BY 聚合的输出预估超过该行数, 则不启用 cache。
@@ -1507,13 +1501,6 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 * **默认值**: `10`
 * **类型**: long
 * **引入版本**: v3.2.0
-
-### use_compute_nodes
-
-* 描述：用于设置使用 CN 节点的数量上限。该设置只会在 `prefer_compute_node=true` 时才会生效。`-1`，表示使用所有 CN 节点。`0` 表示不使用 CN 节点。
-* 默认值：-1
-* 类型：Int
-* 引入版本：v2.4
 
 ### version (global)
 
