@@ -32,7 +32,7 @@ StarRocks のデプロイは、一般的に以下の手順に従います。
 
 5. StarRocks をデプロイします。
 
-   - 共有データ StarRocks クラスターをデプロイしたい場合、これはストレージとコンピュートが分離されたアーキテクチャを特徴としています。[共有データ StarRocks のデプロイと使用](../deployment/shared_data/s3.md) の指示を参照してください。
+   - 共有データ StarRocks クラスターをデプロイしたい場合、これはストレージとコンピュートが分離されたアーキテクチャを特徴としています。[共有データ StarRocks のデプロイと使用](../deployment/deploy_shared_data_manually.md) の指示を参照してください。
    - 共有なし StarRocks クラスターをデプロイしたい場合、これはローカルストレージを使用します。以下のオプションがあります：
 
      - [StarRocks を手動でデプロイします](../deployment/deploy_manually.md)。
