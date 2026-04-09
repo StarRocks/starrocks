@@ -404,10 +404,10 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
-    public void testCreateResourceGroupClassifierAllowsSingleCharacterUserName() throws Exception {
-        String sql = "create resource group rg_single_char_user\n" +
+    public void testCreateResourceGroupClassifierRejectsInvalidUserName() {
+        String sql = "create resource group rg_invalid_user\n" +
                 "to\n" +
-                "    (user='1')\n" +
+                "    (user='aaa~bbb')\n" +
                 "with (\n" +
                 "    'cpu_core_limit' = '10',\n" +
                 "    'mem_limit' = '20%',\n" +
@@ -415,13 +415,9 @@ public class ResourceGroupStmtTest {
                 "    'type' = 'normal'\n" +
                 ");";
 
-        starRocksAssert.executeResourceGroupDdlSql(sql);
-        List<List<String>> rows =
-                starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg_single_char_user");
-        assertThat(rows).hasSize(1);
-        assertThat(rows.get(0).get(rows.get(0).size() - CLASSIFIER_COLUMN_IDX_REVERSE)).contains("user=1");
-
-        dropResourceGroup("rg_single_char_user");
+        assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Illegal classifier specifier 'user'");
     }
 
     @Test
