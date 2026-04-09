@@ -1060,14 +1060,6 @@ The number of scan instances determines the number of other execution nodes in t
 
 Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.
 
-### prefer_compute_node
-
-* **Description**: Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
-  * `true`: indicates that the FEs distribute query execution plans to CN nodes.
-  * `false`: indicates that the FEs do not distribute query execution plans to CN nodes.
-* **Default**: false
-* **Introduced in**: v2.4
-
 ### pipeline_dop
 
 * **Description**: The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. This variable also controls the parallelism of loading jobs on OLAP tables. You can also set this variable to a value greater than 0. Generally, set the value to half the number of physical CPU cores. From v3.0 onwards, StarRocks adaptively adjusts this variable based on query parallelism.
@@ -1321,16 +1313,6 @@ Used to set the time zone of the current session. The time zone can affect the r
 ### tx_isolation
 
 Used for MySQL client compatibility. No practical usage. The alias is `transaction_isolation`.
-
-### use_compute_nodes
-
-* **Description**: The maximum number of CN nodes that can be used. This variable is valid when `prefer_compute_node=true`. Valid values:
-
-  * `-1`: indicates that all CN nodes are used.
-  * `0`: indicates that no CN nodes are used.
-* **Default**: -1
-* **Data type**: Int
-* **Introduced in**: v2.4
 
 ### use_v2_rollup
 
