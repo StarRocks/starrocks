@@ -44,7 +44,6 @@
 #include "exec/es/es_scroll_parser.h"
 #include "exec/es/es_scroll_query.h"
 #include "fmt/compile.h"
-#include "runtime/exec_env.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -59,10 +58,11 @@ const std::string DOCVALUE_SCROLL_SEARCH_FILTER_PATH =
 const std::string REQUEST_SEARCH_SCROLL_PATH = "/_search/scroll";
 
 ESScanReader::ESScanReader(const std::string& target, const std::map<std::string, std::string>& props,
-                           bool doc_value_mode)
+                           bool doc_value_mode, PriorityThreadPool* executor)
         : _scroll_keep_alive(config::es_scroll_keepalive),
           _http_timeout_ms(config::es_http_timeout_ms),
-          _doc_value_mode(doc_value_mode) {
+          _doc_value_mode(doc_value_mode),
+          _executor(executor) {
     _target = target;
     _index = props.at(KEY_INDEX);
     if (props.find(KEY_TYPE) != props.end()) {
@@ -243,8 +243,7 @@ Status ESScanReader::close() {
             LOG(WARNING) << "es_scan_reader delete scroll context failure status code:" << client.get_http_status();
         }
     };
-    auto* thread_pool = ExecEnv::GetInstance()->pipeline_sink_io_pool();
-    if (!thread_pool->try_offer(send_del_request)) {
+    if (!_executor->try_offer(send_del_request)) {
         LOG(WARNING) << "try to delete scroll id failed";
     }
     return Status::OK();

@@ -177,7 +177,8 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
         _is_inited = true;
         return Status::OK();
     }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    auto* query_execution_services = state->query_execution_services();
+    _brpc_stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_brpc_dest_addr);
 
     if (_brpc_stub == nullptr) {
         auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
@@ -346,7 +347,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
     RuntimeState* state = fragment_ctx->runtime_state();
 
     PassThroughChunkBuffer* pass_through_chunk_buffer =
-            state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
+            state->query_execution_services()->runtime->stream_mgr->get_pass_through_chunk_buffer(state->query_id());
 
     _channels.reserve(destinations.size());
     std::vector<int> driver_sequence_per_channel(destinations.size(), 0);

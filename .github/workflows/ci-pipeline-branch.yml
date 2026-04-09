@@ -140,7 +140,9 @@ jobs:
               - 'test/AGENTS.md'
               - 'handbook/**'
               - 'build-support/README.md'
+              - 'build-support/handbook_plan.py'
               - 'build-support/check_repo_handbook.py'
+              - 'build-support/test_handbook_plan.py'
               - 'build-support/test_check_repo_handbook.py'
 
       - uses: actions/checkout@v6
@@ -150,6 +152,7 @@ jobs:
         if: steps.path-filter.outputs.handbook == 'true'
         run: |
           python3 -m unittest build-support/test_check_repo_handbook.py
+          python3 -m unittest build-support/test_handbook_plan.py
 
       - name: Handbook Check
         if: steps.path-filter.outputs.handbook == 'true'
@@ -352,14 +355,14 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
 
       - name: clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
         uses: actions/upload-artifact@v6
-        if: always()
+        if: always() && steps.run_ut.outputs.BE_LOG
         with:
           name: BE UT LOG
           path: ${{ steps.run_ut.outputs.BE_LOG }}
@@ -502,15 +505,15 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
 
       - name: Clean ECI
-        if: always()
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           echo ">>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
-        if: always()
+        if: always() && steps.run_ut.outputs.RES_LOG
         uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG

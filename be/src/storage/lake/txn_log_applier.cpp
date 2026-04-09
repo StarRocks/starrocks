@@ -29,7 +29,6 @@
 #include "common/system/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
@@ -493,7 +492,7 @@ private:
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         if (_skip_write_tablet_metadata) {
-            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+            return _tablet.tablet_mgr()->cache_tablet_metadata(_metadata);
         }
         // Persist the tablet metadata
         RETURN_IF_ERROR(_tablet.put_metadata(_metadata));
@@ -1039,7 +1038,7 @@ public:
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         if (_skip_write_tablet_metadata) {
-            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+            return _tablet.tablet_mgr()->cache_tablet_metadata(_metadata);
         }
         return _tablet.put_metadata(_metadata);
     }
@@ -1138,8 +1137,8 @@ private:
 
         std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
                                                op_compaction.input_rowsets().end());
-        ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                     input_rowsets_id, _metadata.get()));
+        ASSIGN_OR_RETURN(auto tablet_schema,
+                         _tablet.tablet_mgr()->get_output_rowset_schema(input_rowsets_id, _metadata.get()));
         int64_t output_rowset_schema_id = tablet_schema->id();
 
         auto last_input_pos = pre_input_pos;

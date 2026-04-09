@@ -47,7 +47,6 @@
 #include "runtime/closure_guard.h"
 #include "runtime/descriptors.h"
 #include "runtime/diagnose_daemon.h"
-#include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
@@ -67,11 +66,14 @@
 
 namespace starrocks {
 
-LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id,
-                         int64_t txn_id, const std::string& txn_trace_parent, int64_t timeout_s,
+LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, DiagnoseDaemon* diagnose_daemon,
+                         BrpcStubCache* brpc_stub_cache, const UniqueId& load_id, int64_t txn_id,
+                         const std::string& txn_trace_parent, int64_t timeout_s,
                          std::unique_ptr<MemTracker> mem_tracker)
         : _load_mgr(mgr),
           _lake_tablet_mgr(lake_tablet_mgr),
+          _diagnose_daemon(diagnose_daemon),
+          _brpc_stub_cache(brpc_stub_cache),
           _load_id(load_id),
           _txn_id(txn_id),
           _timeout_s(timeout_s),
@@ -154,7 +156,7 @@ void LoadChannel::open(const LoadChannelOpenContext& open_context) {
                 channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
 #endif
             } else {
-                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
+                channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile, _brpc_stub_cache);
             }
             if (st.ok()) {
                 if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
@@ -469,7 +471,7 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
         stack_trace_request.type = DiagnoseType::STACK_TRACE;
         stack_trace_request.context =
                 fmt::format("load_id: {}, txn_id: {}, remote: {}", print_id(_load_id), _txn_id, remote_ip);
-        Status st = ExecEnv::GetInstance()->diagnose_daemon()->diagnose(stack_trace_request);
+        Status st = _diagnose_daemon->diagnose(stack_trace_request);
         if (!st.ok()) {
             LOG(WARNING) << "failed to diagnose stack trace, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
                          << ", status: " << st;

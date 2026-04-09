@@ -18,7 +18,11 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "gen_cpp/AgentService_types.h"
+#include "storage/chunk_helper.h"
+#include "storage/primary_key_encoder.h"
 #include "storage/tablet_range.h"
 #include "storage/tablet_schema.h"
 #include "types/type_descriptor.h"
@@ -190,7 +194,8 @@ TEST(TabletRangeHelperTest, test_create_sst_seek_range_from) {
     ASSERT_THAT(res2.status().to_string(), testing::HasSubstr("Sort key index 0 must be 0, but is 1"));
 }
 
-TEST(TabletRangeHelperTest, test_non_nullable_key_rejects_null_range) {
+// NULL on a non-nullable PK column is treated as type-minimum (MIN sentinel from FE).
+TEST(TabletRangeHelperTest, test_non_nullable_key_null_fills_type_min) {
     TabletSchemaPB schema_pb;
     schema_pb.set_keys_type(PRIMARY_KEYS);
     schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
@@ -213,10 +218,10 @@ TEST(TabletRangeHelperTest, test_non_nullable_key_rejects_null_range) {
     v0->set_variant_type(VariantTypePB::NULL_VALUE);
     range_pb.set_lower_bound_included(true);
 
+    // Should succeed — NULL is filled with INT_MIN.
     auto res = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema);
-    ASSERT_FALSE(res.ok());
-    ASSERT_TRUE(res.status().is_invalid_argument());
-    ASSERT_EQ("Non-nullable primary key contains NULL in tablet range", res.status().message());
+    ASSERT_OK(res.status());
+    ASSERT_FALSE(res.value().seek_key.empty());
 }
 
 TEST(TabletRangeHelperTest, test_create_sst_seek_range_requires_v2_encoding) {
@@ -337,7 +342,6 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_with_nulls) {
     type_desc.types[0].scalar_type.__set_type(TPrimitiveType::INT);
     type_desc.types[0].__isset.scalar_type = true;
     null_value.__set_type(type_desc);
-    null_value.__set_value("");
     null_value.__set_variant_type(TVariantType::NULL_VALUE);
     lower_bound.values.push_back(null_value);
 
@@ -352,16 +356,15 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_with_nulls) {
     ASSERT_TRUE(pb_range.has_lower_bound());
     ASSERT_EQ(1, pb_range.lower_bound().values_size());
     ASSERT_EQ(VariantTypePB::NULL_VALUE, pb_range.lower_bound().values(0).variant_type());
-    ASSERT_TRUE(pb_range.lower_bound().values(0).has_value());
+    ASSERT_FALSE(pb_range.lower_bound().values(0).has_value());
     ASSERT_TRUE(pb_range.has_lower_bound_included());
     ASSERT_TRUE(pb_range.lower_bound_included());
     ASSERT_FALSE(pb_range.has_upper_bound());
 }
 
-TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_min_max_values) {
+// MINIMUM/MAXIMUM in TTabletRange should be rejected at conversion time.
+TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_rejects_min_max_in_lower) {
     TTabletRange t_range;
-
-    // Lower bound with MIN_VALUE
     TTuple lower_bound;
     TVariant min_value;
     TTypeDesc type_desc;
@@ -371,32 +374,15 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_min_max_values) {
     type_desc.types[0].scalar_type.__set_type(TPrimitiveType::BIGINT);
     type_desc.types[0].__isset.scalar_type = true;
     min_value.__set_type(type_desc);
-    min_value.__set_value("");
     min_value.__set_variant_type(TVariantType::MINIMUM);
     lower_bound.values.push_back(min_value);
     t_range.__set_lower_bound(lower_bound);
 
-    // Upper bound with MAX_VALUE
-    TTuple upper_bound;
-    TVariant max_value;
-    max_value.__set_type(type_desc);
-    max_value.__set_value("");
-    max_value.__set_variant_type(TVariantType::MAXIMUM);
-    upper_bound.values.push_back(max_value);
-    t_range.__set_upper_bound(upper_bound);
-
-    // Convert and verify
     auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
-    ASSERT_OK(res.status());
-    TabletRangePB pb_range = res.value();
-
-    ASSERT_TRUE(pb_range.has_lower_bound());
-    ASSERT_EQ(1, pb_range.lower_bound().values_size());
-    ASSERT_EQ(VariantTypePB::MINIMUM, pb_range.lower_bound().values(0).variant_type());
-
-    ASSERT_TRUE(pb_range.has_upper_bound());
-    ASSERT_EQ(1, pb_range.upper_bound().values_size());
-    ASSERT_EQ(VariantTypePB::MAXIMUM, pb_range.upper_bound().values(0).variant_type());
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_invalid_argument());
+    ASSERT_THAT(res.status().to_string(),
+                testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
 }
 
 TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_only_lower_bound) {
@@ -559,51 +545,46 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_complex_types) {
     ASSERT_EQ(TPrimitiveType::DATETIME, pb_datetime_val.type().types(0).scalar_type().type());
 }
 
-TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_partial_fields) {
-    TTabletRange t_range;
-
-    TTuple lower_bound;
-
+// MINIMUM/MAXIMUM variants should be rejected — FE must map them to NULL_VALUE.
+TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_rejects_min_max) {
     TTypeDesc type_desc;
     type_desc.types.resize(1);
     type_desc.__isset.types = true;
     type_desc.types[0].type = TTypeNodeType::SCALAR;
     type_desc.types[0].scalar_type.__set_type(TPrimitiveType::INT);
     type_desc.types[0].__isset.scalar_type = true;
-    // Value with all fields set (MINIMUM) - OK
-    TVariant value1;
-    value1.__set_type(type_desc);
-    value1.__set_value("");
-    value1.__set_variant_type(TVariantType::MINIMUM);
-    lower_bound.values.push_back(value1);
 
-    // Value with all fields set (MAXIMUM) - OK
-    TVariant value2;
-    value2.__set_type(type_desc);
-    value2.__set_value("");
-    value2.__set_variant_type(TVariantType::MAXIMUM);
-    lower_bound.values.push_back(value2);
+    {
+        TTabletRange t_range;
+        TTuple lower_bound;
+        TVariant min_val;
+        min_val.__set_type(type_desc);
+        min_val.__set_variant_type(TVariantType::MINIMUM);
+        lower_bound.values.push_back(min_val);
+        t_range.__set_lower_bound(lower_bound);
 
-    t_range.__set_lower_bound(lower_bound);
+        auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_invalid_argument());
+        ASSERT_THAT(res.status().to_string(),
+                    testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
+    }
 
-    auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
-    ASSERT_OK(res.status());
-    TabletRangePB pb_range = res.value();
+    {
+        TTabletRange t_range;
+        TTuple upper_bound;
+        TVariant max_val;
+        max_val.__set_type(type_desc);
+        max_val.__set_variant_type(TVariantType::MAXIMUM);
+        upper_bound.values.push_back(max_val);
+        t_range.__set_upper_bound(upper_bound);
 
-    ASSERT_TRUE(pb_range.has_lower_bound());
-    ASSERT_EQ(2, pb_range.lower_bound().values_size());
-
-    // Check first value (MINIMUM)
-    const auto& val1 = pb_range.lower_bound().values(0);
-    ASSERT_EQ(VariantTypePB::MINIMUM, val1.variant_type());
-    ASSERT_TRUE(val1.has_value());
-    ASSERT_TRUE(val1.has_type());
-
-    // Check second value (MAXIMUM)
-    const auto& val2 = pb_range.lower_bound().values(1);
-    ASSERT_EQ(VariantTypePB::MAXIMUM, val2.variant_type());
-    ASSERT_TRUE(val2.has_value());
-    ASSERT_TRUE(val2.has_type());
+        auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_invalid_argument());
+        ASSERT_THAT(res.status().to_string(),
+                    testing::HasSubstr("MINIMUM/MAXIMUM variant is not supported in tablet range"));
+    }
 }
 
 TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_missing_fields) {
@@ -641,7 +622,8 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_missing_fields) {
         auto res = TabletRangeHelper::convert_t_range_to_pb_range(t_range);
         ASSERT_FALSE(res.ok());
         ASSERT_TRUE(res.status().is_invalid_argument());
-        ASSERT_THAT(res.status().to_string(), testing::HasSubstr("TVariant value is required"));
+        ASSERT_THAT(res.status().to_string(),
+                    testing::HasSubstr("TVariant value is required for NORMAL_VALUE variant"));
     }
 
     {
@@ -677,6 +659,157 @@ TEST(TabletRangeHelperTest, test_convert_t_range_to_pb_range_invalid_type) {
     ASSERT_FALSE(res.ok());
     ASSERT_TRUE(res.status().is_invalid_argument());
     ASSERT_THAT(res.status().to_string(), testing::HasSubstr("TVariant type is set but types list is empty"));
+}
+
+// NULL on a non-nullable PK column is treated as type-minimum (MIN sentinel from FE).
+TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_on_non_nullable_pk) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+
+    auto c0 = schema_pb.add_column();
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+
+    auto c1 = schema_pb.add_column();
+    c1->set_name("c1");
+    c1->set_type("INT");
+    c1->set_is_key(true);
+    c1->set_is_nullable(false);
+
+    schema_pb.clear_sort_key_idxes();
+    schema_pb.add_sort_key_idxes(0);
+    schema_pb.add_sort_key_idxes(1);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    TypeDescriptor type_int(TYPE_INT);
+
+    // Build range [(100, NULL), (200, NULL)) where NULL represents MIN from FE.
+    TabletRangePB range_pb;
+    {
+        auto* lower = range_pb.mutable_lower_bound();
+        auto* v0 = lower->add_values();
+        v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v0->set_value("100");
+        v0->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        auto* v1 = lower->add_values();
+        v1->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v1->set_variant_type(VariantTypePB::NULL_VALUE);
+        range_pb.set_lower_bound_included(true);
+    }
+    {
+        auto* upper = range_pb.mutable_upper_bound();
+        auto* v0 = upper->add_values();
+        v0->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v0->set_value("200");
+        v0->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        auto* v1 = upper->add_values();
+        v1->mutable_type()->CopyFrom(type_int.to_protobuf());
+        v1->set_variant_type(VariantTypePB::NULL_VALUE);
+        range_pb.set_upper_bound_included(false);
+    }
+
+    // Should succeed — NULL on non-nullable column is filled with type-min.
+    ASSIGN_OR_ABORT(auto sst_seek_range, TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema));
+
+    // Build expected: encode (100, INT_MIN) and (200, INT_MIN).
+    std::vector<ColumnId> pk_columns = {0, 1};
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    auto encode_key = [&](int32_t v1, int32_t v2) {
+        auto chunk = std::make_unique<Chunk>();
+        auto col1 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col1->append_datum(Datum(v1));
+        chunk->append_column(std::move(col1), (SlotId)0);
+        auto col2 = ColumnHelper::create_column(TypeDescriptor(TYPE_INT), false);
+        col2->append_datum(Datum(v2));
+        chunk->append_column(std::move(col2), (SlotId)1);
+
+        MutableColumnPtr pk_column;
+        EXPECT_OK(
+                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
+                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+        if (pk_column->is_binary()) {
+            return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
+        } else {
+            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+        }
+    };
+
+    ASSERT_EQ(sst_seek_range.seek_key, encode_key(100, std::numeric_limits<int32_t>::lowest()));
+    ASSERT_EQ(sst_seek_range.stop_key, encode_key(200, std::numeric_limits<int32_t>::lowest()));
+}
+
+// Exercise datum_from_type_min() for every PK-supported type.
+// Each case builds a 1-column PK schema, puts NULL in the range bound,
+// and verifies that create_sst_seek_range_from succeeds (NULL → type-min fill).
+TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_all_pk_types) {
+    struct TypeCase {
+        const char* type_name;
+        LogicalType logical_type;
+    };
+    // All types from APPLY_FOR_ALL_PK_SUPPORT_TYPE (logical_type_infra.h).
+    std::vector<TypeCase> cases = {
+            {"BOOLEAN", TYPE_BOOLEAN}, {"TINYINT", TYPE_TINYINT},   {"SMALLINT", TYPE_SMALLINT},
+            {"INT", TYPE_INT},         {"BIGINT", TYPE_BIGINT},     {"LARGEINT", TYPE_LARGEINT},
+            {"DATE", TYPE_DATE},       {"DATETIME", TYPE_DATETIME}, {"VARCHAR", TYPE_VARCHAR},
+    };
+
+    for (const auto& tc : cases) {
+        SCOPED_TRACE(tc.type_name);
+
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(PRIMARY_KEYS);
+        schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        auto c0 = schema_pb.add_column();
+        c0->set_name("c0");
+        c0->set_type(tc.type_name);
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        schema_pb.add_sort_key_idxes(0);
+        auto tablet_schema = TabletSchema::create(schema_pb);
+
+        TabletRangePB range_pb;
+        auto* lower = range_pb.mutable_lower_bound();
+        auto* v0 = lower->add_values();
+        TypeDescriptor type_desc(tc.logical_type);
+        v0->mutable_type()->CopyFrom(type_desc.to_protobuf());
+        v0->set_variant_type(VariantTypePB::NULL_VALUE);
+        range_pb.set_lower_bound_included(true);
+
+        auto res = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema);
+        ASSERT_TRUE(res.ok()) << "type=" << tc.type_name << " error=" << res.status().to_string();
+    }
+}
+
+// Unsupported type should return NotSupported, not crash.
+TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_unsupported_type) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(PRIMARY_KEYS);
+    schema_pb.set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    auto c0 = schema_pb.add_column();
+    c0->set_name("c0");
+    c0->set_type("FLOAT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    schema_pb.add_sort_key_idxes(0);
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    TabletRangePB range_pb;
+    auto* lower = range_pb.mutable_lower_bound();
+    auto* v0 = lower->add_values();
+    TypeDescriptor type_desc(TYPE_FLOAT);
+    v0->mutable_type()->CopyFrom(type_desc.to_protobuf());
+    v0->set_variant_type(VariantTypePB::NULL_VALUE);
+    range_pb.set_lower_bound_included(true);
+
+    auto res = TabletRangeHelper::create_sst_seek_range_from(range_pb, tablet_schema);
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_not_supported());
+    ASSERT_THAT(res.status().to_string(), testing::HasSubstr("unsupported type for PK min datum"));
 }
 
 } // namespace starrocks::lake

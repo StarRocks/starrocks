@@ -160,6 +160,13 @@ RuntimeState::~RuntimeState() {
     }
 }
 
+void RuntimeState::init_fragment_mem_pool() {
+    if (_fragment_mem_pool == nullptr) {
+        _fragment_mem_pool = std::make_unique<MemPool>();
+        _mem_resource = std::make_unique<MemPoolResource>(_fragment_mem_pool.get());
+    }
+}
+
 void RuntimeState::set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) {
     _fragment_ctx = fragment_ctx;
 }

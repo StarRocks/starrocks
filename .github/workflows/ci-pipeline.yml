@@ -361,7 +361,7 @@ jobs:
       - name: Compute Merge Base
         id: merge_base
         run: |
-          git fetch origin ${{ github.base_ref }} --depth=1
+          git fetch origin ${{ github.base_ref }}
           base="$(git merge-base FETCH_HEAD HEAD)"
           [[ -n "${base}" ]]
           echo "base=${base}" >> "$GITHUB_OUTPUT"
@@ -417,7 +417,9 @@ jobs:
               - 'test/AGENTS.md'
               - 'handbook/**'
               - 'build-support/README.md'
+              - 'build-support/handbook_plan.py'
               - 'build-support/check_repo_handbook.py'
+              - 'build-support/test_handbook_plan.py'
               - 'build-support/test_check_repo_handbook.py'
 
       - uses: actions/checkout@v6
@@ -427,6 +429,7 @@ jobs:
         if: steps.path-filter.outputs.handbook == 'true'
         run: |
           python3 -m unittest build-support/test_check_repo_handbook.py
+          python3 -m unittest build-support/test_handbook_plan.py
 
       - name: Handbook Check
         if: steps.path-filter.outputs.handbook == 'true'
@@ -802,16 +805,16 @@ jobs:
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }} --linuxdistro ${LINUX_DISTRO}
 
       - name: Clean ECI
-        if: always() && steps.run_ut.outputs.ECI_ID != ''
+        if: always() && steps.run_ut.outputs.ECI_ID
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           echo "::group::>>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           echo "::endgroup::"
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }} || true
 
       - name: Upload log
-        if: always() && steps.run_ut.outputs.RES_LOG != ''
+        if: always() && steps.run_ut.outputs.RES_LOG
         uses: actions/upload-artifact@v6
         with:
           name: FE UT LOG

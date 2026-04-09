@@ -48,13 +48,12 @@
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_client.h"
-#include "runtime/exec_env.h"
 #include "runtime/starrocks_metrics.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {
 
-SmallFileMgr::SmallFileMgr(ExecEnv* env, std::string local_path) : _exec_env(env), _local_path(std::move(local_path)) {
+SmallFileMgr::SmallFileMgr(std::string local_path) : _local_path(std::move(local_path)) {
     REGISTER_GAUGE_STARROCKS_METRIC(small_file_cache_count, [this]() {
         std::lock_guard<std::mutex> l(_lock);
         return _file_cache.size();

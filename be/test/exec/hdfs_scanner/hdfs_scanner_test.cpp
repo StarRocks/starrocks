@@ -155,7 +155,7 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const T
                                               bool diff_case_sensitive) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
-        std::string col_name = slot->col_name();
+        std::string col_name(slot->col_name());
         if (diff_case_sensitive && std::isupper(col_name[0])) {
             std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::tolower);
         } else if (diff_case_sensitive && std::islower(col_name[0])) {

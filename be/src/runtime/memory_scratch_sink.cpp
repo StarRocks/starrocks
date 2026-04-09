@@ -89,7 +89,8 @@ Status MemoryScratchSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(prepare_exprs(state));
     // create queue
     TUniqueId fragment_instance_id = state->fragment_instance_id();
-    state->exec_env()->result_queue_mgr()->create_queue(fragment_instance_id, &_queue);
+    auto* query_execution_services = state->query_execution_services();
+    query_execution_services->runtime->result_queue_mgr->create_queue(fragment_instance_id, &_queue);
     std::stringstream title;
     title << "MemoryScratchSink (frag_id=" << fragment_instance_id << ")";
     // create profile

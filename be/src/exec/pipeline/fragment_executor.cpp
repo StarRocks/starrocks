@@ -231,6 +231,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
                                                                     query_globals,
                                                                     &exec_env->query_execution_services(), exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->init_fragment_mem_pool();
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());

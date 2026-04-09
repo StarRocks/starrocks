@@ -551,13 +551,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## データレイク
 
-### `files_enable_insert_push_down_schema`
+### `files_enable_insert_push_down_column_type`
 
 - デフォルト：true
+- エイリアス：`files_enable_insert_push_down_schema`
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：有効にすると、アナライザは INSERT ... FROM files() 操作のためにターゲットテーブルスキーマを `files()` テーブル関数にプッシュしようとします。これは、ソースが FileTableFunctionRelation であり、ターゲットがネイティブテーブルであり、SELECT リストにそれに対応するスロット参照列 (または *) が含まれている場合にのみ適用されます。アナライザは選択された列をターゲット列に一致させ (カウントが一致する必要があります)、ターゲットテーブルを一時的にロックし、ファイル列の型を非複合型 (Parquet JSON -> `array<varchar>` のような複合型はスキップされます) のディープコピーされたターゲット列型で置き換えます。元のファイルテーブルからの列名は保持されます。これにより、取り込み中のファイルベースの型推論による型ミスマッチと緩さが軽減されます。
+- 説明：有効にすると、StarRocks は `INSERT INTO target_table SELECT ... FROM files()` 操作において、ターゲットテーブルの列型を `files()` テーブル関数にプッシュダウンします。files から推論済みの列の型のみが書き換えられ、列の追加や削除は行われません。複合型はスキップされます。これにより、ファイルベースの型推論の不正確さによる型不一致エラーが軽減されます。列名と型を含む完全なスキーマのプッシュダウンには、INSERT プロパティ `enable_push_down_schema` を使用してください。
 - 導入時期：v3.4.0, v3.5.0
 
 ### `hdfs_read_buffer_size_kb`

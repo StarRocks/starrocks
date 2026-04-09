@@ -866,7 +866,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         if (!output_names.empty()) {
             col.__set_name(output_names[i]);
         } else {
-            col.__set_name(slot_desc->col_name());
+            col.__set_name(std::string(slot_desc->col_name()));
         }
         col.__set_type(to_thrift(slot_desc->type().type));
         selected_columns->emplace_back(std::move(col));

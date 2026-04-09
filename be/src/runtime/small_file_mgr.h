@@ -30,8 +30,6 @@
 
 namespace starrocks {
 
-class ExecEnv;
-
 struct CacheEntry {
     std::string path; // absolute path
     std::string md5;
@@ -43,7 +41,7 @@ struct CacheEntry {
  */
 class SmallFileMgr {
 public:
-    SmallFileMgr(ExecEnv* env, std::string local_path);
+    explicit SmallFileMgr(std::string local_path);
 
     ~SmallFileMgr();
 
@@ -66,7 +64,6 @@ private:
 
 private:
     std::mutex _lock;
-    [[maybe_unused]] ExecEnv* _exec_env;
     std::string _local_path;
     // file id -> small file
     std::unordered_map<int64_t, CacheEntry> _file_cache;

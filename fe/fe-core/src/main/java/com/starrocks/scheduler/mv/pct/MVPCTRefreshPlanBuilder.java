@@ -70,7 +70,7 @@ public class MVPCTRefreshPlanBuilder {
     private final Database mvDb;
     private final MaterializedView mv;
     private final MvTaskRunContext mvContext;
-    private final MVPCTRefreshPartitioner mvRefreshPartitioner;
+    private final PCTPredicateBuilder pctPredicateBuilder;
 
     // push down partition predicates into table relation
     private static final String EXTRA_PREDICATE_KEY = "_EXTRA_";
@@ -105,11 +105,11 @@ public class MVPCTRefreshPlanBuilder {
     public MVPCTRefreshPlanBuilder(Database mvDb,
                                    MaterializedView mv,
                                    MvTaskRunContext mvContext,
-                                   MVPCTRefreshPartitioner mvRefreshPartitioner) {
+                                   PCTPredicateBuilder pctPredicateBuilder) {
         this.mvDb = mvDb;
         this.mv = mv;
         this.mvContext = mvContext;
-        this.mvRefreshPartitioner = mvRefreshPartitioner;
+        this.pctPredicateBuilder = pctPredicateBuilder;
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshPlanBuilder.class);
     }
 
@@ -287,7 +287,7 @@ public class MVPCTRefreshPlanBuilder {
                                                     InsertStmt insertStmt)
             throws AnalysisException {
         TableName tableName = new TableName(mvDb.getFullName(), mv.getName());
-        Expr mvPartitionPredicate = mvRefreshPartitioner.generateMVPartitionPredicate(tableName, mvToRefreshedPartitions);
+        Expr mvPartitionPredicate = pctPredicateBuilder.buildMVPartitionPredicate(tableName, mvToRefreshedPartitions);
         if (mvPartitionPredicate == null) {
             logger.warn("Generate mv partition predicate failed, mv:{}", mv.getName());
             return null;
@@ -486,7 +486,7 @@ public class MVPCTRefreshPlanBuilder {
             // If the updated partition names are empty, it means that the table should not be refreshed.
             return new BoolLiteral(false);
         }
-        return mvRefreshPartitioner.generatePartitionPredicate(table, tablePartitionNames, mvPartitionOutputExprs);
+        return pctPredicateBuilder.buildPartitionPredicate(table, tablePartitionNames, mvPartitionOutputExprs);
     }
 
     /**

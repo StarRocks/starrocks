@@ -63,6 +63,7 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/DataCache_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
 #include "runtime/starrocks_metrics.h"
@@ -286,6 +287,7 @@ void TaskWorkerPool<AgentTaskRequest>::_spawn_callback_worker_thread(CALLBACK_FU
 }
 
 void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     static uint32_t s_worker_count = 0;
 
     auto* worker_pool_this = (PushTaskWorkerPool*)arg_this;
@@ -380,6 +382,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 }
 
 void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     static uint32_t s_worker_count = 0;
 
     auto* worker_pool_this = (DeleteTaskWorkerPool*)arg_this;
@@ -505,6 +508,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 }
 
 void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     auto* worker_pool_this = (PublishVersionTaskWorkerPool*)arg_this;
     auto* agent_server = worker_pool_this->_env->agent_server();
     auto token =

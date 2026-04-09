@@ -27,6 +27,7 @@
 #include "common/util/thrift_util.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "runtime/exec_env.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
@@ -193,9 +194,10 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel =
-                std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(), UniqueId::gen_uid(),
-                                              next_id(), string(), 1000, std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
+                                                      ExecEnv::GetInstance()->diagnose_daemon(),
+                                                      ExecEnv::GetInstance()->brpc_stub_cache(), UniqueId::gen_uid(),
+                                                      next_id(), string(), 1000, std::move(load_mem_tracker));
     }
 
     void TearDown() override {

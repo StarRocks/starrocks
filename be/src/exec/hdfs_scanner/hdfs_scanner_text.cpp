@@ -276,7 +276,7 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
         std::unordered_set<std::string> names;
         for (const auto& column : _scanner_ctx.materialized_columns) {
             if (column.name() == "___count___") continue;
-            names.insert(column.name());
+            names.emplace(column.name());
         }
         RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
     }

@@ -54,7 +54,6 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
-import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
@@ -105,7 +104,8 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // check to refresh partitions of mv and base tables
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             updatePCTToRefreshMetas(taskRunContext);
-            if (PCellUtils.isEmpty(pctMVToRefreshedPartitions)) {
+            PCTRefreshScope refreshScope = mvContext.getRefreshScope();
+            if (refreshScope == null || refreshScope.isEmpty()) {
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
             }
         }
@@ -113,7 +113,9 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // execute the ExecPlan of insert stmt
         InsertStmt insertStmt = null;
         try (Timer ignored = Tracers.watchScope("MVRefreshPrepareRefreshPlan")) {
-            insertStmt = prepareRefreshPlan(pctMVToRefreshedPartitions, pctRefTablePartitionNames);
+            PCTRefreshScope refreshScope = mvContext.getRefreshScope();
+            insertStmt = prepareRefreshPlan(refreshScope.getMvPartitionsToRefresh(),
+                    refreshScope.getRefTablePartitionNames());
         }
         return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
     }
@@ -173,7 +175,8 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
                     db.getFullName(), mv.getName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
-        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, mvRefreshPartitioner);
+        PCTPredicateBuilder predicateBuilder = new PCTPredicateBuilder(mvRefreshPartitioner);
+        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, predicateBuilder);
         try {
             // Analyze and prepare a partition & Rebuild insert statement by
             // considering to-refresh partitions of ref tables/ mv

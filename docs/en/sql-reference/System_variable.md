@@ -204,6 +204,22 @@ If you want to activate the roles assigned to you in a session, use the [SET ROL
 * **Data Type**: String
 * **Introduced in**: -
 
+### binary_encoding_format
+
+* **Scope**: Session
+* **Description**: Controls how `BINARY` / `VARBINARY` values are encoded when StarRocks serializes MySQL text results. Valid values are `raw`, `hex`, and `base64`. The default is `hex`. This variable works together with `binary_encoding_level`. MySQL clients can already handle top-level binary values, but nested binary values inside `ARRAY`, `MAP`, or `STRUCT` are returned through JSON-like strings, so they may need extra encoding to stay printable and well-formed. Set this variable to `base64` if you prefer a denser printable representation, or `raw` to disable extra encoding entirely.
+* **Default**: `hex`
+* **Data Type**: String
+* **Introduced in**: v4.1
+
+### binary_encoding_level
+
+* **Scope**: Session
+* **Description**: Controls which binary values are encoded for MySQL text results. Valid values are `nested` and `all`. The default is `nested`, which preserves historical behavior for top-level binary columns while still encoding nested binary values inside `ARRAY`, `MAP`, or `STRUCT`, where the result is rendered as a JSON-like string. Set this variable to `all` if your team wants a uniform convention and prefers top-level binary values to be encoded as well. If `binary_encoding_format = raw`, no additional binary encoding is applied even when this variable is set to `nested` or `all`, which may make nested output less readable.
+* **Default**: `nested`
+* **Data Type**: String
+* **Introduced in**: v4.1
+
 ### auto_increment_increment
 
 Used for MySQL client compatibility. No practical usage.

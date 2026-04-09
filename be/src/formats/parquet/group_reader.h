@@ -207,7 +207,7 @@ private:
     StatusOr<ColumnReaderPtr> _create_reserved_iceberg_column_reader(const SlotDescriptor* slot, int32_t field_id);
     StatusOr<Datum> _get_extended_bigint_value(SlotId slot_id) const;
     StatusOr<ColumnReaderPtr> _create_column_reader(const GroupReaderParam::Column& column);
-    VariantShreddedReadHints _get_variant_shredded_hints(const std::string& column_name) const;
+    VariantShreddedReadHints _get_variant_shredded_hints(std::string_view column_name) const;
     Status _prepare_column_readers() const;
     // Creates a lightweight VIEW chunk of _read_chunk containing the given slot_ids.
     // Each entry in slot_ids must already exist as a column in _read_chunk. _init_read_chunk()

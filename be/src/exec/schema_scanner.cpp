@@ -352,7 +352,7 @@ bool SchemaScanner::_parse_expr_predicate(Expr* conjunct, const std::string& col
     if (slot_id_mapping.find(slot_id) == slot_id_mapping.end()) {
         return false;
     }
-    auto& slot_name = slot_id_mapping.at(slot_id)->col_name();
+    auto slot_name = slot_id_mapping.at(slot_id)->col_name();
     if (!boost::iequals(slot_name, col_name)) {
         return false;
     }
