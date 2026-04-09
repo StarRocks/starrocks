@@ -56,8 +56,8 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_single_workgroup) {
     queue.force_put(make_wg_task(_wg1, 5));
     ASSERT_EQ(queue.size(), 1);
 
-    // take() is blocking but queue has 1 item, so it returns immediately.
-    auto result = queue.take();
+    // take(worker_id) is blocking but queue has 1 item, so it returns immediately.
+    auto result = queue.take(0);
     ASSERT_TRUE(result.ok());
     ASSERT_NE(result.value().work_function, nullptr);
     ASSERT_EQ(queue.size(), 0);
@@ -72,7 +72,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_blocking_wakeup) {
     std::atomic<bool> consumer_got_task{false};
 
     auto consumer_thread = std::thread([&]() {
-        auto result = queue.take();
+        auto result = queue.take(0);
         if (result.ok()) {
             consumer_got_task.store(true, std::memory_order_release);
         }
@@ -98,7 +98,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_close) {
     bool take_ok = true;
 
     auto consumer_thread = std::thread([&]() {
-        auto result = queue.take();
+        auto result = queue.take(0);
         take_ok = result.ok();
         consumer_returned.store(true, std::memory_order_release);
     });
@@ -115,6 +115,18 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_close) {
     ASSERT_FALSE(take_ok);
 }
 
+// Test: take(worker_id) falls back to non-tokenized path for out-of-range worker_id.
+TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_take_with_invalid_worker_id_fallback) {
+    constexpr int NUM_WORKERS = 4;
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, NUM_WORKERS);
+
+    queue.force_put(make_wg_task(_wg1, 5));
+    auto result = queue.take(NUM_WORKERS);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.value().workgroup, _wg1);
+    ASSERT_EQ(queue.size(), 0);
+}
+
 // Test: try_offer enqueues a task that can be taken back.
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_try_offer) {
     constexpr int NUM_WORKERS = 4;
@@ -123,7 +135,7 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_try_offer) {
     ASSERT_TRUE(queue.try_offer(make_wg_task(_wg1, 10)));
     ASSERT_EQ(queue.size(), 1);
 
-    auto result = queue.take();
+    auto result = queue.take(1);
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(queue.size(), 0);
 }
@@ -142,11 +154,11 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_workgroup_vruntime_selection) {
     queue.force_put(make_wg_task(_wg1, 5));
 
     // wg1 has lower vruntime, so its task should come out first.
-    auto r1 = queue.take();
+    auto r1 = queue.take(0);
     ASSERT_TRUE(r1.ok());
     ASSERT_EQ(r1.value().workgroup, _wg1);
 
-    auto r2 = queue.take();
+    auto r2 = queue.take(1);
     ASSERT_TRUE(r2.ok());
     ASSERT_EQ(r2.value().workgroup, _wg2);
 

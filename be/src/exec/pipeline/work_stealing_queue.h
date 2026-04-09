@@ -23,9 +23,8 @@ namespace starrocks::pipeline {
 
 // WorkStealingQueue is a multi-level lock-free queue built on top of
 // moodycamel::ConcurrentQueue. Each level is an independent ConcurrentQueue.
-// Worker threads get pre-allocated ProducerTokens and ConsumerTokens for
-// reduced enqueue/dequeue contention; external threads use the implicit
-// producer path.
+// Worker threads get pre-allocated ConsumerTokens for reduced dequeue
+// contention; all producers use the implicit producer path.
 //
 // ConsumerToken is critical for scalability: without it, all consumers
 // converge on the same "fullest" producer sub-queue (thundering herd).
@@ -35,19 +34,10 @@ template <typename T, int NUM_LEVELS>
 class WorkStealingQueue {
 public:
     using QueueType = moodycamel::ConcurrentQueue<T>;
-    using ProducerToken = typename QueueType::producer_token_t;
     using ConsumerToken = typename QueueType::consumer_token_t;
 
     explicit WorkStealingQueue(int num_workers) : _num_workers(num_workers) {
         DCHECK(num_workers > 0) << "num_workers must be positive";
-
-        // Pre-allocate producer tokens: _producer_tokens[worker_id * NUM_LEVELS + level]
-        _producer_tokens.reserve(num_workers * NUM_LEVELS);
-        for (int w = 0; w < num_workers; ++w) {
-            for (int l = 0; l < NUM_LEVELS; ++l) {
-                _producer_tokens.emplace_back(_levels[l].queue);
-            }
-        }
 
         // Pre-allocate consumer tokens: _consumer_tokens[worker_id * NUM_LEVELS + level]
         _consumer_tokens.reserve(num_workers * NUM_LEVELS);
@@ -66,11 +56,11 @@ public:
     WorkStealingQueue(WorkStealingQueue&&) = delete;
     WorkStealingQueue& operator=(WorkStealingQueue&&) = delete;
 
-    // Enqueue with explicit ProducerToken (for worker threads).
+    // Enqueue from worker threads. Uses implicit producer path.
     void enqueue(T item, int level, int worker_id) {
         DCHECK(level >= 0 && level < NUM_LEVELS);
         DCHECK(worker_id >= 0 && worker_id < _num_workers);
-        _levels[level].queue.enqueue(_producer_tokens[worker_id * NUM_LEVELS + level], std::move(item));
+        _levels[level].queue.enqueue(std::move(item));
     }
 
     // Enqueue with implicit producer (for external threads).
@@ -121,7 +111,6 @@ private:
 
     int _num_workers;
     LevelQueue _levels[NUM_LEVELS];
-    std::vector<ProducerToken> _producer_tokens; // flat: [worker_id * NUM_LEVELS + level]
     std::vector<ConsumerToken> _consumer_tokens; // flat: [worker_id * NUM_LEVELS + level]
 };
 

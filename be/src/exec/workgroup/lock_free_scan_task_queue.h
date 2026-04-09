@@ -39,11 +39,10 @@ public:
     LockFreeScanTaskQueue(LockFreeScanTaskQueue&&) = delete;
     LockFreeScanTaskQueue& operator=(LockFreeScanTaskQueue&&) = delete;
 
-    // Enqueue a task at its priority level. Worker thread variant uses
-    // pre-allocated ProducerToken for reduced contention.
+    // Enqueue a task at its priority level. All paths use the implicit producer.
+    // The worker_id overload validates range via DCHECK.
     // Always returns true since the underlying ConcurrentQueue allocates.
     bool try_offer(ScanTask task, int worker_id);
-    // External thread variant uses implicit producer path.
     bool try_offer(ScanTask task);
 
     // Enqueue a task at its priority level. Semantically identical to try_offer

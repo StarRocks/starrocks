@@ -42,6 +42,7 @@ public:
     void close() override;
 
     StatusOr<ScanTask> take() override;
+    StatusOr<ScanTask> take(int worker_id) override;
     bool try_offer(ScanTask task) override;
     void force_put(ScanTask task) override;
 

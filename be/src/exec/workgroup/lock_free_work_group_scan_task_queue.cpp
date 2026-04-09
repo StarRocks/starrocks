@@ -17,12 +17,31 @@
 #include <limits>
 
 #include "exec/workgroup/work_group.h"
+#include "glog/logging.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 
+namespace {
+
+const char* sched_entity_type_to_string(ScanSchedEntityType sched_entity_type) {
+    switch (sched_entity_type) {
+    case ScanSchedEntityType::OLAP:
+        return "OLAP";
+    case ScanSchedEntityType::CONNECTOR:
+        return "CONNECTOR";
+    }
+    return "UNKNOWN";
+}
+
+} // namespace
+
 LockFreeWorkGroupScanTaskQueue::LockFreeWorkGroupScanTaskQueue(ScanSchedEntityType sched_entity_type, int num_workers)
-        : _sched_entity_type(sched_entity_type), _num_workers(num_workers) {}
+        : _sched_entity_type(sched_entity_type), _num_workers(num_workers) {
+    LOG(INFO) << "[SCAN_QUEUE] create LockFreeWorkGroupScanTaskQueue"
+              << " sched_entity_type=" << sched_entity_type_to_string(_sched_entity_type)
+              << " num_workers=" << _num_workers;
+}
 
 bool LockFreeWorkGroupScanTaskQueue::try_offer(ScanTask task) {
     _set_wg_in_queue(task);
@@ -42,6 +61,11 @@ void LockFreeWorkGroupScanTaskQueue::force_put(ScanTask task) {
 }
 
 StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take() {
+    return take(-1);
+}
+
+StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take(int worker_id) {
+    const bool use_token = (worker_id >= 0 && worker_id < _num_workers);
     while (true) {
         if (_closed.load(std::memory_order_acquire)) {
             return Status::Cancelled("Shutdown");
@@ -51,7 +75,8 @@ StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take() {
         auto candidates = _pick_sorted_wgs();
         for (auto& [vruntime, wg_queue] : candidates) {
             ScanTask task;
-            if (wg_queue->try_take(task)) {
+            bool got = use_token ? wg_queue->try_take(task, worker_id) : wg_queue->try_take(task);
+            if (got) {
                 _num_tasks.fetch_sub(1, std::memory_order_relaxed);
                 return std::move(task);
             }
@@ -99,6 +124,9 @@ LockFreeScanTaskQueue* LockFreeWorkGroupScanTaskQueue::_get_or_create_wg_queue(W
         return it->second.get();
     }
     auto [inserted_it, ok] = _wg_queues.emplace(wg, std::make_unique<LockFreeScanTaskQueue>(_num_workers));
+    LOG(INFO) << "[SCAN_QUEUE] create per-workgroup LockFreeScanTaskQueue"
+              << " sched_entity_type=" << sched_entity_type_to_string(_sched_entity_type)
+              << " wg_id=" << wg->id() << " wg_name=" << wg->name() << " num_workers=" << _num_workers;
     return inserted_it->second.get();
 }
 

@@ -105,6 +105,62 @@ static void BM_LockFreeScanTaskQueue_SustainedMixed(benchmark::State& state) {
 
 BENCHMARK(BM_LockFreeScanTaskQueue_SustainedMixed)->Apply(BM_ThreadArgs)->UseRealTime();
 
+// Same as BM_LockFreeScanTaskQueue_SustainedMixed, but producers always use
+// implicit producer path (force_put without worker_id), while consumers still
+// use explicit consumer tokens (try_take with worker_id).
+static void BM_LockFreeScanTaskQueue_SustainedMixed_ImplicitProducerExplicitConsumer(benchmark::State& state) {
+    const int num_threads = static_cast<int>(state.range(0));
+    const int fill_count = prefill_count(num_threads);
+
+    LockFreeScanTaskQueue queue(num_threads);
+    for (int i = 0; i < fill_count; ++i) {
+        queue.force_put(make_bench_task(i % 21));
+    }
+
+    int64_t cumulative_ops = 0;
+    int64_t cumulative_failed_ops = 0;
+    for (auto _ : state) {
+        state.PauseTiming();
+        std::vector<int64_t> local_ops(num_threads, 0);
+        std::vector<int64_t> local_fail_ops(num_threads, 0);
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+        std::atomic<bool> start{false};
+
+        for (int t = 0; t < num_threads; ++t) {
+            threads.emplace_back([&queue, &local_ops, &local_fail_ops, &start, t]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                int64_t ops = 0;
+                for (int i = 0; i < OPS_PER_THREAD; ++i) {
+                    ScanTask task;
+                    if (queue.try_take(task, t)) {
+                        queue.force_put(std::move(task));
+                        ++ops;
+                    } else {
+                        ++local_fail_ops[t];
+                    }
+                }
+                local_ops[t] = ops;
+            });
+        }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
+
+        for (auto& th : threads) th.join();
+
+        for (int t = 0; t < num_threads; ++t) {
+            cumulative_ops += local_ops[t];
+            cumulative_failed_ops += local_fail_ops[t];
+        }
+    }
+    state.SetItemsProcessed(cumulative_ops);
+    state.counters["fail_ops"] = benchmark::Counter(cumulative_failed_ops);
+}
+
+BENCHMARK(BM_LockFreeScanTaskQueue_SustainedMixed_ImplicitProducerExplicitConsumer)->Apply(BM_ThreadArgs)->UseRealTime();
+
 static void BM_PriorityScanTaskQueue_SustainedMixed(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
     const int fill_count = prefill_count(num_threads);
@@ -199,6 +255,46 @@ static void BM_LockFreeScanTaskQueue_EnqueueOnly(benchmark::State& state) {
 
 BENCHMARK(BM_LockFreeScanTaskQueue_EnqueueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
 
+// Enqueue-only with implicit producer path.
+static void BM_LockFreeScanTaskQueue_EnqueueOnly_ImplicitProducer(benchmark::State& state) {
+    const int num_threads = static_cast<int>(state.range(0));
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        LockFreeScanTaskQueue queue(num_threads);
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+        std::atomic<bool> start{false};
+
+        for (int t = 0; t < num_threads; ++t) {
+            threads.emplace_back([&queue, &start]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                for (int i = 0; i < OPS_PER_THREAD; ++i) {
+                    queue.force_put(make_bench_task(i % 21));
+                }
+            });
+        }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
+
+        for (auto& th : threads) th.join();
+
+        state.PauseTiming();
+        ScanTask drain;
+        int drain_worker = 0;
+        while (queue.try_take(drain, drain_worker)) {
+            drain_worker = (drain_worker + 1) % num_threads;
+        }
+        state.ResumeTiming();
+    }
+
+    state.SetItemsProcessed(state.iterations() * num_threads * OPS_PER_THREAD);
+}
+
+BENCHMARK(BM_LockFreeScanTaskQueue_EnqueueOnly_ImplicitProducer)->Apply(BM_ThreadArgs)->UseRealTime();
+
 static void BM_PriorityScanTaskQueue_EnqueueOnly(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
 
@@ -276,6 +372,43 @@ static void BM_LockFreeScanTaskQueue_DequeueOnly(benchmark::State& state) {
 }
 
 BENCHMARK(BM_LockFreeScanTaskQueue_DequeueOnly)->Apply(BM_ThreadArgs)->UseRealTime();
+
+// Dequeue-only with implicit producer prefill + explicit consumer tokens.
+static void BM_LockFreeScanTaskQueue_DequeueOnly_ImplicitProducerExplicitConsumer(benchmark::State& state) {
+    const int num_threads = static_cast<int>(state.range(0));
+    const int total_ops = num_threads * OPS_PER_THREAD;
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        LockFreeScanTaskQueue queue(num_threads);
+        for (int i = 0; i < total_ops; ++i) {
+            queue.force_put(make_bench_task(i % 21));
+        }
+
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+        std::atomic<bool> start{false};
+
+        for (int t = 0; t < num_threads; ++t) {
+            threads.emplace_back([&queue, &start, t]() {
+                while (!start.load(std::memory_order_acquire)) {
+                    std::this_thread::yield();
+                }
+                ScanTask task;
+                while (queue.try_take(task, t)) {
+                }
+            });
+        }
+        state.ResumeTiming();
+        start.store(true, std::memory_order_release);
+
+        for (auto& th : threads) th.join();
+    }
+
+    state.SetItemsProcessed(state.iterations() * total_ops);
+}
+
+BENCHMARK(BM_LockFreeScanTaskQueue_DequeueOnly_ImplicitProducerExplicitConsumer)->Apply(BM_ThreadArgs)->UseRealTime();
 
 static void BM_PriorityScanTaskQueue_DequeueOnly(benchmark::State& state) {
     const int num_threads = static_cast<int>(state.range(0));
