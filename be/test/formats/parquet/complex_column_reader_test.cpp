@@ -576,17 +576,17 @@ static std::unique_ptr<FileMetaData> make_minimal_file_meta() {
     return meta;
 }
 
-// typed_value_reader_for_path: empty path → nullptr
+// filterable_typed_value_reader_for_path: empty path → nullptr
 TEST(VariantZoneMapTest, TypedValueReaderForPathEmptyPath) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
     ASSIGN_OR_ABORT(auto reader, make_shredded_variant_reader(rg, opts));
     auto* vr = down_cast<VariantColumnReader*>(reader.get());
 
-    EXPECT_EQ(nullptr, vr->typed_value_reader_for_path(VariantPath{}));
+    EXPECT_EQ(nullptr, vr->filterable_typed_value_reader_for_path(VariantPath{}));
 }
 
-// typed_value_reader_for_path: key not in shredded fields → nullptr
+// filterable_typed_value_reader_for_path: key not in shredded fields → nullptr
 TEST(VariantZoneMapTest, TypedValueReaderForPathNonExistentKey) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
@@ -595,10 +595,10 @@ TEST(VariantZoneMapTest, TypedValueReaderForPathNonExistentKey) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("nonexistent"));
     ASSERT_OK(path);
-    EXPECT_EQ(nullptr, vr->typed_value_reader_for_path(*path));
+    EXPECT_EQ(nullptr, vr->filterable_typed_value_reader_for_path(*path));
 }
 
-// typed_value_reader_for_path: "age" is a SCALAR INT32 leaf → returns non-null reader
+// filterable_typed_value_reader_for_path: "age" is a SCALAR INT32 leaf → returns non-null reader
 TEST(VariantZoneMapTest, TypedValueReaderForPathValidScalarLeaf) {
     tparquet::RowGroup rg;
     ColumnReaderOptions opts;
@@ -607,7 +607,7 @@ TEST(VariantZoneMapTest, TypedValueReaderForPathValidScalarLeaf) {
 
     auto path = VariantPathParser::parse_shredded_path(std::string_view("age"));
     ASSERT_OK(path);
-    EXPECT_NE(nullptr, vr->typed_value_reader_for_path(*path));
+    EXPECT_NE(nullptr, vr->filterable_typed_value_reader_for_path(*path));
 }
 
 TEST(VariantZoneMapTest, VariantVirtualZoneMapReaderNoOpApis) {

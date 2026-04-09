@@ -1873,7 +1873,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     return Status::OK();
 }
 
-const ColumnReader* VariantColumnReader::typed_value_reader_for_path(const VariantPath& path) const {
+const ColumnReader* VariantColumnReader::filterable_typed_value_reader_for_path(const VariantPath& path) const {
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
     if (found_node == nullptr) return nullptr;
     // Only SCALAR leaf nodes carry reliable typed statistics.
@@ -1912,16 +1912,6 @@ bool VariantColumnReader::fallback_values_all_null_in_row_group_for_path(const V
     return chunk_meta->meta_data.statistics.null_count == rg_num_rows;
 }
 
-const TypeDescriptor* VariantVirtualZoneMapReader::_delegate_leaf_type() const {
-    if (_source == nullptr) return nullptr;
-    return _source->typed_value_read_type_for_path(_leaf_path);
-}
-
-const ColumnReader* VariantVirtualZoneMapReader::_delegate_leaf_reader() const {
-    if (_source == nullptr) return nullptr;
-    return _source->typed_value_reader_for_path(_leaf_path);
-}
-
 StatusOr<bool> VariantVirtualZoneMapReader::_prepare_delegate_predicates(
         const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool, const uint64_t rg_num_rows,
         const ColumnReader** leaf_reader, std::vector<const ColumnPredicate*>* rewritten_predicates) const {
@@ -1929,8 +1919,11 @@ StatusOr<bool> VariantVirtualZoneMapReader::_prepare_delegate_predicates(
     DCHECK(leaf_reader != nullptr);
     DCHECK(rewritten_predicates != nullptr);
 
-    *leaf_reader = _delegate_leaf_reader();
-    const TypeDescriptor* leaf_type = _delegate_leaf_type();
+    if (_source == nullptr) {
+        return Status::NotFound("variant virtual leaf reader is not available");
+    }
+    *leaf_reader = _source->filterable_typed_value_reader_for_path(_leaf_path);
+    const TypeDescriptor* leaf_type = _source->typed_value_read_type_for_path(_leaf_path);
     if (*leaf_reader == nullptr || leaf_type == nullptr) {
         return Status::NotFound("variant virtual leaf reader is not available");
     }

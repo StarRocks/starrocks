@@ -381,10 +381,12 @@ public:
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
-    // Returns the typed_value ColumnReader for the given parsed variant path by walking
-    // _shredded_fields recursively. Returns nullptr if the path is absent or has no typed_value_reader.
+    // Returns the typed_value ColumnReader for the given parsed variant path, only if the node
+    // is a SCALAR kind and has a non-binary type (i.e. safe for predicate/zone-map filtering).
+    // Returns nullptr if the path is absent, the node is ARRAY/NONE kind, or the physical type
+    // is BINARY/VARBINARY (whose Parquet min/max reflects byte-order, not semantic value order).
     // Array segments are not supported (shredded paths are object-key-only).
-    const ColumnReader* typed_value_reader_for_path(const VariantPath& path) const;
+    const ColumnReader* filterable_typed_value_reader_for_path(const VariantPath& path) const;
     // Returns the typed_value read type for the given parsed variant path.
     // The returned descriptor reflects the shredded leaf's physical typed_value encoding,
     // not the virtual slot's target type.
@@ -450,8 +452,6 @@ private:
     StatusOr<bool> _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
                                                 uint64_t rg_num_rows, const ColumnReader** leaf_reader,
                                                 std::vector<const ColumnPredicate*>* rewritten_predicates) const;
-    const TypeDescriptor* _delegate_leaf_type() const;
-    const ColumnReader* _delegate_leaf_reader() const;
 
     VariantColumnReader* _source;
     VariantPath _leaf_path;
