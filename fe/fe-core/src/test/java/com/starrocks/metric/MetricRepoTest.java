@@ -79,6 +79,23 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testSPMMetricsExposure() {
+        MetricRepo.COUNTER_SPM_REWRITE_TOTAL.getMetric("hit").increase(1L);
+        MetricRepo.COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL.getMetric("captured").increase(1L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("spm_baseline_count"));
+        Assertions.assertTrue(output.contains("spm_rewrite_total"));
+        Assertions.assertTrue(output.contains("spm_capture_candidate_total"));
+        Assertions.assertTrue(output.contains("result=\"hit\""));
+        Assertions.assertTrue(output.contains("result=\"captured\""));
+    }
+
+    @Test
     public void testLeaderAwarenessMetric() {
         Assertions.assertTrue(GlobalStateMgr.getCurrentState().isLeader());
 

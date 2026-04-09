@@ -603,6 +603,26 @@ All transaction metrics share the following labels:
 - Unit: Bytes
 - Description: Memory used by storage page cache.
 
+## `spm_baseline_count`
+
+- Unit: Count
+- Type: Instantaneous
+- Description: Current number of global SQL Plan Management (SPM) baselines on the FE leader.
+
+## `spm_capture_candidate_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`captured`, `skipped_duplicate`, `skipped_table_count`, `skipped_table_missing`, `skipped_db_missing`, `skipped_pattern_mismatch`, or `failed`)
+- Description: Total number of SPM auto-capture candidate processing results. Each series records how query-history candidates are classified during auto-capture.
+
+## `spm_rewrite_total`
+
+- Unit: Count
+- Type: Cumulative
+- Labels: `result` (`hit`, `miss`, or `error`)
+- Description: Total number of SPM rewrite attempts by result. `hit` means a baseline is matched and applied successfully. `miss` means rewrite is attempted but no enabled baseline matches. `error` means rewrite falls back because an exception occurs during the SPM rewrite flow.
+
 ## `stream_load`
 
 - Unit: -

@@ -76,6 +76,7 @@ public class SPMPlanner {
         }
 
         watch.start();
+        String result = SPMMetrics.REWRITE_MISS;
         try (Timer ignored = Tracers.watchScope("SPMPlanner")) {
             analyze(query);
             checkTimeout();
@@ -105,6 +106,7 @@ public class SPMPlanner {
                     checkTimeout();
                     if (bind(base, query)) {
                         baseline = base;
+                        result = SPMMetrics.REWRITE_HIT;
                         return replacePlan(base);
                     }
                 }
@@ -112,7 +114,10 @@ public class SPMPlanner {
         } catch (Exception e) {
             // fallback to original query
             baseline = null; // clean baseline
+            result = SPMMetrics.REWRITE_ERROR;
             return query;
+        } finally {
+            SPMMetrics.increaseRewrite(result);
         }
         return query;
     }

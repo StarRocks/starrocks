@@ -108,6 +108,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
             } catch (Exception e) {
                 // if the db isn't exists, we just skip this query
                 AuditLog.getInternalAudit().info("SPM auto capture failed, db not exists: {}", queryHistory.getDb());
+                SPMMetrics.increaseCaptureCandidate(SPMMetrics.CAPTURE_CANDIDATE_SKIPPED_DB_MISSING);
                 continue;
             }
             try (var scope = connect.bindScope()) {
@@ -117,11 +118,13 @@ public class SPMAutoCapturer extends FrontendDaemon {
 
                 Map<TableName, Table> tables = AnalyzerUtils.collectAllTable(stmt.get(0));
                 if (tables.size() < 2) {
+                    SPMMetrics.increaseCaptureCandidate(SPMMetrics.CAPTURE_CANDIDATE_SKIPPED_TABLE_COUNT);
                     continue;
                 }
 
                 if (!tables.keySet().stream()
                         .allMatch(t -> checkPattern.matcher(t.getDb() + "." + t.getTbl()).find())) {
+                    SPMMetrics.increaseCaptureCandidate(SPMMetrics.CAPTURE_CANDIDATE_SKIPPED_PATTERN_MISMATCH);
                     continue;
                 }
 
@@ -135,6 +138,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
                     }
                 }
                 if (!allTableExists) {
+                    SPMMetrics.increaseCaptureCandidate(SPMMetrics.CAPTURE_CANDIDATE_SKIPPED_TABLE_MISSING);
                     continue;
                 }
 
@@ -148,6 +152,7 @@ public class SPMAutoCapturer extends FrontendDaemon {
                 base.setUpdateTime(queryHistory.getDatetime());
                 plans.put(queryHistory.getSqlDigest(), base);
             } catch (Exception e) {
+                SPMMetrics.increaseCaptureCandidate(SPMMetrics.CAPTURE_CANDIDATE_FAILED);
                 LOG.warn("sql plan capture failed. sql: {}", queryHistory.getOriginSQL(), e);
             }
         }
@@ -169,8 +174,10 @@ public class SPMAutoCapturer extends FrontendDaemon {
 
             if (allBaselines.stream().anyMatch(b -> b.getBindSqlDigest().equalsIgnoreCase(digest) &&
                     b.getPlanSql().equalsIgnoreCase(plan.getPlanSql()))) {
+                SPMMetrics.increaseCaptureCandidate(SPMMetrics.CAPTURE_CANDIDATE_SKIPPED_DUPLICATE);
                 continue;
             }
+            SPMMetrics.increaseCaptureCandidate(SPMMetrics.CAPTURE_CANDIDATE_CAPTURED);
             result.add(plan);
         }
         return result;
