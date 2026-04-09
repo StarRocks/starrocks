@@ -244,4 +244,57 @@ public class ClickhouseSchemaResolverTest {
         List<String> expectResult = Lists.newArrayList("clickhouse", "template1", "test");
         Assertions.assertEquals(expectResult, result);
     }
+
+    @Test
+    public void testAggregateFunctionParsing() throws SQLException {
+        MockResultSet aggColumnResult = new MockResultSet("agg_columns");
+        aggColumnResult.addColumn("DATA_TYPE", Arrays.asList(Types.OTHER, Types.OTHER, Types.OTHER, Types.OTHER));
+        aggColumnResult.addColumn("TYPE_NAME", Arrays.asList(
+                "AggregateFunction(sum, Int64)",
+                "SimpleAggregateFunction(max, Int32)",
+                "AggregateFunction(quantiles(0.5, 0.9), Float64)",
+                "SomeUnknownType"
+        ));
+        aggColumnResult.addColumn("COLUMN_SIZE", Arrays.asList(0, 0, 0, 0));
+        aggColumnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 0));
+        aggColumnResult.addColumn("COLUMN_NAME", Arrays.asList("col1", "col2", "col3", "col4"));
+        aggColumnResult.addColumn("IS_NULLABLE", Arrays.asList("NO", "NO", "NO", "NO"));
+
+        ClickhouseSchemaResolver clickhouseSchemaResolver = new ClickhouseSchemaResolver(properties);
+        List<Column> fullSchema = clickhouseSchemaResolver.convertToSRTable(aggColumnResult);
+
+        Assertions.assertEquals(4, fullSchema.size());
+
+        // Test AggregateFunction(sum, Int64)
+        Column col1 = fullSchema.get(0);
+        Assertions.assertEquals("col1", col1.getName());
+        Assertions.assertTrue(col1.getType().isVarchar());
+        Assertions.assertEquals(com.starrocks.sql.ast.AggregateType.AGG_STATE_UNION, col1.getAggregationType());
+        Assertions.assertNotNull(col1.getAggStateDesc());
+        Assertions.assertEquals("sumMerge", col1.getAggStateDesc().getFunctionName());
+        Assertions.assertEquals(1, col1.getAggStateDesc().getArgTypes().size());
+        Assertions.assertTrue(col1.getAggStateDesc().getArgTypes().get(0).isVarchar());
+
+        // Test SimpleAggregateFunction(max, Int32)
+        Column col2 = fullSchema.get(1);
+        Assertions.assertEquals("col2", col2.getName());
+        Assertions.assertTrue(col2.getType().isVarchar());
+        Assertions.assertEquals(com.starrocks.sql.ast.AggregateType.AGG_STATE_UNION, col2.getAggregationType());
+        Assertions.assertNotNull(col2.getAggStateDesc());
+        Assertions.assertEquals("max", col2.getAggStateDesc().getFunctionName());
+
+        // Test AggregateFunction(quantiles(0.5, 0.9), Float64)
+        Column col3 = fullSchema.get(2);
+        Assertions.assertEquals("col3", col3.getName());
+        Assertions.assertTrue(col3.getType().isVarchar());
+        Assertions.assertEquals(com.starrocks.sql.ast.AggregateType.AGG_STATE_UNION, col3.getAggregationType());
+        Assertions.assertNotNull(col3.getAggStateDesc());
+        Assertions.assertEquals("quantilesMerge(0.5, 0.9)", col3.getAggStateDesc().getFunctionName());
+
+        // Test SomeUnknownType
+        Column col4 = fullSchema.get(3);
+        Assertions.assertEquals("col4", col4.getName());
+        Assertions.assertTrue(col4.getType().isUnknown());
+        Assertions.assertNull(col4.getAggStateDesc());
+    }
 }

@@ -71,6 +71,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnMinMaxRewr
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PullUpScanPredicateRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownAggToJDBCScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAsofJoinTemporalExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
@@ -749,6 +750,8 @@ public class QueryOptimizer extends Optimizer {
         if (context.getSessionVariable().isEnableScanPredicateExprReuse()) {
             scheduler.rewriteOnce(tree, rootTaskContext, PullUpScanPredicateRule.OLAP_SCAN);
         }
+
+        scheduler.rewriteOnce(tree, rootTaskContext, new PushDownAggToJDBCScanRule());
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);

@@ -15,7 +15,12 @@
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.common.SchemaConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.type.AggStateDesc;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
@@ -27,6 +32,7 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -90,6 +96,70 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
 
 
     @Override
+    public List<Column> convertToSRTable(ResultSet columnSet) throws SQLException {
+        List<Column> fullSchema = Lists.newArrayList();
+        while (columnSet.next()) {
+            String typeName = columnSet.getString("TYPE_NAME");
+            Type type = convertColumnType(columnSet.getInt("DATA_TYPE"),
+                    typeName,
+                    columnSet.getInt("COLUMN_SIZE"),
+                    columnSet.getInt("DECIMAL_DIGITS"));
+
+            String comment = "";
+            try {
+                if (columnSet.getString("REMARKS") != null) {
+                    comment = columnSet.getString("REMARKS");
+                }
+            } catch (SQLException ignored) {
+            }
+
+            Column column = new Column(columnSet.getString("COLUMN_NAME"), type,
+                    columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment);
+
+            // Inject AGG_STATE_UNION metadata for AggregateFunction columns to support precise pushdown.
+            if (typeName != null && (typeName.startsWith("AggregateFunction(")
+                    || typeName.startsWith("SimpleAggregateFunction("))) {
+                injectAggStateMetadata(column, typeName);
+            }
+
+            fullSchema.add(column);
+        }
+        return fullSchema;
+    }
+
+    private void injectAggStateMetadata(Column column, String typeName) {
+        String inner;
+        if (typeName.startsWith("AggregateFunction(")) {
+            inner = typeName.substring("AggregateFunction(".length(), typeName.length() - 1);
+        } else if (typeName.startsWith("SimpleAggregateFunction(")) {
+            inner = typeName.substring("SimpleAggregateFunction(".length(), typeName.length() - 1);
+        } else {
+            return;
+        }
+
+        int firstComma = findFirstTopLevelComma(inner);
+        if (firstComma > 0) {
+            String funcName = inner.substring(0, firstComma).trim();
+            if (typeName.startsWith("AggregateFunction(")) {
+                int paramParen = funcName.indexOf('(');
+                if (paramParen != -1) {
+                    funcName = funcName.substring(0, paramParen).trim() + "Merge" + funcName.substring(paramParen);
+                } else {
+                    funcName = funcName + "Merge";
+                }
+            }
+            String argTypeName = inner.substring(firstComma + 1).trim();
+            Type argType = resolveInnerType(argTypeName);
+
+            if (argType.isValid()) {
+                AggStateDesc desc = new AggStateDesc(funcName, column.getType(),
+                        Lists.newArrayList(argType), true);
+                column.setAggregationType(AggregateType.AGG_STATE_UNION, true);
+                column.setAggStateDesc(desc);
+            }
+        }
+    }
+    @Override
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
         switch (dataType) {
@@ -145,6 +215,13 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
                 }
             case Types.TIME_WITH_TIMEZONE, Types.TIMESTAMP_WITH_TIMEZONE:
                 return TypeFactory.createVarcharType(65533);
+            case Types.OTHER:
+                // ClickHouse aggregate functions are reported as Types.OTHER by the JDBC driver.
+                if (typeName != null && (typeName.startsWith("AggregateFunction(")
+                        || typeName.startsWith("SimpleAggregateFunction("))) {
+                    return resolveInnerType(typeName);
+                }
+                return TypeFactory.createType(PrimitiveType.UNKNOWN_TYPE);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
                 break;
@@ -152,5 +229,37 @@ public class ClickhouseSchemaResolver extends JDBCSchemaResolver {
         return TypeFactory.createType(primitiveType);
     }
 
+    /**
+     * Finds the index of the first comma at bracket nesting depth 0 in {@code s}.
+     * This correctly handles nested types such as {@code Decimal(9,2)} or
+     * function names such as {@code quantile(0.5)}.
+     *
+     * @return index of the comma, or {@code -1} if not found.
+     */
+    private int findFirstTopLevelComma(String s) {
+        int depth = 0;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth--;
+            } else if (c == ',' && depth == 0) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Resolves a raw ClickHouse type name string (possibly wrapped in {@code Nullable(...)})
+     * directly to a StarRocks {@link Type}.
+     * We map them to VARCHAR because the JDBC driver returns them as Strings.
+     * TODO: The current implementation always returning VARCHAR is technically an incorrect
+     * mapping.
+     */
+    private Type resolveInnerType(String innerTypeName) {
+        return TypeFactory.createVarcharType(65533);
+    }
 
 }

@@ -49,7 +49,8 @@ const TupleDescriptor* JDBCDataSourceProvider::tuple_descriptor(RuntimeState* st
 // ================================
 
 static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, const std::vector<std::string>& columns,
-                                const std::vector<std::string>& filters, int64_t limit) {
+                                const std::vector<std::string>& filters,
+                                const std::vector<std::string>& group_by_columns, int64_t limit) {
     std::ostringstream oss;
     oss << "SELECT";
     if (limit != -1 && jdbc_url.starts_with("jdbc:sqlserver")) {
@@ -66,6 +67,11 @@ static std::string get_jdbc_sql(const Slice jdbc_url, const std::string& table, 
             oss << (i == 0 ? "" : " AND") << "(" << filters[i] << ")";
         }
     }
+
+    if (!group_by_columns.empty()) {
+        oss << " GROUP BY " << fmt::format("{}", fmt::join(group_by_columns, ", "));
+    }
+
     if (limit != -1) {
         if (jdbc_url.starts_with("jdbc:oracle")) {
             // oracle doesn't support limit clause, we should generate a subquery to do this
@@ -152,7 +158,7 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     scan_ctx.user = jdbc_table->jdbc_user();
     scan_ctx.passwd = jdbc_table->jdbc_passwd();
     scan_ctx.sql = get_jdbc_sql(scan_ctx.jdbc_url, jdbc_scan_node.table_name, jdbc_scan_node.columns,
-                                jdbc_scan_node.filters, _read_limit);
+                                jdbc_scan_node.filters, jdbc_scan_node.group_by_columns, _read_limit);
     _scanner = _pool->add(new JDBCScanner(scan_ctx, _tuple_desc, _runtime_profile));
 
     RETURN_IF_ERROR(_scanner->open(state));

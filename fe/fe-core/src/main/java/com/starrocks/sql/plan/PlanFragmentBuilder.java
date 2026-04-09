@@ -2094,6 +2094,15 @@ public class PlanFragmentBuilder {
 
             scanNode.setLimit(node.getLimit());
             scanNode.computeColumnsAndFilters();
+
+            if (node.getGroupingKeys() != null) {
+                List<String> groupByColumns = Lists.newArrayList();
+                for (ColumnRefOperator grouping : node.getGroupingKeys()) {
+                    groupByColumns.add(grouping.getName());
+                }
+                scanNode.setAggPushdown(groupByColumns);
+            }
+
             scanNode.computeStatistics(optExpression.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             registerScanNode(node, scanNode, context);

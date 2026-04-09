@@ -24,9 +24,12 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
 
 public class LogicalJDBCScanOperator extends LogicalScanOperator {
+
+    private List<ColumnRefOperator> groupingKeys;
 
     public LogicalJDBCScanOperator(Table table,
                                    Map<ColumnRefOperator, Column> columnRefOperatorColumnMap,
@@ -51,11 +54,26 @@ public class LogicalJDBCScanOperator extends LogicalScanOperator {
         return visitor.visitLogicalJDBCScan(this, context);
     }
 
+    public List<ColumnRefOperator> getGroupingKeys() {
+        return groupingKeys;
+    }
+
+    public void setGroupingKeys(List<ColumnRefOperator> groupingKeys) {
+        this.groupingKeys = groupingKeys;
+    }
+
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalJDBCScanOperator, LogicalJDBCScanOperator.Builder> {
         @Override
         protected LogicalJDBCScanOperator newInstance() {
             return new LogicalJDBCScanOperator();
+        }
+
+        @Override
+        public LogicalJDBCScanOperator.Builder withOperator(LogicalJDBCScanOperator scanOperator) {
+            super.withOperator(scanOperator);
+            builder.groupingKeys = scanOperator.groupingKeys;
+            return this;
         }
     }
 }
