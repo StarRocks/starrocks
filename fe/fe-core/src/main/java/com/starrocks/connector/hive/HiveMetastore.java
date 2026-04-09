@@ -129,6 +129,10 @@ public class HiveMetastore implements IHiveMetastore {
                 throw new StarRocksConnectorException(String.format(
                         "%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName, tableName));
             }
+            if (table.getParameters() != null && AcidUtils.isInsertOnlyTable(table.getParameters())) {
+                throw new StarRocksConnectorException(String.format(
+                        "%s.%s is a hive transactional table(insert only), sr didn't support it yet", dbName, tableName));
+            }
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
             } else {
