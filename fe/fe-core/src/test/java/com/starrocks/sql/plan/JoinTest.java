@@ -2695,7 +2695,7 @@ public class JoinTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 11: N_NAME = 16: cast\n" +
-                "  |  equal join conjunct: 11: N_NAME = CAST(1: C_CUSTKEY AS VARCHAR(1048576))");
+                "  |  equal join conjunct: 11: N_NAME = 17: cast");
     }
 
     @Test
