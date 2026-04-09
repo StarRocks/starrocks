@@ -30,7 +30,7 @@ netstat -tunlp | grep 9010
 netstat -tunlp | grep 6090
 ```
 
-上記のポートが使用されている場合は、代替ポートを見つけ、FE ノードをデプロイする際に指定する必要があります。詳細な手順については、[Deploy StarRocks - Start the Leader FE node](../deployment/deploy_manually.md#step-1-start-the-leader-fe-node) を参照してください。
+上記のポートが使用されている場合は、代替ポートを見つけ、FE ノードをデプロイする際に指定する必要があります。詳細な手順については、[Deploy StarRocks - Start the Leader FE node](../deployment/deploy_manually.md#ステップ-1-leader-fe-ノードを起動する) を参照してください。
 
 ### BE ポート
 
@@ -52,7 +52,7 @@ netstat -tunlp | grep 8060
 netstat -tunlp | grep 9070
 ```
 
-上記のポートが使用されている場合は、代替ポートを見つけ、BE ノードをデプロイする際に指定する必要があります。詳細な手順については、[Deploy StarRocks - Start the BE service](../deployment/deploy_manually.md#step-2-start-the-be-service) を参照してください。
+上記のポートが使用されている場合は、代替ポートを見つけ、BE ノードをデプロイする際に指定する必要があります。詳細な手順については、[Deploy StarRocks - Start the BE service](../deployment/deploy_manually.md#ステップ-2-共有なしの場合-be-サービスを起動する) を参照してください。
 
 ### CN ポート
 
@@ -74,7 +74,7 @@ netstat -tunlp | grep 8060
 netstat -tunlp | grep 9070
 ```
 
-上記のポートが使用されている場合は、代替ポートを見つけ、CN ノードをデプロイする際に指定する必要があります。詳細な手順については、[Deploy StarRocks - Start the CN service](../deployment/deploy_manually.md#step-3-optional-start-the-cn-service) を参照してください。
+上記のポートが使用されている場合は、代替ポートを見つけ、CN ノードをデプロイする際に指定する必要があります。詳細な手順については、[Deploy StarRocks - Start the CN service](../deployment/deploy_manually.md#ステップ-2-共有データの場合-cn-サービスを起動する) を参照してください。
 
 ## ホスト名
 
@@ -82,9 +82,9 @@ StarRocks クラスターで [FQDN アクセスを有効にする](../administra
 
 各インスタンスの **/etc/hosts** ファイルに、クラスター内の他のすべてのインスタンスの IP アドレスと対応するホスト名を指定する必要があります。
 
-> **注意**
->
-> **/etc/hosts** ファイル内のすべての IP アドレスは一意でなければなりません。
+:::important
+**/etc/hosts** ファイル内のすべての IP アドレスは一意でなければなりません。
+:::
 
 ## JDK 設定
 
