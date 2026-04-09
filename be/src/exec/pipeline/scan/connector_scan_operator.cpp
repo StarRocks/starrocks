@@ -907,9 +907,8 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
             std::vector<MorselPtr> split_morsels;
             std::shared_ptr<const std::vector<BaseRowsetSharedPtr>> shared_rowsets;
             if (!current_morsel->rowsets().empty()) {
-                shared_rowsets =
-                        std::make_shared<const std::vector<BaseRowsetSharedPtr>>(current_morsel->rowsets().begin(),
-                                                                                 current_morsel->rowsets().end());
+                shared_rowsets = std::make_shared<const std::vector<BaseRowsetSharedPtr>>(
+                        current_morsel->rowsets().begin(), current_morsel->rowsets().end());
             }
 
             if (current_morsel->is_last_split()) {

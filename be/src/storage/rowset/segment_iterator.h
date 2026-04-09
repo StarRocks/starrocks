@@ -17,8 +17,8 @@
 #include <memory>
 #include <vector>
 
-#include "storage/chunk_iterator.h"
 #include "common/statusor.h"
+#include "storage/chunk_iterator.h"
 #include "storage/options.h"
 #include "storage/range.h"
 #include "storage/seek_range.h"

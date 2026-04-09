@@ -661,7 +661,8 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache,
     return load_segments(segments, seg_options, nullptr);
 }
 
-bool Rowset::_copy_cached_segments(std::vector<SegmentPtr>* segments, const std::unordered_set<int>* skip_segment_idxs) {
+bool Rowset::_copy_cached_segments(std::vector<SegmentPtr>* segments,
+                                   const std::unordered_set<int>* skip_segment_idxs) {
     std::lock_guard<std::mutex> l(_segments_lock);
     if (_segments.empty()) {
         return false;

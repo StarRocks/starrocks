@@ -125,8 +125,7 @@ private:
                                                   std::vector<uint32_t>* scanner_columns,
                                                   std::vector<uint32_t>* reader_columns, Schema* child_schema,
                                                   std::optional<Schema>* output_schema);
-    void _capture_prepared_split_open_state(PreparedSplitOpenState* prepared,
-                                            std::vector<uint32_t>* scanner_columns,
+    void _capture_prepared_split_open_state(PreparedSplitOpenState* prepared, std::vector<uint32_t>* scanner_columns,
                                             std::vector<uint32_t>* reader_columns, Schema* child_schema,
                                             std::optional<Schema>* output_schema);
     void init_counter(RuntimeState* state);

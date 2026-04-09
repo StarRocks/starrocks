@@ -14,8 +14,6 @@
 
 #include "connector/lake_connector.h"
 
-#include "storage/rowset/rowid_range_option.h"
-
 #include <vector>
 
 #include "base/string/string_parser.hpp"
@@ -45,6 +43,7 @@
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/virtual_column_utils.h"
@@ -250,7 +249,8 @@ void LakeDataSource::_capture_prepared_split_open_state(PreparedSplitOpenState* 
                                                         std::vector<uint32_t>* reader_columns, Schema* child_schema,
                                                         std::optional<Schema>* output_schema) {
     prepared->tablet_schema = _tablet_schema;
-    prepared->global_dictmaps = _params.global_dictmaps != nullptr ? *_params.global_dictmaps : ColumnIdToGlobalDictMap{};
+    prepared->global_dictmaps =
+            _params.global_dictmaps != nullptr ? *_params.global_dictmaps : ColumnIdToGlobalDictMap{};
     prepared->unused_output_column_ids = _unused_output_column_ids;
     prepared->scanner_columns = *scanner_columns;
     prepared->reader_columns = *reader_columns;
@@ -433,7 +433,8 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         GlobalDictPredicatesRewriter not_pushdown_predicate_rewriter(*_params.global_dictmaps);
         ObjectPool* predicate_obj_pool = prepared_state != nullptr ? &prepared_state->predicate_obj_pool : &_obj_pool;
         if (prepared_state == nullptr || !prepared_state->predicate_trees_ready) {
-            RETURN_IF_ERROR(not_pushdown_predicate_rewriter.rewrite_predicate(predicate_obj_pool, _non_pushdown_pred_tree));
+            RETURN_IF_ERROR(
+                    not_pushdown_predicate_rewriter.rewrite_predicate(predicate_obj_pool, _non_pushdown_pred_tree));
         }
     }
     if (prepared_state != nullptr && !prepared_state->predicate_trees_ready) {
@@ -497,7 +498,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
         std::lock_guard<std::mutex> l(prepared_split_open_state->lock);
         if (prepared_split_open_state->ready) {
             RETURN_IF_ERROR(_try_restore_prepared_split_open_state(*prepared_split_open_state, &scanner_columns,
-                                                                  &reader_columns, &child_schema, &output_schema));
+                                                                   &reader_columns, &child_schema, &output_schema));
             restored_prepared_split_open_state = true;
         }
         if (!prepared_split_open_state->disabled && _provider->could_split_physically()) {
@@ -1340,10 +1341,9 @@ StatusOr<std::shared_ptr<ResolvedLakeTabletState>> LakeDataSourceProvider::get_r
         schema_key_pb.set_schema_id(t_schema_key.schema_id);
         schema_key_pb.set_db_id(t_schema_key.db_id);
         schema_key_pb.set_table_id(t_schema_key.table_id);
-        ASSIGN_OR_RETURN(tablet_schema,
-                         tablet_manager->table_schema_service()->get_schema_for_scan(
-                                 schema_key_pb, tablet_id, state->query_id(), state->fragment_ctx()->fe_addr(),
-                                 tablet.metadata()));
+        ASSIGN_OR_RETURN(tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
+                                                schema_key_pb, tablet_id, state->query_id(),
+                                                state->fragment_ctx()->fe_addr(), tablet.metadata()));
     } else {
         // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
         // so fallback to the old way to get schema from tablet metadata

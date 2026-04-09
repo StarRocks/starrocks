@@ -24,9 +24,9 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/range.h"
-#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader.h"
@@ -72,8 +72,7 @@ bool ScanMorsel::has_more_scan_ranges(const std::vector<TScanRangeParams>& scan_
 void PhysicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
     params->rowid_range_option = _rowid_range_option;
     params->short_key_ranges_option = nullptr;
-    params->skip_key_range_filter =
-            _rowid_range_option != nullptr && _rowid_range_option->key_ranges_materialized;
+    params->skip_key_range_filter = _rowid_range_option != nullptr && _rowid_range_option->key_ranges_materialized;
 }
 
 void LogicalSplitScanMorsel::init_tablet_reader_params(TabletReaderParams* params) {
@@ -432,9 +431,9 @@ StatusOr<RowidRangeOptionPtr> PhysicalSplitMorselQueue::_try_get_split_from_sing
 
         if (rowid_range == nullptr) {
             rowid_range = std::make_shared<RowidRangeOption>();
-            rowid_range->key_ranges_materialized =
-                    _tablet_idx < _tablets.size() && _tablets[_tablet_idx]->belonged_to_cloud_native() &&
-                    !_tablet_seek_ranges.empty();
+            rowid_range->key_ranges_materialized = _tablet_idx < _tablets.size() &&
+                                                   _tablets[_tablet_idx]->belonged_to_cloud_native() &&
+                                                   !_tablet_seek_ranges.empty();
         }
 
         SparseRange<> taken_range;
