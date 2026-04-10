@@ -44,6 +44,7 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
+#include "http/utils.h"
 #ifndef __clang__
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")

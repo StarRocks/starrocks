@@ -19,7 +19,7 @@
       "owned_targets": ["Gutil"],
       "owned_roots": ["be/src/gutil"],
       "allowed_include_prefixes": ["gutil/"],
-      "allowed_target_deps": [],
+      "allowed_target_deps": ["Common", "Base", "Gutil"],
       "allowed_test_targets": [],
       "allowed_test_link_deps": [],
       "remediation": "Keep Gutil independent; move BE-specific logic out instead of importing BE modules."
@@ -35,6 +35,39 @@
       "allowed_test_targets": ["common_test"],
       "allowed_test_link_deps": ["Common", "Base", "Gutil", "StarRocksGen"],
       "remediation": "Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated headers."
+    },
+    {
+      "id": "httpcore",
+      "doc_label": "HttpCore",
+      "summary": "Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.",
+      "owned_targets": ["HttpCore"],
+      "owned_globs": [
+        "be/src/http/http_handler.h",
+        "be/src/http/http_method.*",
+        "be/src/http/http_status.*",
+        "be/src/http/http_headers.*",
+        "be/src/http/http_request.*",
+        "be/src/http/http_response.*",
+        "be/src/http/http_parser.*",
+        "be/src/http/http_channel.*",
+        "be/src/http/http_stream_channel.*",
+        "be/src/http/ev_http_server.*"
+      ],
+      "allowed_include_prefixes": ["http/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["http/action/"],
+      "forbidden_includes": [
+        "http/default_path_handlers.h",
+        "http/download_action.h",
+        "http/http_common.h",
+        "http/monitor_action.h",
+        "http/rest_monitor_iface.h",
+        "http/utils.h",
+        "http/web_page_handler.h"
+      ],
+      "allowed_target_deps": ["Common", "Base", "Gutil"],
+      "allowed_test_targets": ["http_core_test"],
+      "allowed_test_link_deps": ["HttpCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward."
     },
     {
       "id": "iocore",

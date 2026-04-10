@@ -373,6 +373,7 @@ add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
+add_subdirectory(http)
 
 if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/src/service/macos_link_stubs.cpp)

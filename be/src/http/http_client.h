@@ -27,8 +27,7 @@
 #include "common/statusor.h"
 #include "http/http_headers.h"
 #include "http/http_method.h"
-#include "http/http_response.h"
-#include "http/utils.h"
+
 namespace starrocks {
 
 // Helper class to access HTTP resource
