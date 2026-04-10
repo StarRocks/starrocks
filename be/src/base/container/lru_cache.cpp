@@ -277,7 +277,8 @@ void LRUCache::release(Cache::Handle* handle) {
 void LRUCache::touch(const CacheKey& key, uint32_t hash) {
     std::lock_guard l(_mutex);
     LRUHandle* e = _table.lookup(key, hash);
-    if (e != nullptr && e->in_cache && e->refs == 1) {
+    if (e != nullptr && e->refs == 1) {
+        DCHECK(e->in_cache);
         _lru_remove(e);
         _lru_append(&_lru, e);
     }
