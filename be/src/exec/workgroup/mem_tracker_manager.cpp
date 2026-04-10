@@ -82,8 +82,7 @@ void MemTrackerManager::deregister_workgroup(const std::string& mem_pool) {
 
 void MemTrackerManager::_add_metrics_unlocked(const std::string& mem_pool, UniqueLockType& lock) {
     std::call_once(_register_metrics_hook_once_flag, [this] {
-        StarRocksMetrics::instance()->metrics()->register_hook("mem_pool_metrics_hook",
-                                                                    [this] { _update_metrics(); });
+        StarRocksMetrics::instance()->metrics()->register_hook("mem_pool_metrics_hook", [this] { _update_metrics(); });
     });
 
     if (_shared_mem_trackers_metrics.contains(mem_pool)) {
