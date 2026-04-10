@@ -23,6 +23,8 @@ import com.starrocks.common.DdlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.function.LongSupplier;
+
 public class JournalObservable {
     private static final Logger LOG = LogManager.getLogger(JournalObservable.class);
     private Multiset<JournalObserver> obs;
@@ -50,6 +52,20 @@ public class JournalObservable {
                 expectedJournalVersion, timeoutMs);
 
         JournalObserver observer = new JournalObserver(expectedJournalVersion);
+        addObserver(observer);
+        try {
+            observer.waitForReplay(timeoutMs);
+        } finally {
+            deleteObserver(observer);
+        }
+    }
+
+    public void waitOn(Long expectedJournalVersion, int timeoutMs,
+                       LongSupplier replayedJournalIdSupplier) throws DdlException {
+        LOG.info("waiting for the observer to replay journal to {} with timeout: {} ms",
+                expectedJournalVersion, timeoutMs);
+
+        JournalObserver observer = new JournalObserver(expectedJournalVersion, replayedJournalIdSupplier);
         addObserver(observer);
         try {
             observer.waitForReplay(timeoutMs);
