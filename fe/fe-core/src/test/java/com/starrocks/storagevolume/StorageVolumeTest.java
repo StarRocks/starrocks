@@ -35,6 +35,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
+import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
 import com.starrocks.credential.hdfs.HDFSCloudCredential;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -330,6 +331,86 @@ public class StorageVolumeTest {
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assertions.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
         Assertions.assertTrue(fileStore.hasHdfsFsInfo());
+    }
+
+    @Test
+    public void testHDFSInvalidAuthenticationValidate() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(HDFS_AUTHENTICATION, "invalid_auth");
+
+        HDFSCloudConfigurationProvider provider = new HDFSCloudConfigurationProvider();
+        CloudConfiguration cloudConfiguration = provider.build(storageParams);
+        Assertions.assertNull(cloudConfiguration);
+    }
+
+    @Test
+    public void testHDFSApplyToConfiguration() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.SIMPLE_AUTH);
+        storageParams.put("dfs.nameservices", "HDFS1002060");
+        storageParams.put("dfs.ha.namenodes.HDFS1002060", "nn1,nn2");
+        storageParams.put("dfs.namenode.rpc-address.HDFS1002060.nn1", "host1:4007");
+        storageParams.put("dfs.namenode.rpc-address.HDFS1002060.nn2", "host2:4007");
+        storageParams.put("dfs.client.failover.proxy.provider.HDFS1002060",
+                "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+        storageParams.put("fs.defaultFS", "hdfs://HDFS1002060");
+
+
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+
+        // Verify that applyToConfiguration can write the configuration into Hadoop Configuration
+        Configuration conf = new Configuration();
+        hdfsCloudConfiguration.applyToConfiguration(conf);
+        Assertions.assertEquals("HDFS1002060", conf.get("dfs.nameservices"));
+        Assertions.assertEquals("nn1,nn2", conf.get("dfs.ha.namenodes.HDFS1002060"));
+        Assertions.assertEquals("host1:4007", conf.get("dfs.namenode.rpc-address.HDFS1002060.nn1"));
+        Assertions.assertEquals("host2:4007", conf.get("dfs.namenode.rpc-address.HDFS1002060.nn2"));
+        Assertions.assertEquals("org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+                conf.get("dfs.client.failover.proxy.provider.HDFS1002060"));
+        Assertions.assertEquals("hdfs://HDFS1002060", conf.get("fs.defaultFS"));
+
+        Map<String, String> hadoopConf = hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration();
+        Assertions.assertEquals(6, hadoopConf.size());
+        Assertions.assertEquals("HDFS1002060", hadoopConf.get("dfs.nameservices"));
+    }
+
+
+    @Test
+    public void testHDFSToThrift() throws DdlException {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.SIMPLE_AUTH);
+        storageParams.put(HDFS_USERNAME, "username");
+        storageParams.put("dfs.nameservices", "HDFS1002060");
+        storageParams.put("dfs.ha.namenodes.HDFS1002060", "nn1,nn2");
+        storageParams.put("dfs.namenode.rpc-address.HDFS1002060.nn1", "host1:4007");
+        storageParams.put("dfs.namenode.rpc-address.HDFS1002060.nn2", "host2:4007");
+        storageParams.put("dfs.client.failover.proxy.provider.HDFS1002060",
+                "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
+        storageParams.put("fs.defaultFS", "hdfs://HDFS1002060");
+
+
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        HDFSCloudCredential credential = hdfsCloudConfiguration.getHdfsCloudCredential();
+
+        // Verify that toThrift can write the HA configuration into the properties map
+        Map<String, String> thriftProperties = new HashMap<>();
+        credential.toThrift(thriftProperties);
+        Assertions.assertEquals("HDFS1002060", thriftProperties.get("dfs.nameservices"));
+        Assertions.assertEquals("nn1,nn2", thriftProperties.get("dfs.ha.namenodes.HDFS1002060"));
+        Assertions.assertEquals("host1:4007", thriftProperties.get("dfs.namenode.rpc-address.HDFS1002060.nn1"));
+        Assertions.assertEquals("host2:4007", thriftProperties.get("dfs.namenode.rpc-address.HDFS1002060.nn2"));
+        Assertions.assertEquals("org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+                thriftProperties.get("dfs.client.failover.proxy.provider.HDFS1002060"));
+        Assertions.assertEquals("hdfs://HDFS1002060", thriftProperties.get("fs.defaultFS"));
+        // Verify that known keys such as HDFS_AUTHENTICATION are removed by preprocessProperties and not present in hadoopConfiguration
+        Assertions.assertNull(thriftProperties.get(HDFS_AUTHENTICATION));
+        Assertions.assertNull(thriftProperties.get(HDFS_USERNAME));
     }
 
     @Test

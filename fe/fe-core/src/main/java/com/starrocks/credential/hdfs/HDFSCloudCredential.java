@@ -63,6 +63,11 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        if (hadoopConfiguration != null) {
+            for (Map.Entry<String, String> entry : hadoopConfiguration.entrySet()) {
+                configuration.set(entry.getKey(), entry.getValue());
+            }
+        }
     }
 
     @Override
@@ -82,6 +87,9 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public void toThrift(Map<String, String> properties) {
+        if (hadoopConfiguration != null) {
+            properties.putAll(hadoopConfiguration);
+        }
     }
 
     @Override
