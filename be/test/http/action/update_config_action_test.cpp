@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include "agent/agent_server.h"
-#include "base/testutil/sync_point.h"
 #include "cache/block_cache/block_cache.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
@@ -26,6 +25,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "testutil/scoped_updater.h"
 
 namespace starrocks {
