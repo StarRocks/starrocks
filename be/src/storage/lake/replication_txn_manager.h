@@ -19,6 +19,7 @@
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/macros.h"
 #include "lake_replication_txn_manager.h"
+#include "storage/delta_column_group.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"
@@ -50,6 +51,27 @@ public:
             const TabletManager* tablet_manager, const TReplicateSnapshotRequest& request,
             const std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
             std::unordered_map<uint32_t, uint32_t>& column_unique_id_map, std::vector<std::string>& files_to_delete);
+
+    // Convert DeltaColumnGroupSnapshotPB from shared-nothing non-PK table snapshot
+    // into DeltaColumnGroupMetadataPB for shared-data replication.
+    // Also populates filename_map with old->new .cols filename mappings.
+    static Status convert_dcg_meta_for_non_pk(
+            const DeltaColumnGroupSnapshotPB& dcg_snapshot_pb,
+            const std::unordered_map<std::string, uint32_t>& rowset_id_to_seg_id, TTransactionId transaction_id,
+            DeltaColumnGroupMetadataPB* dcg_meta,
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map);
+
+    // Convert DeltaColumnGroupList from shared-nothing PK table snapshot
+    // into DeltaColumnGroupMetadataPB for shared-data replication.
+    // Also populates filename_map with old->new .cols filename mappings.
+    static Status convert_dcg_meta_for_pk(
+            const std::unordered_map<uint32_t, DeltaColumnGroupList>& delta_column_groups,
+            TTransactionId transaction_id, DeltaColumnGroupMetadataPB* dcg_meta,
+            std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map);
+
+    // Convert column unique IDs in DCG metadata using the provided column_unique_id_map.
+    static Status convert_dcg_column_unique_ids(DeltaColumnGroupMetadataPB* dcg_meta,
+                                                const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map);
 
 private:
     Status make_remote_snapshot(const TRemoteSnapshotRequest& request, const std::vector<Version>* missed_versions,

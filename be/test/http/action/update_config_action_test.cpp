@@ -28,6 +28,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
+#include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
 
 namespace starrocks {
@@ -117,6 +118,35 @@ TEST_F(UpdateConfigActionTest, test_update_tablet_meta_info_worker_count) {
     st = action.update_config("update_tablet_meta_info_worker_count", "0");
     CHECK_OK(st);
     ASSERT_EQ(1, thread_pool->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
+
+    auto st = action.update_config("parallel_clone_task_per_path", "4");
+    CHECK_OK(st);
+
+    int expected_max_threads = static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * 4;
+    expected_max_threads = std::max(expected_max_threads, 2);
+    ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
+}
+
+TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path_with_missing_clone_pool) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
+
+    SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                          [](void* arg) { *(ThreadPool**)arg = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    auto st = action.update_config("parallel_clone_task_per_path", "4");
+    CHECK_OK(st);
 }
 
 TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {

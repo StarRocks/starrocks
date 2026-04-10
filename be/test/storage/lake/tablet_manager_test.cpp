@@ -444,7 +444,6 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
     type_desc.types[0].__isset.scalar_type = true;
     type_desc.__isset.types = true;
     null_val.__set_type(type_desc);
-    null_val.__set_value("");
     null_val.__set_variant_type(TVariantType::NULL_VALUE);
     lower_bound.values.push_back(null_val);
     range.__set_lower_bound(lower_bound);
@@ -462,8 +461,8 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_null_values) {
     EXPECT_EQ(VariantTypePB::NULL_VALUE, pb_range.lower_bound().values(0).variant_type());
 }
 
-TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
-    auto fs = FileSystem::Default();
+// MINIMUM/MAXIMUM variants should be rejected — FE must map them to NULL_VALUE.
+TEST_F(LakeTabletManagerTest, create_tablet_with_range_rejects_min_max) {
     auto tablet_id = next_id();
     auto schema_id = next_id();
 
@@ -476,7 +475,6 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
     req.tablet_schema.__set_short_key_column_count(2);
     req.tablet_schema.__set_keys_type(TKeysType::DUP_KEYS);
 
-    // Set tablet range with MIN and MAX values
     TTabletRange range;
     TTuple lower_bound;
     TVariant min_val;
@@ -487,35 +485,14 @@ TEST_F(LakeTabletManagerTest, create_tablet_with_range_min_max_values) {
     type_desc.types[0].__isset.scalar_type = true;
     type_desc.__isset.types = true;
     min_val.__set_type(type_desc);
-    min_val.__set_value("");
     min_val.__set_variant_type(TVariantType::MINIMUM);
     lower_bound.values.push_back(min_val);
-
-    TTuple upper_bound;
-    TVariant max_val;
-    max_val.__set_type(type_desc);
-    max_val.__set_value("");
-    max_val.__set_variant_type(TVariantType::MAXIMUM);
-    upper_bound.values.push_back(max_val);
-
     range.__set_lower_bound(lower_bound);
-    range.__set_upper_bound(upper_bound);
     req.__set_range(range);
 
-    EXPECT_OK(_tablet_manager->create_tablet(req));
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
-    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
-
-    // Verify range with MIN/MAX values
-    EXPECT_TRUE(metadata->has_range());
-    const auto& pb_range = metadata->range();
-    EXPECT_TRUE(pb_range.has_lower_bound());
-    EXPECT_EQ(1, pb_range.lower_bound().values_size());
-    EXPECT_EQ(VariantTypePB::MINIMUM, pb_range.lower_bound().values(0).variant_type());
-
-    EXPECT_TRUE(pb_range.has_upper_bound());
-    EXPECT_EQ(1, pb_range.upper_bound().values_size());
-    EXPECT_EQ(VariantTypePB::MAXIMUM, pb_range.upper_bound().values(0).variant_type());
+    auto status = _tablet_manager->create_tablet(req);
+    EXPECT_FALSE(status.ok());
+    EXPECT_TRUE(status.is_invalid_argument());
 }
 
 TEST_F(LakeTabletManagerTest, create_tablet_without_range) {

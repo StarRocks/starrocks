@@ -92,6 +92,11 @@ static int32_t calc_real_num_threads(int32_t num_threads, int32_t cpu_cores_mult
     return num_threads;
 }
 
+static int32_t calc_clone_thread_pool_size(size_t num_store_paths, int32_t parallel_clone_task_per_path) {
+    return std::max(static_cast<int32_t>(num_store_paths) * parallel_clone_task_per_path,
+                    static_cast<int32_t>(MIN_CLONE_TASK_THREADS_IN_POOL));
+}
+
 class AgentServer::Impl {
 public:
     explicit Impl(ExecEnv* exec_env, bool is_compute_node) : _exec_env(exec_env), _is_compute_node(is_compute_node) {}
@@ -267,10 +272,10 @@ Status AgentServer::Impl::init() {
         // need to modify many interfaces. So for now we still use TaskThreadPool to submit clone tasks, but with
         // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
         // callback, so that we can match the dop of FE clone task scheduling.
-        BUILD_DYNAMIC_TASK_THREAD_POOL(clone, 0,
-                                       std::max(_exec_env->store_paths().size() * config::parallel_clone_task_per_path,
-                                                MIN_CLONE_TASK_THREADS_IN_POOL),
-                                       DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(
+                clone, 0,
+                calc_clone_thread_pool_size(_exec_env->store_paths().size(), config::parallel_clone_task_per_path),
+                DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(
                 remote_snapshot, 0,
@@ -654,6 +659,16 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         st = _thread_pool_replicate_snapshot->update_max_threads(
                 calc_real_num_threads(new_val, REPLICATION_CPU_CORES_MULTIPLIER));
         break;
+    case TTaskType::CLONE: {
+        ThreadPool* thread_pool = get_thread_pool(type);
+        if (thread_pool) {
+            st = thread_pool->update_max_threads(calc_clone_thread_pool_size(_exec_env->store_paths().size(), new_val));
+        } else {
+            LOG(WARNING) << "Failed to update max thread, cannot get thread pool by task type: "
+                         << to_string((TTaskType::type)type);
+        }
+        break;
+    }
     default: {
         ThreadPool* thread_pool = get_thread_pool(type);
         if (thread_pool) {

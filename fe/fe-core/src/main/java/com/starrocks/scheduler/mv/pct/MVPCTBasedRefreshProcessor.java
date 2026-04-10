@@ -26,6 +26,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
@@ -315,6 +316,20 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
     public void updateVersionMeta(ExecPlan execPlan,
                                   PCellSortedSet mvRefreshedPartitions,
                                   Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+        // Only promote TVR checkpoint on the last batch. Intermediate batches pass empty map
+        // to avoid committing TVR before all partitions are refreshed.
+        Map<BaseTableInfo, TvrVersionRange> tvrMap;
+        if (mvContext.hasNextBatchPartition()) {
+            tvrMap = Maps.newHashMap();
+        } else {
+            tvrMap = mv.getRefreshScheme().getAsyncRefreshContext().getTempBaseTableInfoTvrDeltaMap();
+        }
+        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, tvrMap);
+        // Clear temp map after the last batch promotes TVR, preventing stale data from being
+        // reused by subsequent unrelated refreshes (e.g., user-initiated partial refresh or
+        // explain-time planning that populates the temp map without executing).
+        if (!mvContext.hasNextBatchPartition()) {
+            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaMap();
+        }
     }
 }

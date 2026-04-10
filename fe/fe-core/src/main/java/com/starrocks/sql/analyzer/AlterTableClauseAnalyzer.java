@@ -980,7 +980,21 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         }
         try {
             if (table.isOlapOrCloudNativeTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
-                columnDef.setAggregateType(AggregateType.REPLACE);
+                Column baseColumn = ((OlapTable) table).getBaseColumn(columnDef.getName());
+                if (baseColumn != null) {
+                    if (baseColumn.isKey()) {
+                        // Keep MODIFY COLUMN semantics aligned with CREATE TABLE: existing PK columns
+                        // are analyzed as key + implicit NOT NULL even if the clause omits these attributes.
+                        columnDef.setIsKey(true);
+                        columnDef.setPrimaryKeyNonNullable();
+                        if (columnDef.isAllowNull()) {
+                            throw new SemanticException("primary key column[" + columnDef.getName()
+                                    + "] cannot be nullable");
+                        }
+                    } else {
+                        columnDef.setAggregateType(AggregateType.REPLACE);
+                    }
+                }
             }
             ColumnDefAnalyzer.analyze(columnDef, true);
         } catch (AnalysisException e) {

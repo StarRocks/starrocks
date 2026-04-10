@@ -192,7 +192,10 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                     && FunctionSet.IF.equals(((CallOperator) aggExpr).getFunction().getFunctionName().getFunction());
 
             if (isCaseWhen) {
-                CaseWhenOperator caseWhen = (CaseWhenOperator) aggExpr;
+                // Clone to avoid mutating the shared object in originProjectMap/project's columnRefMap.
+                // Without clone, when multiple aggregations reference the same CASE WHEN column,
+                // the first aggregation's setThenClause/setElseClause corrupts the shared operator.
+                CaseWhenOperator caseWhen = (CaseWhenOperator) aggExpr.clone();
                 for (ScalarOperator condition : caseWhen.getAllConditionClause()) {
                     condition.getUsedColumns().getStream().map(factory::getColumnRef)
                             .forEach(v -> context.groupBys.put(v, v));
@@ -221,7 +224,8 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
                 context.aggregations.remove(key);
                 originProjectMap.put(key, new CaseWhenOperator(key.getType(), caseWhen));
             } else if (isIfFn) {
-                CallOperator ifFn = (CallOperator) aggExpr;
+                // Clone to avoid mutating the shared object (same reason as CaseWhen above).
+                CallOperator ifFn = (CallOperator) aggExpr.clone();
                 ifFn.getChild(0).getUsedColumns().getStream().map(factory::getColumnRef)
                         .forEach(v -> context.groupBys.put(v, v));
 

@@ -198,6 +198,7 @@ public class HdfsScanNode extends ScanNode {
         setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         setNonPartitionConjunctsToThrift(msg, this, this.getScanNodePredicates());
         setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
+        setConnectorCatalogType(msg);
     }
 
     public static void appendDataCacheOptionsInExplain(StringBuilder output, String prefix, DataCacheOptions dataCacheOptions) {

@@ -31,6 +31,7 @@ import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
+import com.starrocks.qe.JournalObservable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
@@ -91,6 +92,7 @@ public class StarMgrServer {
 
     private StarManagerServer starMgrServer;
     private StarOSBDBJEJournalSystem journalSystem;
+    private final JournalObservable starMgrJournalObservable = new JournalObservable();
     private ThreadPoolExecutor grpcExecutor;
 
     public StarMgrServer() {
@@ -140,6 +142,7 @@ public class StarMgrServer {
 
     private void initializeImpl(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
         this.journalSystem = bdbJournalSystem;
+        this.journalSystem.setJournalObservable(starMgrJournalObservable);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now
@@ -304,6 +307,10 @@ public class StarMgrServer {
             return;
         }
         PrometheusRegistryHelper.visitPrometheusRegistry(MetricsSystem.METRIC_REGISTRY, visitor);
+    }
+
+    public JournalObservable getStarMgrJournalObservable() {
+        return starMgrJournalObservable;
     }
 
     public long getMaxJournalId() {
