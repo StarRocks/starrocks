@@ -149,9 +149,9 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
             }
             Expr rangePartitionExpr = rangePartitionExprOpt.get();
             PCellSortedSet snapshotPartitionMap = MVPartitionCellBuilder.getPartitionKeyRange(
-                    baseTable, partitionColumn, rangePartitionExpr);
+                    baseTable, partitionColumn, rangePartitionExpr).cells();
             PCellSortedSet currentPartitionMap = MVPartitionCellBuilder.getPartitionKeyRange(
-                    table, partitionColumn, rangePartitionExpr);
+                    table, partitionColumn, rangePartitionExpr).cells();
             return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
         } else {
             return false;

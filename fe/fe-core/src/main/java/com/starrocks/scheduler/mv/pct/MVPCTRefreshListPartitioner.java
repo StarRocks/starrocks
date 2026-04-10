@@ -27,6 +27,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
@@ -148,15 +149,16 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         // add into mv context
         result.mvPartitionToCells.addAll(adds);
-        final Map<Table, PCellSortedSet> refBaseTablePartitionMap = result.refBaseTablePartitionMap;
+        final Map<Table, PCellSortedSet> refBaseTableCells =
+                BaseToMVPartitionMapping.extractCells(result.refBaseTablePartitionMap);
         // base table -> Map<partition name -> mv partition names>
         final Map<Table, PCellSetMapping> baseToMvNameRef =
-                differ.generateBaseRefMap(refBaseTablePartitionMap, result.mvPartitionToCells);
+                differ.generateBaseRefMap(refBaseTableCells, result.mvPartitionToCells);
         // mv partition name -> Map<base table -> base partition names>
         final Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef =
-                differ.generateMvRefMap(result.mvPartitionToCells, refBaseTablePartitionMap);
-        publishTopology(new PCTPartitionTopology(result.mvPartitionToCells, refBaseTablePartitionMap,
-                baseToMvNameRef, mvToBaseNameRef, result.getRefBaseTableMVPartitionMap()));
+                differ.generateMvRefMap(result.mvPartitionToCells, refBaseTableCells);
+        publishTopology(new PCTPartitionTopology(result.mvPartitionToCells, result.refBaseTablePartitionMap,
+                baseToMvNameRef, mvToBaseNameRef));
         return true;
     }
 
