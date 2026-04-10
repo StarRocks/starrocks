@@ -401,14 +401,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.4.0
 
-<!--
-### enable_collect_table_level_scan_stats (Invisible to users)
-
-解决升级中的兼容问题，用户不可见。
-
-默认值：`true`。
--->
-
 ### enable_connector_adaptive_io_tasks
 
 * 描述：外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。

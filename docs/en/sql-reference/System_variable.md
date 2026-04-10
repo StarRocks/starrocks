@@ -400,14 +400,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.4.0
 
-<!--
-### enable_collect_table_level_scan_stats (Invisible to users)
-
-This variable is introduced to solve compatibility issues.
-
-Default value: `true`.
--->
-
 ### enable_datacache_async_populate_mode
 
 * **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
