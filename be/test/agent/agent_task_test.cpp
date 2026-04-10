@@ -14,9 +14,9 @@
 
 #include "agent/agent_task.h"
 
-#include <algorithm>
-
 #include <gtest/gtest.h>
+
+#include <algorithm>
 
 #include "agent/agent_server.h"
 #include "agent/publish_version.h"

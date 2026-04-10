@@ -276,10 +276,10 @@ Status AgentServer::Impl::init() {
         // need to modify many interfaces. So for now we still use TaskThreadPool to submit clone tasks, but with
         // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
         // callback, so that we can match the dop of FE clone task scheduling.
-        BUILD_DYNAMIC_TASK_THREAD_POOL(clone, 0,
-                                       calc_clone_thread_pool_size(_exec_env->store_paths().size(),
-                                                                   config::parallel_clone_task_per_path),
-                                       DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(
+                clone, 0,
+                calc_clone_thread_pool_size(_exec_env->store_paths().size(), config::parallel_clone_task_per_path),
+                DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(
                 remote_snapshot, 0,
