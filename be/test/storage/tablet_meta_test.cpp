@@ -38,9 +38,9 @@
 
 #include <string>
 
+#include "runtime/decimalv2_value.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_meta.h"
-#include "runtime/decimalv2_value.h"
 
 namespace starrocks {
 namespace {
