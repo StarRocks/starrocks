@@ -45,7 +45,7 @@
 namespace starrocks {
 namespace {
 
-// Test helper: sum RowsetMeta::data_disk_size() (same as former TabletMeta::tablet_data_size()).
+// Test helper: sum column-data bytes across all rowsets in tablet meta.
 size_t sum_rowset_data_disk_size(const TabletMeta& tablet_meta) {
     size_t total_size = 0;
     for (const auto& rs : tablet_meta.all_rs_metas()) {
