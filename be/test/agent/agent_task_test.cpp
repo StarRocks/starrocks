@@ -35,378 +35,377 @@
 #include "testutil/assert.h"
 #include "util/uuid_generator.h"
 
-        namespace starrocks {
+namespace starrocks {
 
-    class AgentTaskTest : public testing::Test {
-    public:
-        AgentTaskTest() = default;
-        ~AgentTaskTest() override = default;
-        void SetUp() override {
-            TCreateTabletReq create_tablet_req = get_create_tablet_request(_tablet_id, _schema_hash, _version);
-            Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(
-                    create_tablet_req, StorageEngine::instance()->get_stores());
-            ASSERT_TRUE(create_st.ok());
+class AgentTaskTest : public testing::Test {
+public:
+    AgentTaskTest() = default;
+    ~AgentTaskTest() override = default;
+    void SetUp() override {
+        TCreateTabletReq create_tablet_req = get_create_tablet_request(_tablet_id, _schema_hash, _version);
+        Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(
+                create_tablet_req, StorageEngine::instance()->get_stores());
+        ASSERT_TRUE(create_st.ok());
 
-            TCreateTabletReq src_create_tablet_req =
-                    get_create_tablet_request(_src_tablet_id, _schema_hash, _src_version);
-            Status src_create_st = StorageEngine::instance()->tablet_manager()->create_tablet(
-                    src_create_tablet_req, StorageEngine::instance()->get_stores());
-            ASSERT_TRUE(src_create_st.ok());
-        }
-
-        void TearDown() override {
-            auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
-            EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
-            status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
-            EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
-            status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
-            EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
-            status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
-            EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
-            status = fs::remove_all(config::storage_root_path);
-            EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
-        }
-
-        TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int schema_hash, int64_t version) {
-            TColumnType col_type;
-            col_type.__set_type(TPrimitiveType::SMALLINT);
-            TColumn col1;
-            col1.__set_column_name("col1");
-            col1.__set_column_type(col_type);
-            col1.__set_is_key(true);
-            std::vector<TColumn> cols;
-            cols.push_back(col1);
-            TTabletSchema tablet_schema;
-            tablet_schema.__set_short_key_column_count(1);
-            tablet_schema.__set_schema_hash(schema_hash);
-            tablet_schema.__set_keys_type(TKeysType::AGG_KEYS);
-            tablet_schema.__set_storage_type(TStorageType::COLUMN);
-            tablet_schema.__set_columns(cols);
-            tablet_schema.__set_id(1);
-            tablet_schema.__set_schema_version(0);
-            TCreateTabletReq create_tablet_req;
-            create_tablet_req.__set_tablet_schema(tablet_schema);
-            create_tablet_req.__set_tablet_id(tablet_id);
-            create_tablet_req.__set_version(version);
-            create_tablet_req.__set_version_hash(0);
-            return create_tablet_req;
-        }
-
-    protected:
-        int64_t _transaction_id = 100;
-        int64_t _table_id = 10001;
-        int64_t _partition_id = 10002;
-        int64_t _tablet_id = 10003;
-        int64_t _src_tablet_id = 10004;
-        int32_t _schema_hash = 368169781;
-        int64_t _version = 2;
-        int64_t _src_version = 10;
-    };
-
-    TEST_F(AgentTaskTest, test_replication_txn) {
-        TAgentTaskRequest agent_task_request;
-        agent_task_request.__set_task_type(TTaskType::REMOTE_SNAPSHOT);
-        agent_task_request.__set_signature(100);
-
-        TRemoteSnapshotRequest remote_snapshot_request;
-        remote_snapshot_request.__set_transaction_id(_transaction_id);
-        remote_snapshot_request.__set_table_id(_table_id);
-        remote_snapshot_request.__set_partition_id(_partition_id);
-        remote_snapshot_request.__set_tablet_id(_tablet_id);
-        remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
-        remote_snapshot_request.__set_schema_hash(_schema_hash);
-        remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
-        remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
-        remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
-        remote_snapshot_request.__set_src_schema_hash(_schema_hash);
-        remote_snapshot_request.__set_src_backends({TBackend()});
-        remote_snapshot_request.__set_src_visible_version(_src_version);
-        agent_task_request.__set_remote_snapshot_req(remote_snapshot_request);
-
-        auto remote_snapshot_agent_task = std::make_shared<RemoteSnapshotAgentTaskRequest>(
-                agent_task_request, agent_task_request.remote_snapshot_req, time(nullptr));
-
-        TSnapshotInfo remote_snapshot_info;
-        Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
-                                                                                              &remote_snapshot_info);
-        EXPECT_TRUE(status.ok());
-
-        run_remote_snapshot_task(remote_snapshot_agent_task, nullptr);
-
-        agent_task_request.__set_task_type(TTaskType::REPLICATE_SNAPSHOT);
-        TReplicateSnapshotRequest replicate_snapshot_request;
-        replicate_snapshot_request.__set_transaction_id(_transaction_id);
-        replicate_snapshot_request.__set_table_id(_table_id);
-        replicate_snapshot_request.__set_partition_id(_partition_id);
-        replicate_snapshot_request.__set_tablet_id(_tablet_id);
-        replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
-        replicate_snapshot_request.__set_schema_hash(_schema_hash);
-        replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
-        replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
-        replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
-        replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
-        replicate_snapshot_request.__set_src_visible_version(_src_version);
-        replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
-        agent_task_request.__set_replicate_snapshot_req(replicate_snapshot_request);
-
-        auto replicate_snapshot_agent_task = std::make_shared<ReplicateSnapshotAgentTaskRequest>(
-                agent_task_request, agent_task_request.replicate_snapshot_req, time(nullptr));
-
-        run_replicate_snapshot_task(replicate_snapshot_agent_task, nullptr);
-
-        TPublishVersionRequest publish_version_request;
-        publish_version_request.__set_transaction_id(_transaction_id);
-        TPartitionVersionInfo partition_version_info;
-        partition_version_info.__set_partition_id(_partition_id);
-        partition_version_info.__set_version(_src_version);
-        publish_version_request.partition_version_infos.push_back(partition_version_info);
-        publish_version_request.__set_txn_type(TTxnType::TXN_REPLICATION);
-
-        auto token = ExecEnv::GetInstance()
-                             ->agent_server()
-                             ->get_thread_pool(TTaskType::PUBLISH_VERSION)
-                             ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
-        TFinishTaskRequest finish_task_request;
-        std::unordered_set<DataDir*> affected_dirs;
-
-        run_publish_version_task(token.get(), publish_version_request, finish_task_request, affected_dirs, 0);
-
-        agent_task_request.__set_task_type(TTaskType::CLEAR_TRANSACTION_TASK);
-        TClearTransactionTaskRequest clear_transaction_task_request;
-        clear_transaction_task_request.__set_transaction_id(_transaction_id);
-        clear_transaction_task_request.__set_txn_type(TTxnType::TXN_REPLICATION);
-        agent_task_request.__set_clear_transaction_task_req(clear_transaction_task_request);
-
-        auto clear_transaction_agent_task = std::make_shared<ClearTransactionAgentTaskRequest>(
-                agent_task_request, agent_task_request.clear_transaction_task_req, time(nullptr));
-
-        run_clear_transaction_task(clear_transaction_agent_task, nullptr);
+        TCreateTabletReq src_create_tablet_req = get_create_tablet_request(_src_tablet_id, _schema_hash, _src_version);
+        Status src_create_st = StorageEngine::instance()->tablet_manager()->create_tablet(
+                src_create_tablet_req, StorageEngine::instance()->get_stores());
+        ASSERT_TRUE(src_create_st.ok());
     }
 
-    // TODO(zhangqiang) add ut
-    TEST_F(AgentTaskTest, test_update_schema) {
-        TAgentTaskRequest agent_task_request;
-        agent_task_request.__set_task_type(TTaskType::UPDATE_SCHEMA);
-        agent_task_request.__set_signature(100);
+    void TearDown() override {
+        auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+        status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+        status = fs::remove_all(config::storage_root_path);
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
+    }
 
-        TUpdateSchemaReq update_schema_req;
-        update_schema_req.__set_index_id(1);
-        update_schema_req.__set_schema_id(2);
-        update_schema_req.__set_schema_version(1);
-        auto& tablet_ids = update_schema_req.tablet_ids;
-        tablet_ids.push_back(_tablet_id);
-
-        // create column param
-        TOlapTableColumnParam column_param;
-        column_param.__set_short_key_column_count(1);
-        auto& columns = column_param.columns;
-        //auto& sort_key_uid = column_param.sort_key_uid;
-        //sort_key_uid.push_back(0);
+    TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int schema_hash, int64_t version) {
         TColumnType col_type;
-        col_type.__set_type(TPrimitiveType::BIGINT);
-
-        TScalarType scalar_type;
-        scalar_type.__set_type(TPrimitiveType::BIGINT);
-        TTypeNode type;
-        type.__set_type(TTypeNodeType::SCALAR);
-        type.__set_scalar_type(scalar_type);
-        TTypeDesc type_desc;
-        type_desc.types.push_back(type);
-
-        TColumn tcolumn1;
-        tcolumn1.__set_column_name("c1");
-        tcolumn1.__set_column_type(col_type);
-        tcolumn1.__set_is_key(true);
-        tcolumn1.__set_col_unique_id(0);
-        tcolumn1.__set_type_desc(type_desc);
-        columns.push_back(tcolumn1);
-
-        TColumn tcolumn2;
-        tcolumn2.__set_column_name("c2");
-        tcolumn2.__set_column_type(col_type);
-        tcolumn2.__set_is_key(false);
-        tcolumn2.__set_col_unique_id(1);
-        tcolumn2.__set_type_desc(type_desc);
-        columns.push_back(tcolumn2);
-
-        TColumn tcolumn3;
-        tcolumn3.__set_column_name("c3");
-        tcolumn3.__set_column_type(col_type);
-        tcolumn3.__set_is_key(false);
-        tcolumn3.__set_col_unique_id(2);
-        tcolumn3.__set_type_desc(type_desc);
-        columns.push_back(tcolumn3);
-
-        update_schema_req.__set_column_param(column_param);
-        agent_task_request.__set_update_schema_req(update_schema_req);
-
-        auto update_schema_agent_task = std::make_shared<UpdateSchemaTaskRequest>(
-                agent_task_request, agent_task_request.update_schema_req, time(nullptr));
-
-        run_update_schema_task(update_schema_agent_task, nullptr);
-
-        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
-        EXPECT_EQ(3, tablet->num_columns_with_max_version());
+        col_type.__set_type(TPrimitiveType::SMALLINT);
+        TColumn col1;
+        col1.__set_column_name("col1");
+        col1.__set_column_type(col_type);
+        col1.__set_is_key(true);
+        std::vector<TColumn> cols;
+        cols.push_back(col1);
+        TTabletSchema tablet_schema;
+        tablet_schema.__set_short_key_column_count(1);
+        tablet_schema.__set_schema_hash(schema_hash);
+        tablet_schema.__set_keys_type(TKeysType::AGG_KEYS);
+        tablet_schema.__set_storage_type(TStorageType::COLUMN);
+        tablet_schema.__set_columns(cols);
+        tablet_schema.__set_id(1);
+        tablet_schema.__set_schema_version(0);
+        TCreateTabletReq create_tablet_req;
+        create_tablet_req.__set_tablet_schema(tablet_schema);
+        create_tablet_req.__set_tablet_id(tablet_id);
+        create_tablet_req.__set_version(version);
+        create_tablet_req.__set_version_hash(0);
+        return create_tablet_req;
     }
 
-    TEST_F(AgentTaskTest, clone_task_under_dropping) {
-        TCloneReq clone_req;
-        clone_req.__set_tablet_id(_tablet_id);
-        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
-        tablet->set_is_dropping(true);
-        EngineCloneTask task(nullptr, clone_req, 1, nullptr, nullptr, nullptr);
-        Status st = task.execute();
-        ASSERT_TRUE(st.is_corruption());
-        tablet->set_is_dropping(false);
-    }
+protected:
+    int64_t _transaction_id = 100;
+    int64_t _table_id = 10001;
+    int64_t _partition_id = 10002;
+    int64_t _tablet_id = 10003;
+    int64_t _src_tablet_id = 10004;
+    int32_t _schema_hash = 368169781;
+    int64_t _version = 2;
+    int64_t _src_version = 10;
+};
 
-    TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
-        auto* agent_server = ExecEnv::GetInstance()->agent_server();
-        auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
-        ASSERT_NE(nullptr, thread_pool);
+TEST_F(AgentTaskTest, test_replication_txn) {
+    TAgentTaskRequest agent_task_request;
+    agent_task_request.__set_task_type(TTaskType::REMOTE_SNAPSHOT);
+    agent_task_request.__set_signature(100);
 
-        constexpr int new_parallelism = 4;
-        const int expected_max_threads =
-                std::max(static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * new_parallelism, 2);
+    TRemoteSnapshotRequest remote_snapshot_request;
+    remote_snapshot_request.__set_transaction_id(_transaction_id);
+    remote_snapshot_request.__set_table_id(_table_id);
+    remote_snapshot_request.__set_partition_id(_partition_id);
+    remote_snapshot_request.__set_tablet_id(_tablet_id);
+    remote_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    remote_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    remote_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    remote_snapshot_request.__set_src_schema_hash(_schema_hash);
+    remote_snapshot_request.__set_src_backends({TBackend()});
+    remote_snapshot_request.__set_src_visible_version(_src_version);
+    agent_task_request.__set_remote_snapshot_req(remote_snapshot_request);
 
-        agent_server->update_max_thread_by_type(TTaskType::CLONE, new_parallelism);
+    auto remote_snapshot_agent_task = std::make_shared<RemoteSnapshotAgentTaskRequest>(
+            agent_task_request, agent_task_request.remote_snapshot_req, time(nullptr));
 
-        ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
-    }
+    TSnapshotInfo remote_snapshot_info;
+    Status status = StorageEngine::instance()->replication_txn_manager()->remote_snapshot(remote_snapshot_request,
+                                                                                          &remote_snapshot_info);
+    EXPECT_TRUE(status.ok());
 
-    TEST_F(AgentTaskTest, update_clone_thread_pool_size_skips_missing_pool) {
-        auto* agent_server = ExecEnv::GetInstance()->agent_server();
-        auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
-        ASSERT_NE(nullptr, thread_pool);
+    run_remote_snapshot_task(remote_snapshot_agent_task, nullptr);
 
-        const int original_max_threads = thread_pool->max_threads();
+    agent_task_request.__set_task_type(TTaskType::REPLICATE_SNAPSHOT);
+    TReplicateSnapshotRequest replicate_snapshot_request;
+    replicate_snapshot_request.__set_transaction_id(_transaction_id);
+    replicate_snapshot_request.__set_table_id(_table_id);
+    replicate_snapshot_request.__set_partition_id(_partition_id);
+    replicate_snapshot_request.__set_tablet_id(_tablet_id);
+    replicate_snapshot_request.__set_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    replicate_snapshot_request.__set_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_src_token(ExecEnv::GetInstance()->token());
+    replicate_snapshot_request.__set_src_tablet_id(_src_tablet_id);
+    replicate_snapshot_request.__set_src_tablet_type(TTabletType::TABLET_TYPE_DISK);
+    replicate_snapshot_request.__set_src_schema_hash(_schema_hash);
+    replicate_snapshot_request.__set_src_visible_version(_src_version);
+    replicate_snapshot_request.__set_src_snapshot_infos({remote_snapshot_info});
+    agent_task_request.__set_replicate_snapshot_req(replicate_snapshot_request);
 
-        SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
-                                              [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
-        SyncPoint::GetInstance()->EnableProcessing();
-        DeferOp defer([]() {
-            SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
-            SyncPoint::GetInstance()->DisableProcessing();
-        });
+    auto replicate_snapshot_agent_task = std::make_shared<ReplicateSnapshotAgentTaskRequest>(
+            agent_task_request, agent_task_request.replicate_snapshot_req, time(nullptr));
 
-        agent_server->update_max_thread_by_type(TTaskType::CLONE, 4);
+    run_replicate_snapshot_task(replicate_snapshot_agent_task, nullptr);
 
-        ASSERT_EQ(original_max_threads, thread_pool->max_threads());
-    }
+    TPublishVersionRequest publish_version_request;
+    publish_version_request.__set_transaction_id(_transaction_id);
+    TPartitionVersionInfo partition_version_info;
+    partition_version_info.__set_partition_id(_partition_id);
+    partition_version_info.__set_version(_src_version);
+    publish_version_request.partition_version_infos.push_back(partition_version_info);
+    publish_version_request.__set_txn_type(TTxnType::TXN_REPLICATION);
 
-    TEST_F(AgentTaskTest, create_tablet_task_timeout) {
-        TCreateTabletReq create_tablet_req = get_create_tablet_request(10010, 368169791, 2);
-        create_tablet_req.__set_timeout_ms(2000);
+    auto token = ExecEnv::GetInstance()
+                         ->agent_server()
+                         ->get_thread_pool(TTaskType::PUBLISH_VERSION)
+                         ->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    TFinishTaskRequest finish_task_request;
+    std::unordered_set<DataDir*> affected_dirs;
 
-        TAgentTaskRequest agent_task_request;
-        agent_task_request.__set_task_type(TTaskType::CREATE);
-        agent_task_request.__set_signature(1902);
-        agent_task_request.__set_create_tablet_req(create_tablet_req);
-        auto agent_task = std::make_shared<CreateTabletAgentTaskRequest>(agent_task_request,
-                                                                         agent_task_request.create_tablet_req, 1);
+    run_publish_version_task(token.get(), publish_version_request, finish_task_request, affected_dirs, 0);
 
-        DeferOp defer([]() {
-            SyncPoint::GetInstance()->ClearCallBack("AgentTask::run_create_tablet_task::time");
-            SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
-            SyncPoint::GetInstance()->DisableProcessing();
-        });
+    agent_task_request.__set_task_type(TTaskType::CLEAR_TRANSACTION_TASK);
+    TClearTransactionTaskRequest clear_transaction_task_request;
+    clear_transaction_task_request.__set_transaction_id(_transaction_id);
+    clear_transaction_task_request.__set_txn_type(TTxnType::TXN_REPLICATION);
+    agent_task_request.__set_clear_transaction_task_req(clear_transaction_task_request);
 
-        SyncPoint::GetInstance()->EnableProcessing();
-        SyncPoint::GetInstance()->SetCallBack("AgentTask::run_create_tablet_task::time",
-                                              [](void* arg) { *((int64_t*)arg) = 4; });
-        SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [](void* arg) {
-            TFinishTaskRequest* request = (TFinishTaskRequest*)arg;
-            auto status = request->task_status;
-            EXPECT_EQ(TStatusCode::RUNTIME_ERROR, request->task_status.status_code);
-            EXPECT_EQ(1, request->task_status.error_msgs.size());
-            EXPECT_EQ("create tablet failed. the task waits too long in the queue. timeout: 2000 ms, elapsed: 3000 ms",
-                      request->task_status.error_msgs[0]);
-        });
-        run_create_tablet_task(agent_task, nullptr);
-    }
+    auto clear_transaction_agent_task = std::make_shared<ClearTransactionAgentTaskRequest>(
+            agent_task_request, agent_task_request.clear_transaction_task_req, time(nullptr));
 
-    TEST_F(AgentTaskTest, drop_tablet_blocked_by_clone_task) {
-        // This test verifies the fix for the DROP/CLONE race condition
-        // where a DROP task should be rejected if a CLONE task is in progress for the same tablet
+    run_clear_transaction_task(clear_transaction_agent_task, nullptr);
+}
 
-        // Register a CLONE task for the tablet using the tablet_manager's register_clone_tablet
-        StorageEngine::instance()->tablet_manager()->register_clone_tablet(_tablet_id);
+// TODO(zhangqiang) add ut
+TEST_F(AgentTaskTest, test_update_schema) {
+    TAgentTaskRequest agent_task_request;
+    agent_task_request.__set_task_type(TTaskType::UPDATE_SCHEMA);
+    agent_task_request.__set_signature(100);
 
-        // Verify CLONE task is registered
-        EXPECT_TRUE(StorageEngine::instance()->tablet_manager()->check_clone_tablet(_tablet_id));
+    TUpdateSchemaReq update_schema_req;
+    update_schema_req.__set_index_id(1);
+    update_schema_req.__set_schema_id(2);
+    update_schema_req.__set_schema_version(1);
+    auto& tablet_ids = update_schema_req.tablet_ids;
+    tablet_ids.push_back(_tablet_id);
 
-        // Create a DROP task request
-        TDropTabletReq drop_tablet_req;
-        drop_tablet_req.__set_tablet_id(_tablet_id);
-        drop_tablet_req.__set_schema_hash(_schema_hash);
-        drop_tablet_req.__set_force(false);
+    // create column param
+    TOlapTableColumnParam column_param;
+    column_param.__set_short_key_column_count(1);
+    auto& columns = column_param.columns;
+    //auto& sort_key_uid = column_param.sort_key_uid;
+    //sort_key_uid.push_back(0);
+    TColumnType col_type;
+    col_type.__set_type(TPrimitiveType::BIGINT);
 
-        DeferOp defer([]() {
-            // Clean up the CLONE task registration
-            StorageEngine::instance()->tablet_manager()->unregister_clone_tablet(10003); // _tablet_id
-        });
+    TScalarType scalar_type;
+    scalar_type.__set_type(TPrimitiveType::BIGINT);
+    TTypeNode type;
+    type.__set_type(TTypeNodeType::SCALAR);
+    type.__set_scalar_type(scalar_type);
+    TTypeDesc type_desc;
+    type_desc.types.push_back(type);
 
-        // Try to drop the tablet - should be rejected because CLONE is in progress
-        TabletDropFlag flag = kMoveFilesToTrash;
-        auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, flag);
+    TColumn tcolumn1;
+    tcolumn1.__set_column_name("c1");
+    tcolumn1.__set_column_type(col_type);
+    tcolumn1.__set_is_key(true);
+    tcolumn1.__set_col_unique_id(0);
+    tcolumn1.__set_type_desc(type_desc);
+    columns.push_back(tcolumn1);
 
-        // Verify DROP was rejected
-        EXPECT_FALSE(st.ok());
-        EXPECT_TRUE(st.message().find("CLONE task is in progress") != std::string::npos);
+    TColumn tcolumn2;
+    tcolumn2.__set_column_name("c2");
+    tcolumn2.__set_column_type(col_type);
+    tcolumn2.__set_is_key(false);
+    tcolumn2.__set_col_unique_id(1);
+    tcolumn2.__set_type_desc(type_desc);
+    columns.push_back(tcolumn2);
 
-        // Verify tablet still exists (was not dropped)
-        auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
-        EXPECT_TRUE(tablet != nullptr);
+    TColumn tcolumn3;
+    tcolumn3.__set_column_name("c3");
+    tcolumn3.__set_column_type(col_type);
+    tcolumn3.__set_is_key(false);
+    tcolumn3.__set_col_unique_id(2);
+    tcolumn3.__set_type_desc(type_desc);
+    columns.push_back(tcolumn3);
 
-        // Now unregister the CLONE task
-        StorageEngine::instance()->tablet_manager()->unregister_clone_tablet(_tablet_id);
-        EXPECT_FALSE(StorageEngine::instance()->tablet_manager()->check_clone_tablet(_tablet_id));
+    update_schema_req.__set_column_param(column_param);
+    agent_task_request.__set_update_schema_req(update_schema_req);
 
-        // Now DROP should succeed
-        st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, flag);
-        EXPECT_TRUE(st.ok());
-    }
+    auto update_schema_agent_task = std::make_shared<UpdateSchemaTaskRequest>(
+            agent_task_request, agent_task_request.update_schema_req, time(nullptr));
 
-    TEST_F(AgentTaskTest, drop_tablet_proceeds_when_no_clone_task) {
-        // This test verifies that DROP task proceeds normally when there is no CLONE task
+    run_update_schema_task(update_schema_agent_task, nullptr);
 
-        // Create a DROP task request
-        TAgentTaskRequest drop_agent_task_request;
-        drop_agent_task_request.__set_task_type(TTaskType::DROP);
-        drop_agent_task_request.__set_signature(_tablet_id);
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
+    EXPECT_EQ(3, tablet->num_columns_with_max_version());
+}
 
-        TDropTabletReq drop_tablet_req;
-        drop_tablet_req.__set_tablet_id(_tablet_id);
-        drop_tablet_req.__set_schema_hash(_schema_hash);
-        drop_tablet_req.__set_force(false);
+TEST_F(AgentTaskTest, clone_task_under_dropping) {
+    TCloneReq clone_req;
+    clone_req.__set_tablet_id(_tablet_id);
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
+    tablet->set_is_dropping(true);
+    EngineCloneTask task(nullptr, clone_req, 1, nullptr, nullptr, nullptr);
+    Status st = task.execute();
+    ASSERT_TRUE(st.is_corruption());
+    tablet->set_is_dropping(false);
+}
 
-        drop_agent_task_request.__set_drop_tablet_req(drop_tablet_req);
+TEST_F(AgentTaskTest, update_clone_thread_pool_size_by_task_type) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
 
-        auto drop_agent_task = std::make_shared<DropTabletAgentTaskRequest>(
-                drop_agent_task_request, drop_agent_task_request.drop_tablet_req, time(nullptr));
+    constexpr int new_parallelism = 4;
+    const int expected_max_threads =
+            std::max(static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * new_parallelism, 2);
 
-        // Set up sync point to verify DROP task succeeds
-        bool drop_succeeded = false;
-        DeferOp defer([&drop_succeeded]() {
-            SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
-            SyncPoint::GetInstance()->DisableProcessing();
-        });
+    agent_server->update_max_thread_by_type(TTaskType::CLONE, new_parallelism);
 
-        SyncPoint::GetInstance()->EnableProcessing();
-        SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&drop_succeeded](void* arg) {
-            TFinishTaskRequest* request = (TFinishTaskRequest*)arg;
-            if (request->task_type == TTaskType::DROP) {
-                // DROP task should succeed
-                EXPECT_EQ(TStatusCode::OK, request->task_status.status_code);
-                drop_succeeded = true;
-            }
-        });
+    ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
+}
 
-        // Execute DROP task - should succeed
-        run_drop_tablet_task(drop_agent_task, nullptr);
+TEST_F(AgentTaskTest, update_clone_thread_pool_size_skips_missing_pool) {
+    auto* agent_server = ExecEnv::GetInstance()->agent_server();
+    auto* thread_pool = agent_server->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
 
-        // Verify DROP succeeded
-        EXPECT_TRUE(drop_succeeded);
-    }
+    const int original_max_threads = thread_pool->max_threads();
+
+    SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                          [](void* arg) { *static_cast<ThreadPool**>(arg) = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    agent_server->update_max_thread_by_type(TTaskType::CLONE, 4);
+
+    ASSERT_EQ(original_max_threads, thread_pool->max_threads());
+}
+
+TEST_F(AgentTaskTest, create_tablet_task_timeout) {
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(10010, 368169791, 2);
+    create_tablet_req.__set_timeout_ms(2000);
+
+    TAgentTaskRequest agent_task_request;
+    agent_task_request.__set_task_type(TTaskType::CREATE);
+    agent_task_request.__set_signature(1902);
+    agent_task_request.__set_create_tablet_req(create_tablet_req);
+    auto agent_task =
+            std::make_shared<CreateTabletAgentTaskRequest>(agent_task_request, agent_task_request.create_tablet_req, 1);
+
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("AgentTask::run_create_tablet_task::time");
+        SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("AgentTask::run_create_tablet_task::time",
+                                          [](void* arg) { *((int64_t*)arg) = 4; });
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [](void* arg) {
+        TFinishTaskRequest* request = (TFinishTaskRequest*)arg;
+        auto status = request->task_status;
+        EXPECT_EQ(TStatusCode::RUNTIME_ERROR, request->task_status.status_code);
+        EXPECT_EQ(1, request->task_status.error_msgs.size());
+        EXPECT_EQ("create tablet failed. the task waits too long in the queue. timeout: 2000 ms, elapsed: 3000 ms",
+                  request->task_status.error_msgs[0]);
+    });
+    run_create_tablet_task(agent_task, nullptr);
+}
+
+TEST_F(AgentTaskTest, drop_tablet_blocked_by_clone_task) {
+    // This test verifies the fix for the DROP/CLONE race condition
+    // where a DROP task should be rejected if a CLONE task is in progress for the same tablet
+
+    // Register a CLONE task for the tablet using the tablet_manager's register_clone_tablet
+    StorageEngine::instance()->tablet_manager()->register_clone_tablet(_tablet_id);
+
+    // Verify CLONE task is registered
+    EXPECT_TRUE(StorageEngine::instance()->tablet_manager()->check_clone_tablet(_tablet_id));
+
+    // Create a DROP task request
+    TDropTabletReq drop_tablet_req;
+    drop_tablet_req.__set_tablet_id(_tablet_id);
+    drop_tablet_req.__set_schema_hash(_schema_hash);
+    drop_tablet_req.__set_force(false);
+
+    DeferOp defer([]() {
+        // Clean up the CLONE task registration
+        StorageEngine::instance()->tablet_manager()->unregister_clone_tablet(10003); // _tablet_id
+    });
+
+    // Try to drop the tablet - should be rejected because CLONE is in progress
+    TabletDropFlag flag = kMoveFilesToTrash;
+    auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, flag);
+
+    // Verify DROP was rejected
+    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.message().find("CLONE task is in progress") != std::string::npos);
+
+    // Verify tablet still exists (was not dropped)
+    auto tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id, false);
+    EXPECT_TRUE(tablet != nullptr);
+
+    // Now unregister the CLONE task
+    StorageEngine::instance()->tablet_manager()->unregister_clone_tablet(_tablet_id);
+    EXPECT_FALSE(StorageEngine::instance()->tablet_manager()->check_clone_tablet(_tablet_id));
+
+    // Now DROP should succeed
+    st = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, flag);
+    EXPECT_TRUE(st.ok());
+}
+
+TEST_F(AgentTaskTest, drop_tablet_proceeds_when_no_clone_task) {
+    // This test verifies that DROP task proceeds normally when there is no CLONE task
+
+    // Create a DROP task request
+    TAgentTaskRequest drop_agent_task_request;
+    drop_agent_task_request.__set_task_type(TTaskType::DROP);
+    drop_agent_task_request.__set_signature(_tablet_id);
+
+    TDropTabletReq drop_tablet_req;
+    drop_tablet_req.__set_tablet_id(_tablet_id);
+    drop_tablet_req.__set_schema_hash(_schema_hash);
+    drop_tablet_req.__set_force(false);
+
+    drop_agent_task_request.__set_drop_tablet_req(drop_tablet_req);
+
+    auto drop_agent_task = std::make_shared<DropTabletAgentTaskRequest>(
+            drop_agent_task_request, drop_agent_task_request.drop_tablet_req, time(nullptr));
+
+    // Set up sync point to verify DROP task succeeds
+    bool drop_succeeded = false;
+    DeferOp defer([&drop_succeeded]() {
+        SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [&drop_succeeded](void* arg) {
+        TFinishTaskRequest* request = (TFinishTaskRequest*)arg;
+        if (request->task_type == TTaskType::DROP) {
+            // DROP task should succeed
+            EXPECT_EQ(TStatusCode::OK, request->task_status.status_code);
+            drop_succeeded = true;
+        }
+    });
+
+    // Execute DROP task - should succeed
+    run_drop_tablet_task(drop_agent_task, nullptr);
+
+    // Verify DROP succeeded
+    EXPECT_TRUE(drop_succeeded);
+}
 
 } // namespace starrocks

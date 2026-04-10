@@ -17,8 +17,8 @@
 #include <gtest/gtest.h>
 
 #include "agent/agent_server.h"
-#include "cache/block_cache/block_cache.h"
 #include "base/testutil/sync_point.h"
+#include "cache/block_cache/block_cache.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
@@ -28,120 +28,120 @@
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
 
-        namespace starrocks {
+namespace starrocks {
 
-    class UpdateConfigActionTest : public testing::Test {
-    public:
-        UpdateConfigActionTest() = default;
-        ~UpdateConfigActionTest() override = default;
-        static void SetUpTestSuite() {}
-        static void TearDownTestSuite() {}
+class UpdateConfigActionTest : public testing::Test {
+public:
+    UpdateConfigActionTest() = default;
+    ~UpdateConfigActionTest() override = default;
+    static void SetUpTestSuite() {}
+    static void TearDownTestSuite() {}
 
-        void SetUp() override {}
-        void TearDown() override {}
-    };
+    void SetUp() override {}
+    void TearDown() override {}
+};
 
-    TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
-        SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
-        const std::string cache_dir = "./block_cache_for_update_config";
-        ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+TEST_F(UpdateConfigActionTest, update_datacache_disk_size) {
+    SCOPED_UPDATE(bool, config::datacache_auto_adjust_enable, false);
+    const std::string cache_dir = "./block_cache_for_update_config";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
-        auto cache = BlockCache::instance();
-        CacheOptions options;
-        options.mem_space_size = 0;
-        options.disk_spaces.push_back({.path = cache_dir, .size = 50 * 1024 * 1024});
-        options.max_concurrent_inserts = 100000;
-        options.block_size = 256 * 1024;
-        options.enable_checksum = false;
-        options.engine = "starcache";
-        Status st = BlockCache::instance()->init(options);
-        ASSERT_TRUE(st.ok());
+    auto cache = BlockCache::instance();
+    CacheOptions options;
+    options.mem_space_size = 0;
+    options.disk_spaces.push_back({.path = cache_dir, .size = 50 * 1024 * 1024});
+    options.max_concurrent_inserts = 100000;
+    options.block_size = 256 * 1024;
+    options.enable_checksum = false;
+    options.engine = "starcache";
+    Status st = BlockCache::instance()->init(options);
+    ASSERT_TRUE(st.ok());
 
-        UpdateConfigAction action(ExecEnv::GetInstance());
+    UpdateConfigAction action(ExecEnv::GetInstance());
 
-        st = action.update_config("datacache_disk_size", "-200");
-        ASSERT_TRUE(!st.ok());
+    st = action.update_config("datacache_disk_size", "-200");
+    ASSERT_TRUE(!st.ok());
 
-        st = action.update_config("datacache_disk_size", "100000000");
-        ASSERT_TRUE(st.ok());
+    st = action.update_config("datacache_disk_size", "100000000");
+    ASSERT_TRUE(st.ok());
 
-        std::vector<DirSpace> spaces;
-        cache->disk_spaces(&spaces);
-        ASSERT_EQ(spaces.size(), 1);
-        ASSERT_EQ(spaces[0].size, 100000000);
+    std::vector<DirSpace> spaces;
+    cache->disk_spaces(&spaces);
+    ASSERT_EQ(spaces.size(), 1);
+    ASSERT_EQ(spaces[0].size, 100000000);
 
-        fs::remove_all(cache_dir).ok();
-    }
+    fs::remove_all(cache_dir).ok();
+}
 
-    TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
-        UpdateConfigAction action(ExecEnv::GetInstance());
+TEST_F(UpdateConfigActionTest, test_update_pindex_load_thread_pool_num_max) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
 
-        auto st = action.update_config("pindex_load_thread_pool_num_max", "16");
-        CHECK_OK(st);
+    auto st = action.update_config("pindex_load_thread_pool_num_max", "16");
+    CHECK_OK(st);
 
-        auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
-        ASSERT_EQ(16, load_pool->max_threads());
-    }
+    auto* load_pool = StorageEngine::instance()->update_manager()->get_pindex_load_executor()->TEST_get_load_pool();
+    ASSERT_EQ(16, load_pool->max_threads());
+}
 
-    TEST_F(UpdateConfigActionTest, test_update_tablet_meta_info_worker_count) {
-        UpdateConfigAction action(ExecEnv::GetInstance());
+TEST_F(UpdateConfigActionTest, test_update_tablet_meta_info_worker_count) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
 
-        auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
-        ASSERT_NE(nullptr, thread_pool);
+    auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::UPDATE_TABLET_META_INFO);
+    ASSERT_NE(nullptr, thread_pool);
 
-        auto st = action.update_config("update_tablet_meta_info_worker_count", "4");
-        CHECK_OK(st);
-        ASSERT_EQ(4, thread_pool->max_threads());
+    auto st = action.update_config("update_tablet_meta_info_worker_count", "4");
+    CHECK_OK(st);
+    ASSERT_EQ(4, thread_pool->max_threads());
 
-        st = action.update_config("update_tablet_meta_info_worker_count", "0");
-        CHECK_OK(st);
-        ASSERT_EQ(1, thread_pool->max_threads());
-    }
+    st = action.update_config("update_tablet_meta_info_worker_count", "0");
+    CHECK_OK(st);
+    ASSERT_EQ(1, thread_pool->max_threads());
+}
 
-    TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path) {
-        UpdateConfigAction action(ExecEnv::GetInstance());
+TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
 
-        auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
-        ASSERT_NE(nullptr, thread_pool);
+    auto* thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CLONE);
+    ASSERT_NE(nullptr, thread_pool);
 
-        auto st = action.update_config("parallel_clone_task_per_path", "4");
-        CHECK_OK(st);
+    auto st = action.update_config("parallel_clone_task_per_path", "4");
+    CHECK_OK(st);
 
-        int expected_max_threads = static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * 4;
-        expected_max_threads = std::max(expected_max_threads, 2);
-        ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
-    }
+    int expected_max_threads = static_cast<int>(ExecEnv::GetInstance()->store_paths().size()) * 4;
+    expected_max_threads = std::max(expected_max_threads, 2);
+    ASSERT_EQ(expected_max_threads, thread_pool->max_threads());
+}
 
-    TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path_with_missing_clone_pool) {
-        UpdateConfigAction action(ExecEnv::GetInstance());
+TEST_F(UpdateConfigActionTest, test_update_parallel_clone_task_per_path_with_missing_clone_pool) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
 
-        SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
-                                              [](void* arg) { *(ThreadPool**)arg = nullptr; });
-        SyncPoint::GetInstance()->EnableProcessing();
-        DeferOp defer([]() {
-            SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
-            SyncPoint::GetInstance()->DisableProcessing();
-        });
+    SyncPoint::GetInstance()->SetCallBack("AgentServer::Impl::get_thread_pool:1",
+                                          [](void* arg) { *(ThreadPool**)arg = nullptr; });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("AgentServer::Impl::get_thread_pool:1");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
 
-        auto st = action.update_config("parallel_clone_task_per_path", "4");
-        CHECK_OK(st);
-    }
+    auto st = action.update_config("parallel_clone_task_per_path", "4");
+    CHECK_OK(st);
+}
 
-    TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {
-        UpdateConfigAction action(ExecEnv::GetInstance());
+TEST_F(UpdateConfigActionTest, test_update_lake_metadata_fetch_thread_count) {
+    UpdateConfigAction action(ExecEnv::GetInstance());
 
-        auto* thread_pool = ExecEnv::GetInstance()->lake_metadata_fetch_thread_pool();
-        ASSERT_NE(nullptr, thread_pool);
-        ASSERT_EQ(std::max(1, config::lake_metadata_fetch_thread_count), thread_pool->max_threads());
+    auto* thread_pool = ExecEnv::GetInstance()->lake_metadata_fetch_thread_pool();
+    ASSERT_NE(nullptr, thread_pool);
+    ASSERT_EQ(std::max(1, config::lake_metadata_fetch_thread_count), thread_pool->max_threads());
 
-        auto st = action.update_config("lake_metadata_fetch_thread_count", "8");
-        CHECK_OK(st);
-        ASSERT_EQ(8, thread_pool->max_threads());
+    auto st = action.update_config("lake_metadata_fetch_thread_count", "8");
+    CHECK_OK(st);
+    ASSERT_EQ(8, thread_pool->max_threads());
 
-        // Verify clamped to at least 1
-        st = action.update_config("lake_metadata_fetch_thread_count", "0");
-        CHECK_OK(st);
-        ASSERT_EQ(1, thread_pool->max_threads());
-    }
+    // Verify clamped to at least 1
+    st = action.update_config("lake_metadata_fetch_thread_count", "0");
+    CHECK_OK(st);
+    ASSERT_EQ(1, thread_pool->max_threads());
+}
 
 } // namespace starrocks
