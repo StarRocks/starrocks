@@ -306,7 +306,10 @@ Status RowsetWriter::_flush_segment(const SegmentPB& segment_pb, butil::IOBuf& d
     // 3. update statistic
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += segment_pb.data_size();
+        // segment_pb.data_size() is full segment file bytes (column data + embedded index pages).
+        // Subtract embedded index so _total_data_size holds only column data bytes;
+        // invariant: data_disk_size + index_disk_size == total_disk_size == segment file size.
+        _total_data_size += segment_pb.data_size() - segment_pb.index_size();
         _total_index_size += segment_pb.index_size();
         _num_rows_written += segment_pb.num_rows();
         _total_row_size += segment_pb.row_size();
@@ -1171,7 +1174,9 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
     }
     {
         std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += static_cast<int64_t>(segment_size);
+        // segment_size is full segment file bytes; subtract index_size so
+        // _total_data_size holds only column data bytes.
+        _total_data_size += static_cast<int64_t>(segment_size) - static_cast<int64_t>(index_size);
         _total_index_size += static_cast<int64_t>(index_size);
     }
 
@@ -1346,6 +1351,7 @@ Status VerticalRowsetWriter::flush_columns() {
 }
 
 Status VerticalRowsetWriter::final_flush() {
+    int64_t total_segment_file_bytes = 0;
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -1358,15 +1364,18 @@ Status VerticalRowsetWriter::final_flush() {
             partial_rowset_footer->set_position(footer_position);
             partial_rowset_footer->set_size(segment_size - footer_position);
         }
-        {
-            std::lock_guard<std::mutex> l(_lock);
-            _total_data_size += static_cast<int64_t>(segment_size);
-        }
+        total_segment_file_bytes += static_cast<int64_t>(segment_size);
 
         // check global_dict efficacy
         _check_global_dict(segment_writer.get());
 
         segment_writer.reset();
+    }
+    {
+        // _total_index_size was accumulated in _flush_columns() via finalize_columns().
+        // Match horizontal RowsetWriter::flush: data_disk_size is column bytes only (segment file minus embedded index).
+        std::lock_guard<std::mutex> l(_lock);
+        _total_data_size += total_segment_file_bytes - _total_index_size;
     }
     return Status::OK();
 }

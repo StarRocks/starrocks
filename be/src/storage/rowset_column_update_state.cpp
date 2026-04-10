@@ -578,7 +578,7 @@ Status RowsetColumnUpdateState::_update_primary_index(const TabletSchemaCSPtr& t
 Status RowsetColumnUpdateState::_update_rowset_meta(const RowsetSegmentStat& stat, Rowset* rowset) {
     rowset->rowset_meta()->set_num_rows(stat.num_rows_written);
     rowset->rowset_meta()->set_total_row_size(stat.total_row_size);
-    rowset->rowset_meta()->set_total_disk_size(stat.total_data_size);
+    rowset->rowset_meta()->set_total_disk_size(stat.total_data_size + stat.total_index_size);
     rowset->rowset_meta()->set_data_disk_size(stat.total_data_size);
     rowset->rowset_meta()->set_index_disk_size(stat.total_index_size);
     rowset->rowset_meta()->set_empty(stat.num_rows_written == 0);
@@ -635,9 +635,9 @@ Status RowsetColumnUpdateState::_insert_new_rows(const TabletSchemaCSPtr& tablet
             padding_char_columns(schema, tablet_schema, chunk_ptr.get());
             RETURN_IF_ERROR(writer->append_chunk(*chunk_ptr));
             RETURN_IF_ERROR(writer->finalize(&segment_file_size, &index_size, &footer_position));
-            // update statisic
+            // update statistic
             stat.num_segment++;
-            stat.total_data_size += segment_file_size;
+            stat.total_data_size += static_cast<int64_t>(segment_file_size) - static_cast<int64_t>(index_size);
             stat.total_index_size += index_size;
             stat.num_rows_written += static_cast<int64_t>(chunk_ptr->num_rows());
             stat.total_row_size += static_cast<int64_t>(chunk_ptr->bytes_usage());
