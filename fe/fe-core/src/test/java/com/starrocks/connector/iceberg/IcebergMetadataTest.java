@@ -1326,6 +1326,35 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testGetRemoteFileFailsFastForEncryptedTable() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT), new Column("k2", INT));
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", columns, mockedNativeTableB, Maps.newHashMap());
+
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        mockedNativeTableB.updateProperties().set(TableProperties.ENCRYPTION_TABLE_KEY, "test-key").commit();
+        mockedNativeTableB.refresh();
+
+        long snapshotId = mockedNativeTableB.currentSnapshot().snapshotId();
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.GE,
+                new ColumnRefOperator(1, INT, "k2", true), ConstantOperator.createInt(1));
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class,
+                () -> metadata.getRemoteFiles(icebergTable,
+                        GetRemoteFilesParams.newBuilder()
+                                .setTableVersionRange(TvrTableSnapshot.of(Optional.of(snapshotId)))
+                                .setPredicate(predicate)
+                                .setFieldNames(Lists.newArrayList())
+                                .setLimit(10)
+                                .build()));
+        assertTrue(ex.getMessage().contains("encryption is not supported"),
+                "Expected encryption error, got: " + ex.getMessage());
+    }
+
+    @Test
     public void testGetTableStatistics() {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
