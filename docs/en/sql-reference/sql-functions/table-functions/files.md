@@ -202,30 +202,6 @@ From v3.2 onwards, StarRocks can extract the value of a key/value pair from the 
 
 Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
 
-<!--
-
-### schema_detect
-
-From v3.2 onwards, FILES() supports automatic schema detection and unionization of the same batch of data files. StarRocks first detects the schema of the data by sampling certain data rows of a random data file in the batch. Then, StarRocks unionizes the columns from all the data files in the batch.
-
-You can configure the sampling rule using the following parameters:
-
-- `schema_auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: [-1, 500]. If this parameter is set to `-1`, all data rows are scanned. 
-- `schema_auto_detect_sample_files`: the number of random data files to sample in each batch. Valid values: `1` (default) and `-1`. If this parameter is set to `-1`, all data files are scanned.
-
-After the sampling, StarRocks unionizes the columns from all the data files according to these rules:
-
-- For columns with different column names or indices, each column is identified as an individual column, and, eventually, the union of all individual columns is returned.
-- For columns with the same column name but different data types, they are identified as the same column but with a more general data type. For example, if the column `col1` in file A is INT but DECIMAL in file B, DOUBLE is used in the returned column. The STRING type can be used to unionize all data types.
-
-If StarRocks fails to unionize all the columns, it generates a schema error report that includes the error information and all the file schemas.
-
-> **CAUTION**
->
-> All data files in a single batch must be of the same file format.
-
--->
-
 ### unload_data_param
 
 From v3.2 onwards, FILES() supports defining writable files in remote storage for data unloading.

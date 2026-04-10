@@ -336,14 +336,6 @@ Used to enable the streaming pre-aggregations. The default value is `false`, mea
 
 Used for MySQL client compatibility. No practical usage.
 
-<!--
-### enable_collect_table_level_scan_stats (Invisible to users)
-
-This variable is introduced to solve compatibility issues.
-
-Default value: `true`.
--->
-
 ### enable_datacache_async_populate_mode
 
 * **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
@@ -445,7 +437,6 @@ Used to enable the strict mode when loading data using the INSERT statement. The
 
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
-
 
 ### enable_lake_tablet_internal_parallel
 

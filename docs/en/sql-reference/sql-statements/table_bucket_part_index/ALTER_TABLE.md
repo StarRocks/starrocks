@@ -492,8 +492,6 @@ Note:
 
 #### Modify columns of the sort key in a Primary Key table
 
-<!--Supported Versions-->
-
 Syntax:
 
 ```SQL
@@ -594,7 +592,6 @@ For more usage instructions, see [Example - Column -14](#column).
 - After this feature is used, downgrading the cluster directly to a version that does not support this feature is not allowed.
 
 :::
-
 
 ### Modify rollup index
 
