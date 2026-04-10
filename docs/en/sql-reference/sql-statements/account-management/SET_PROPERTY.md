@@ -29,16 +29,3 @@ SET PROPERTY [FOR 'user'] 'key' = 'value' [, 'key' = 'value']
     SET PROPERTY FOR 'jack' 'max_user_connections' = '1000';
     ```
 
-<!--
-2. Modify cpu_share to 1000 for the user jack
-
-    ```SQL
-    SET PROPERTY FOR 'jack' 'resource.cpu_share' = '1000';
-    ```
-
-3. Modify the weight of the normal level for the user jack
-
-    ```SQL
-    SET PROPERTY FOR 'jack' 'quota.normal' = '400';
-    ```
--->

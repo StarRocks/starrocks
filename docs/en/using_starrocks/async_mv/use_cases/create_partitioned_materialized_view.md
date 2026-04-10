@@ -225,53 +225,6 @@ FROM par_tbl1
 GROUP BY datekey, k1;
 ```
 
-<!--
-### Align partitions with multiple base tables
-
-![Partitioned Materialized View-3](../../../_assets/partitioned_mv-3.png)
-
-You can create a materialized view whose partitions are aligned with those of multiple base tables, as long as the partitions of the base tables can align with each other, that is, the base tables use the same type of Partitioning Key. You can use JOIN to connect the base tables, and set the Partition Key as the common column. Alternatively, you can connect them with UNION. The base tables with aligned partitions are called reference tables. Data changes in any of the reference tables will trigger the refresh task on the corresponding partitions of the materialized view.
-
-This feature is supported from v3.3 onwards.
-
-```SQL
--- Connect tables with JOIN.
-CREATE MATERIALIZED VIEW par_mv6
-REFRESH ASYNC
-PARTITION BY datekey
-AS SELECT 
-  par_tbl1.datekey,
-  par_tbl1.k1 AS t1k1,
-  par_tbl3.k1 AS t2k1, 
-  sum(par_tbl1.v1) AS SUM1, 
-  sum(par_tbl3.v1) AS SUM2
-FROM par_tbl1 JOIN par_tbl3 ON par_tbl1.datekey = par_tbl3.datekey_new
-GROUP BY par_tbl1.datekey, t1k1, t2k1;
-
--- Connect tables with UNION.
-CREATE MATERIALIZED VIEW par_mv7
-REFRESH ASYNC
-PARTITION BY datekey
-AS SELECT 
-  par_tbl1.datekey,
-  par_tbl1.k1 AS t1k1,
-  sum(par_tbl1.v1) AS SUM1
-FROM par_tbl1
-GROUP BY 
-  par_tbl1.datekey,
-  par_tbl1.k1
-UNION ALL
-SELECT
-  par_tbl3.datekey_new,
-  par_tbl3.k1 AS t2k1, 
-  sum(par_tbl3.v1) AS SUM2
-FROM par_tbl3
-GROUP BY 
-  par_tbl3.datekey_new,
-  par_tbl3.k1;
-```
--->
-
 ### Achieve incremental refresh and transparent rewrite
 
 You can create a partitioned materialized view that refreshes by partitions to achieve incremental updates of the materialized view and transparent rewrite of queries with partial data materialization.

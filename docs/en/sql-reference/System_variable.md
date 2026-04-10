@@ -309,14 +309,6 @@ Used to enable the streaming pre-aggregations. The default value is `false`, mea
 
 Used for MySQL client compatibility. No practical usage.
 
-<!--
-### enable_collect_table_level_scan_stats (Invisible to users)
-
-This variable is introduced to solve compatibility issues.
-
-Default value: `true`.
--->
-
 ### enable_connector_adaptive_io_tasks
 
 * **Description**: Whether to adaptively adjust the number of concurrent I/O tasks when querying external tables. Default value is `true`. If this feature is not enabled, you can manually set the number of concurrent I/O tasks using the variable `connector_io_tasks_per_scan_operator`.
@@ -400,7 +392,6 @@ Used to enable the strict mode when loading data using the INSERT statement. The
   However, if there are some hotspot tablets, this feature may degrade the query performance because it directs the queries to the same BE, making it unable to fully use the resources of multiple BEs in high-concurrency scenarios.
 * **Default**: false, which means the system selects a replica for each query.
 * **Introduced in**: v2.5.6, v3.0.8, v3.1.4, and v3.2.0.
-
 
 ### enable_lake_tablet_internal_parallel
 

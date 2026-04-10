@@ -262,57 +262,6 @@ PROPERTIES
   >
   > Storage Volume 当前不支持通过认证接入 HDFS。
 
-<!--
-
-  - 如果您使用简单认证接入 HDFS，请设置以下属性：
-
-    ```SQL
-      "enabled" = "{ true | false }",
-      "hadoop.security.authentication" = "simple",
-      "username" = "<hdfs_username>",
-      "password" = "<hdfs_password>"
-      ```
-
-  - 如果您使用 Kerberos 认证接入 HDFS，请设置以下属性：
-
-    ```SQL
-    "enabled" = "{ true | false }",
-    "hadoop.security.authentication" = "kerberos",
-    "kerberos_principal" = "nn/zelda1@ZELDA.COM",
-    "kerberos_keytab" = "/keytab/hive.keytab",
-    "kerberos_keytab_content" = "YWFhYWFh"
-    ```
-
-    > **注意**
-    >
-    > 每个 StarRocks 集群仅支持创建一个使用 Kerberos 认证的 HDFS 存储卷。
-
-  - 如果您的 HDFS 集群启用了 NameNode HA 配置，请额外设置以下属性：
-
-    ```SQL
-    "dfs.nameservices" = "<ha_cluster_name>",
-    "dfs.ha.namenodes.<ha_cluster_name>" = "ha_n1,ha_n2",
-    "dfs.namenode.rpc-address.<ha_cluster_name>.<NameNode1>" = "<hdfs_host>:<hdfs_port>",
-    "dfs.namenode.rpc-address.<ha_cluster_name>.<NameNode2>" = "<hdfs_host>:<hdfs_port>",
-    "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-    ```
-
-    | **属性**                                              | **描述**                                                     |
-    | ----------------------------------------------------- | ------------------------------------------------------------ |
-    | enabled                                               | 是否启用当前存储卷。默认值：`false`。已禁用的存储卷无法被引用。 |
-    | hadoop.security.authentication                        | 指定认证方式。有效值：`simple`（默认） 和 `kerberos`。`simple` 表示简单认证，即无认证。`kerberos` 表示 Kerberos 认证。 |
-    | username                                              | 用于访问 HDFS 集群中 NameNode 节点的用户名。                 |
-    | password                                              | 用于访问 HDFS 集群中 NameNode 节点的密码。                   |
-    | kerberos_principal                                    | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>示例：`nn/zelda1@ZELDA.COM`。 |
-    | kerberos_keytab                                       | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
-    | kerberos_keytab_content                               | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
-    | dfs.nameservices                                      | 自定义 HDFS 集群的名称。                                     |
-    | dfs.ha.namenodes.<ha_cluster_name\>                    | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。 其中 `<ha_cluster_name>` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
-    | dfs.namenode.rpc-address.<ha_cluster_name\>.<NameNode\> | 指定 NameNode 的 RPC 地址信息。 其中 `<NameNode>` 表示 `dfs.ha.namenodes.<ha_cluster_name>` 中自定义 NameNode 的名称。 |
-    | dfs.client.failover.proxy.provider                    | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
-
--->
-
 ## 示例
 
 示例一：为 AWS S3 存储空间 `defaultbucket` 创建存储卷 `my_s3_volume`，使用 IAM user-based 认证，并启用该存储卷。
