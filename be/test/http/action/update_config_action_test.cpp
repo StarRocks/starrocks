@@ -17,12 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "agent/agent_server.h"
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
->>>>>>> 1d0970ca75 ([BugFix] Fix incorrect update for parallel_clone_task_per_path (#71484))
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
