@@ -445,7 +445,9 @@ TEST(ParquetComplexColumnReaderTest, BuildVariantBindingArrayNoneChildWithGrandc
 
 // node == nullptr, seek on primitive variant (non-object) with key path → seek fails  (lines 1324-1325)
 TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowSeekFail) {
-    // A primitive integer row, not an object; seeking key "name" should fail.
+    // A primitive integer row, not an object; seeking key "name" on a non-object value
+    // is treated as "path not found" (null result) rather than a hard error.
+    // This matches the behaviour of variant_path_reader.cpp which silently returns kMissing.
     auto full_row = parse_variant_json("42");
     auto dst = NullableColumn::create(VariantColumn::create(), NullColumn::create());
     TopBinding binding{.kind = TopBinding::Kind::VARIANT,
@@ -456,7 +458,9 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowSeekFail) {
     auto st = VariantColumnReader::append_variant_binding_row(
             0, binding, full_row.get_metadata().raw(),
             VariantRowRef(full_row.get_metadata().raw(), full_row.get_value().raw()), dst.get());
-    EXPECT_FALSE(st.ok());
+    EXPECT_TRUE(st.ok());
+    ASSERT_EQ(1, dst->size());
+    EXPECT_TRUE(dst->is_null(0));
 }
 
 // ─── VariantVirtualZoneMapReader tests ───────────────────────────────────────

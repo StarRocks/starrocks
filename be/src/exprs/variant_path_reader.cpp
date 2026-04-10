@@ -99,7 +99,7 @@ static VariantReadResult drill_down_column(const Column* col, size_t row, const 
     VariantRowRef val_ref = val.as_ref();
     DCHECK(suffix != nullptr);
     auto field = VariantPath::seek_view(val_ref, *suffix, seg_offset);
-    if (!field.ok()) return VariantReadResult{.state = VariantReadState::kMissing};
+    if (!field.ok() || field.value().is_null()) return VariantReadResult{.state = VariantReadState::kMissing};
     return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
 }
 
@@ -232,7 +232,7 @@ bool VariantPathReader::_seek_base(size_t row, VariantRowValue* out) {
                            std::string_view(remain_slice.data, remain_slice.size));
     DCHECK(_path != nullptr);
     auto field = VariantPath::seek_view(base_row, *_path, _seg_offset);
-    if (!field.ok()) {
+    if (!field.ok() || field.value().is_null()) {
         return false;
     }
     *out = std::move(field).value().to_owned();
@@ -244,7 +244,7 @@ VariantReadResult VariantPathReader::_read_full(size_t row) {
     if (_col->try_get_row_ref(row, &variant_ref)) {
         DCHECK(_path != nullptr);
         auto field = VariantPath::seek_view(variant_ref, *_path, _seg_offset);
-        if (!field.ok()) {
+        if (!field.ok() || field.value().is_null()) {
             return VariantReadResult{.state = VariantReadState::kMissing};
         }
         return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
@@ -258,7 +258,7 @@ VariantReadResult VariantPathReader::_read_full(size_t row) {
     variant_ref = variant->as_ref();
     DCHECK(_path != nullptr);
     auto field = VariantPath::seek_view(variant_ref, *_path, _seg_offset);
-    if (!field.ok()) {
+    if (!field.ok() || field.value().is_null()) {
         return VariantReadResult{.state = VariantReadState::kMissing};
     }
     return VariantReadResult{.state = VariantReadState::kValue, .value = std::move(field).value().to_owned()};
