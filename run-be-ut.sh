@@ -220,8 +220,8 @@ fi
 
 CMAKE_BUILD_DIR=${CMAKE_BUILD_PREFIX}/ut_build_${CMAKE_BUILD_TYPE}
 if [ ${CLEAN} -eq 1 ]; then
-    rm ${CMAKE_BUILD_DIR} -rf
-    rm ${STARROCKS_HOME}/be/output/ -rf
+    rm -rf ${CMAKE_BUILD_DIR}
+    rm -rf ${STARROCKS_HOME}/be/output/
 fi
 
 if [ ! -d ${CMAKE_BUILD_DIR} ]; then
