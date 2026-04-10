@@ -101,6 +101,14 @@ public:
     // This function could be called in cloud native persistent index only.
     Status parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator, DeletesMap* new_deletes);
 
+    // Parallel query of PK index to retrieve rss_rowids for each primary key.
+    // Unlike parallel_get() which collects rows-to-delete into a DeletesMap,
+    // this method preserves the positional mapping: rss_rowids[i] = (rssid << 32 | rowid)
+    // for the i-th primary key, or NullIndexValue if the key doesn't exist.
+    // Used by column mode partial update to build the update-row-to-source-row mapping.
+    Status parallel_get_rss_rowids(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
+                                   std::vector<uint64_t>* rss_rowids);
+
     // This function will be called when parallel upsert happens.
     // The process flow of parallel upsert is:
     // 1. upsert into memtable. (serialize)
