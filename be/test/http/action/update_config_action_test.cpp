@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include "agent/agent_server.h"
-#include "base/testutil/sync_point.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/starcache_engine.h"
 #include "cache/disk_cache/test_cache_utils.h"
@@ -28,6 +27,7 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "testutil/scoped_updater.h"
 #include "util/bthreads/executor.h"
 
