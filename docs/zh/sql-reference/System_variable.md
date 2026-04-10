@@ -380,13 +380,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 描述：用于兼容 MySQL 客户端，无实际作用。
 * 默认值：4
 * 类型：Int
-<!--
-### enable_collect_table_level_scan_stats (Invisible to users)
-
-解决升级中的兼容问题，用户不可见。
-
-默认值：`true`。
--->
 
 ### enable_connector_adaptive_io_tasks
 
