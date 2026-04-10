@@ -272,6 +272,20 @@ std::string_view PaimonTableDescriptor::get_time_zone() const {
     return _time_zone;
 }
 
+FlussTableDescriptor::FlussTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool,
+                                           std::pmr::memory_resource* mr)
+        : HiveTableDescriptor(tdesc, pool, mr),
+          _table_conf(tdesc.flussTable.table_conf, mr),
+          _time_zone(tdesc.flussTable.time_zone, mr) {}
+
+std::string_view FlussTableDescriptor::get_table_conf() const {
+    return _table_conf;
+}
+
+std::string_view FlussTableDescriptor::get_time_zone() const {
+    return _time_zone;
+}
+
 OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool, std::pmr::memory_resource* mr)
         : HiveTableDescriptor(tdesc, pool, mr),
           _database_name(tdesc.dbName, mr),
