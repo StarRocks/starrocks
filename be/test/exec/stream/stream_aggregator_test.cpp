@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "exec/stream/stream_test.h"
+#include "runtime/runtime_state.h"
 #include "testutil/desc_tbl_helper.h"
 
 namespace starrocks::stream {

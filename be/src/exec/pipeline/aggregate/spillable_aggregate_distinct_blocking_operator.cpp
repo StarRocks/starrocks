@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "base/concurrency/race_detect.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "exec/spill/spiller.hpp"
 #include "runtime/runtime_state_helper.h"

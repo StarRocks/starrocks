@@ -43,6 +43,8 @@
 #include "connector/file_chunk_sink.h"
 #include "connector/file_connector.h"
 #include "connector/hive_chunk_sink.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #ifndef __APPLE__
 #include "connector/iceberg_chunk_sink.h"
 #endif

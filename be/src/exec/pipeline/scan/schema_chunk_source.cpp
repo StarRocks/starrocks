@@ -21,6 +21,7 @@
 #include "exec/workgroup/work_group.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/descriptors_ext.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

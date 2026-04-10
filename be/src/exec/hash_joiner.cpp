@@ -112,6 +112,14 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
     _probe_metrics = _pool->add(new HashJoinProbeMetrics());
 }
 
+size_t HashJoiner::runtime_bloom_filter_row_limit() const {
+    uint64_t runtime_join_filter_pushdown_limit = 1024000;
+    if (_runtime_state->query_options().__isset.runtime_join_filter_pushdown_limit) {
+        runtime_join_filter_pushdown_limit = _runtime_state->query_options().runtime_join_filter_pushdown_limit;
+    }
+    return runtime_join_filter_pushdown_limit;
+}
+
 Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile) {
     if (_runtime_state == nullptr) {
         _runtime_state = state;

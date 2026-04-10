@@ -19,10 +19,12 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/query_context.h"
 #include "exprs/expr_executor.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {

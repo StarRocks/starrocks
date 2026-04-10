@@ -22,11 +22,9 @@
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
@@ -38,6 +36,7 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "fmt/printf.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 

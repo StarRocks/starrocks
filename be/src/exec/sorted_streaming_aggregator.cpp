@@ -29,6 +29,7 @@
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

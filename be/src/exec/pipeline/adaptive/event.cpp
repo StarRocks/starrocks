@@ -20,6 +20,7 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"

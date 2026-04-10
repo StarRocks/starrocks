@@ -27,14 +27,17 @@
 #include "gen_cpp/Types_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state_fwd.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks::spill {
 struct TraceInfo {
-    TraceInfo(RuntimeState* state) : query_id(state->query_id()), fragment_id(state->fragment_instance_id()) {}
+    explicit TraceInfo(RuntimeState* state);
     TUniqueId query_id;
     TUniqueId fragment_id;
 };
+
+std::weak_ptr<pipeline::QueryContext> spill_query_ctx_weak_ptr(RuntimeState* state);
 
 struct EmptyMemGuard {
     bool scoped_begin() const { return true; }
@@ -172,7 +175,7 @@ struct SyncTaskExecutor {
 #define DEFER_GUARD_END(guard) auto VARNAME_LINENUM(defer) = DeferOp([&]() { guard.scoped_end(); });
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
-    spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(), ##__VA_ARGS__)
+    spill::ResourceMemTrackerGuard(tls_mem_tracker, spill::spill_query_ctx_weak_ptr(state), ##__VA_ARGS__)
 
 #define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
 

@@ -35,6 +35,7 @@
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::spill {
@@ -209,7 +210,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, MemGuard&& guard) {
     };
 
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
-    auto query_type = state->query_options().query_type;
+    auto query_type = spill_query_type(state);
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     io_task.set_query_type(query_type);
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
@@ -286,7 +287,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
             auto ctx = std::any_cast<SpillIOTaskContextPtr>(task.get_work_context().task_context_data);
             TaskExecutor::force_submit(std::move(task));
         };
-        auto query_type = state->query_options().query_type;
+        auto query_type = spill_query_type(state);
         auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(restore_task), std::move(yield_func));
         io_task.set_query_type(query_type);
         RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));
@@ -385,7 +386,7 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         return Status::OK();
     };
     auto yield_func = [&](workgroup::ScanTask&& task) { TaskExecutor::force_submit(std::move(task)); };
-    auto query_type = state->query_options().query_type;
+    auto query_type = spill_query_type(state);
     auto io_task = workgroup::ScanTask(_spiller->options().wg, std::move(task), std::move(yield_func));
     io_task.set_query_type(query_type);
     RETURN_IF_ERROR(TaskExecutor::submit(std::move(io_task)));

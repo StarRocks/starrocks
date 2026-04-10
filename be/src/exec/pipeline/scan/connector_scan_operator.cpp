@@ -18,6 +18,7 @@
 #include "connector/lake_connector.h"
 #include "exec/connector_scan_node.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exprs/expr_executor.h"
 #include "runtime/descriptors.h"

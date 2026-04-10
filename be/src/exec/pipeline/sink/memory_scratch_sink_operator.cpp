@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/expr_executor.h"

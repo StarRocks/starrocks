@@ -20,8 +20,9 @@
 #include <queue>
 #include <unordered_map>
 
+#include "base/time/time.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
-#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "mem_tracker_manager.h"
 #include "pipeline_executor_set_manager.h"

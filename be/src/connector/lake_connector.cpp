@@ -26,6 +26,7 @@
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_factory.h"

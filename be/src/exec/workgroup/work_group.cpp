@@ -22,6 +22,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/cpu_info.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/mem_tracker_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_task_queue.h"

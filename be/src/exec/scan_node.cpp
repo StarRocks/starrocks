@@ -38,6 +38,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr_factory.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

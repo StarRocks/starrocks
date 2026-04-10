@@ -26,6 +26,8 @@
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"

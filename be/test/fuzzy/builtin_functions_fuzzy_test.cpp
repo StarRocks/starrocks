@@ -30,6 +30,7 @@
 #include "column/runtime_type_traits.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
+#include "runtime/runtime_state.h"
 #include "testutil/init_test_env.h"
 #include "types/json_value.h"
 #include "types/logical_type.h"

@@ -15,6 +15,7 @@
 #include "exec/pipeline/stream_pipeline_driver.h"
 
 #include "common/statusor.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -22,6 +23,7 @@
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

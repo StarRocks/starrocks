@@ -15,6 +15,7 @@
 
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 
+#include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {

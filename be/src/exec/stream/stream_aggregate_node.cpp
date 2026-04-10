@@ -40,7 +40,7 @@ StatusOr<pipeline::OpFactories> StreamAggregateNode::decompose_to_pipeline(pipel
             down_cast<pipeline::SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
     // shared by sink operator and source operator
-    OpFactories operators_with_source;
+    pipeline::OpFactories operators_with_source;
     auto aggregator_factory = std::make_shared<stream::StreamAggregatorFactory>(_tnode);
     auto source_operator = std::make_shared<stream::StreamAggregateOperatorFactory>(context->next_operator_id(), id(),
                                                                                     aggregator_factory);

@@ -20,6 +20,8 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/thread/threadpool.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/stream/scan/stream_scan_operator.h"

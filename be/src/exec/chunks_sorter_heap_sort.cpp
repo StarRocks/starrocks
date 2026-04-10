@@ -27,6 +27,7 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type_infra.h"
 
 namespace starrocks {

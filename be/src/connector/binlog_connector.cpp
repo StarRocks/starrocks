@@ -14,6 +14,7 @@
 
 #include "connector/binlog_connector.h"
 
+#include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"

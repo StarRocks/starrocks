@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/tablet_sink.h"
 #include "runtime/buffer_control_block.h"

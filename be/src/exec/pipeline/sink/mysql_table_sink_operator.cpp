@@ -15,6 +15,7 @@
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"

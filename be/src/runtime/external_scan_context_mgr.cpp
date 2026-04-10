@@ -42,6 +42,7 @@
 #include "base/uid_util.h"
 #include "common/config_runtime_fwd.h"
 #include "common/thread/thread.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"

@@ -16,6 +16,8 @@
 
 #include <utility>
 
+#include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
 
 LocalPartitionTopnSinkOperator::LocalPartitionTopnSinkOperator(OperatorFactory* factory, int32_t id,

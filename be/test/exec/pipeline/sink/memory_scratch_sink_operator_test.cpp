@@ -16,10 +16,14 @@
 
 #include "base/concurrency/await.h"
 #include "base/testutil/assert.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
+#include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/query_context.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

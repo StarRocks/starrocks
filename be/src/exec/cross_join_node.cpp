@@ -21,6 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"

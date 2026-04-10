@@ -40,6 +40,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #ifndef __APPLE__
 #include "udf/java/java_udf.h"

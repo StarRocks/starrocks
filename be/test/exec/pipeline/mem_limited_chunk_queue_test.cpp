@@ -23,6 +23,7 @@
 #include "common/config_storage_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"

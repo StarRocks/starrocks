@@ -34,6 +34,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"

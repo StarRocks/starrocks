@@ -17,6 +17,7 @@
 #include "base/utility/defer_op.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/common.h"
 #include "exec/spill/executor.h"

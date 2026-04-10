@@ -16,6 +16,7 @@
 
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/project_operator.h"
