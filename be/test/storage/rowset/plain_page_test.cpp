@@ -40,6 +40,7 @@
 #include <limits>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/logging.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -70,7 +71,7 @@ public:
         size_t n = 1;
         decoder->next_batch(&n, column.get());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const CppType*>(column->raw_data());
+        *ret = GetStorageContainer<type>::get_data(column, 0);
     }
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType, class CppType = StorageCppType<Type>>
@@ -105,7 +106,7 @@ public:
         auto column = ChunkHelper::column_from_field_type(Type, false);
         status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
-        const auto* decoded = reinterpret_cast<const CppType*>(column->raw_data());
+        const auto decoded = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < size; i++) {
             if (src[i] != decoded[i]) {
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << decoded[i];
@@ -124,7 +125,7 @@ public:
         status = page_decoder.next_batch(read_range, column1.get());
         ASSERT_TRUE(status.ok());
 
-        const auto* decoded_data = reinterpret_cast<const CppType*>(column1->raw_data());
+        const auto decoded_data = GetStorageContainer<Type>::get_data(column1);
         SparseRangeIterator<> read_iter = read_range.new_iterator();
         size_t offset = 0;
         while (read_iter.has_more()) {

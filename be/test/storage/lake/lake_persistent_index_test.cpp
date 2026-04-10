@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "column/runtime_type_traits.h"
 #include "common/config_primary_key_fwd.h"
 #include "runtime/descriptors.h"
@@ -325,7 +326,9 @@ TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 
@@ -745,7 +748,9 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 
@@ -792,7 +797,9 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_multi_column_pk) {
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 
@@ -852,7 +859,9 @@ TEST_F(LakePersistentIndexTest, test_tablet_range_null_as_min_on_non_nullable_pk
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 

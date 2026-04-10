@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "base/hash/unaligned_access.h"
+#include "column/raw_data_visitor.h"
 #include "base/string/slice.h" // for Slice
 #include "common/logging.h"
 #include "gutil/casts.h"
@@ -225,7 +226,9 @@ Status DictPageDecoder<Type>::next_batch(const SparseRange<>& range, Column* dst
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
     using cast_type = StorageCppType<DataTypeTraits<Type>::type>;
-    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_vec_code_buf->accept(&visitor));
+    const auto* codewords = reinterpret_cast<const cast_type*>(visitor.result());
     std::vector<ValueType> numbers;
     raw::stl_vector_resize_uninitialized(&numbers, nread);
     for (int i = 0; i < nread; ++i) {
