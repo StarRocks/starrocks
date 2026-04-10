@@ -689,6 +689,14 @@ struct TPaimonTable {
     4: optional TIcebergSchema paimon_schema
 }
 
+struct TFlussTable {
+    // fluss table conf
+    1: optional string table_conf
+
+    // timezone
+    2: optional string time_zone
+}
+
 struct TDeltaLakeTable {
     // table location
     1: optional string location
@@ -763,6 +771,9 @@ struct TTableDescriptor {
 
   // Lance Table
   37: optional TLanceTable lanceTable
+
+  // Fluss Table schema
+  38: optional TFlussTable flussTable
 }
 
 struct TDescriptorTable {

@@ -492,6 +492,12 @@ struct THdfsScanRange {
     39: optional bool use_lance_jni_reader
     // lance split info (serialized fragment metadata)
     40: optional binary lance_split_info
+
+    // whether to use JNI scanner to read data of fluss table
+    41: optional bool use_fluss_jni_reader
+
+    // fluss split info
+    42: optional string fluss_split_info
 }
 
 struct TBinlogScanRange {
