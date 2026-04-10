@@ -13,7 +13,6 @@
 // limitations under the License.
 package com.starrocks.http;
 
-import com.starrocks.common.Config;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,7 +47,6 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
 
     @Override
     protected void doSetUp() throws Exception {
-        Config.query_detail_explain_level = "NORMAL";
         MetricRepo.init();
         ExecuteEnv.setup();
     }

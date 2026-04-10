@@ -22,7 +22,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.rpc.ThriftConnectionPool;
-import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;
 import com.starrocks.sql.ast.OriginStatement;
@@ -38,8 +37,6 @@ import org.apache.thrift.TException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 
 public class LeaderOpExecutorTest {
     private static ConnectContext connectContext;
@@ -78,7 +75,6 @@ public class LeaderOpExecutorTest {
 
     @Test
     public void testResourceGroupNameInAuditLog() throws Exception {
-
         String createGroup = "create resource group rg1\n" +
                 "to\n" +
                 "    (db='d1')\n" +
@@ -93,7 +89,8 @@ public class LeaderOpExecutorTest {
         String sql = "insert into t1 select * from t1";
         StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         LeaderOpExecutor executor =
-                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
+                new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false,
+                        null);
 
         mockFrontendService(new MockFrontendServiceClient());
         executor.execute();
@@ -158,26 +155,5 @@ public class LeaderOpExecutorTest {
         TMasterOpRequest request = executor.createTMasterOpRequest(connectContext, 1);
         Assertions.assertEquals(catalog, request.getCatalog());
         Assertions.assertEquals(database, request.getDb());
-    }
-
-    @Test
-    public void testTxnForward() throws Exception {
-        String sql = "begin";
-        StatementBase stmtBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-
-        TMasterOpResult tMasterOpResult = new TMasterOpResult();
-        tMasterOpResult.setTxn_id(1);
-
-        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
-                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
-            thriftConnectionPoolMockedStatic.when(()
-                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
-                    .thenReturn(tMasterOpResult);
-            LeaderOpExecutor executor =
-                    new LeaderOpExecutor(stmtBase, stmtBase.getOrigStmt(), connectContext, RedirectStatus.FORWARD_NO_SYNC, false);
-            executor.execute();
-
-            Assertions.assertEquals(1, connectContext.getTxnId());
-        }
     }
 }

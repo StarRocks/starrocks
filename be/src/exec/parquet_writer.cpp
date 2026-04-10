@@ -19,9 +19,11 @@
 
 #include <utility>
 
+#include "base/uid_util.h"
 #include "formats/parquet/file_writer.h"
-#include "runtime/exec_env.h"
-#include "util/uid_util.h"
+#include "fs/fs_factory.h"
+#include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks {
 
@@ -38,8 +40,8 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
           _driver_id(driver_id) {}
 
 Status RollingAsyncParquetWriter::init() {
-    ASSIGN_OR_RETURN(
-            _fs, FileSystem::CreateUniqueFromString(_table_info.partition_location, FSOptions(&_table_info.cloud_conf)))
+    ASSIGN_OR_RETURN(_fs, FileSystemFactory::CreateUniqueFromString(_table_info.partition_location,
+                                                                    FSOptions(&_table_info.cloud_conf)))
     _schema = _table_info.schema;
     _partition_location = _table_info.partition_location;
 
@@ -67,9 +69,10 @@ Status RollingAsyncParquetWriter::_new_file_writer(RuntimeState* state) {
     std::string new_file_location = _new_file_location();
     WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, new_file_location))
+    auto* query_execution_services = state->query_execution_services();
     _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(
             std::move(writable_file), new_file_location, _partition_location, _properties, _schema, _output_expr_ctxs,
-            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile, _max_file_size, state);
+            query_execution_services->execution->pipeline_sink_io_pool, _parent_profile, _max_file_size, state);
     auto st = _writer->init();
     return st;
 }

@@ -196,6 +196,13 @@ if __name__ == "__main__":
         print("In alive mode, set concurrency=1 in default!")
         concurrency = 1
 
+    # Auto-exclude no_arrow_flight_sql cases in arrow mode
+    if arrow_mode:
+        if attr:
+            attr = attr + ",!no_arrow_flight_sql"
+        else:
+            attr = "!no_arrow_flight_sql"
+
     # set environment
     os.environ.update(
         {
@@ -210,6 +217,7 @@ if __name__ == "__main__":
             "log_filtered": str(log_filtered),
             "check_status": str(check_status),
             "case_timeout": str(timeout),
+            "arrow_mode": "true" if arrow_mode else "false",
         }
     )
 

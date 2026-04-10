@@ -14,11 +14,14 @@
 
 #include "exprs/bitmap_functions.h"
 
+#include "base/phmap/phmap.h"
+#include "base/string/string_parser.hpp"
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "common/config_expr_fwd.h"
 #include "exprs/base64.h"
 #include "exprs/binary_function.h"
 #include "exprs/function_context.h"
@@ -26,8 +29,6 @@
 #include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
-#include "util/phmap/phmap.h"
-#include "util/string_parser.hpp"
 
 namespace starrocks {
 
@@ -409,7 +410,8 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_to_array(FunctionContext* context, c
                 ArrayColumn::create(
                         NullableColumn::create(std::move(array_bigint_column), NullColumn::create(offset, 0)),
                         std::move(array_offsets)),
-                NullColumn::create(*ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()));
+                NullColumn::static_pointer_cast(
+                        ColumnHelper::as_raw_column<NullableColumn>(columns[0])->null_column()->clone()));
     }
 }
 

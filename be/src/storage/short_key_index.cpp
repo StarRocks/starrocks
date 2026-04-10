@@ -36,8 +36,8 @@
 
 #include <string>
 
+#include "base/coding.h"
 #include "gutil/strings/substitute.h"
-#include "util/coding.h"
 
 using strings::Substitute;
 

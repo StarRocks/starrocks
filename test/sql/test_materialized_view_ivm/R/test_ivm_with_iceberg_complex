@@ -131,6 +131,9 @@ FROM
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019b02fc-9885-7874-8a97-3f0df3d85d3f
+-- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
 True
@@ -161,7 +164,7 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
 -- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
-False
+True
 -- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
@@ -192,6 +195,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 values
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019b02fc-bffa-7f1a-a812-ac2069e3807b
+-- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
 True
@@ -229,6 +235,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019b02fc-cff4-788a-9839-c9887e3c9d03
+-- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
 True
@@ -274,6 +283,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 values
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019b02fc-e3f5-7c3b-bf89-70d83b0940d2
+-- !result
 function: print_hit_materialized_view("SELECT t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1, sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52 from mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t2 on t1.dt = t2.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 on t1.dt = t3.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t4 on t1.dt = t4.dt join mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 on t1.dt = t5.dt group by t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;", "test_mv1")
 -- result:
 True
@@ -325,6 +337,9 @@ GROUP BY t.dt, t.col1;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019b02fc-f602-7c0e-aec6-22d1e5af5d28
+-- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
 8
@@ -342,6 +357,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019b02fd-0590-73b7-aa04-0717df1ea20b
+-- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
 8
@@ -403,6 +421,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t3 values
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019b02fd-126b-7f6a-8dc0-b4dc8a587c04
+-- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
 11
@@ -444,6 +465,9 @@ insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t5 values
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+-- result:
+019b02fd-2650-745d-97d6-657cb4146c07
+-- !result
 SELECT COUNT(*) FROM test_mv1;
 -- result:
 16

@@ -80,6 +80,16 @@ public class ErrorReport {
         throw new AnalysisException(reportCommon(pattern, errorCode, objs));
     }
 
+    public static void reportSqlBlackListException(ErrorCode errorCode, Object... objs)
+            throws SqlBlacklistedException {
+        reportSqlBlackListException(null, errorCode, objs);
+    }
+
+    public static void reportSqlBlackListException(String pattern, ErrorCode errorCode, Object... objs)
+            throws SqlBlacklistedException {
+        throw new SqlBlacklistedException(reportCommon(pattern, errorCode, objs));
+    }
+
     public static void reportDdlException(ErrorCode errorCode, Object... objs)
             throws DdlException {
         reportDdlException(null, errorCode, objs);

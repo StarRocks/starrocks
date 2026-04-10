@@ -14,20 +14,19 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.catalog.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
 import java.util.UUID;
 
 public class CreateTemporaryTableLikeStmt extends CreateTableLikeStmt {
-    public CreateTemporaryTableLikeStmt(boolean ifNotExists, TableName tableName,
-                               TableName existedTableName,
+    public CreateTemporaryTableLikeStmt(boolean ifNotExists, TableRef tableRef,
+                               TableRef existedTableRef,
                                PartitionDesc partitionDesc,
                                DistributionDesc distributionDesc,
                                Map<String, String> properties,
                                NodePosition pos) {
-        super(ifNotExists, tableName, existedTableName, partitionDesc, distributionDesc, properties, pos);
+        super(ifNotExists, tableRef, existedTableRef, partitionDesc, distributionDesc, properties, pos);
     }
 
     public void setSessionId(UUID sessionId) {

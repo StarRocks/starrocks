@@ -1,0 +1,22 @@
+### UNIX Groups
+
+Sometimes users mirror LDAP groups locally (on the host OS) for security or isolation reasons, avoiding direct communication with external LDAP servers. These local UNIX groups can be used for authentication or access control enforcement.
+
+### OAuth, OIDC, and JWT
+
+:::tip
+
+**Quick Explanation of Terms**
+
+- **ID Token**: Proof of identity (I am me.)
+- **Access Token**: Proof of permission to access certain resources (I can do certain things.)
+- **OAuth 2.0**: Authorization framework that provides access tokens.
+- **OIDC**: Authentication layer on top of OAuth. Provides ID and Access Tokens.
+- **JWT**: Token format. Used by both OAuth and OIDC.
+
+:::
+
+**Practical Use:**
+
+- **OAuth-based login**: Redirects to an external login page (for example, Google), then back to the cluster. Requires browser access and redirect URL setup in advance.
+- **JWT-based login**: The user passes a token directly to the cluster, which requires a public key or endpoint setup in advance.

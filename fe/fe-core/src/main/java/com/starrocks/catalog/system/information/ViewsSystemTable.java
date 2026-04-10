@@ -48,6 +48,7 @@ import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUserIdentity;
+import com.starrocks.thrift.TUserRoles;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import org.apache.commons.lang3.NotImplementedException;
@@ -57,6 +58,7 @@ import org.apache.parquet.Strings;
 import org.apache.thrift.TException;
 import org.apache.thrift.meta_data.FieldValueMetaData;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -78,18 +80,18 @@ public class ViewsSystemTable extends SystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("TABLE_CATALOG", TypeFactory.createVarchar(512))
-                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(64))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(64))
+                        .column("TABLE_CATALOG", TypeFactory.createVarcharType(512))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarcharType(64))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(64))
                         // TODO: Type for EVENT_DEFINITION should be `longtext`, but `varchar(65535)` was set at this stage.
                         .column("VIEW_DEFINITION",
-                                TypeFactory.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
-                        .column("CHECK_OPTION", TypeFactory.createVarchar(8))
-                        .column("IS_UPDATABLE", TypeFactory.createVarchar(3))
-                        .column("DEFINER", TypeFactory.createVarchar(77))
-                        .column("SECURITY_TYPE", TypeFactory.createVarchar(7))
-                        .column("CHARACTER_SET_CLIENT", TypeFactory.createVarchar(32))
-                        .column("COLLATION_CONNECTION", TypeFactory.createVarchar(32))
+                                TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("CHECK_OPTION", TypeFactory.createVarcharType(8))
+                        .column("IS_UPDATABLE", TypeFactory.createVarcharType(3))
+                        .column("DEFINER", TypeFactory.createVarcharType(77))
+                        .column("SECURITY_TYPE", TypeFactory.createVarcharType(7))
+                        .column("CHARACTER_SET_CLIENT", TypeFactory.createVarcharType(32))
+                        .column("COLLATION_CONNECTION", TypeFactory.createVarcharType(32))
                         .build(), TSchemaTableType.SCH_VIEWS);
     }
 
@@ -129,6 +131,11 @@ public class ViewsSystemTable extends SystemTable {
         final List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         ConnectContext context = Preconditions.checkNotNull(ConnectContext.get(), "not a valid connection");
         TUserIdentity userIdentity = UserIdentityUtils.toThrift(context.getCurrentUserIdentity());
+        if (context.getCurrentRoleIds() != null) {
+            TUserRoles userRoles = new TUserRoles();
+            userRoles.setRole_id_list(new ArrayList<>(context.getCurrentRoleIds()));
+            userIdentity.setCurrent_role_ids(userRoles);
+        }
         TGetTablesParams params = new TGetTablesParams();
         params.setCurrent_user_ident(userIdentity);
         params.setType(VIEW);
@@ -241,11 +248,12 @@ public class ViewsSystemTable extends SystemTable {
                 throw new TException("Pattern is in bad format " + params.getPattern());
             }
         }
-        UserIdentity currentUser;
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentityUtils.fromThrift(params.current_user_ident);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
         }
         String tableNameParam = params.isSetTable_name() ? params.getTable_name() : null;
         boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
@@ -261,7 +269,7 @@ public class ViewsSystemTable extends SystemTable {
         long limit = params.isSetLimit() ? params.getLimit() : -1;
         List<GetViewResult> result = Lists.newArrayList();
         for (Database db : databases) {
-            if (!collectViewsInDb(context, db, currentUser, tableNameParam, pattern, matcher,
+            if (!collectViewsInDb(context, db, tableNameParam, pattern, matcher,
                     limit, listingViews, caseSensitive, result)) {
                 break;
             }
@@ -272,7 +280,7 @@ public class ViewsSystemTable extends SystemTable {
     /**
      * if the limit is reached, false is returned, otherwise true will be returned.
      */
-    private static boolean collectViewsInDb(ConnectContext context, Database db, UserIdentity currentUser,
+    private static boolean collectViewsInDb(ConnectContext context, Database db,
                                             String paramTableName, String paramPattern, PatternMatcher matcher,
                                             long limit, boolean listingViews, boolean caseSensitive,
                                             List<GetViewResult> result) {
@@ -288,8 +296,6 @@ public class ViewsSystemTable extends SystemTable {
             OUTER:
             for (Table table : tables) {
                 try {
-                    context.setCurrentUserIdentity(currentUser);
-                    context.setCurrentRoleIds(currentUser);
                     Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
                 } catch (AccessDeniedException e) {
                     continue;
@@ -312,7 +318,7 @@ public class ViewsSystemTable extends SystemTable {
                 status.setLast_check_time(table.getLastCheckTime());
                 if (listingViews) {
                     View view = (View) table;
-                    String ddlSql = view.getInlineViewDef();
+                    String ddlSql = view.getDDLViewDef();
 
                     ConnectContext connectContext = ConnectContext.buildInner();
                     connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -326,8 +332,6 @@ public class ViewsSystemTable extends SystemTable {
                                     .getTable(db.getFullName(), tableName.getTbl());
                             if (tbl != null) {
                                 try {
-                                    context.setCurrentUserIdentity(currentUser);
-                                    context.setCurrentRoleIds(currentUser);
                                     Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
                                 } catch (AccessDeniedException e) {
                                     continue OUTER;

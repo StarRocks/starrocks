@@ -11,28 +11,28 @@ StarRocks allows users to add, view, and delete SQL blacklists.
 
 ## Syntax
 
-EnableSQL blacklisting via `enable_sql_blacklist`. The default is False (off).
+Enable SQL blacklisting via `enable_sql_blacklist`. The default is False (off).
 
 ~~~sql
-admin set frontend config ("enable_sql_blacklist" = "true")
+admin set frontend config ("enable_sql_blacklist" = "true");
 ~~~
 
 The admin user who has ADMIN_PRIV privileges can manage blacklists by executing the following commands:
 
 ~~~sql
-ADD SQLBLACKLIST "<sql>"
-DELETE SQLBLACKLIST <sql_index_number>
-SHOW SQLBLACKLIST
+ADD SQLBLACKLIST "<sql>";
+DELETE SQLBLACKLIST <sql_index_number>;
+SHOW SQLBLACKLIST;
 ~~~
 
-* When `enable_sql_blacklist` is true, every SQL query needs to be filtered by sqlblacklist. If it matches, the user will be informed that theSQL is in the blacklist. Otherwise, the SQL will be executed normally. The message may be as follows when the SQL is blacklisted:
+* When `enable_sql_blacklist` is true, every SQL query needs to be filtered by sqlblacklist. If it matches, the user will be informed that the SQL is in the blacklist. Otherwise, the SQL will be executed normally. The message may be as follows when the SQL is blacklisted:
 
 `ERROR 1064 (HY000): Access denied; sql 'select count (*) from test_all_type_select_2556' is in blacklist`
 
 ## Add blacklist
 
 ~~~sql
-ADD SQLBLACKLIST "<sql>"
+ADD SQLBLACKLIST "<sql>";
 ~~~
 
 **sql** is a regular expression for a certain type of SQL.
@@ -41,30 +41,30 @@ ADD SQLBLACKLIST "<sql>"
 Currently, StarRocks supports adding SELECT statements to the SQL Blacklist.
 :::
 
-Since SQL itself contains the common characters `(`, `)`, `*`, `.` that may be mixed up with the semantics of regular expressions, so we need to distinguish those by  using escape characters. Given that `(` and `)` are used too often in SQL, there is no need to use escape characters. Other special characters need to use the escape character `\` as a prefix. For example:
+Since SQL itself contains the common characters `(`, `)`, `*`, `.` that may be mixed up with the semantics of regular expressions, we need to distinguish those by using escape characters. Given that `(` and `)` are used too often in SQL, there is no need to use escape characters. Other special characters need to use the escape character `\` as a prefix. For example:
 
 * Prohibit `count(\*)`:
 
 ~~~sql
-ADD SQLBLACKLIST "select count(\\*) from .+"
+ADD SQLBLACKLIST "select count(\\*) from .+";
 ~~~
 
 * Prohibit `count(distinct)`:
 
 ~~~sql
-ADD SQLBLACKLIST "select count(distinct .+) from .+"
+ADD SQLBLACKLIST "select count(distinct .+) from .+";
 ~~~
 
 * Prohibit order by limit `x`, `y`, `1 <= x <=7`, `5 <=y <=7`:
 
 ~~~sql
-ADD SQLBLACKLIST "select id_int from test_all_type_select1 order by id_int limit [1-7], [5-7]"
+ADD SQLBLACKLIST "select id_int from test_all_type_select1 order by id_int limit [1-7], [5-7]";
 ~~~
 
 * Prohibit complex SQL:
 
 ~~~sql
-ADD SQLBLACKLIST "select id_int \\* 4, id_tinyint, id_varchar from test_all_type_nullable except select id_int, id_tinyint, id_varchar from test_basic except select (id_int \\* 9 \\- 8) \\/ 2, id_tinyint, id_varchar from test_all_type_nullable2 except select id_int, id_tinyint, id_varchar from test_basic_nullable"
+ADD SQLBLACKLIST "select id_int \\* 4, id_tinyint, id_varchar from test_all_type_nullable except select id_int, id_tinyint, id_varchar from test_basic except select (id_int \\* 9 \\- 8) \\/ 2, id_tinyint, id_varchar from test_all_type_nullable2 except select id_int, id_tinyint, id_varchar from test_basic_nullable";
 ~~~
 
 * Prohibit all INSERT INTO statements:
@@ -88,7 +88,7 @@ ADD SQLBLACKLIST "(?i)^insert\\s+into\\s+(?!column_statistics\\b).*values\\s*\\(
 ## View blacklist
 
 ~~~sql
-SHOW SQLBLACKLIST
+SHOW SQLBLACKLIST;
 ~~~
 
 Result format: `Index | Forbidden SQL`
@@ -113,7 +113,7 @@ The SQL shown in `Forbidden SQL` is escaped for all SQL semantic characters.
 ## Delete blacklist
 
 ~~~sql
-DELETE SQLBLACKLIST <sql_index_number>
+DELETE SQLBLACKLIST <sql_index_number>;
 ~~~
 
 `<sql_index_number>` is a list of SQL IDs separated by comma (,).
@@ -121,7 +121,7 @@ DELETE SQLBLACKLIST <sql_index_number>
 For example, delete the No.3 and No.4 SQLs in the above blacklist:
 
 ~~~sql
-delete sqlblacklist  3, 4;
+delete sqlblacklist 3, 4;
 ~~~
 
 Then, the remaining sqlblacklist is as follows:

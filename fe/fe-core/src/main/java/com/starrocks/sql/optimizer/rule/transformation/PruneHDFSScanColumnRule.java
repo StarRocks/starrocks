@@ -170,10 +170,19 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
                 throw new StarRocksPlannerException("Iceberg table partition by float/double/decimalV2 datatype is not supported",
                         ErrorType.UNSUPPORTED);
             }
+        } else if (table.isHiveTable()) {
+            if (partitionColumns.stream().map(Column::getType).anyMatch(this::hiveNotSupportedPartitionColumnType)) {
+                throw new StarRocksPlannerException("Hive table partition by decimalV2 datatype is not supported",
+                        ErrorType.UNSUPPORTED);
+            }
         } else if (partitionColumns.stream().map(Column::getType).anyMatch(this::notSupportedPartitionColumnType)) {
             throw new StarRocksPlannerException("Table partition by float/double/decimal datatype is not supported",
                     ErrorType.UNSUPPORTED);
         }
+    }
+
+    private boolean hiveNotSupportedPartitionColumnType(Type type) {
+        return type.isDecimalV2();
     }
 
     private boolean notSupportedPartitionColumnType(Type type) {

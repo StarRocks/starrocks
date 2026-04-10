@@ -18,14 +18,14 @@
 #include <memory>
 #include <random>
 
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "base/types/int128.h"
 #include "column/array_column.h"
 #include "exprs/function_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "types/large_int_value.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -50,7 +50,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldStringTest) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(1, v->get_data()[i]);
+        ASSERT_EQ(1, v->immutable_data()[i]);
     }
 }
 
@@ -97,7 +97,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(res[i], v->get_data()[i]);
+        ASSERT_EQ(res[i], v->immutable_data()[i]);
     }
 }
 
@@ -151,7 +151,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldDecTest) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < num_rows; ++i) {
-        ASSERT_EQ(res[i], v->get_data()[i]);
+        ASSERT_EQ(res[i], v->immutable_data()[i]);
     }
 }
 
@@ -200,7 +200,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest2) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(res[i], v->get_data()[i]);
+        ASSERT_EQ(res[i], v->immutable_data()[i]);
     }
 }
 
@@ -233,7 +233,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest3) {
 
     auto v = ColumnHelper::as_column<ConstColumn>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(res[i], ColumnHelper::as_column<Int32Column>(v->data_column())->get_data()[0]);
+        ASSERT_EQ(res[i], ColumnHelper::as_column<Int32Column>(v->data_column())->immutable_data()[0]);
     }
 }
 
@@ -282,7 +282,7 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest4) {
 
     auto v = ColumnHelper::as_column<Int32Column>(result);
     for (int i = 0; i < 5; ++i) {
-        ASSERT_EQ(res[i], v->get_data()[i]);
+        ASSERT_EQ(res[i], v->immutable_data()[i]);
     }
 }
 

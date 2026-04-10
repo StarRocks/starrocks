@@ -16,10 +16,10 @@
 
 #include <list>
 
+#include "base/types/uint24.h"
 #include "common/status.h"
 #include "gen_cpp/binlog.pb.h"
 #include "gutil/strings/substitute.h"
-#include "storage/uint24.h"
 
 namespace starrocks {
 

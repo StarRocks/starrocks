@@ -20,11 +20,30 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/exec")
 
+set(EXEC_CORE_FILES
+    runtime_filter/runtime_filter_descriptor.cpp
+    runtime_filter/runtime_filter_probe.cpp
+    runtime_filter/runtime_filter_probe_wait.cpp
+    runtime_filter/runtime_filter_registry.cpp
+    runtime_filter/runtime_filter_helper.cpp
+)
+
+ADD_BE_LIB(ExecCore
+    ${EXEC_CORE_FILES}
+)
+
+target_link_libraries(ExecCore PUBLIC ExprCore RuntimeCore)
+
 set(EXEC_FILES
+    fetch_node.cpp
+    lookup_node.cpp
     capture_version_node.cpp
     data_sink.cpp
     empty_set_node.cpp
+    exec_factory.cpp
     exec_node.cpp
+    pipeline_node.cpp
+    exec_node_executor.cpp
     exchange_node.cpp
     scan_node.cpp
     select_node.cpp
@@ -37,9 +56,12 @@ set(EXEC_FILES
     tablet_sink_colocate_sender.cpp
     tablet_sink_index_channel.cpp
     tablet_sink_sender.cpp
+    range_tablet_sink_sender.cpp
     write_combined_txn_log.cpp
     multi_olap_table_sink.cpp
     mysql_scanner.cpp
+    benchmark_scanner.cpp
+    cache_stats_scanner.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp
@@ -57,7 +79,6 @@ set(EXEC_FILES
     aggregate/distinct_blocking_node.cpp
     aggregate/aggregate_streaming_node.cpp
     aggregate/distinct_streaming_node.cpp
-    partition/bucket_aware_partition.cpp
     partition/chunks_partitioner.cpp
     partition/partition_hash_variant.cpp
     analytic_node.cpp
@@ -81,7 +102,7 @@ set(EXEC_FILES
     chunks_sorter_heap_sort.cpp
     chunks_sorter_topn.cpp
     chunks_sorter_full_sort.cpp
-    spillable_chunks_sorter_full_sort.cpp
+    spillable_chunks_sorter.cpp
     cross_join_node.cpp
     union_node.cpp
     raw_values_node.cpp
@@ -106,8 +127,8 @@ set(EXEC_FILES
     schema_scan_node.cpp
     dictionary_cache_writer.cpp
     arrow_flight_batch_reader.cpp
-    iceberg/iceberg_delete_builder.cpp
-    iceberg/iceberg_delete_file_iterator.cpp
+    range_router.cpp
+    iceberg/iceberg_delete_builder.cpp    
     paimon/paimon_delete_file_builder.cpp
     hdfs_scanner/cache_select_scanner.cpp
     hdfs_scanner/hdfs_scanner_text.cpp
@@ -159,6 +180,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_be_cloud_native_compactions_scanner.cpp
+    schema_scanner/schema_be_tablet_write_log_scanner.cpp
     schema_scanner/schema_pipe_files.cpp
     schema_scanner/schema_pipes.cpp
     schema_scanner/schema_recyclebin_catalogs.cpp
@@ -211,6 +233,7 @@ set(EXEC_FILES
     pipeline/pipeline_builder.cpp
     pipeline/project_operator.cpp
     pipeline/dict_decode_operator.cpp
+    pipeline/scan/glm_manager.cpp
     pipeline/scan/balanced_chunk_buffer.cpp
     pipeline/scan/chunk_source.cpp
     pipeline/scan/morsel.cpp
@@ -312,6 +335,13 @@ set(EXEC_FILES
     pipeline/schedule/pipeline_timer.cpp
     pipeline/wait_operator.cpp
     pipeline/runtime_filter_types.cpp
+    pipeline/fetch_task.cpp
+    pipeline/fetch_processor.cpp
+    pipeline/fetch_sink_operator.cpp
+    pipeline/fetch_source_operator.cpp
+    pipeline/lookup/tablet_adaptor.cpp
+    pipeline/lookup_request.cpp
+    pipeline/lookup_operator.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp
@@ -358,14 +388,18 @@ IF(ENABLE_MULTI_DYNAMIC_LIBS)
     set_property(TARGET join_hash_map_inst_objs PROPERTY POSITION_INDEPENDENT_CODE ON)
 ENDIF()
 
-target_precompile_headers(join_hash_map_inst_objs
-    PRIVATE
-    join/join_hash_map.h
-    join/join_hash_map.hpp
-    join/join_hash_map_method.hpp
-)
+if (WITH_PCH)
+    target_precompile_headers(join_hash_map_inst_objs
+        PRIVATE
+        join/join_hash_map.h
+        join/join_hash_map.hpp
+        join/join_hash_map_method.hpp
+    )
+endif()
 
 ADD_BE_LIB(Exec
     ${EXEC_FILES}
     $<TARGET_OBJECTS:join_hash_map_inst_objs>
 )
+
+target_link_libraries(Exec PUBLIC ExecCore)

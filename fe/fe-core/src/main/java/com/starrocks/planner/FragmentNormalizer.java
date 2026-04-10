@@ -21,16 +21,17 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
 import com.starrocks.planner.expression.ExprToNormalFormVisitor;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.BetweenPredicate;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -331,7 +332,7 @@ public class FragmentNormalizer {
             cacheParam.setSlot_remapping(outputSlotIdRemapping);
             cacheParam.setRegion_map(selectedRangeMap);
             cacheParam.setCan_use_multiversion(canUseMultiVersion);
-            cacheParam.setKeys_type(keysType.toThrift());
+            cacheParam.setKeys_type(ExprToThrift.keysTypeToThrift(keysType));
             cacheParam.setCached_plan_node_ids(cachedPlanNodeIds);
             if (RunMode.isSharedDataMode()) {
                 cacheParam.setIs_lake(true);

@@ -31,8 +31,14 @@ SpillProcessChannelPtr SpillProcessChannelFactory::get_or_create(int32_t sequenc
 }
 
 Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
+    std::lock_guard guard(_mutex);
     Status res;
-    if (is_working()) {
+    if (_is_closed) {
+        auto st = task_builder.final_task()();
+        if (!st.status().is_ok_or_eof()) {
+            res = st.status();
+        }
+    } else if (is_working()) {
         for (auto&& task : task_builder.tasks()) {
             add_spill_task(std::move(task));
         }
@@ -51,6 +57,26 @@ Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
         }
     }
     return res;
+}
+
+void SpillProcessChannel::close() {
+    std::lock_guard guard(_mutex);
+    if (!_is_finishing) {
+        return;
+    }
+
+    SpillProcessTask task;
+    while (!_spill_tasks.empty()) {
+        _spill_tasks.try_get(&task);
+    }
+
+    // run the last task
+    if (task) {
+        (void)task();
+    }
+
+    _spiller.reset();
+    _is_closed = true;
 }
 
 } // namespace starrocks

@@ -15,6 +15,7 @@
 
 package com.starrocks.staros;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
 import com.staros.metrics.MetricsSystem;
@@ -25,12 +26,12 @@ import com.starrocks.ha.StateChangeExecution;
 import com.starrocks.journal.CheckpointWorker;
 import com.starrocks.journal.StarMgrCheckpointWorker;
 import com.starrocks.journal.bdbje.BDBEnvironment;
-import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
+import com.starrocks.qe.JournalObservable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import org.apache.logging.log4j.LogManager;
@@ -91,6 +92,7 @@ public class StarMgrServer {
 
     private StarManagerServer starMgrServer;
     private StarOSBDBJEJournalSystem journalSystem;
+    private final JournalObservable starMgrJournalObservable = new JournalObservable();
     private ThreadPoolExecutor grpcExecutor;
 
     public StarMgrServer() {
@@ -108,7 +110,7 @@ public class StarMgrServer {
     }
 
     // for checkpoint thread only
-    public StarMgrServer(BDBJEJournal journal) {
+    public StarMgrServer(com.starrocks.journal.Journal journal) {
         journalSystem = new StarOSBDBJEJournalSystem(journal);
         starMgrServer = new StarManagerServer(journalSystem);
     }
@@ -125,8 +127,22 @@ public class StarMgrServer {
         return execution;
     }
 
+    /**
+     * NOTE: Only used by UtFrameUtils to construct a StarMgrServer with MockedJournal for testing.
+     */
+    @VisibleForTesting
+    public void initializeForTest(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
+        initializeImpl(bdbJournalSystem, baseImageDir);
+    }
+
     public void initialize(BDBEnvironment environment, String baseImageDir) throws IOException {
-        journalSystem = new StarOSBDBJEJournalSystem(environment);
+        StarOSBDBJEJournalSystem bdbJournalSystem = new StarOSBDBJEJournalSystem(environment);
+        initializeImpl(bdbJournalSystem, baseImageDir);
+    }
+
+    private void initializeImpl(StarOSBDBJEJournalSystem bdbJournalSystem, String baseImageDir) throws IOException {
+        this.journalSystem = bdbJournalSystem;
+        this.journalSystem.setJournalObservable(starMgrJournalObservable);
         imageDir = baseImageDir + IMAGE_SUBDIR;
 
         // TODO: remove separate deployment capability for now
@@ -180,6 +196,13 @@ public class StarMgrServer {
         // start rpc server
         starMgrServer = new StarManagerServer(journalSystem);
         starMgrServer.start(FrontendOptions.getLocalHostAddress(), com.staros.util.Config.STARMGR_RPC_PORT, grpcExecutor);
+        if (com.staros.util.Config.STARMGR_RPC_PORT == 0) {
+            // get the actual port
+            com.staros.util.Config.STARMGR_RPC_PORT = starMgrServer.getServerPort();
+            // update the configuration to reflect the real port
+            Config.cloud_native_meta_port = com.staros.util.Config.STARMGR_RPC_PORT;
+            LOG.info("star mgr rpc server bind port is set to {}.", com.staros.util.Config.STARMGR_RPC_PORT);
+        }
 
         StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         if (starOsAgent != null && !starOsAgent.init(starMgrServer)) {
@@ -284,6 +307,10 @@ public class StarMgrServer {
             return;
         }
         PrometheusRegistryHelper.visitPrometheusRegistry(MetricsSystem.METRIC_REGISTRY, visitor);
+    }
+
+    public JournalObservable getStarMgrJournalObservable() {
+        return starMgrJournalObservable;
     }
 
     public long getMaxJournalId() {

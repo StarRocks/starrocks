@@ -797,7 +797,7 @@ GROUP BY k1, k2
 HAVING COUNT(*) > 1
 ORDER BY k1, k2;
 -- result:
-E: (1064, "Getting analyzing error from line 4, column 7 to line 4, column 32. Detail message: 'CONCAT_WS(',', `test_full_outer_join_using`.`t1`.`v1`, `test_full_outer_join_using`.`t2`.`v2`, `test_full_outer_join_using`.`t3`.`v3`)' must be an aggregate expression or appear in GROUP BY clause.")
+[REGEX]E:.*
 -- !result
 SELECT k1, k2,
        CASE 

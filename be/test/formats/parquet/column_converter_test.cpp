@@ -20,6 +20,7 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "common/config_exec_fwd.h"
 #include "formats/parquet/encoding_dict.h"
 #include "formats/parquet/encoding_plain.h"
 #include "formats/parquet/file_reader.h"
@@ -60,7 +61,7 @@ protected:
         return scan_range;
     }
 
-    static void check_chunk_values(std::shared_ptr<Chunk>& chunk, const std::string& expected_value) {
+    static void check_chunk_values(ChunkPtr& chunk, const std::string& expected_value) {
         chunk->check_or_die();
         size_t mid = chunk->num_rows() / 2;
         for (size_t i = 0; i < chunk->num_rows(); i++) {

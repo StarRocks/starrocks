@@ -32,9 +32,12 @@
 #include <ctime>
 #include <limits>
 
-#include "common/config.h"
+#include "common/config_object_storage_fwd.h"
+#include "common/http/content_type.h"
 #include "common/s3_uri.h"
+#include "fs/credential/cloud_configuration_factory.h"
 #include "fs/encrypt_file.h"
+#include "fs/fs_options_helper.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
@@ -201,7 +204,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     string access_key_id;
     string secret_access_key;
     bool path_style_access = config::object_storage_endpoint_path_style_access;
-    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    const THdfsProperties* hdfs_properties = FSOptionsHelper::hdfs_properties(opts);
     if (hdfs_properties != nullptr) {
         if (hdfs_properties->__isset.access_key) {
             access_key_id = hdfs_properties->access_key;
@@ -269,7 +272,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
         const S3URI& uri, const FSOptions& opts,
         S3ClientFactory::OperationType operation_type = S3ClientFactory::OperationType::UNKNOWN) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    const THdfsProperties* hdfs_properties = FSOptionsHelper::hdfs_properties(opts);
     // TODO(SmithCruise) If CloudType is DEFAULT, we should use hadoop sdk to access file,
     // otherwise user's core-site.xml will not take effect in s3 sdk
     if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||
@@ -356,7 +359,7 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(
 
 class S3FileSystem : public FileSystem {
 public:
-    S3FileSystem(const FSOptions& options) : _options(std::move(options)) {}
+    S3FileSystem(FSOptions options) : _options(std::move(options)) {}
     ~S3FileSystem() override = default;
 
     S3FileSystem(const S3FileSystem&) = delete;
@@ -521,13 +524,16 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
         return Status::NotSupported(fmt::format("S3FileSystem does not support open mode {}", opts.mode));
     }
     auto client = new_s3client(uri, _options);
+    // Use provided content_type or default to application/octet-stream
+    std::string content_type = opts.content_type.empty() ? http::ContentType::OCTET_STREAM : opts.content_type;
     std::unique_ptr<io::OutputStream> output_stream;
     if (opts.direct_write) {
-        output_stream = std::make_unique<io::DirectS3OutputStream>(std::move(client), uri.bucket(), uri.key());
+        output_stream =
+                std::make_unique<io::DirectS3OutputStream>(std::move(client), uri.bucket(), uri.key(), content_type);
     } else {
-        output_stream = std::make_unique<io::S3OutputStream>(std::move(client), uri.bucket(), uri.key(),
-                                                             config::experimental_s3_max_single_part_size,
-                                                             config::experimental_s3_min_upload_part_size);
+        output_stream = std::make_unique<io::S3OutputStream>(
+                std::move(client), uri.bucket(), uri.key(), config::experimental_s3_max_single_part_size,
+                config::experimental_s3_min_upload_part_size, content_type);
     }
 
     return wrap_encrypted(std::make_unique<OutputStreamAdapter>(std::move(output_stream), fname), opts.encryption_info);
@@ -566,9 +572,9 @@ Status S3FileSystem::rename_file(const std::string& src, const std::string& targ
 
 StatusOr<SpaceInfo> S3FileSystem::space(const std::string& path) {
     // call `is_directory()` to check if 'path' is an valid path
-    const Status status = S3FileSystem::is_directory(path).status();
+    Status status = S3FileSystem::is_directory(path).status();
     if (!status.ok()) {
-        return status;
+        return std::move(status);
     }
     return SpaceInfo{.capacity = std::numeric_limits<int64_t>::max(),
                      .free = std::numeric_limits<int64_t>::max(),

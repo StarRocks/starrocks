@@ -18,26 +18,31 @@
 #include <memory>
 #include <variant>
 
+#include "base/concurrency/race_detect.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/agg_runtime_filter_builder.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 
 Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    _aggregator->attach_sink_observer(state, this->_observer);
+    return Status::OK();
+}
+
+Status AggregateBlockingSinkOperator::prepare_local_state(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare_local_state(state));
+    RETURN_IF_ERROR(_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_aggregator->open(state));
 
     _agg_group_by_with_limit = (!_aggregator->is_none_group_by_exprs() &&     // has group by keys
                                 _aggregator->limit() != -1 &&                 // has limit
                                 _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
                                 _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
-    _aggregator->attach_sink_observer(state, this->_observer);
     return Status::OK();
 }
 

@@ -25,6 +25,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -61,8 +62,15 @@ public class QueryDumpInfo implements DumpInfo {
 
     private final List<String> exceptionList = new ArrayList<>();
     private int beNum;
-    private int cachedAvgNumOfHardwareCores = -1;
-    private final Map<Long, Integer> numOfHardwareCoresPerBe = Maps.newHashMap();
+
+    // Be core stat
+    private int cachedAvgNumCores = -1;
+    private final Map<Long, Integer> numCoresPerBe = Maps.newHashMap();
+    // Be core stat v2
+    // warehouseId -> (beId -> numOfCores)
+    private final Map<Long, Map<Long, Integer>> numCoresPerWarehouse = Maps.newHashMap();
+    private final Map<Long, Integer> cachedAvgNumCoresPerWarehouse = Maps.newHashMap();
+    private long currentWarehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     private SessionVariable sessionVariable;
     private final ConnectContext connectContext;
@@ -137,20 +145,41 @@ public class QueryDumpInfo implements DumpInfo {
         addPartitionRowCount(tableName, partition, rowCount);
     }
 
-    public void setCachedAvgNumOfHardwareCores(int cores) {
-        cachedAvgNumOfHardwareCores = cores;
+    public void setCachedAvgNumCores(int cores) {
+        cachedAvgNumCores = cores;
     }
 
-    public int getCachedAvgNumOfHardwareCores() {
-        return this.cachedAvgNumOfHardwareCores;
+    public int getCachedAvgNumCores() {
+        return this.cachedAvgNumCores;
     }
 
-    public void addNumOfHardwareCoresPerBe(Map<Long, Integer> numOfHardwareCoresPerBe) {
-        this.numOfHardwareCoresPerBe.putAll(numOfHardwareCoresPerBe);
+    public void addNumCoresPerBe(Map<Long, Integer> numCoresPerBe) {
+        this.numCoresPerBe.putAll(numCoresPerBe);
     }
 
-    public Map<Long, Integer> getNumOfHardwareCoresPerBe() {
-        return this.numOfHardwareCoresPerBe;
+    public Map<Long, Integer> getNumCoresPerBe() {
+        return this.numCoresPerBe;
+    }
+
+    public void addWarehouseBeCoreStat(long warehouseId, int cachedAvgNumCores, Map<Long, Integer> numCoresPerBe) {
+        cachedAvgNumCoresPerWarehouse.put(warehouseId, cachedAvgNumCores);
+        numCoresPerWarehouse.put(warehouseId, new HashMap<>(numCoresPerBe));
+    }
+
+    public Map<Long, Integer> getCachedAvgNumCoresPerWarehouse() {
+        return cachedAvgNumCoresPerWarehouse;
+    }
+
+    public Map<Long, Map<Long, Integer>> getNumCoresPerWarehouse() {
+        return numCoresPerWarehouse;
+    }
+
+    public void setCurrentWarehouseId(long currentWarehouseId) {
+        this.currentWarehouseId = currentWarehouseId;
+    }
+
+    public long getCurrentWarehouseId() {
+        return currentWarehouseId;
     }
 
     @Override
@@ -174,7 +203,10 @@ public class QueryDumpInfo implements DumpInfo {
         this.partitionRowCountMap.clear();
         this.tableStatisticsMap.clear();
         this.createTableStmtMap.clear();
-        this.numOfHardwareCoresPerBe.clear();
+        this.numCoresPerBe.clear();
+        this.numCoresPerWarehouse.clear();
+        this.cachedAvgNumCoresPerWarehouse.clear();
+        this.currentWarehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         this.resourceSet.clear();
         this.hmsTableMap.clear();
         this.exceptionList.clear();

@@ -14,12 +14,8 @@
 
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include <functional>
 #include <memory>
-#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
@@ -51,12 +47,16 @@ public:
 
     // used to set fixed length for FLBA
     virtual void set_type_length(int32_t type_length) {}
+
+    virtual std::string to_string() const { return "Encoder"; }
 };
 
 class Decoder {
 public:
     Decoder() = default;
     virtual ~Decoder() = default;
+
+    virtual std::string to_string() const { return "Decoder"; }
 
     virtual Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) {
         return Status::NotSupported("set_dict is not supported");

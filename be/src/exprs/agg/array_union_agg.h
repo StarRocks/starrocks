@@ -14,18 +14,17 @@
 
 #pragma once
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -84,7 +83,7 @@ struct ArrayUnionAggAggregateState {
         if (data_column.size() > 0 || size == 0) {
             return &data_column;
         }
-        data_column.get_data().reserve(size);
+        data_column.reserve(size);
         if constexpr (is_distinct) {
             if constexpr (lt_is_string<PT>) {
                 for (auto& key : set) {
@@ -159,9 +158,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         const Column* src_data = ColumnHelper::get_data_column(src[0].get());
-        (*dst)->append(*src_data);
+        dst->append(*src_data);
     }
 
     std::string get_name() const override { return is_distinct ? "array_unique_agg" : "array_union_agg"; }

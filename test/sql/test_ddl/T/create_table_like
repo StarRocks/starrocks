@@ -1,4 +1,4 @@
--- name: test_ddl_create_table_like
+-- name: test_ddl_create_table_like @native
 create database db_${uuid0};
 use db_${uuid0};
 CREATE TABLE t1 (id1 int, id2 int, id3 double) DUPLICATE KEY(id1) COMMENT "c1" DISTRIBUTED BY HASH(id1) BUCKETS 1 properties('replication_num' = '1');

@@ -96,7 +96,7 @@ public class LakeAggregatePublishTest {
         List<TabletCommitInfo> transTablets1 = Lists.newArrayList();
 
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
                 for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                     TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tabletId, backendId);
@@ -129,7 +129,7 @@ public class LakeAggregatePublishTest {
     
         List<Tablet> tablets = Lists.newArrayList();
         for (Partition partition : table.getPartitions()) {
-            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
+            MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
             tablets.addAll(baseIndex.getTablets());
         }
 

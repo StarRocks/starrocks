@@ -123,7 +123,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 3. 启动该 BE 节点。
 
    ```Bash
-   sh bin/start_be.sh --daemon
+   ./bin/start_be.sh --daemon
    ```
 
 4. 查看节点是否启动成功。
@@ -158,7 +158,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 3. 启动该 CN 节点。
 
    ```Bash
-   sh bin/start_cn.sh --daemon
+   ./bin/start_cn.sh --daemon
    ```
 
 4. 查看节点是否启动成功。
@@ -195,7 +195,7 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 3. 启动该 FE 节点。
 
    ```Bash
-   sh bin/start_fe.sh --daemon
+   ./bin/start_fe.sh --daemon
    ```
 
 4. 查看节点是否启动成功。

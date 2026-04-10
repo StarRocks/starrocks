@@ -18,10 +18,9 @@
 
 #include "gutil/hash/jenkins.h"
 
-#include <common/logging.h>
-
 #include "gutil/hash/jenkins_lookup2.h"
 #include "gutil/integral_types.h"
+#include "gutil/logging.h"
 
 static inline uint32 char2unsigned(char c) {
     return static_cast<uint32>(static_cast<unsigned char>(c));

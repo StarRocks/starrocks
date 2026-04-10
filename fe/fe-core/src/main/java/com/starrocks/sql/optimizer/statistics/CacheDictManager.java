@@ -18,16 +18,17 @@ import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
@@ -252,7 +253,8 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public void removeGlobalDict(long tableId, ColumnId columnName) {
+    public void removeGlobalDict(OlapTable table, ColumnId columnName) {
+        long tableId = table.getId();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
 
         // skip dictionary operator in checkpoint thread
@@ -275,7 +277,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                 columnIdentifier = new ColumnIdentifier(tableId, ColumnId.create(rootColumn));
 
                 // Set dbId for the columnIdentifier to enable MetaUtils.getColumnByColumnId lookup
-                long dbId = MetaUtils.lookupDbIdByTableId(tableId);
+                long dbId = MetaUtils.lookupDbIdByTable(table);
                 if (dbId != -1) {
                     columnIdentifier.setDbId(dbId);
                     Column column = MetaUtils.getColumnByColumnId(columnIdentifier);
@@ -302,12 +304,13 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, ColumnId columnName, long collectVersion, long versionTime) {
+    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectVersion, long versionTime) {
         // skip dictionary operator in checkpoint thread
         if (GlobalStateMgr.isCheckpointThread()) {
             return;
         }
 
+        long tableId = table.getId();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
         if (!dictStatistics.asMap().containsKey(columnIdentifier)) {
             return;
@@ -324,7 +327,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
                     long dictCollectVersion = columnDict.getCollectedVersion();
                     if (collectVersion != dictCollectVersion) {
                         LOG.info("remove dict by unmatched version {}:{}", collectVersion, dictCollectVersion);
-                        removeGlobalDict(tableId, columnName);
+                        removeGlobalDict(table, columnName);
                         return;
                     }
                     columnDict.updateVersion(versionTime);
@@ -351,11 +354,12 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
         return Optional.empty();
     }
 
-    public Optional<ColumnDict> getGlobalDictSync(long tableId, ColumnId columnName) {
+    public Optional<ColumnDict> getGlobalDictSync(OlapTable table, ColumnId columnName) {
+        long tableId = table.getId();
         ColumnIdentifier columnIdentifier = new ColumnIdentifier(tableId, columnName);
 
         // NOTE: it's used to patch the dbId, because asyncLoad requires the dbId
-        long dbId = MetaUtils.lookupDbIdByTableId(tableId);
+        long dbId = MetaUtils.lookupDbIdByTable(table);
         if (dbId == -1) {
             throw new RuntimeException("table not found " + tableId);
         }
@@ -434,32 +438,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = new ArrayList<>();
-        dictStatistics.asMap().values().stream().findAny().ifPresent(future -> {
-            if (future.isDone()) {
-                try {
-                    future.get().ifPresent(samples::add);
-                } catch (Exception e) {
-                    LOG.warn("get samples failed", e);
-                }
-            }
-        });
-
-        return Lists.newArrayList(Pair.create(samples, (long) dictStatistics.asMap().size()));
-    }
-
-    private List<ColumnDict> getSamplesForMemoryTracker() {
-        List<ColumnDict> result = new ArrayList<>();
-        dictStatistics.asMap().values().stream().findAny().ifPresent(future -> {
-            if (future.isDone()) {
-                try {
-                    future.get().ifPresent(result::add);
-                } catch (Exception e) {
-                    LOG.warn("get samples failed", e);
-                }
-            }
-        });
-        return result;
+    public long estimateSize() {
+        return Estimator.estimate(dictStatistics.asMap(), 20);
     }
 }

@@ -333,7 +333,7 @@ public class VariablePriorityTest {
         // mock context
         ConnectContext ctx = new ConnectContext();
         ConnectProcessor processor = new ConnectProcessor(ctx);
-        TMasterOpResult result = processor.proxyExecute(request);
+        TMasterOpResult result = processor.proxyExecute(request, null);
         Assertions.assertNotNull(result);
         Assertions.assertEquals(300, ctx.getSessionVariable().getQueryTimeoutS());
 
@@ -352,7 +352,7 @@ public class VariablePriorityTest {
         // mock context
         ctx = new ConnectContext();
         processor = new ConnectProcessor(ctx);
-        result = processor.proxyExecute(request);
+        result = processor.proxyExecute(request, null);
         Assertions.assertNotNull(result);
         Assertions.assertEquals(10, ctx.getSessionVariable().getQueryTimeoutS());
     }

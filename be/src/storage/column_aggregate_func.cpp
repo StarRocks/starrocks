@@ -16,6 +16,7 @@
 
 #include <fmt/format.h>
 
+#include "base/bit/bit_util.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -26,12 +27,10 @@
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/combinator/agg_state_union.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_aggregator.h"
-#include "util/bit_util.h"
-#include "util/percentile_value.h"
+#include "types/percentile_value.h"
 
 namespace starrocks {
 
@@ -146,7 +145,7 @@ public:
     }
 
     void append_data(Column* agg) override {
-        auto* col = down_cast<BinaryColumn*>(agg);
+        auto* col = static_cast<BinaryColumn*>(agg);
         // NOTE: assume the storage pointed by |this->data().slice()| not destroyed.
         col->append(this->data().slice());
     }
@@ -207,8 +206,8 @@ public:
         _aggregate_column = agg;
 
         auto* n = down_cast<NullableColumn*>(agg);
-        _child->update_aggregate(n->data_column().get());
-        _null_child->update_aggregate(n->null_column().get());
+        _child->update_aggregate(n->data_column_raw_ptr());
+        _null_child->update_aggregate(n->null_column_raw_ptr());
 
         reset();
     }
@@ -223,7 +222,7 @@ public:
         _null_child->finalize();
 
         auto p = down_cast<NullableColumn*>(_aggregate_column);
-        p->set_has_null(SIMD::count_nonzero(p->null_column()->get_data()));
+        p->set_has_null(SIMD::count_nonzero(p->immutable_null_column_data()));
         _aggregate_column = nullptr;
     }
 
@@ -261,7 +260,7 @@ public:
     AggFuncBasedValueAggregator(AggStateDesc* agg_state_desc, std::unique_ptr<AggregateFunction> agg_state_unoin)
             : _agg_func(agg_state_unoin.get()) {
         _agg_state_unoin = std::move(agg_state_unoin);
-        _runtime_state = std::make_unique<RuntimeState>(ExecEnv::GetInstance());
+        _runtime_state = std::make_unique<RuntimeState>(TQueryGlobals());
         _mem_pool = std::make_unique<MemPool>();
         _func_ctx = FunctionContext::create_context(_runtime_state.get(), _mem_pool.get(),
                                                     agg_state_desc->get_return_type(), agg_state_desc->get_arg_types());
@@ -377,6 +376,7 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_DECIMAL32, Decimal32Column, int32_t)
             CASE_REPLACE(TYPE_DECIMAL64, Decimal64Column, int64_t)
             CASE_REPLACE(TYPE_DECIMAL128, Decimal128Column, int128_t)
+            CASE_REPLACE(TYPE_DECIMAL256, Decimal256Column, int256_t)
             CASE_REPLACE(TYPE_DATE_V1, DateColumn, DateValue)
             CASE_REPLACE(TYPE_DATE, DateColumn, DateValue)
             CASE_REPLACE(TYPE_DATETIME_V1, TimestampColumn, TimestampValue)
@@ -423,6 +423,7 @@ ColumnAggregatorPtr ColumnAggregatorFactory::create_key_column_aggregator(const 
         CASE_NEW_KEY_AGGREGATOR(TYPE_DECIMAL32, Decimal32Column)
         CASE_NEW_KEY_AGGREGATOR(TYPE_DECIMAL64, Decimal64Column)
         CASE_NEW_KEY_AGGREGATOR(TYPE_DECIMAL128, Decimal128Column)
+        CASE_NEW_KEY_AGGREGATOR(TYPE_DECIMAL256, Decimal256Column)
         CASE_NEW_KEY_AGGREGATOR(TYPE_DATE, DateColumn)
         CASE_NEW_KEY_AGGREGATOR(TYPE_DATETIME, TimestampColumn)
         CASE_DEFAULT_WARNING(type)

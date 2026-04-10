@@ -29,7 +29,6 @@
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/runtime_state.h"
 #include "storage/runtime_range_pruner.hpp"
 
 namespace tparquet {

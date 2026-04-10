@@ -62,6 +62,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 import java.io.File;
 import java.io.IOException;
@@ -71,6 +73,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class StatisticsCalculatorTest {
@@ -245,7 +250,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds =
                     partitions.stream().mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         List<Column> columns = table.getColumns();
@@ -260,7 +265,7 @@ public class StatisticsCalculatorTest {
             LogicalOlapScanOperator olapScanOperator = new LogicalOlapScanOperator(table,
                         refToColumn, columnToRef,
                         null, -1, null,
-                        ((OlapTable) table).getBaseIndexId(),
+                        ((OlapTable) table).getBaseIndexMetaId(),
                         partitionIds,
                         null,
                         false,
@@ -351,8 +356,11 @@ public class StatisticsCalculatorTest {
         Partition partition3 = partitions.get(2);
         // mock one empty partition
         partition1.getDefaultPhysicalPartition().setVisibleVersion(Partition.PARTITION_INIT_VERSION, System.currentTimeMillis());
+        partition1.getDefaultPhysicalPartition().setDataVersion(Partition.PARTITION_INIT_VERSION);
         partition2.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+        partition2.getDefaultPhysicalPartition().setDataVersion(2);
         partition3.getDefaultPhysicalPartition().setVisibleVersion(2, System.currentTimeMillis());
+        partition3.getDefaultPhysicalPartition().setDataVersion(2);
         List<Long> partitionIds = partitions.stream().filter(partition -> !(partition.getName().equalsIgnoreCase("p1"))).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
 
@@ -369,7 +377,7 @@ public class StatisticsCalculatorTest {
                                 ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
                                 ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate),
                                 null, -1, null,
-                                ((OlapTable) table).getBaseIndexId(),
+                                ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -416,7 +424,7 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p1")).
                     mapToLong(Partition::getId).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
@@ -426,7 +434,7 @@ public class StatisticsCalculatorTest {
                                 null, -1,
                                 new BinaryPredicateOperator(BinaryType.EQ,
                                             idDate, ConstantOperator.createDate(LocalDateTime.of(2013, 12, 30, 0, 0, 0))),
-                                ((OlapTable) table).getBaseIndexId(),
+                                ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -456,7 +464,7 @@ public class StatisticsCalculatorTest {
                     new LogicalOlapScanOperator(table,
                                 ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
                                 ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate),
-                                null, -1, null, ((OlapTable) table).getBaseIndexId(),
+                                null, -1, null, ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -512,14 +520,14 @@ public class StatisticsCalculatorTest {
         List<Long> partitionIds = partitions.stream().filter(partition -> partition.getName().equalsIgnoreCase("p2")).
                     mapToLong(partition -> partition.getId()).boxed().collect(Collectors.toList());
         for (Partition partition : partitions) {
-            partition.getDefaultPhysicalPartition().getBaseIndex().setRowCount(1000);
+            partition.getDefaultPhysicalPartition().getLatestBaseIndex().setRowCount(1000);
         }
 
         LogicalOlapScanOperator olapScanOperator =
                     new LogicalOlapScanOperator(table,
                                 ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
                                 ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate), null, -1, null,
-                                ((OlapTable) table).getBaseIndexId(),
+                                ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -551,7 +559,7 @@ public class StatisticsCalculatorTest {
                     new LogicalOlapScanOperator(table,
                                 ImmutableMap.of(idDate, new Column("id_date", DateType.DATE, true)),
                                 ImmutableMap.of(new Column("id_date", DateType.DATE, true), idDate), null, -1, null,
-                                ((OlapTable) table).getBaseIndexId(),
+                                ((OlapTable) table).getBaseIndexMetaId(),
                                 partitionIds,
                                 null,
                                 false,
@@ -697,6 +705,87 @@ public class StatisticsCalculatorTest {
         Assertions.assertThrows(StarRocksPlannerException.class, () -> statistics.getColumnStatistic(v3));
     }
 
+    public enum OuterJoin {
+        LEFT_OUTER_JOIN,
+        RIGHT_OUTER_JOIN
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = OuterJoin.class)
+    public void testOuterJoinPreservesOuterSideNullFraction(OuterJoin outerJoin) {
+        // GIVEN
+        ColumnRefOperator outerJoinKey = columnRefFactory.create("nullable_col", IntegerType.INT, true);
+        ColumnRefOperator outerOtherCol = columnRefFactory.create("other_col", IntegerType.INT, true);
+
+        final double outerNullFraction = 0.755;
+        Statistics.Builder outerBuilder = Statistics.builder();
+        outerBuilder.setOutputRowCount(1000000);
+        outerBuilder.addColumnStatistics(ImmutableMap.of(
+                outerJoinKey, new ColumnStatistic(1, 100000, outerNullFraction, 8, 50000)));
+        outerBuilder.addColumnStatistics(ImmutableMap.of(
+                outerOtherCol, new ColumnStatistic(0, 100, 0.1, 8, 50)));
+
+        Group outerGroup = new Group(0);
+        outerGroup.setStatistics(outerBuilder.build());
+        outerGroup.setLogicalProperty(new LogicalProperty(
+                new ColumnRefSet(Lists.newArrayList(outerJoinKey, outerOtherCol))));
+
+        ColumnRefOperator innerKey = columnRefFactory.create("dim_id", IntegerType.INT, true);
+        ColumnRefOperator innerVal = columnRefFactory.create("dim_val", IntegerType.INT, true);
+
+        Statistics.Builder innerBuilder = Statistics.builder();
+        innerBuilder.setOutputRowCount(200000);
+        innerBuilder.addColumnStatistics(ImmutableMap.of(
+                innerKey, new ColumnStatistic(1, 200000, 0, 8, 200000)));
+        innerBuilder.addColumnStatistics(ImmutableMap.of(
+                innerVal, new ColumnStatistic(0, 100, 0, 8, 50)));
+
+        Group innerGroup = new Group(1);
+        innerGroup.setStatistics(innerBuilder.build());
+        innerGroup.setLogicalProperty(new LogicalProperty(new ColumnRefSet(Lists.newArrayList(innerKey, innerVal))));
+
+        // LEFT JOIN: outer.nullable_col = inner.dim1_id
+        // RIGHT JOIN: inner.dim1_id = outer.nullable_col
+        JoinOperator joinType;
+        if (outerJoin == OuterJoin.LEFT_OUTER_JOIN) {
+            joinType = JoinOperator.LEFT_OUTER_JOIN;
+        } else {
+            joinType = JoinOperator.RIGHT_OUTER_JOIN;
+        }
+
+        BinaryPredicateOperator joinPred;
+        GroupExpression groupExpr;
+        if (joinType == JoinOperator.LEFT_OUTER_JOIN) {
+            joinPred = new BinaryPredicateOperator(BinaryType.EQ, outerJoinKey, innerKey);
+        } else {
+            joinPred = new BinaryPredicateOperator(BinaryType.EQ, innerKey, outerJoinKey);
+        }
+
+        LogicalJoinOperator joinOp = new LogicalJoinOperator(joinType, joinPred);
+
+        if (joinType == JoinOperator.LEFT_OUTER_JOIN) {
+            groupExpr = new GroupExpression(joinOp, Lists.newArrayList(outerGroup, innerGroup));
+        } else {
+            groupExpr = new GroupExpression(joinOp, Lists.newArrayList(innerGroup, outerGroup));
+        }
+
+        Group joinGroup = new Group(2);
+        groupExpr.setGroup(joinGroup);
+        ExpressionContext exprCtx = new ExpressionContext(groupExpr);
+        StatisticsCalculator calc = new StatisticsCalculator(exprCtx, columnRefFactory, optimizerContext);
+
+        // WHEN
+        // The outer side join key's null fraction should be preserved after LEFT JOIN
+        calc.estimatorStats();
+        Statistics joinStats = exprCtx.getStatistics();
+        ColumnStatistic outerJoinKeyStatAfterJoin = joinStats.getColumnStatistic(outerJoinKey);
+
+        // THEN
+        Assertions.assertEquals(outerNullFraction, outerJoinKeyStatAfterJoin.getNullsFraction(), 0.001,
+                "Outer join key null fraction should be preserved after " + outerJoin.name());
+    }
+
+
     private static File newFolder(File root, String... subDirs) throws IOException {
         String subFolder = String.join("/", subDirs);
         File result = new File(root, subFolder);
@@ -704,5 +793,51 @@ public class StatisticsCalculatorTest {
             throw new IOException("Couldn't create folders " + root);
         }
         return result;
+    }
+
+    @Test
+    public void testSkipPredicateColumnsCollectionScopeIsNestableAndRestores() {
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        try (var scope1 = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+            Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+            try (var scope2 = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+                Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+            }
+
+            Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+        }
+
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+    }
+
+    @Test
+    public void testSkipPredicateColumnsCollectionScopeDoesNotLeakAcrossThreads() throws Exception {
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(1);
+        AtomicReference<Throwable> err = new AtomicReference<>();
+
+        Thread t = new Thread(() -> {
+            try (var scope = StatisticsCalculator.skipPredicateColumnsCollectionScope()) {
+                entered.countDown();
+                Assertions.assertTrue(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+            } catch (Throwable e) {
+                err.set(e);
+            } finally {
+                done.countDown();
+            }
+        });
+        t.start();
+
+        Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
+        Assertions.assertFalse(StatisticsCalculator.isInSkipPredicateColumnsCollectionScope());
+
+        Assertions.assertTrue(done.await(5, TimeUnit.SECONDS));
+        if (err.get() != null) {
+            throw new AssertionError(err.get());
+        }
     }
 }

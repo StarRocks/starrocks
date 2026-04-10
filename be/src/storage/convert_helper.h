@@ -18,9 +18,9 @@
 #include <vector>
 
 #include "column/column.h"
-#include "column/datum.h"
 #include "common/status.h"
 #include "storage/olap_common.h"
+#include "types/datum.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -34,7 +34,7 @@ class Schema;
 class TypeConverter {
 public:
     TypeConverter() = default;
-    ~TypeConverter() = default;
+    virtual ~TypeConverter() = default;
 
     virtual Status convert(void* dest, const void* src, MemPool* memPool) const = 0;
 
@@ -53,9 +53,9 @@ const TypeConverter* get_type_converter(LogicalType from_type, LogicalType to_ty
 class MaterializeTypeConverter {
 public:
     MaterializeTypeConverter() = default;
-    ~MaterializeTypeConverter() = default;
+    virtual ~MaterializeTypeConverter() = default;
 
-    virtual Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const = 0;
+    virtual Status convert_materialized(ColumnPtr src_col, Column* dst_col, TypeInfo* src_type) const = 0;
 };
 
 const MaterializeTypeConverter* get_materialized_converter(LogicalType from_type, MaterializeType to_type);

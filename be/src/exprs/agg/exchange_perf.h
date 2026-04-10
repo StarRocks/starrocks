@@ -16,13 +16,13 @@
 
 #include <fmt/format.h>
 
+#include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "column/fixed_length_column.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
-#include "util/time.h"
 
 namespace starrocks {
 
@@ -117,8 +117,8 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        auto* column = down_cast<Int64Column*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        auto* column = down_cast<Int64Column*>(dst.get());
         column->get_data().assign(chunk_size, 1);
     }
 

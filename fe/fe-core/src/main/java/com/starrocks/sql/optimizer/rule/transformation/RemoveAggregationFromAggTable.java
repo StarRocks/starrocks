@@ -74,7 +74,7 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         }
         OlapTable olapTable = (OlapTable) scanOperator.getTable();
 
-        MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByIndexId(scanOperator.getSelectedIndexId());
+        MaterializedIndexMeta materializedIndexMeta = olapTable.getIndexMetaByMetaId(scanOperator.getSelectedIndexMetaId());
         // must be Aggregation
         if (!materializedIndexMeta.getKeysType().isAggregationFamily()) {
             return false;

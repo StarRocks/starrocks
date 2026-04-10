@@ -19,11 +19,11 @@
 
 #include <memory>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "common/status.h"
+#include "common/util/stack_trace_mutex.h"
 #include "compaction_task_context.h"
 #include "gutil/macros.h"
-#include "util/blocking_queue.hpp"
-#include "util/stack_trace_mutex.h"
 
 namespace google::protobuf {
 class RpcController;
@@ -41,6 +41,7 @@ namespace starrocks::lake {
 class CompactionScheduler;
 class CompactionTask;
 class TabletManager;
+class TabletParallelCompactionManager;
 
 // For every `CompactRequest` a new `CompactionTaskCallback` instance will be created.
 // A single `CompactRequest` may have multiple tablets to be compacted, each time a tablet compaction
@@ -95,7 +96,7 @@ private:
     int64_t _timeout_deadline_ms;
     // compaction's last check time in second, initialized when first put into task queue,
     // used to help check whether it's valid periodically, task's in queue time is considered
-    int64_t _last_check_time;
+    int64_t _last_check_time{INT64_MAX};
     // use lock to protect _last_check_time and prevent multiple rpc called
     mutable std::mutex _txn_valid_check_mutex;
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
@@ -127,7 +128,7 @@ class CompactionScheduler {
     public:
         constexpr const static int16_t kConcurrencyRestoreTimes = 2;
 
-        explicit Limiter(int16_t total) : _total(total), _free(total), _reserved(0), _success(0) {}
+        explicit Limiter(int16_t total) : _total(total), _free(total) {}
 
         // Acquire a token for doing compaction task. returns true on success and false otherwise.
         // No new compaction task should be scheduled to run if the method returned false.
@@ -149,9 +150,9 @@ class CompactionScheduler {
         // The number of tokens can be assigned to compaction tasks.
         int64_t _free;
         // The number of reserved tokens. reserved tokens cannot be assigned to compaction task.
-        int16_t _reserved;
+        int16_t _reserved{0};
         // The number of tasks that didn't encounter the Status::MemoryLimitExceeded error.
-        int64_t _success;
+        int64_t _success{0};
     };
 
     using CompactionContextPtr = std::unique_ptr<CompactionTaskContext>;
@@ -254,6 +255,13 @@ private:
     std::atomic<bool> _stopped{false};
     std::mutex _mutex;
     WrapTaskQueues _task_queues;
+
+    // Per-tablet parallel compaction manager
+    std::unique_ptr<TabletParallelCompactionManager> _parallel_mgr;
+
+    // Process compaction request with parallel mode
+    void process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
+                                     const std::shared_ptr<CompactionTaskCallback>& callback);
 };
 
 inline bool CompactionScheduler::Limiter::acquire() {

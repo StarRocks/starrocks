@@ -18,6 +18,7 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -70,28 +71,24 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
                                           String comment) throws DdlException {
         String id = UUID.randomUUID().toString();
         StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
-        GlobalStateMgr.getCurrentState().getEditLog().logCreateStorageVolume(sv);
-        idToSV.put(id, sv);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateStorageVolume(sv, wal -> idToSV.put(id, sv));
         return id;
     }
 
     @Override
     protected void updateInternalNoLock(StorageVolume sv) {
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv);
-        idToSV.put(sv.getId(), sv);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv, wal -> idToSV.put(sv.getId(), sv));
     }
 
     @Override
     protected void replaceInternalNoLock(StorageVolume sv) {
-        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv);
-        idToSV.put(sv.getId(), sv);
+        GlobalStateMgr.getCurrentState().getEditLog().logUpdateStorageVolume(sv, wal -> idToSV.put(sv.getId(), sv));
     }
 
     @Override
     protected void removeInternalNoLock(StorageVolume sv) {
         DropStorageVolumeLog log = new DropStorageVolumeLog(sv.getId());
-        GlobalStateMgr.getCurrentState().getEditLog().logDropStorageVolume(log);
-        idToSV.remove(sv.getId());
+        GlobalStateMgr.getCurrentState().getEditLog().logDropStorageVolume(log, wal -> idToSV.remove(sv.getId()));
     }
 
     @Override
@@ -173,5 +170,15 @@ public class SharedNothingStorageVolumeMgr extends StorageVolumeMgr {
     @Override
     protected void updateTableStorageInfo(String storageVolumeId) throws DdlException {
 
+    }
+
+    @Override
+    public long getOrCreateVirtualTabletId(String storageVolumeName, String srcServiceId) throws MetaNotFoundException {
+        return -1;
+    }
+
+    @Override
+    public boolean hasStorageVolumeBindAsVirtualGroup(long shardGroupId) {
+        return false;
     }
 }

@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.ColumnId;
+import com.starrocks.catalog.OlapTable;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -43,7 +44,7 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime) {
+    public void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion, long versionTime) {
     }
 
     @Override
@@ -52,7 +53,7 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public void removeGlobalDict(long tableId, ColumnId columnName) {
+    public void removeGlobalDict(OlapTable table, ColumnId columnName) {
     }
 
     @Override

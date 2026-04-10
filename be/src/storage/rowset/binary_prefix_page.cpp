@@ -39,13 +39,13 @@
 #include <cstring>
 #include <map>
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "common/logging.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/mem_pool.h"
-#include "util/coding.h"
-#include "util/faststring.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -329,7 +329,6 @@ Status BinaryPrefixPageDecoder<Type>::next_batch(const SparseRange<>& range, Col
     }
     return Status::OK();
 }
-
 template class BinaryPrefixPageDecoder<TYPE_CHAR>;
 template class BinaryPrefixPageDecoder<TYPE_VARCHAR>;
 

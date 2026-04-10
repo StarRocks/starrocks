@@ -20,12 +20,18 @@
 #include <atomic>
 #include <utility>
 
-#include "agent/master_info.h"
+#include "base/container/raw_container.h"
+#include "base/debug/trace.h"
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/compiler_util.h"
-#include "common/config.h"
+#include "common/config_lake_fwd.h"
+#include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/util.h"
 #include "storage/lake/cloud_native_index_compaction_task.h"
@@ -38,8 +44,10 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/options.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
@@ -49,11 +57,6 @@
 #include "storage/protobuf_file.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
-#include "util/failpoint/fail_point.h"
-#include "util/raw_container.h"
-#include "util/trace.h"
 
 // TODO: Eliminate the explicit dependency on staros worker
 #ifdef USE_STAROS
@@ -71,17 +74,40 @@ static bvar::Adder<int64_t> g_read_bundle_tablet_meta_real_access_cnt("lake",
                                                                       "lake_read_bundle_tablet_meta_real_access_cnt");
 static bvar::LatencyRecorder g_read_bundle_tablet_meta_latency("lake", "lake_read_bundle_tablet_meta_latency");
 
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet::ShardInfo& shard_info) {
+    const auto& properties = shard_info.properties;
+
+    int64_t table_id = -1;
+    auto table_id_iter = properties.find("tableId");
+    if (table_id_iter != properties.end()) {
+        table_id = std::atol(table_id_iter->second.data());
+    }
+
+    int64_t partition_id = -1;
+    auto partition_id_iter = properties.find("partitionId");
+    if (partition_id_iter != properties.end()) {
+        partition_id = std::atol(partition_id_iter->second.data());
+    }
+
+    return std::make_pair(table_id, partition_id);
+}
+#endif
+
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
                              int64_t cache_capacity)
         : _location_provider(std::move(location_provider)),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
-          _update_mgr(update_mgr) {
+          _update_mgr(update_mgr),
+          _table_schema_service(std::make_unique<TableSchemaService>(this)) {
     _update_mgr->set_tablet_mgr(this);
 }
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, int64_t cache_capacity)
-        : _location_provider(std::move(location_provider)), _metacache(std::make_unique<Metacache>(cache_capacity)) {}
+        : _location_provider(std::move(location_provider)),
+          _metacache(std::make_unique<Metacache>(cache_capacity)),
+          _table_schema_service(std::make_unique<TableSchemaService>(this)) {}
 
 TabletManager::~TabletManager() = default;
 
@@ -142,6 +168,10 @@ std::string TabletManager::delvec_location(int64_t tablet_id, std::string_view d
     return _location_provider->delvec_location(tablet_id, delvec_name);
 }
 
+std::string TabletManager::lcrm_location(int64_t tablet_id, std::string_view crm_name) const {
+    return _location_provider->lcrm_location(tablet_id, crm_name);
+}
+
 std::string TabletManager::sst_location(int64_t tablet_id, std::string_view sst_name) const {
     return _location_provider->sst_location(tablet_id, sst_name);
 }
@@ -159,23 +189,14 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
 }
 
 Status TabletManager::drop_local_cache(const std::string& path) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(path));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     return fs->drop_local_cache(path);
 }
 
 // current lru cache does not support updating value size, so use refill to update.
-void TabletManager::update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint) {
-    // use write lock to protect parallel segment size update
-    std::unique_lock wrlock(_meta_lock);
-    auto segment = _metacache->lookup_segment(key);
-    if (segment == nullptr) {
-        return;
-    }
-    if (segment_addr_hint != 0 && segment_addr_hint != reinterpret_cast<intptr_t>(segment.get())) {
-        // the segment in cache is not the one as expected, skip the cache update
-        return;
-    }
-    _metacache->cache_segment(key, std::move(segment));
+void TabletManager::update_segment_cache_size(std::string_view key, size_t mem_cost, intptr_t segment_addr_hint) {
+    TEST_SYNC_POINT_CALLBACK("lake::TabletManager::update_segment_cache_size", nullptr);
+    _metacache->cache_segment_if_present(key, mem_cost, segment_addr_hint);
 }
 
 void TabletManager::prune_metacache() {
@@ -194,6 +215,10 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb->set_next_rowset_id(1);
     tablet_metadata_pb->set_cumulative_point(0);
     tablet_metadata_pb->set_gtid(req.gtid);
+    if (req.__isset.range) {
+        ASSIGN_OR_RETURN(auto range_pb, TabletRangeHelper::convert_t_range_to_pb_range(req.range));
+        *tablet_metadata_pb->mutable_range() = range_pb;
+    }
 
     if (req.__isset.enable_persistent_index) {
         tablet_metadata_pb->set_enable_persistent_index(req.enable_persistent_index);
@@ -326,6 +351,7 @@ DEFINE_FAIL_POINT(tablet_meta_not_found);
 // NOTE: tablet_metas is non-const and we will clear schemas for optimization.
 // Callers should ensure thread safety.
 Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadataPB>& tablet_metas) {
+    TEST_ERROR_POINT("TabletManager::put_bundle_tablet_metadata");
     if (tablet_metas.empty()) {
         return Status::InternalError("tablet_metas cannot be empty");
     }
@@ -356,7 +382,7 @@ Status TabletManager::put_bundle_tablet_metadata(std::map<int64_t, TabletMetadat
     const std::string meta_location =
             bundle_tablet_metadata_location(tablet_metas.begin()->first, tablet_metas.begin()->second.version());
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(meta_location));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(meta_location));
     WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto meta_file, fs->new_writable_file(opts, meta_location));
     std::string serialized_buf;
@@ -563,7 +589,7 @@ StatusOr<TabletMetadataPtrs> TabletManager::get_metas_from_bundle_tablet_metadat
     std::unique_ptr<RandomAccessFile> input_file;
     RandomAccessFileOptions opts{.skip_fill_local_cache = true};
     if (input_fs == nullptr) {
-        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(location));
+        ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(location));
         ASSIGN_OR_RETURN(input_file, fs->new_random_access_file(opts, location));
     } else {
         ASSIGN_OR_RETURN(input_file, input_fs->new_random_access_file(opts, location));
@@ -620,7 +646,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     ASSIGN_OR_RETURN(auto real_path, _location_provider->real_location(path));
     std::shared_ptr<FileSystem> file_system;
     if (!fs) {
-        ASSIGN_OR_RETURN(file_system, FileSystem::CreateSharedFromString(path));
+        ASSIGN_OR_RETURN(file_system, FileSystemFactory::CreateSharedFromString(path));
     } else {
         file_system = fs;
     }
@@ -658,7 +684,7 @@ StatusOr<TabletMetadataPtr> TabletManager::get_single_tablet_metadata(int64_t ta
     size_t offset = 0;
     size_t size = 0;
     if (meta_it == bundle_metadata->tablet_meta_pages().end()) {
-        return Status::Corruption(strings::Substitute("can not find tablet $0 from shared tablet metadata", tablet_id));
+        return Status::NotFound(strings::Substitute("can not find tablet $0 from shared tablet metadata", tablet_id));
     } else {
         const PagePointerPB& page_pointer = meta_it->second;
         offset = page_pointer.offset();
@@ -740,7 +766,7 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     std::string prefix = fmt::format("{:016X}_", tablet_id);
 
     auto root = _location_provider->metadata_root_location(tablet_id);
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {
             objects.insert(join_path(root, name));
@@ -1103,11 +1129,52 @@ StatusOr<TabletSchemaPtr> TabletManager::get_output_rowset_schema(std::vector<ui
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    if (g_worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
+        auto shard_info_or = g_worker->retrieve_shard_info(context->tablet_id);
+        if (shard_info_or.ok()) {
+            auto id_pair = get_table_partition_id(shard_info_or.value());
+            if (context->table_id == 0) {
+                context->table_id = id_pair.first;
+            }
+            if (context->partition_id == 0) {
+                context->partition_id = id_pair.second;
+            }
+        }
+    }
+#endif
+
+    ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
+    const auto& tablet_metadata = tablet.metadata();
+    ASSIGN_OR_RETURN(auto compaction_policy,
+                     CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction));
+    ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
+    return compact(context, std::move(input_rowsets));
+}
+
+StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* context,
+                                                   std::vector<RowsetPtr> input_rowsets) {
+#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
+    // Retrieve table_id and partition_id from shard info if not already set.
+    // This is needed for parallel compaction which may call this overload directly.
+    if (g_worker != nullptr && (context->table_id == 0 || context->partition_id == 0)) {
+        auto shard_info_or = g_worker->retrieve_shard_info(context->tablet_id);
+        if (shard_info_or.ok()) {
+            auto id_pair = get_table_partition_id(shard_info_or.value());
+            if (context->table_id == 0) {
+                context->table_id = id_pair.first;
+            }
+            if (context->partition_id == 0) {
+                context->partition_id = id_pair.second;
+            }
+        }
+    }
+#endif
+
     ASSIGN_OR_RETURN(auto tablet, get_tablet(context->tablet_id, context->version));
     auto tablet_metadata = tablet.metadata();
     ASSIGN_OR_RETURN(auto compaction_policy,
                      CompactionPolicy::create(this, tablet_metadata, context->force_base_compaction));
-    ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     std::vector<uint32_t> input_rowsets_id;
     size_t total_input_rowsets_file_size = 0;
@@ -1185,7 +1252,18 @@ int64_t TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size)
         }
     }
 
-    int64_t base_size = get_tablet_data_size(tablet_id, nullptr).value_or(0);
+    // Immutable check for random bucketing is best-effort.
+    // On cache hit, compute base_size directly from the cached metadata to avoid any remote I/O.
+    // On cache miss, whether to fallback LIST metadata files is controlled by
+    // `allow_list_object_for_random_bucketing_on_cache_miss`.
+    int64_t base_size = 0;
+    if (auto metadata = get_latest_cached_tablet_metadata(tablet_id); metadata != nullptr) {
+        for (const auto& rowset : metadata->rowsets()) {
+            base_size += rowset.data_size();
+        }
+    } else if (config::allow_list_object_for_random_bucketing_on_cache_miss) {
+        base_size = get_tablet_data_size(tablet_id, nullptr).value_or(0);
+    }
 
     std::unique_lock wrlock(_meta_lock);
     const auto& it = _tablet_in_writing_size.find(tablet_id);
@@ -1236,13 +1314,13 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         if (segment_info.fs) {
             fs = segment_info.fs;
         } else {
-            ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(segment_info.path));
+            ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(segment_info.path));
         }
         segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
         if (fill_meta_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
-            if (auto cached_segment = metacache()->cache_segment_if_absent(segment_info.path, segment);
+            if (auto cached_segment = _metacache->cache_segment_if_absent(segment_info.path, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }
@@ -1264,24 +1342,6 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
 }
 
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-static std::pair<int64_t, int64_t> get_table_partition_id(const staros::starlet::ShardInfo& shard_info) {
-    const auto& properties = shard_info.properties;
-
-    int64_t table_id = -1;
-    auto table_id_iter = properties.find("tableId");
-    if (table_id_iter != properties.end()) {
-        table_id = std::atol(table_id_iter->second.data());
-    }
-
-    int64_t partition_id = -1;
-    auto partition_id_iter = properties.find("partitionId");
-    if (partition_id_iter != properties.end()) {
-        partition_id = std::atol(partition_id_iter->second.data());
-    }
-
-    return std::make_pair(table_id, partition_id);
-}
-
 StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
         int64_t tablet_id, int64_t table_id, int64_t partition_id, const std::set<int64_t>& authorized_table_ids,
         const std::unordered_map<int64_t, int64_t>& partition_versions) {
@@ -1291,7 +1351,7 @@ StatusOr<TabletBasicInfo> TabletManager::get_tablet_basic_info(
                                                  shard_info_or.status().message()));
     }
 
-    auto shard_info = shard_info_or.value();
+    const auto& shard_info = shard_info_or.value();
     auto id_pair = get_table_partition_id(shard_info);
     auto shard_table_id = id_pair.first;
     auto shard_partition_id = id_pair.second;
@@ -1376,7 +1436,11 @@ void TabletManager::stop() {
 
 StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version,
                                                                      int64_t to_version) {
+    if (!config::experimental_enable_lake_capture_tablet_and_rowsets) {
+        return Status::NotSupported("capture_tablet_and_rowsets is disabled");
+    }
     DCHECK(from_version <= to_version);
+
     auto tablet_ptr = std::make_shared<Tablet>(this, tablet_id);
     std::vector<std::shared_ptr<BaseRowset>> rowsets;
 
@@ -1420,4 +1484,20 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tab
 
     return std::make_tuple(std::move(tablet_ptr), std::move(rowsets));
 }
+
+void TabletManager::cache_schema(const TabletSchemaPtr& schema) {
+    // GlobalTabletSchemaMap and metadata cache overlap in functionality, but because many places
+    // previously relied on GlobalTabletSchemaMap, caching is still performed in GlobalTabletSchemaMap
+    // here. In the future, it may be possible to refactor and remove GlobalTabletSchemaMap.
+    auto [cached_schema, inserted] = GlobalTabletSchemaMap::Instance()->emplace(schema);
+    auto cache_key = global_schema_cache_key(cached_schema->id());
+    auto cache_size = inserted ? cached_schema->mem_usage() : 0;
+    _metacache->cache_tablet_schema(cache_key, cached_schema, cache_size);
+}
+
+TabletSchemaPtr TabletManager::get_cached_schema(int64_t schema_id) {
+    auto cache_key = global_schema_cache_key(schema_id);
+    return _metacache->lookup_tablet_schema(cache_key);
+}
+
 } // namespace starrocks::lake

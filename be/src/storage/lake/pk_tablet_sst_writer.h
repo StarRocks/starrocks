@@ -17,6 +17,7 @@
 #include <future>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "gutil/macros.h"
@@ -37,19 +38,19 @@ public:
                                     const std::shared_ptr<FileSystem>& fs) {
         return Status::OK();
     }
-    virtual StatusOr<FileInfo> flush_sst_writer() { return Status::OK(); }
+    virtual StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() { return Status::OK(); }
     virtual bool has_file_info() const { return false; }
 };
 
 class PkTabletSSTWriter : public DefaultSSTWriter {
 public:
-    PkTabletSSTWriter(const TabletSchemaCSPtr& tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
-            : _tablet_schema_ptr(tablet_schema_ptr), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
+    PkTabletSSTWriter(TabletSchemaCSPtr tablet_schema_ptr, TabletManager* tablet_mgr, int64_t tablet_id)
+            : _tablet_schema_ptr(std::move(tablet_schema_ptr)), _tablet_mgr(tablet_mgr), _tablet_id(tablet_id) {}
     ~PkTabletSSTWriter() override = default;
     Status append_sst_record(const Chunk& data) override;
     Status reset_sst_writer(const std::shared_ptr<LocationProvider>& location_provider,
                             const std::shared_ptr<FileSystem>& fs) override;
-    StatusOr<FileInfo> flush_sst_writer() override;
+    StatusOr<std::pair<FileInfo, PersistentIndexSstableRangePB>> flush_sst_writer() override;
     bool has_file_info() const override { return _pk_sst_builder != nullptr; }
 
 private:

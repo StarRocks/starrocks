@@ -1,0 +1,87 @@
+{
+  "tables": [
+    {
+      "name": "customer",
+      "columns": [
+        {"name": "c_custkey", "type": "int64"},
+        {"name": "c_name", "type": "string"},
+        {"name": "c_address", "type": "string"},
+        {"name": "c_city", "type": "string"},
+        {"name": "c_nation", "type": "string"},
+        {"name": "c_region", "type": "string"},
+        {"name": "c_phone", "type": "string"},
+        {"name": "c_mktsegment", "type": "string"}
+      ]
+    },
+    {
+      "name": "part",
+      "columns": [
+        {"name": "p_partkey", "type": "int64"},
+        {"name": "p_name", "type": "string"},
+        {"name": "p_mfgr", "type": "string"},
+        {"name": "p_category", "type": "string"},
+        {"name": "p_brand", "type": "string"},
+        {"name": "p_color", "type": "string"},
+        {"name": "p_type", "type": "string"},
+        {"name": "p_size", "type": "int32"},
+        {"name": "p_container", "type": "string"}
+      ]
+    },
+    {
+      "name": "supplier",
+      "columns": [
+        {"name": "s_suppkey", "type": "int64"},
+        {"name": "s_name", "type": "string"},
+        {"name": "s_address", "type": "string"},
+        {"name": "s_city", "type": "string"},
+        {"name": "s_nation", "type": "string"},
+        {"name": "s_region", "type": "string"},
+        {"name": "s_phone", "type": "string"}
+      ]
+    },
+    {
+      "name": "date",
+      "columns": [
+        {"name": "d_datekey", "type": "int32"},
+        {"name": "d_date", "type": "string"},
+        {"name": "d_dayofweek", "type": "string"},
+        {"name": "d_month", "type": "string"},
+        {"name": "d_year", "type": "int32"},
+        {"name": "d_yearmonthnum", "type": "int32"},
+        {"name": "d_yearmonth", "type": "string"},
+        {"name": "d_daynuminweek", "type": "int32"},
+        {"name": "d_daynuminmonth", "type": "int32"},
+        {"name": "d_daynuminyear", "type": "int32"},
+        {"name": "d_monthnuminyear", "type": "int32"},
+        {"name": "d_weeknuminyear", "type": "int32"},
+        {"name": "d_sellingseason", "type": "string"},
+        {"name": "d_lastdayinweekfl", "type": "string"},
+        {"name": "d_lastdayinmonthfl", "type": "string"},
+        {"name": "d_holidayfl", "type": "string"},
+        {"name": "d_weekdayfl", "type": "string"}
+      ]
+    },
+    {
+      "name": "lineorder",
+      "columns": [
+        {"name": "lo_orderkey", "type": "int64"},
+        {"name": "lo_linenumber", "type": "int32"},
+        {"name": "lo_custkey", "type": "int64"},
+        {"name": "lo_partkey", "type": "int64"},
+        {"name": "lo_suppkey", "type": "int64"},
+        {"name": "lo_orderdate", "type": "string"},
+        {"name": "lo_orderpriority", "type": "string"},
+        {"name": "lo_shippriority", "type": "int32"},
+        {"name": "lo_quantity", "type": "int32"},
+        {"name": "lo_extendedprice", "type": "int64"},
+        {"name": "lo_order_totalprice", "type": "int64"},
+        {"name": "lo_discount", "type": "int32"},
+        {"name": "lo_revenue", "type": "int64"},
+        {"name": "lo_supplycost", "type": "int64"},
+        {"name": "lo_tax", "type": "int32"},
+        {"name": "lo_commitdate", "type": "string"},
+        {"name": "lo_shipmode", "type": "string"}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+-- name: test_iceberg_file_path_position
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+select max(_file) from iceberg_sql_test_${uuid0}.iceberg_oss_db.entity;
+-- result:
+oss://starrocks-ci-test/dla_test_data/iceberg/entity/data/019a710b-41e1-7699-bfb4-bc3a548dd192_0_0_0.parquet
+-- !result
+select count(distinct _file) from iceberg_sql_test_${uuid0}.iceberg_oss_db.entity;
+-- result:
+1
+-- !result
+select distinct _file from iceberg_sql_test_${uuid0}.iceberg_oss_db.entity;
+-- result:
+oss://starrocks-ci-test/dla_test_data/iceberg/entity/data/019a710b-41e1-7699-bfb4-bc3a548dd192_0_0_0.parquet
+-- !result
+select count(distinct _file) from iceberg_sql_test_${uuid0}.iceberg_oss_db.partsupp_two_bucket;
+-- result:
+4
+-- !result
+select distinct _file from iceberg_sql_test_${uuid0}.iceberg_oss_db.partsupp_two_bucket order by _file;
+-- result:
+oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=11/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00002.parquet
+oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=12/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00003.parquet
+oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=40/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00004.parquet
+oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=8/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00001.parquet
+-- !result
+select min(_pos), max(_pos) from iceberg_sql_test_${uuid0}.iceberg_oss_db.entity;
+-- result:
+0	1000012
+-- !result
+select count(distinct _pos) from iceberg_sql_test_${uuid0}.iceberg_oss_db.entity;
+-- result:
+1000013
+-- !result
+select min(_pos), max(_pos) from iceberg_sql_test_${uuid0}.iceberg_oss_db.partsupp_two_bucket;
+-- result:
+0	2
+-- !result
+select count(distinct _pos) from iceberg_sql_test_${uuid0}.iceberg_oss_db.partsupp_two_bucket;
+-- result:
+3
+-- !result
+select entity_id,_file, _pos from iceberg_sql_test_${uuid0}.iceberg_oss_db.entity where entity_id = 'e_635571';
+-- result:
+e_635571	oss://starrocks-ci-test/dla_test_data/iceberg/entity/data/019a710b-41e1-7699-bfb4-bc3a548dd192_0_0_0.parquet	56208
+-- !result
+select entity_id,_file, _pos from iceberg_sql_test_${uuid0}.iceberg_oss_db.entity order by entity_id,_file,_pos limit 5;
+-- result:
+a	oss://starrocks-ci-test/dla_test_data/iceberg/entity/data/019a710b-41e1-7699-bfb4-bc3a548dd192_0_0_0.parquet	795336
+a	oss://starrocks-ci-test/dla_test_data/iceberg/entity/data/019a710b-41e1-7699-bfb4-bc3a548dd192_0_0_0.parquet	799670
+b	oss://starrocks-ci-test/dla_test_data/iceberg/entity/data/019a710b-41e1-7699-bfb4-bc3a548dd192_0_0_0.parquet	26998
+b	oss://starrocks-ci-test/dla_test_data/iceberg/entity/data/019a710b-41e1-7699-bfb4-bc3a548dd192_0_0_0.parquet	39331
+b	oss://starrocks-ci-test/dla_test_data/iceberg/entity/data/019a710b-41e1-7699-bfb4-bc3a548dd192_0_0_0.parquet	244332
+-- !result
+select ps_partkey, ps_suppkey, _file, _pos from iceberg_sql_test_${uuid0}.iceberg_oss_db.partsupp_two_bucket  order by ps_partkey,ps_suppkey,_file,_pos limit 5;
+-- result:
+1	2	oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=12/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00003.parquet	0
+1	2	oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=12/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00003.parquet	1
+1	2	oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=12/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00003.parquet	2
+1	2502	oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=40/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00004.parquet	0
+1	2502	oss://starrocks-ci-test/dla_test_data/iceberg/partsupp_two_bucket/data/ps_partkey_bucket=6/ps_suppkey_bucket=40/00000-11-f80d7d69-13ac-4ce0-9b71-e30afe2ef92d-00004.parquet	1
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result

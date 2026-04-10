@@ -6,9 +6,9 @@
 
 #include <string>
 
+#include "base/string/slice.h"
 #include "common/status.h"
 #include "storage/sstable/options.h"
-#include "util/slice.h"
 
 namespace starrocks {
 class RandomAccessFile;

@@ -18,8 +18,8 @@
 
 #include <cstdlib>
 
+#include "common/memory/mem_hook_allocator.h"
 #include "roaring/memory.h"
-#include "runtime/memory/mem_hook_allocator.h"
 
 namespace starrocks {
 

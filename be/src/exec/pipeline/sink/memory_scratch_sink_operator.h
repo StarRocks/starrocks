@@ -16,11 +16,11 @@
 
 #include <utility>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/result_queue_mgr.h"
-#include "util/blocking_queue.hpp"
 
 namespace arrow {
 class MemoryPool;

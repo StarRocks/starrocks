@@ -27,8 +27,8 @@ public class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
     }
 
     public RecyclePartitionInfoV1(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
-                                  DataProperty dataProperty, short replicationNum, boolean isInMemory) {
-        super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+                                  DataProperty dataProperty, short replicationNum) {
+        super(dbId, tableId, partition, dataProperty, replicationNum);
         this.range = range;
     }
 
@@ -43,7 +43,12 @@ public class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
     }
 
     @Override
-    void recover(OlapTable table) throws DdlException {
-        RecyclePartitionInfo.recoverRangePartition(table, this);
+    public void checkRecoverable(OlapTable table) throws DdlException {
+        checkRecoverableForRangePartition(table);
+    }
+
+    @Override
+    public void recover(OlapTable table) {
+        recoverRangePartition(table);
     }
 }

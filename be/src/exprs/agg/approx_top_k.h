@@ -16,17 +16,18 @@
 
 #include <type_traits>
 
+#include "base/phmap/phmap.h"
 #include "column/array_column.h"
 #include "column/column_hash.h"
 #include "column/column_helper.h"
+#include "column/runtime_type_traits.h"
 #include "column/struct_column.h"
-#include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/aggregate_traits.h"
+#include "exprs/function_context.h"
 #include "runtime/mem_pool.h"
 #include "types/logical_type.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 
@@ -69,7 +70,7 @@ struct ApproxTopKState {
         this->table.clear();
     }
 
-    void merge(MemPool* mem_pool, const std::vector<Counter> other_counters) {
+    void merge(MemPool* mem_pool, const std::vector<Counter>& other_counters) {
         for (auto& other_counter : other_counters) {
             process<false>(mem_pool, other_counter.value, other_counter.count, true);
         }
@@ -115,15 +116,15 @@ struct ApproxTopKState {
 
     void get_values(Column* dst, size_t start, size_t end) const {
         auto* array_column = down_cast<ArrayColumn*>(dst);
-        auto& offset_column = array_column->offsets_column();
-        auto& elements_column = array_column->elements_column();
+        auto* offset_column = array_column->offsets_column_raw_ptr();
 
         // Array's fields must be nullable
-        auto* nullable_struct_column = down_cast<NullableColumn*>(elements_column.get());
-        auto* struct_column = down_cast<StructColumn*>(nullable_struct_column->data_column().get());
+        auto* nullable_struct_column = down_cast<NullableColumn*>(array_column->elements_column_raw_ptr());
+        auto* nullable_struct_null_col = nullable_struct_column->null_column_raw_ptr();
+        auto* struct_column = down_cast<StructColumn*>(nullable_struct_column->data_column_raw_ptr());
         // Struct's fields must be nullable
-        auto* value_column = down_cast<NullableColumn*>(struct_column->fields_column()[0].get());
-        auto* order_column = down_cast<NullableColumn*>(struct_column->fields_column()[1].get());
+        auto* value_column = down_cast<NullableColumn*>(struct_column->field_column_raw_ptr(0));
+        auto* order_column = down_cast<NullableColumn*>(struct_column->field_column_raw_ptr(1));
 
         for (size_t row = start; row < end; row++) {
             bool has_null = null_counter.count > 0;
@@ -136,12 +137,12 @@ struct ApproxTopKState {
                     if (counter_i >= 0 && (is_null_processed || counters[counter_i].count > null_counter.count)) {
                         value_column->append_datum(counters[counter_i].value);
                         order_column->append_datum(counters[counter_i].count);
-                        nullable_struct_column->null_column()->append(0);
+                        nullable_struct_null_col->append(0);
                         counter_i--;
                     } else {
                         value_column->append_nulls(1);
                         order_column->append_datum(null_counter.count);
-                        nullable_struct_column->null_column()->append(0);
+                        nullable_struct_null_col->append(0);
                         is_null_processed = true;
                     }
                 }
@@ -154,7 +155,7 @@ struct ApproxTopKState {
                 for (int32_t i = unused_idx - 1; i >= (unused_idx - cnt); i--) {
                     value_column->append_datum(counters[i].value);
                     order_column->append_datum(counters[i].count);
-                    nullable_struct_column->null_column()->append(0);
+                    nullable_struct_null_col->append(0);
                 }
 
                 // array_offsets
@@ -275,7 +276,7 @@ public:
         this->data(state).reset(kv.first, kv.second);
     }
 
-    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const {
+    void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
         init_state_if_necessary(ctx, state);
         this->data(state).process_null(1);
     }
@@ -327,7 +328,7 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         init_state_if_necessary(ctx, state);
-        const auto* column = down_cast<const InputColumnType*>(ColumnHelper::get_data_column(columns[0]));
+        const auto* column = ColumnHelper::get_data_column(columns[0]);
         const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, row_num);
         this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);
     }
@@ -338,10 +339,10 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         const auto kv = get_k_and_counter_num(ctx);
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
 
         if (src[0]->is_nullable()) {
             auto* src_nullable_column = down_cast<const NullableColumn*>(src[0].get());
@@ -440,7 +441,7 @@ public:
     }
 
     void update_single_state_null(FunctionContext* ctx, AggDataPtr __restrict state, int64_t peer_group_start,
-                                  int64_t peer_group_end) const {
+                                  int64_t peer_group_end) const override {
         this->data(state).process_null(1);
     }
 
@@ -450,7 +451,7 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const auto* column = down_cast<const InputColumnType*>(columns[0]);
+        const auto* column = ColumnHelper::get_data_column(columns[0]);
         for (size_t i = frame_start; i < frame_end; i++) {
             const auto& value = AggDataTypeTraits<LT>::get_row_ref(*column, i);
             this->data(state).template process<true>(ctx->mem_pool(), value, 1, false);

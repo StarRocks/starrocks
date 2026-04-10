@@ -19,8 +19,9 @@
 
 #include <map>
 #include <memory>
+#include <mutex>
 
-#include "util/metrics.h"
+#include "base/metrics.h"
 
 namespace starrocks {
 
@@ -67,6 +68,7 @@ public:
     METRIC_DEFINE_INT_GAUGE(ordinal_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(bitmap_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(bloom_filter_index_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(builtin_inverted_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(segment_zonemap_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(short_key_index_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
@@ -75,9 +77,11 @@ public:
     METRIC_DEFINE_INT_GAUGE(jit_cache_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(passthrough_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(brpc_iobuf_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_mem_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(replication_mem_bytes, MetricUnit::BYTES);
 };
 
 class SystemMetrics {
@@ -102,6 +106,8 @@ public:
     const MemoryMetrics* memory_metrics() const { return _memory_metrics.get(); }
     IOMetrics* get_io_metrics_by_tag(uint32_t tag) const { return !_io_metrics.empty() ? _io_metrics[tag] : nullptr; }
 
+    void update_memory_metrics();
+
 private:
     void _install_cpu_metrics(MetricRegistry*);
     // On Intel(R) Xeon(R) CPU E5-2450 0 @ 2.10GHz;
@@ -109,7 +115,6 @@ private:
     void _update_cpu_metrics();
 
     void _install_memory_metrics(MetricRegistry* registry);
-    void _update_memory_metrics();
 
     void _install_disk_metrics(MetricRegistry* registry, const std::set<std::string>& devices);
     void _update_disk_metrics();
@@ -157,6 +162,7 @@ private:
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
     std::vector<IOMetrics*> _io_metrics;
 
+    std::mutex _update_mutex;
     char* _line_ptr = nullptr;
     size_t _line_buf_size = 0;
     MetricRegistry* _registry = nullptr;

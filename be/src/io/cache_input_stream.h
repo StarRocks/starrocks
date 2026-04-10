@@ -117,7 +117,7 @@ protected:
     std::string _cache_key;
     std::string _filename;
     std::shared_ptr<SharedBufferedInputStream> _sb_stream;
-    int64_t _offset;
+    int64_t _offset{0};
     int64_t _buffer_size;
     std::string _buffer;
     Stats _stats;

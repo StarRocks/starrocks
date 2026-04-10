@@ -48,7 +48,6 @@ public class PartitionPersistInfo extends JsonWriter {
     private Range<PartitionKey> range;
     private DataProperty dataProperty;
     private short replicationNum;
-    private boolean isInMemory = false;
     private boolean isTempPartition = false;
 
     public PartitionPersistInfo() {
@@ -56,7 +55,7 @@ public class PartitionPersistInfo extends JsonWriter {
 
     public PartitionPersistInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
                                 DataProperty dataProperty, short replicationNum,
-                                boolean isInMemory, boolean isTempPartition) {
+                                boolean isTempPartition) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partition = partition;
@@ -65,7 +64,6 @@ public class PartitionPersistInfo extends JsonWriter {
         this.dataProperty = dataProperty;
 
         this.replicationNum = replicationNum;
-        this.isInMemory = isInMemory;
         this.isTempPartition = isTempPartition;
     }
 
@@ -91,10 +89,6 @@ public class PartitionPersistInfo extends JsonWriter {
 
     public short getReplicationNum() {
         return replicationNum;
-    }
-
-    public boolean isInMemory() {
-        return isInMemory;
     }
 
     public boolean isTempPartition() {

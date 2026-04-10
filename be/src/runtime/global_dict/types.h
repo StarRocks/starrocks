@@ -19,7 +19,7 @@
 
 #include "runtime/global_dict/types_fwd_decl.h"
 // For esay of use these types, include phmap.h here
-#include "util/phmap/phmap.h"
+#include "base/phmap/phmap.h"
 
 namespace starrocks {
 

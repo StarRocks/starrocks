@@ -33,11 +33,12 @@
 typedef unsigned long ulong;
 #endif
 #endif
+#include "base/time/timezone_hsscan.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 // index as day of week(1: Sunday, 2: Monday....), value as distance of this day and first day(Monday) of this week.
@@ -90,7 +91,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
         }
     } else if (v1->is_nullable()) {
         auto v = ColumnHelper::as_column<NullableColumn>(v1);
-        auto& nulls = v->null_column()->get_data();
+        auto& nulls = v->immutable_null_column_data();
         auto& values = ColumnHelper::cast_to_raw<Type>(v->data_column())->get_data();
 
         auto null_column = NullColumn::create();
@@ -2358,7 +2359,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
                 result.append(ts);
             } else {
                 const Slice& fmt = fmt_viewer.value(i);
-                str_to_date_internal(&ts, fmt, str, &result);
+                RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
             }
         }
     }
@@ -2366,14 +2367,18 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_from_date_format(FunctionContext*
 }
 
 // uncommon approach to process string content, based on uncommon string format.
-void TimeFunctions::str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
-                                         ColumnBuilder<TYPE_DATETIME>* result) {
+Status TimeFunctions::str_to_date_internal(FunctionContext* context, TimestampValue* ts, const Slice& fmt,
+                                           const Slice& str, ColumnBuilder<TYPE_DATETIME>* result) {
     bool r = ts->from_uncommon_format_str(fmt.get_data(), fmt.get_size(), str.get_data(), str.get_size());
     if (r) {
         result->append(*ts);
-    } else {
-        result->append_null();
+        return Status::OK();
     }
+    if (context != nullptr && context->allow_throw_exception()) {
+        return Status::InvalidArgument("Fail to parse date");
+    }
+    result->append_null();
+    return Status::OK();
 }
 
 // Try to process string content, based on uncommon string format
@@ -2392,7 +2397,7 @@ StatusOr<ColumnPtr> TimeFunctions::str_to_date_uncommon(FunctionContext* context
             const Slice& str = str_viewer.value(i);
             const Slice& fmt = fmt_viewer.value(i);
             TimestampValue ts;
-            str_to_date_internal(&ts, fmt, str, &result);
+            RETURN_IF_ERROR(str_to_date_internal(context, &ts, fmt, str, &result));
         }
     }
 
@@ -2567,7 +2572,7 @@ ColumnPtr date_format_func(const Columns& cols, size_t patten_size) {
 
     size_t num_rows = viewer.size();
     ColumnBuilder<TYPE_VARCHAR> builder(num_rows);
-    builder.data_column()->reserve(num_rows, num_rows * patten_size);
+    builder.data_column_raw_ptr()->reserve(num_rows, num_rows * patten_size);
 
     for (int i = 0; i < num_rows; ++i) {
         if (viewer.is_null(i)) {

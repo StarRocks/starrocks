@@ -14,9 +14,9 @@
 
 #pragma once
 
+#include "base/concurrency/race_detect.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/set/except_context.h"
-#include "util/race_detect.h"
 
 namespace starrocks::pipeline {
 

@@ -14,14 +14,14 @@
 
 #pragma once
 
-#include <string>
+#include <string_view>
 
 #include "column/column.h"
 #include "common/status.h"
-#include "runtime/types.h"
 #include "simdjson.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
-Status add_map_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_map_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                       simdjson::ondemand::value* value);
 } // namespace starrocks

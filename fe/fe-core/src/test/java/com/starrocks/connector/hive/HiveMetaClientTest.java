@@ -19,6 +19,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
@@ -39,6 +40,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -154,6 +156,65 @@ public class HiveMetaClientTest {
         client.getTable("db", "tbl");
         Assertions.assertEquals(1, client.getClientSize());
 
+    }
+
+    @Test
+    public void testRecyclableClientFinishClosesWhenPoolFull(
+            @Mocked HiveMetaStoreClient metaStoreClient) throws Exception {
+        new Expectations() {
+            {
+                metaStoreClient.getTable(anyString, anyString);
+                result = new Table();
+                minTimes = 0;
+            }
+        };
+
+        // Use CyclicBarrier to ensure all 3 threads create their clients before any of them
+        // can complete getTable and call finish(). Without this, due to the mock's instant
+        // getTable return, threads may run sequentially and only 1 client is ever created,
+        // so the pool never fills and close() is never called.
+        CyclicBarrier barrier = new CyclicBarrier(3);
+
+        new MockUp<RetryingMetaStoreClient>() {
+            @Mock
+            public IMetaStoreClient getProxy(Configuration hiveConf, HiveMetaHookLoader hookLoader,
+                                             ConcurrentHashMap<String, Long> metaCallTimeMap, String mscClassName,
+                                             boolean allowEmbedded) throws MetaException {
+                try {
+                    barrier.await(10, TimeUnit.SECONDS);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+                return metaStoreClient;
+            }
+        };
+
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set(HIVE_METASTORE_CONNECTION_POOL_SIZE, "2");
+        hiveConf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), "thrift://127.0.0.1:90300");
+        HiveMetaClient client = new HiveMetaClient(hiveConf);
+
+        ExecutorService es = Executors.newFixedThreadPool(3);
+        for (int i = 0; i < 3; i++) {
+            es.execute(() -> {
+                try {
+                    client.getTable("db", "tbl");
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+        es.shutdown();
+        es.awaitTermination(10, TimeUnit.SECONDS);
+
+        Assertions.assertEquals(2, client.getClientSize());
+
+        new Verifications() {
+            {
+                metaStoreClient.close();
+                times = 1;
+            }
+        };
     }
 
     @Test

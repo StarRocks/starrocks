@@ -38,13 +38,14 @@ public class TableRelation extends Relation {
         _BINLOG_,
         _SYNC_MV_,
         _USE_PK_INDEX_,
+        _CACHE_STATS_,
     }
 
     private final TableName name;
     private Table table;
     private Map<Field, Column> columns;
     // Support temporary partition
-    private PartitionNames partitionNames;
+    private PartitionRef partitionNames;
     private final List<Long> tabletIds;
     private final List<Long> replicaIds;
     private final Set<TableHint> tableHints = new HashSet<>();
@@ -75,11 +76,11 @@ public class TableRelation extends Relation {
         this.replicaIds = Lists.newArrayList();
     }
 
-    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, List<Long> replicaIds) {
+    public TableRelation(TableName name, PartitionRef partitionNames, List<Long> tabletIds, List<Long> replicaIds) {
         this(name, partitionNames, tabletIds, replicaIds, NodePosition.ZERO);
     }
 
-    public TableRelation(TableName name, PartitionNames partitionNames, List<Long> tabletIds, List<Long> replicaIds,
+    public TableRelation(TableName name, PartitionRef partitionNames, List<Long> tabletIds, List<Long> replicaIds,
                          NodePosition pos) {
         super(pos);
         this.name = name;
@@ -100,11 +101,11 @@ public class TableRelation extends Relation {
         this.table = table;
     }
 
-    public PartitionNames getPartitionNames() {
+    public PartitionRef getPartitionNames() {
         return partitionNames;
     }
 
-    public void setPartitionNames(PartitionNames partitionNames) {
+    public void setPartitionNames(PartitionRef partitionNames) {
         this.partitionNames = partitionNames;
     }
 
@@ -197,6 +198,10 @@ public class TableRelation extends Relation {
 
     public boolean isUsePkIndex() {
         return tableHints.contains(TableHint._USE_PK_INDEX_);
+    }
+
+    public boolean isCacheStatsQuery() {
+        return tableHints.contains(TableHint._CACHE_STATS_);
     }
 
     @Override

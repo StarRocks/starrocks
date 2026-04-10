@@ -16,7 +16,7 @@
 
 #include "agent/task_worker_pool.h"
 #include "gen_cpp/AgentService_types.h"
-#include "runtime/exec_env.h"
+#include "runtime/runtime_fwd.h"
 #include "storage/olap_define.h"
 
 namespace starrocks {

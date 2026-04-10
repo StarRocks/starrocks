@@ -9,7 +9,7 @@ StarRocks 自 3.1 版本起支持 Elasticsearch Catalog。
 
 StarRocks 与 Elasticsearch 都是目前流行的分析系统。StarRocks 擅长大规模分布式计算，且支持通过外部表查询 Elasticsearch。Elasticsearch 擅长全文检索。两者结合提供了一个更完善的 OLAP 解决方案。基于 Elasticsearch Catalog，您可以直接通过 StarRocks 使用 SQL 分析 Elasticsearch 集群内所有的索引数据，并且无需数据迁移。
 
-区别于其他数据源的 Catalog，Elasticsearch Catalog 创建后，下面只有一个名为 `default` 的数据库 (Database)，每一个 Elasticsearch 索引 (Index) 自动映射一张数据表 (Table)，并且都会自动挂载在 `default` 数据库下面。
+区别于其他数据源的 Catalog，Elasticsearch Catalog 创建后，下面只有一个名为 `default_db` 的数据库 (Database)，每一个 Elasticsearch 索引 (Index) 自动映射一张数据表 (Table)，并且都会自动挂载在 `default_db` 数据库下面。
 
 ## 创建 Elasticsearch Catalog
 

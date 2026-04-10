@@ -26,13 +26,9 @@
 #include <set>
 #include <string>
 
-#define __IN_CONFIGBASE_CPP__
-#include "common/config.h"
-#undef __IN_CONFIGBASE_CPP__
-
-#include <fmt/format.h>
-
+#include "common/configbase_impl.h"
 #include "common/status.h"
+#include "fmt/format.h"
 
 namespace starrocks::config {
 

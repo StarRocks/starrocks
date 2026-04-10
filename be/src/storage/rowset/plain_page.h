@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include "base/coding.h"
+#include "base/string/faststring.h"
 #include "column/column.h"
 #include "column/container_resource.h"
 #include "storage/olap_common.h"
@@ -41,10 +43,8 @@
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/coding.h"
-#include "util/faststring.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -127,8 +127,8 @@ private:
     PageBuilderOptions _options;
     uint32_t _count;
     uint32_t _max_count;
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     faststring _first_value;
     faststring _last_value;
     uint8_t _reserved_head_size{0};
@@ -137,7 +137,7 @@ private:
 
 template <LogicalType Type>
 class PlainPageDecoder : public PageDecoder {
-    using ValueType = typename CppTypeTraits<Type>::CppType;
+    using ValueType = StorageCppType<Type>;
 
 public:
     PlainPageDecoder(Slice data) : _data(data) {}
@@ -271,8 +271,8 @@ private:
     bool _parsed{false};
     uint32_t _num_elems{0};
     uint32_t _cur_idx{0};
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 };
 
 } // namespace starrocks

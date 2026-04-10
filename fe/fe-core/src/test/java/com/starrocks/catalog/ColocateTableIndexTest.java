@@ -14,6 +14,8 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.common.DdlException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -24,8 +26,10 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -38,8 +42,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ColocateTableIndexTest {
     private static final Logger LOG = LogManager.getLogger(ColocateTableIndexTest.class);
@@ -313,6 +319,82 @@ public class ColocateTableIndexTest {
         Assertions.assertFalse(colocateTableIndex.isLakeColocateTable(tableId));
     }
 
+    // Regression test: when addTableToGroup is called with a non-null assignedGroupId
+    // for a brand new group (not in groupName2Id), it should call createMetaGroup,
+    // not updateMetaGroup. The bug was introduced by the refactoring that splits
+    // modifyTableColocate into prepare + apply: prepareModifyTableColocate always
+    // generates assignedGroupId via getNextId(), but addTableToGroup misinterprets
+    // non-null assignedGroupId as "the group already exists" and calls updateMetaGroup
+    // (join) instead of createMetaGroup (create), causing StarOS NOT_EXIST error.
+    @Test
+    public void testLakeTableNewGroupShouldCallCreateMetaGroup(
+            @Mocked LakeTable olapTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        AtomicBoolean createMetaGroupCalled = new AtomicBoolean(false);
+        AtomicBoolean updateMetaGroupCalled = new AtomicBoolean(false);
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) {
+                createMetaGroupCalled.set(true);
+            }
+
+            @Mock
+            public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) {
+                updateMetaGroupCalled.set(true);
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
+        long dbId = 100;
+        long tableId = 200;
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return tableId;
+            }
+
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new HashDistributionInfo();
+            }
+        };
+
+        new MockUp<LakeTable>() {
+            @Mock
+            public List<Long> getShardGroupIds() {
+                return Arrays.asList(5001L, 5002L, 5003L);
+            }
+        };
+
+        // Simulate the modifyTableColocate (ALTER TABLE SET colocate_with) path on sr11073:
+        // prepareModifyTableColocate generates a new assignedGroupId via getNextId(),
+        // then passes it to addTableToGroup. The group "newGroup" does NOT exist yet.
+        ColocateTableIndex.GroupId assignedGroupId = new ColocateTableIndex.GroupId(dbId, 99999);
+        colocateTableIndex.addTableToGroup(
+                dbId, (OlapTable) olapTable, "newGroup", assignedGroupId, false /* isReplay */);
+
+        // For a brand new group, createMetaGroup should be called, NOT updateMetaGroup
+        Assertions.assertTrue(createMetaGroupCalled.get(),
+                "createMetaGroup should be called for a brand new colocate group");
+        Assertions.assertFalse(updateMetaGroupCalled.get(),
+                "updateMetaGroup should NOT be called for a brand new colocate group, " +
+                "but it was called due to groupAlreadyExist being incorrectly true " +
+                "when assignedGroupId is non-null");
+    }
+
     @Test
     public void testSaveLoadJsonFormatImage() throws Exception {
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
@@ -345,5 +427,245 @@ public class ColocateTableIndexTest {
         Assertions.assertEquals(colocateTableIndex.getGroup(table.getId()), followerIndex.getGroup(table.getId()));
 
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    @Test
+    public void testLoadLegacyImageWithoutColocateRangeMgr(@Mocked SRMetaBlockReader reader) throws Exception {
+        ColocateTableIndex legacyIndex = new ColocateTableIndex();
+        Deencapsulation.setField(legacyIndex, "colocateRangeMgr", null);
+
+        new Expectations() {
+            {
+                reader.readJson(ColocateTableIndex.class);
+                result = legacyIndex;
+            }
+        };
+
+        ColocateTableIndex restoredIndex = new ColocateTableIndex();
+        restoredIndex.loadColocateTableIndexV2(reader);
+        Assertions.assertNotNull(restoredIndex.getColocateRangeMgr());
+    }
+
+    @Test
+    public void testRangeColocateNotSupportedInSharedNothing() throws Exception {
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        connectContext.getSessionVariable().setEnableRangeDistribution(true);
+
+        String createDbStmtStr = "create database db_range_colocate;";
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(
+                createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+
+        // Range distribution colocate is only supported in shared-data mode.
+        // In shared-nothing mode (non-lake table), it should fail.
+        String sql = "CREATE TABLE db_range_colocate.t1 (k1 int, k2 int, k3 varchar(32), v1 int)\n" +
+                "DUPLICATE KEY(k1, k2, k3)\n" +
+                "PROPERTIES(\"colocate_with\"=\"rg1:k1,k2\", \"replication_num\" = \"1\");\n";
+        CreateTableStmt stmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assertions.assertThrows(Exception.class, () -> StarRocksAssert.utCreateTableWithRetry(stmt));
+    }
+
+    @Test
+    public void testRangeColocateInSharedData(@Mocked LakeTable lakeTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) {
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
+        long dbId = 100;
+        long tableId = 200;
+        // Mock a lake table with range distribution and colocate group
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return tableId;
+            }
+
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new RangeDistributionInfo();
+            }
+
+            @Mock
+            public String getColocateGroup() {
+                return "rg1:k1,k2";
+            }
+
+            @Mock
+            public short getDefaultReplicationNum() {
+                return 1;
+            }
+        };
+
+        new MockUp<LakeTable>() {
+            @Mock
+            public List<Long> getShardGroupIds() {
+                return Arrays.asList(5001L);
+            }
+        };
+
+        // Mock MetaUtils.getRangeColocateColumns to return 2 columns
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeColocateColumns(OlapTable olapTable, List<String> colocateColumnNames) {
+                return Arrays.asList(
+                        new Column("k1", com.starrocks.type.IntegerType.INT),
+                        new Column("k2", com.starrocks.type.IntegerType.INT));
+            }
+        };
+
+        // Add lake range colocate table should succeed
+        colocateTableIndex.addTableToGroup(
+                dbId, (OlapTable) lakeTable, "rg1", null, false /* isReplay */);
+
+        // Verify group was created with RANGE type
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+        Assertions.assertNotNull(groupId);
+        ColocateGroupSchema schema = colocateTableIndex.getGroupSchema(groupId);
+        Assertions.assertNotNull(schema);
+        Assertions.assertTrue(schema.isRangeColocate());
+        Assertions.assertEquals(2, schema.getColocateColumnCount());
+
+        // Verify ColocateRangeMgr is initialized
+        ColocateRangeMgr rangeMgr = colocateTableIndex.getColocateRangeMgr();
+        Assertions.assertTrue(rangeMgr.containsColocateGroup(groupId.grpId));
+        List<ColocateRange> ranges = rangeMgr.getColocateRanges(groupId.grpId);
+        Assertions.assertEquals(1, ranges.size());
+        Assertions.assertTrue(ranges.get(0).getRange().isAll());
+    }
+
+    @Test
+    public void testRangeColocatePropertyMustMatchExistingGroupSchema(
+            @Mocked LakeTable firstTable, @Mocked LakeTable secondTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+        DistributionInfo rangeDistributionInfo = new RangeDistributionInfo();
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setReplicationNum(1L, (short) 1);
+
+        new Expectations() {
+            {
+                firstTable.getId();
+                result = 200L;
+                minTimes = 0;
+                secondTable.getId();
+                result = 201L;
+                minTimes = 0;
+                firstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                secondTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                firstTable.getDefaultDistributionInfo();
+                result = rangeDistributionInfo;
+                minTimes = 0;
+                secondTable.getDefaultDistributionInfo();
+                result = rangeDistributionInfo;
+                minTimes = 0;
+                firstTable.getDefaultReplicationNum();
+                result = (short) 1;
+                minTimes = 0;
+                secondTable.getDefaultReplicationNum();
+                result = (short) 1;
+                minTimes = 0;
+                firstTable.getPartitionInfo();
+                result = partitionInfo;
+                minTimes = 0;
+                secondTable.getPartitionInfo();
+                result = partitionInfo;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeColocateColumns(OlapTable olapTable, List<String> colocateColumnNames) {
+                if (colocateColumnNames != null && colocateColumnNames.size() == 1) {
+                    return Arrays.asList(new Column("k1", com.starrocks.type.IntegerType.INT));
+                }
+                return Arrays.asList(
+                        new Column("k1", com.starrocks.type.IntegerType.INT),
+                        new Column("k2", com.starrocks.type.IntegerType.INT));
+            }
+        };
+
+        colocateTableIndex.addTableToGroup(100L, firstTable, "rg1:k1", null, false);
+        Assertions.assertThrows(DdlException.class,
+                () -> colocateTableIndex.addTableToGroup(100L, secondTable, "rg1:k1,k2", null, false));
+    }
+
+    @Test
+    public void testRangeCrossDbSchemaCheckUsesRequestedColocateColumns(
+            @Mocked LakeTable existingTable, @Mocked LakeTable newTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+        DistributionInfo rangeDistributionInfo = new RangeDistributionInfo();
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setReplicationNum(1L, (short) 1);
+
+        new Expectations() {
+            {
+                existingTable.getId();
+                result = 300L;
+                minTimes = 0;
+                newTable.getId();
+                result = 301L;
+                minTimes = 0;
+                existingTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                newTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                existingTable.getDefaultDistributionInfo();
+                result = rangeDistributionInfo;
+                minTimes = 0;
+                newTable.getDefaultDistributionInfo();
+                result = rangeDistributionInfo;
+                minTimes = 0;
+                existingTable.getDefaultReplicationNum();
+                result = (short) 1;
+                minTimes = 0;
+                newTable.getDefaultReplicationNum();
+                result = (short) 1;
+                minTimes = 0;
+                existingTable.getPartitionInfo();
+                result = partitionInfo;
+                minTimes = 0;
+                newTable.getPartitionInfo();
+                result = partitionInfo;
+                minTimes = 0;
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeColocateColumns(OlapTable olapTable, List<String> colocateColumnNames) {
+                if (colocateColumnNames != null && colocateColumnNames.size() == 1) {
+                    return Arrays.asList(new Column("k1", com.starrocks.type.IntegerType.INT));
+                }
+                return Arrays.asList(
+                        new Column("k1", com.starrocks.type.IntegerType.INT),
+                        new Column("k2", com.starrocks.type.IntegerType.INT));
+            }
+        };
+
+        colocateTableIndex.addTableToGroup(100L, existingTable, "rg1:k1", null, false);
+        Assertions.assertThrows(DdlException.class,
+                () -> colocateTableIndex.checkColocateSchemaWithGroupInOtherDb("rg1:k1,k2", 101L, newTable));
     }
 }

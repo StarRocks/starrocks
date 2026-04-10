@@ -21,19 +21,29 @@
 #include <llvm/IR/Value.h>
 #endif
 
+#include <cctz/time_zone.h>
 #include <ryu/ryu.h>
 
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 
+#include "base/time/date_func.h"
+#include "base/types/int128.h"
+#include "base/types/numeric_types.h"
+#include "base/utility/mysql_global.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "column/json_column.h"
+#include "column/json_converter.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
+#include "column/variant_column.h"
+#include "column/variant_converter.h"
+#include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -41,23 +51,19 @@
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
+#include "exprs/expr_context.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
-#include "gutil/strings/substitute.h"
-#include "runtime/datetime_value.h"
 #include "runtime/exception.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
+#include "types/datetime_value.h"
 #include "types/hll.h"
-#include "types/large_int_value.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/date_func.h"
-#include "util/json.h"
-#include "util/json_converter.h"
-#include "util/mysql_global.h"
-#include "util/numeric_types.h"
+#include "types/type_descriptor.h"
 
 #ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/expr_jit_codegen.h"
 #include "exprs/jit/ir_helper.h"
 #endif
 
@@ -190,6 +196,36 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             auto v = viewer.value(row);
             std::string str = CastToString::apply<RunTimeCppType<FromType>, std::string>(v);
             value = JsonValue::from_string(str);
+        } else if constexpr (lt_is_variant<FromType>) {
+            const auto* variant_data_column =
+                    down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
+            const size_t variant_row = column->is_constant() ? 0 : row;
+            VariantRowRef row_ref;
+            if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
+                VariantRowValue variant_buffer;
+                const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
+                if (variant == nullptr) {
+                    overflow = true;
+                } else {
+                    row_ref = variant->as_ref();
+                }
+            }
+
+            if (!overflow) {
+                std::stringstream ss;
+                auto st = VariantUtil::variant_to_json(row_ref.get_metadata(), row_ref.get_value(), ss,
+                                                       cctz::local_time_zone());
+                if (!st.ok()) {
+                    overflow = true;
+                } else {
+                    auto parsed = JsonValue::parse_json_or_string(ss.str());
+                    if (parsed.ok()) {
+                        value = parsed.value();
+                    } else {
+                        overflow = true;
+                    }
+                }
+            }
         } else {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
@@ -199,8 +235,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         if (overflow || value.is_null()) {
             if constexpr (AllowThrowException) {
                 if constexpr (FromType == TYPE_LARGEINT) {
-                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType,
-                                                             LargeIntValue::to_string(viewer.value(row)));
+                    THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, int128_to_string(viewer.value(row)));
                 } else {
                     THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, viewer.value(row));
                 }
@@ -237,6 +272,79 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
     return builder.build(column->is_constant());
 }
 
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_variant_fn(ColumnPtr& column) {
+    ColumnViewer<TYPE_VARIANT> viewer(column);
+    ColumnBuilder<ToType> builder(viewer.size());
+    const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
+
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        const size_t variant_row = column->is_constant() ? 0 : row;
+        VariantRowRef row_ref;
+        if (!variant_data_column->try_get_row_ref(variant_row, &row_ref)) {
+            VariantRowValue variant_buffer;
+            const VariantRowValue* variant = variant_data_column->get_row_value(variant_row, &variant_buffer);
+            if (variant == nullptr) {
+                builder.append_null();
+                continue;
+            }
+            row_ref = variant->as_ref();
+        }
+
+        auto status =
+                VariantRowConverter::cast_to<ToType, AllowThrowException>(row_ref, cctz::local_time_zone(), builder);
+        if (!status.ok()) {
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, row_ref.to_owned().to_string());
+            }
+            builder.append_null();
+        }
+    }
+
+    return builder.build(column->is_constant());
+}
+
+template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
+static ColumnPtr cast_to_variant_fn(ColumnPtr& column) {
+    if constexpr (FromType != TYPE_JSON) {
+        THROW_RUNTIME_ERROR_WITH_TYPE(ToType);
+    }
+
+    ColumnViewer<TYPE_JSON> viewer(column);
+    ColumnBuilder<TYPE_VARIANT> builder(viewer.size());
+
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        JsonValue* json = viewer.value(row);
+        if (json == nullptr) {
+            builder.append_null();
+            continue;
+        }
+
+        auto encoded = VariantEncoder::encode_json_to_variant(*json);
+        if (!encoded.ok()) {
+            VLOG_ROW << "encode json to variant failed: " << encoded.status();
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, json->to_string_uncheck());
+            }
+            builder.append_null();
+            continue;
+        }
+        builder.append(std::move(encoded.value()));
+    }
+
+    return builder.build(column->is_constant());
+}
+
 SELF_CAST(TYPE_BOOLEAN);
 UNARY_FN_CAST(TYPE_TINYINT, TYPE_BOOLEAN, ImplicitToBoolean);
 UNARY_FN_CAST(TYPE_SMALLINT, TYPE_BOOLEAN, ImplicitToBoolean);
@@ -250,6 +358,8 @@ UNARY_FN_CAST(TYPE_DATE, TYPE_BOOLEAN, DateToBoolean);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_BOOLEAN, TimestampToBoolean);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BOOLEAN, ImplicitToBoolean);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BOOLEAN, cast_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_BOOLEAN, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_VARIANT, cast_to_variant_fn);
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
 static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
@@ -375,9 +485,9 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
     if (result) {
         std::stringstream ss;
         if constexpr (std::is_same_v<Type, __int128_t>) {
-            ss << LargeIntValue::to_string(value) << " conflict with range of "
-               << "(" << LargeIntValue::to_string((Type)std::numeric_limits<ResultType>::lowest()) << ", "
-               << LargeIntValue::to_string((Type)std::numeric_limits<ResultType>::max()) << ")";
+            ss << int128_to_string(value) << " conflict with range of "
+               << "(" << int128_to_string((Type)std::numeric_limits<ResultType>::lowest()) << ", "
+               << int128_to_string((Type)std::numeric_limits<ResultType>::max()) << ")";
         } else {
             ss << value << " conflict with range of "
                << "(" << (Type)std::numeric_limits<ResultType>::lowest() << ", "
@@ -419,10 +529,11 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     res_data_column->resize(sz);
     auto& res_data = res_data_column->get_data();
     if (column->is_nullable()) {
-        auto* input_column = down_cast<NullableColumn*>(column.get());
-        NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
-        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
-        auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
+        const auto* input_column = down_cast<const NullableColumn*>(column.get());
+        auto null_column_ptr = input_column->null_column()->clone();
+        auto* null_column = down_cast<NullColumn*>(null_column_ptr.get());
+        const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
+        auto& null_data = null_column->get_data();
         for (int i = 0; i < sz; ++i) {
             if (!null_data[i]) {
                 auto slice = data_column->get_slice(i);
@@ -439,7 +550,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     } else {
         NullColumn::MutablePtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
-        auto* data_column = down_cast<BinaryColumn*>(column.get());
+        const auto* data_column = down_cast<const BinaryColumn*>(column.get());
 
         bool has_null = false;
         for (int i = 0; i < sz; ++i) {
@@ -504,6 +615,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_TINYINT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_TINYINT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TINYINT, cast_int_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_TINYINT, cast_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_TINYINT, cast_from_variant_fn);
 
 // smallint
 SELF_CAST(TYPE_SMALLINT);
@@ -520,6 +632,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_SMALLINT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_SMALLINT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_SMALLINT, cast_int_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_SMALLINT, cast_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_SMALLINT, cast_from_variant_fn);
 
 // int
 SELF_CAST(TYPE_INT);
@@ -543,6 +656,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_INT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_INT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_INT, cast_int_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_INT, cast_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_INT, cast_from_variant_fn);
 
 // bigint
 SELF_CAST(TYPE_BIGINT);
@@ -566,6 +680,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_BIGINT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_BIGINT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_BIGINT, cast_int_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_BIGINT, cast_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_BIGINT, cast_from_variant_fn);
 
 // largeint
 SELF_CAST(TYPE_LARGEINT);
@@ -589,6 +704,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_LARGEINT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_LARGEINT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_LARGEINT, cast_int_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_LARGEINT, cast_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_LARGEINT, cast_from_variant_fn);
 
 // float
 SELF_CAST(TYPE_FLOAT);
@@ -612,6 +728,7 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_FLOAT, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_FLOAT, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_FLOAT, cast_float_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_FLOAT, cast_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_FLOAT, cast_from_variant_fn);
 
 // double
 SELF_CAST(TYPE_DOUBLE);
@@ -635,6 +752,10 @@ UNARY_FN_CAST(TYPE_DATETIME, TYPE_DOUBLE, TimestampToNumber);
 UNARY_FN_CAST(TYPE_TIME, TYPE_DOUBLE, TimeToNumber);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_DOUBLE, cast_float_from_string_fn);
 CUSTOMIZE_FN_CAST(TYPE_JSON, TYPE_DOUBLE, cast_from_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DOUBLE, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DATE, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_DATETIME, cast_from_variant_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_TIME, cast_from_variant_fn);
 
 // decimal
 DEFINE_UNARY_FN_WITH_IMPL(NumberToDecimal, value) {
@@ -884,11 +1005,12 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
     auto& res_data = res_data_column->get_data();
 
     if (column->is_nullable()) {
-        auto* input_column = down_cast<NullableColumn*>(column.get());
-        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+        const auto* input_column = down_cast<const NullableColumn*>(column.get());
+        const auto* data_column = down_cast<const BinaryColumn*>(input_column->data_column_raw_ptr());
 
-        NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
-        auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
+        auto null_column_ptr = input_column->null_column()->clone();
+        auto* null_column = down_cast<NullColumn*>(null_column_ptr.get());
+        auto& null_data = null_column->get_data();
 
         for (int i = 0; i < num_rows; ++i) {
             if (!null_data[i]) {
@@ -905,7 +1027,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
         }
         return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     } else {
-        auto* data_column = down_cast<BinaryColumn*>(column.get());
+        const auto* data_column = down_cast<const BinaryColumn*>(column.get());
         NullColumn::MutablePtr null_column = NullColumn::create(num_rows);
         auto& null_data = null_column->get_data();
 
@@ -1061,7 +1183,13 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_TIME, cast_from_string_to_time_fn);
 // clang-format on
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
-class VectorizedCastExpr final : public Expr {
+#ifdef STARROCKS_JIT_ENABLE
+class VectorizedCastExpr final : public Expr,
+                                 public JITCodegenNode
+#else
+class VectorizedCastExpr final : public Expr
+#endif
+{
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
@@ -1090,6 +1218,19 @@ public:
                 result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column));
             } else {
                 result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
+            }
+        } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
+            if constexpr (lt_is_decimal<ToType>) {
+                if (context != nullptr && context->error_if_overflow()) {
+                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                            column, to_type.precision, to_type.scale);
+                } else {
+                    return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                            column, to_type.precision, to_type.scale);
+                }
+            } else {
+                result_column =
+                        CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column))->as_mutable_ptr();
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
@@ -1123,7 +1264,7 @@ public:
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
-            result_column->resize(col_size);
+            result_column->as_mutable_raw_ptr()->resize(col_size);
         }
         return result_column;
     };
@@ -1135,16 +1276,18 @@ public:
     }
 
     std::string jit_func_name_impl(RuntimeState* state) const override {
-        return "{cast(" + _children[0]->jit_func_name(state) + ")}" + (is_constant() ? "c:" : "") +
+        return "{cast(" + ExprJITCodegen::func_name(_children[0], state) + ")}" + (is_constant() ? "c:" : "") +
                (is_nullable() ? "n:" : "") + type().debug_string();
     }
 
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, JITContext* jit_ctx) override {
-        ASSIGN_OR_RETURN(auto datum, _children[0]->generate_ir(context, jit_ctx))
+        ASSIGN_OR_RETURN(auto datum, ExprJITCodegen::generate_ir(context, _children[0], jit_ctx))
         auto* l = datum.value;
         auto& b = jit_ctx->builder;
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             return Status::NotSupported("JIT casting does not support JSON");
+        } else if constexpr (FromType == TYPE_VARIANT || ToType == TYPE_VARIANT) {
+            return Status::NotSupported("JIT casting does not support VARIANT");
         } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {
             return Status::NotSupported("JIT casting does not support decimal");
         } else {
@@ -1153,7 +1296,6 @@ public:
                                                                                lt_is_float<ToType>)) {
                 typedef RunTimeCppType<FromType> FromCppType;
                 typedef RunTimeCppType<ToType> ToCppType;
-
                 if constexpr ((std::is_floating_point_v<ToCppType> || std::is_floating_point_v<FromCppType>)
                                       ? (static_cast<long double>(std::numeric_limits<ToCppType>::max()) <
                                          static_cast<long double>(std::numeric_limits<FromCppType>::max()))
@@ -1280,6 +1422,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
     return {buf, len};
 }
 
+// clang-format off
 // The StringUnaryFunction templace is defined in unary_function.h
 // This place is a trait for this, it's for performance.
 // CastToString will copy string when returning value,
@@ -1303,6 +1446,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
         }                                                                                                   \
         return result;                                                                                      \
     }
+// clang-format on
 
 DEFINE_INT_CAST_TO_STRING(TYPE_BOOLEAN, TYPE_VARCHAR);
 DEFINE_INT_CAST_TO_STRING(TYPE_TINYINT, TYPE_VARCHAR);
@@ -1325,6 +1469,10 @@ CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_TIME, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_DATETIME, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_DATE, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_VARIANT, TYPE_JSON, cast_to_json_fn);
+
+// Cast SQL type to VARIANT
+SELF_CAST(TYPE_VARIANT);
 
 /**
  * Resolve cast to string
@@ -1374,6 +1522,10 @@ public:
 
         if constexpr (Type == TYPE_JSON) {
             return cast_from_json_fn<TYPE_JSON, TYPE_VARCHAR, AllowThrowException>(column);
+        }
+
+        if constexpr (Type == TYPE_VARIANT) {
+            return cast_from_variant_fn<TYPE_VARIANT, TYPE_VARCHAR, AllowThrowException>(column);
         }
 
         return _evaluate_string(context, std::move(column));
@@ -1509,6 +1661,24 @@ private:
         }                                                                     \
     }
 
+#define CASE_TO_VARIANT(FROM_TYPE, ALLOWTHROWEXCEPTION)                          \
+    case FROM_TYPE: {                                                            \
+        if (ALLOWTHROWEXCEPTION) {                                               \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, true>(node);  \
+        } else {                                                                 \
+            return new VectorizedCastExpr<FROM_TYPE, TYPE_VARIANT, false>(node); \
+        }                                                                        \
+    }
+
+#define CASE_FROM_VARIANT_TO(TO_TYPE, ALLOWTHROWEXCEPTION)                     \
+    case TO_TYPE: {                                                            \
+        if (ALLOWTHROWEXCEPTION) {                                             \
+            return new VectorizedCastExpr<TYPE_VARIANT, TO_TYPE, true>(node);  \
+        } else {                                                               \
+            return new VectorizedCastExpr<TYPE_VARIANT, TO_TYPE, false>(node); \
+        }                                                                      \
+    }
+
 #define CASE_TO_STRING_FROM(FROM_TYPE, ALLOWTHROWEXCEPTION)                \
     case FROM_TYPE: {                                                      \
         if (ALLOWTHROWEXCEPTION) {                                         \
@@ -1558,24 +1728,61 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
     return only_null;
 }
 
-// Need add result to pool by caller.
-Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
-                                                       LogicalType to_type, bool allow_throw_exception) {
-    if (to_type == TYPE_CHAR) {
-        to_type = TYPE_VARCHAR;
+StatusOr<ColumnPtr> CastToVariantExpr::evaluate_checked(ExprContext* context, Chunk* ptr) {
+    ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
+    const size_t num_rows = column->size();
+
+    if (num_rows != 0 && ColumnHelper::count_nulls(column) == num_rows) {
+        return ColumnHelper::create_const_null_column(num_rows);
     }
-    if (from_type == TYPE_CHAR) {
-        from_type = TYPE_VARCHAR;
+
+    ColumnBuilder<TYPE_VARIANT> builder(num_rows);
+    RETURN_IF_ERROR(VariantEncoder::encode_column(column, _from_type, &builder, _allow_throw_exception));
+
+    return builder.build(column->is_constant());
+}
+
+// Check whether JSON can be cast to complex types (ARRAY / MAP / STRUCT)
+inline bool json_to_complex_type(LogicalType from_type, LogicalType to_type) {
+    switch (from_type) {
+    case TYPE_JSON:
+        switch (to_type) {
+        case TYPE_ARRAY:
+        case TYPE_MAP:
+        case TYPE_STRUCT:
+            return true;
+        default:
+            return false;
+        }
+    default:
+        return false;
     }
-    if (from_type == TYPE_NULL) {
-        // NULL TO OTHER TYPE, direct return
-        from_type = to_type;
+}
+
+// Check whether VARIANT can be cast to complex types (ARRAY / MAP / STRUCT)
+inline bool variant_to_complex_type(LogicalType from_type, LogicalType to_type) {
+    switch (from_type) {
+    case TYPE_VARIANT:
+        switch (to_type) {
+        case TYPE_ARRAY:
+        case TYPE_MAP:
+        case TYPE_STRUCT:
+            return true;
+        default:
+            return false;
+        }
+    default:
+        return false;
     }
-    if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
-        return dispatch_throw_exception<CastVarcharToHll>(allow_throw_exception, node);
-    }
-    // Cast string to array<ANY>
-    if ((from_type == TYPE_VARCHAR || from_type == TYPE_JSON) && to_type == TYPE_ARRAY) {
+}
+
+Expr* VectorizedCastExprFactory::create_json_to_complex_type_cast(ObjectPool* pool, const TExprNode& node,
+                                                                  LogicalType from_type, LogicalType to_type,
+                                                                  bool allow_throw_exception) {
+    DCHECK(from_type == TYPE_JSON);
+
+    switch (to_type) {
+    case TYPE_ARRAY: {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
         TExprNode cast;
         cast.type = cast_to.children[0].to_thrift();
@@ -1594,14 +1801,9 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         pool->add(child);
         cast_element_expr->add_child(child);
 
-        if (from_type == TYPE_VARCHAR) {
-            return new CastStringToArray(node, cast_element_expr, cast_to, allow_throw_exception);
-        } else {
-            return new CastJsonToArray(node, cast_element_expr, cast_to);
-        }
+        return new CastJsonToArray(node, cast_element_expr, cast_to);
     }
-
-    if (from_type == TYPE_JSON && to_type == TYPE_STRUCT) {
+    case TYPE_STRUCT: {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
 
         std::vector<Expr*> field_casts(cast_to.children.size());
@@ -1620,8 +1822,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         }
         return new CastJsonToStruct(node, std::move(field_casts));
     }
-
-    if (from_type == TYPE_JSON && to_type == TYPE_MAP) {
+    case TYPE_MAP: {
         TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
 
         // CastJsonToMap will first cast json to MAP<VARCHAR,JSON>, then cast to the target MAP<KEY,VALUE>
@@ -1662,9 +1863,157 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
 
         return new CastJsonToMap(node, key_cast_expr, value_cast_expr);
     }
+    default:
+        LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
+                     << " to type: " << type_to_string(to_type);
+        return nullptr;
+    }
+}
+
+Expr* VectorizedCastExprFactory::create_variant_to_complex_type_cast(ObjectPool* pool, const TExprNode& node,
+                                                                     LogicalType from_type, LogicalType to_type,
+                                                                     bool allow_throw_exception) {
+    DCHECK(from_type == TYPE_VARIANT);
+
+    switch (to_type) {
+    case TYPE_ARRAY: {
+        const TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
+        TExprNode cast;
+        cast.type = expected_type.children[0].to_thrift();
+        cast.child_type = to_thrift(from_type);
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = from_thrift(pool, cast, allow_throw_exception);
+        if (cast_element_expr == nullptr) {
+            return nullptr;
+        }
+        DCHECK(pool != nullptr);
+        pool->add(cast_element_expr);
+
+        auto* child = new ColumnRef(cast);
+        pool->add(child);
+        cast_element_expr->add_child(child);
+
+        return new CastVariantToArray(node, cast_element_expr, expected_type);
+    }
+    case TYPE_MAP: {
+        TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
+
+        DCHECK(expected_type.children.size() == 2);
+        Expr* key_cast_expr = nullptr;
+        auto& key_desc = expected_type.children[0];
+        if (key_desc.type != TYPE_VARCHAR) {
+            const TypeDescriptor varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            auto result = create_cast_expr(pool, varchar_type, key_desc, allow_throw_exception);
+            if (!result.ok()) {
+                LOG(ERROR) << "Fail to create cast expr from variant to map, map key type: " << key_desc
+                           << ", status: " << result.status();
+                return nullptr;
+            }
+
+            key_cast_expr = result.value();
+            Expr* cast_input = create_slot_ref(varchar_type).release();
+            key_cast_expr->add_child(cast_input);
+            pool->add(key_cast_expr);
+            pool->add(cast_input);
+        }
+        Expr* value_cast_expr = nullptr;
+        auto& value_desc = expected_type.children[1];
+        if (value_desc.type != TYPE_VARIANT) {
+            TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
+            auto result = create_cast_expr(pool, variant_type, value_desc, allow_throw_exception);
+            if (!result.ok()) {
+                LOG(ERROR) << "Fail to create cast expr from variant to map, map value type: " << value_desc
+                           << ", status: " << result.status();
+                return nullptr;
+            }
+            value_cast_expr = result.value();
+            Expr* cast_input = create_slot_ref(variant_type).release();
+            value_cast_expr->add_child(cast_input);
+            pool->add(value_cast_expr);
+            pool->add(cast_input);
+        }
+
+        return new CastVariantToMap(node, key_cast_expr, value_cast_expr);
+    }
+    case TYPE_STRUCT: {
+        TypeDescriptor expected_type = TypeDescriptor::from_thrift(node.type);
+
+        std::vector<Expr*> field_casts(expected_type.children.size());
+        for (int i = 0; i < expected_type.children.size(); ++i) {
+            TypeDescriptor variant_type = TypeDescriptor::create_variant_type();
+            auto ret = create_cast_expr(pool, variant_type, expected_type.children[i], allow_throw_exception);
+            if (!ret.ok()) {
+                LOG(WARNING) << "Fail to create cast expr from variant to struct, field type: "
+                             << expected_type.children[i] << ", status: " << ret.status();
+                return nullptr;
+            }
+            pool->add(ret.value());
+            field_casts[i] = ret.value();
+            auto cast_input = create_slot_ref(variant_type);
+            field_casts[i]->add_child(cast_input.get());
+            pool->add(cast_input.release());
+        }
+
+        return new CastVariantToStruct(node, std::move(field_casts));
+    }
+    default:
+        LOG(WARNING) << "Not support cast from type: " << type_to_string(from_type)
+                     << " to type: " << type_to_string(to_type);
+        return nullptr;
+    }
+}
+
+// Need add result to pool by caller.
+Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const TExprNode& node, LogicalType from_type,
+                                                       LogicalType to_type, bool allow_throw_exception) {
+    if (to_type == TYPE_CHAR) {
+        to_type = TYPE_VARCHAR;
+    }
+    if (from_type == TYPE_CHAR) {
+        from_type = TYPE_VARCHAR;
+    }
+    if (from_type == TYPE_NULL) {
+        // NULL TO OTHER TYPE, direct return
+        from_type = to_type;
+    }
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_HLL) {
+        return dispatch_throw_exception<CastVarcharToHll>(allow_throw_exception, node);
+    }
+    // Cast string to array<ANY>
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_ARRAY) {
+        TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
+        TExprNode cast;
+        cast.type = cast_to.children[0].to_thrift();
+        cast.child_type = to_thrift(from_type);
+        cast.slot_ref.slot_id = 0;
+        cast.slot_ref.tuple_id = 0;
+
+        Expr* cast_element_expr = VectorizedCastExprFactory::from_thrift(pool, cast, allow_throw_exception);
+        if (cast_element_expr == nullptr) {
+            return nullptr;
+        }
+        DCHECK(pool != nullptr);
+        pool->add(cast_element_expr);
+
+        auto* child = new ColumnRef(cast);
+        pool->add(child);
+        cast_element_expr->add_child(child);
+
+        return new CastStringToArray(node, cast_element_expr, cast_to, allow_throw_exception);
+    }
 
     if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {
         return dispatch_throw_exception<CastVarcharToBitmap>(allow_throw_exception, node);
+    }
+
+    if (json_to_complex_type(from_type, to_type)) {
+        return create_json_to_complex_type_cast(pool, node, from_type, to_type, allow_throw_exception);
+    }
+
+    if (variant_to_complex_type(from_type, to_type)) {
+        return create_variant_to_complex_type_cast(pool, node, from_type, to_type, allow_throw_exception);
     }
 
     if (to_type == TYPE_VARCHAR) {
@@ -1688,6 +2037,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
             CASE_TO_STRING_FROM(TYPE_DECIMAL256, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_JSON, allow_throw_exception);
             CASE_TO_STRING_FROM(TYPE_VARBINARY, allow_throw_exception);
+            CASE_TO_STRING_FROM(TYPE_VARIANT, allow_throw_exception);
         default:
             LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
             return nullptr;
@@ -1705,6 +2055,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_FROM_JSON_TO(TYPE_FLOAT, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_DOUBLE, allow_throw_exception);
                 CASE_FROM_JSON_TO(TYPE_JSON, allow_throw_exception);
+                CASE_FROM_JSON_TO(TYPE_VARIANT, allow_throw_exception);
             default:
                 LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
@@ -1720,6 +2071,7 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 CASE_TO_JSON(TYPE_FLOAT, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DOUBLE, allow_throw_exception);
                 CASE_TO_JSON(TYPE_JSON, allow_throw_exception);
+                CASE_TO_JSON(TYPE_VARIANT, allow_throw_exception);
                 CASE_TO_JSON(TYPE_CHAR, allow_throw_exception);
                 CASE_TO_JSON(TYPE_VARCHAR, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DECIMAL32, allow_throw_exception);
@@ -1732,6 +2084,36 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
                 LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
                 return nullptr;
             }
+        }
+    } else if (from_type == TYPE_VARIANT || to_type == TYPE_VARIANT) {
+        if (from_type == TYPE_VARIANT) {
+            switch (to_type) {
+                CASE_FROM_VARIANT_TO(TYPE_BOOLEAN, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_TINYINT, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_SMALLINT, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_INT, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_BIGINT, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_LARGEINT, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_FLOAT, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DOUBLE, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DATE, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DATETIME, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_TIME, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DECIMAL32, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DECIMAL64, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_DECIMAL128, allow_throw_exception);
+                CASE_FROM_VARIANT_TO(TYPE_VARIANT, allow_throw_exception);
+            default:
+                LOG(WARNING) << "Not support cast " << type_to_string(from_type) << " to " << type_to_string(to_type);
+                return nullptr;
+            }
+        }
+        if (to_type == TYPE_VARIANT) {
+            TypeDescriptor from_desc(thrift_to_type(node.child_type));
+            if (node.__isset.child_type_desc) {
+                from_desc = TypeDescriptor::from_thrift(node.child_type_desc);
+            }
+            return new CastToVariantExpr(node, std::move(from_desc), allow_throw_exception);
         }
     } else if (is_binary_type(to_type)) {
         if (is_string_type(from_type)) {
@@ -1803,22 +2185,57 @@ StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, co
         return new CastMapExpr(node, key_cast, value_cast);
     }
     if (from_type.is_struct_type() && to_type.is_struct_type()) {
-        if (from_type.children.size() != to_type.children.size()) {
-            return Status::NotSupported("Not support cast struct with different number of children.");
+        bool cast_by_name = node.__isset.cast_struct_by_name && node.cast_struct_by_name;
+        if (cast_by_name) {
+            // Name-based: match each target field by name in the source; counts may differ.
+            // Source fields not referenced in the target are ignored.
+            std::unordered_map<std::string, int> from_field_name_to_index;
+            for (int i = 0; i < (int)from_type.field_names.size(); ++i) {
+                std::string lower_name = from_type.field_names[i];
+                std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::tolower);
+                from_field_name_to_index[lower_name] = i;
+            }
+
+            std::vector<Expr*> field_casts(to_type.children.size());
+            std::vector<int> source_field_indices(to_type.children.size());
+            for (int i = 0; i < (int)to_type.children.size(); ++i) {
+                std::string target_name = to_type.field_names[i];
+                std::transform(target_name.begin(), target_name.end(), target_name.begin(), ::tolower);
+                auto it = from_field_name_to_index.find(target_name);
+                if (it == from_field_name_to_index.end()) {
+                    return Status::NotSupported(
+                            fmt::format("Struct field '{}' not found in source struct.", to_type.field_names[i]));
+                }
+                int source_idx = it->second;
+                source_field_indices[i] = source_idx;
+                ASSIGN_OR_RETURN(field_casts[i],
+                                 create_cast_expr(pool, from_type.children[source_idx], to_type.children[i],
+                                                  allow_throw_exception, /*cast_by_name=*/true));
+                pool->add(field_casts[i]);
+                auto cast_input = create_slot_ref(from_type.children[source_idx]);
+                field_casts[i]->add_child(cast_input.get());
+                pool->add(cast_input.release());
+            }
+            return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
+        } else {
+            // Position-based: match fields by index; counts must be equal.
+            if (from_type.children.size() != to_type.children.size()) {
+                return Status::NotSupported("Not support cast struct with different number of children.");
+            }
+
+            std::vector<Expr*> field_casts(to_type.children.size());
+            std::vector<int> source_field_indices(to_type.children.size());
+            for (int i = 0; i < (int)to_type.children.size(); ++i) {
+                source_field_indices[i] = i;
+                ASSIGN_OR_RETURN(field_casts[i], create_cast_expr(pool, from_type.children[i], to_type.children[i],
+                                                                  allow_throw_exception));
+                pool->add(field_casts[i]);
+                auto cast_input = create_slot_ref(from_type.children[i]);
+                field_casts[i]->add_child(cast_input.get());
+                pool->add(cast_input.release());
+            }
+            return new CastStructExpr(node, std::move(field_casts), std::move(source_field_indices));
         }
-        if (to_type.field_names.empty() || from_type.field_names.size() != to_type.field_names.size()) {
-            return Status::NotSupported("Not support cast struct with different field of children.");
-        }
-        std::vector<Expr*> field_casts{from_type.children.size()};
-        for (int i = 0; i < from_type.children.size(); ++i) {
-            ASSIGN_OR_RETURN(field_casts[i],
-                             create_cast_expr(pool, from_type.children[i], to_type.children[i], allow_throw_exception));
-            pool->add(field_casts[i]);
-            auto cast_input = create_slot_ref(from_type.children[i]);
-            field_casts[i]->add_child(cast_input.get());
-            pool->add(cast_input.release());
-        }
-        return new CastStructExpr(node, std::move(field_casts));
     }
     if ((from_type.type == TYPE_NULL || from_type.type == TYPE_BOOLEAN) && to_type.is_complex_type()) {
         return new MustNullExpr(node);
@@ -1849,12 +2266,16 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
 
 // Need add result to pool by caller.
 StatusOr<Expr*> VectorizedCastExprFactory::create_cast_expr(ObjectPool* pool, const TypeDescriptor& from_type,
-                                                            const TypeDescriptor& to_type, bool allow_throw_exception) {
+                                                            const TypeDescriptor& to_type, bool allow_throw_exception,
+                                                            bool cast_by_name) {
     TExprNode cast_node;
     cast_node.node_type = TExprNodeType::CAST_EXPR;
     cast_node.type = to_type.to_thrift();
     cast_node.__set_child_type(to_thrift(from_type.type));
     cast_node.__set_child_type_desc(from_type.to_thrift());
+    if (cast_by_name) {
+        cast_node.__set_cast_struct_by_name(true);
+    }
     return create_cast_expr(pool, cast_node, from_type, to_type, allow_throw_exception);
 }
 

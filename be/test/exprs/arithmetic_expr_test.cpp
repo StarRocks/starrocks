@@ -67,7 +67,7 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
+                ASSERT_EQ(3, v->immutable_data()[j]);
             }
         });
     }
@@ -95,7 +95,7 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
+                ASSERT_EQ(3, v->immutable_data()[j]);
             }
         });
     }
@@ -123,7 +123,7 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(7, v->get_data()[j]);
+                ASSERT_EQ(7, v->immutable_data()[j]);
             }
         });
     }
@@ -151,7 +151,7 @@ TEST_F(VectorizedArithmeticExprTest, addExpr) {
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(3, v->get_data()[j]);
+                ASSERT_EQ(3, v->immutable_data()[j]);
             }
         });
     }
@@ -175,7 +175,7 @@ TEST_F(VectorizedArithmeticExprTest, mulExpr) {
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(20, v->get_data()[j]);
+                ASSERT_EQ(20, v->immutable_data()[j]);
             }
         });
     }
@@ -209,7 +209,7 @@ TEST_F(VectorizedArithmeticExprTest, nullMulExpr) {
 
         auto ptr = NullableColumn::static_pointer_cast(v)->data_column();
         for (int j = 0; j < v->size(); ++j) {
-            ASSERT_EQ(10, Int32Column::static_pointer_cast(ptr)->get_data()[j]);
+            ASSERT_EQ(10, Int32Column::static_pointer_cast(ptr)->immutable_data()[j]);
         }
     }
 
@@ -266,7 +266,7 @@ TEST_F(VectorizedArithmeticExprTest, divExpr) {
             auto nums = Int32Column::static_pointer_cast(v->data_column());
 
             for (int j = 0; j < nums->size(); ++j) {
-                ASSERT_EQ(5, nums->get_data()[j]);
+                ASSERT_EQ(5, nums->immutable_data()[j]);
             }
 
             for (int j = 0; j < nums->size(); ++j) {
@@ -293,7 +293,7 @@ TEST_F(VectorizedArithmeticExprTest, divExpr) {
 
             ASSERT_EQ(nums->size(), 1);
             int32_t zero = 0;
-            ASSERT_EQ(crc_hash_32(&nums->get_data()[0], sizeof(int32_t), 0x811C9DC5),
+            ASSERT_EQ(crc_hash_32(&nums->immutable_data()[0], sizeof(int32_t), 0x811C9DC5),
                       crc_hash_32(&zero, sizeof(int32_t), 0x811C9DC5));
         });
     }

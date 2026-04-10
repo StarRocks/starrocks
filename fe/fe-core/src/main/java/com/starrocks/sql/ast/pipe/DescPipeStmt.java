@@ -14,15 +14,10 @@
 
 package com.starrocks.sql.ast.pipe;
 
-import com.starrocks.catalog.TableName;
-import com.starrocks.load.pipe.Pipe;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.parser.NodePosition;
-
-import java.util.List;
-import java.util.Optional;
 
 public class DescPipeStmt extends ShowStmt {
     private final PipeName name;
@@ -30,17 +25,6 @@ public class DescPipeStmt extends ShowStmt {
     public DescPipeStmt(NodePosition pos, PipeName name) {
         super(pos);
         this.name = name;
-    }
-
-    public static void handleDesc(List<String> row, Pipe pipe) {
-        row.add(String.valueOf(pipe.getPipeId().getDbId()));
-        row.add(String.valueOf(pipe.getPipeId().getId()));
-        row.add(pipe.getName());
-        row.add(String.valueOf(pipe.getType()));
-        row.add(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
-        row.add(pipe.getPipeSource().toString());
-        row.add(pipe.getOriginSql());
-        row.add(pipe.getPropertiesJson());
     }
 
     public PipeName getName() {

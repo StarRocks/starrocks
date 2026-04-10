@@ -4,6 +4,9 @@
 
 #include "storage/sstable/table_builder.h"
 
+#include "base/hash/crc32c.h"
+#include "base/string/slice.h"
+#include "base/testutil/sync_point.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/sstable/block_builder.h"
@@ -12,10 +15,7 @@
 #include "storage/sstable/filter_block.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/format.h"
-#include "testutil/sync_point.h"
 #include "util/compression/compression_headers.h"
-#include "util/crc32c.h"
-#include "util/slice.h"
 
 namespace starrocks::sstable {
 
@@ -55,6 +55,9 @@ struct TableBuilder::Rep {
     BlockHandle pending_handle; // Handle to add to index block
 
     std::string compressed_output;
+    // key range of the table
+    std::string start_key;
+    std::string end_key;
 };
 
 TableBuilder::TableBuilder(const Options& options, WritableFile* file) : rep_(new Rep(options, file)) {
@@ -91,7 +94,12 @@ Status TableBuilder::Add(const Slice& key, const Slice& value) {
     if (r->num_entries > 0) {
         RETURN_ERROR_IF_FALSE(r->options.comparator->Compare(key, Slice(r->last_key)) > 0,
                               "Key must be greater than the previously added key according to comparator");
+    } else {
+        // record start key
+        r->start_key.assign(key.get_data(), key.get_size());
     }
+    // record end key
+    r->end_key.assign(key.get_data(), key.get_size());
 
     if (r->pending_index_entry) {
         RETURN_ERROR_IF_FALSE(r->data_block.empty(), "Data block must be empty when pending index entry exists");
@@ -274,6 +282,10 @@ uint64_t TableBuilder::NumEntries() const {
 
 uint64_t TableBuilder::FileSize() const {
     return rep_->offset;
+}
+
+std::pair<Slice, Slice> TableBuilder::KeyRange() const {
+    return {rep_->start_key, rep_->end_key};
 }
 
 } // namespace starrocks::sstable

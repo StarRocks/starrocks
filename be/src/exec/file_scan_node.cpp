@@ -29,13 +29,15 @@
 #ifndef __APPLE__
 #include "exec/file_scanner/parquet_scanner.h"
 #endif
+#include "base/utility/defer_op.h"
+#include "common/runtime_profile.h"
+#include "common/thread/thread.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr.h"
+#include "exprs/expr_executor.h"
 #include "fs/fs.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
-#include "util/defer_op.h"
-#include "util/runtime_profile.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
@@ -267,7 +269,7 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
         runtime_state()->update_num_bytes_load_from_source(temp_chunk->bytes_usage());
 
         // eval conjuncts
-        RETURN_IF_ERROR(eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
         counter->num_rows_unselected += (before_rows - temp_chunk->num_rows());
 
         // Row batch has been filled, push this to the queue
@@ -310,8 +312,8 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
 
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
-    DeferOp close_exprs([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
-    auto status = Expr::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
+    DeferOp close_exprs([this, &scanner_expr_ctxs] { ExprExecutor::close(scanner_expr_ctxs, runtime_state()); });
+    auto status = ExprExecutor::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
 
     if (!status.ok()) {
         LOG(WARNING) << "Clone conjuncts failed.";

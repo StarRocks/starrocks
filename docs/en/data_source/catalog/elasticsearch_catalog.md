@@ -9,7 +9,7 @@ StarRocks supports Elasticsearch catalogs from v3.1 onwards.
 
 StarRocks and Elasticsearch are both popular analytical systems with distinct strengths. StarRocks excels in large-scale distributed computing and supports querying data from Elasticsearch through external tables. Elasticsearch is known for its full-text search capabilities. The combination of StarRocks and Elasticsearch provides a more comprehensive OLAP solution. With Elasticsearch catalogs, you can directly analyze all indexed data in your Elasticsearch cluster by using SQL statements on StarRocks without the need for data migration.
 
-Unlike catalogs for other data sources, an Elasticsearch catalog has only one database named `default` in it upon creation. Each Elasticsearch index is automatically mapped to a data table and mounted to the `default` database.
+Unlike catalogs for other data sources, an Elasticsearch catalog has only one database named `default_db` in it upon creation. Each Elasticsearch index is automatically mapped to a data table and mounted to the `default_db` database.
 
 ## Create an Elasticsearch catalog
 

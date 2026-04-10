@@ -42,7 +42,7 @@ namespace starrocks {
 Status ColumnIterator::decode_dict_codes(const Column& codes, Column* words) {
     if (codes.is_nullable()) {
         const ColumnPtr& data_column = down_cast<const NullableColumn&>(codes).data_column();
-        const Buffer<int32_t>& v = Int32Column::static_pointer_cast(data_column)->get_data();
+        const auto& v = Int32Column::static_pointer_cast(data_column)->immutable_data();
         return this->decode_dict_codes(v.data(), v.size(), words);
     } else {
         const auto v = down_cast<const Int32Column&>(codes).immutable_data();
@@ -62,6 +62,10 @@ Status ColumnIterator::fetch_dict_codes_by_rowid(const Column& rowids, Column* v
     const auto& numeric_col = down_cast<const FixedLengthColumn<rowid_t>&>(rowids);
     const auto* p = reinterpret_cast<const rowid_t*>(numeric_col.immutable_data().data());
     return fetch_dict_codes_by_rowid(p, rowids.size(), values);
+}
+
+Status ColumnIterator::fetch_values_by_rowid_for_predicate_evaluate(const Column& rowids, Column* values) {
+    return fetch_values_by_rowid(rowids, values);
 }
 
 Status ColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {

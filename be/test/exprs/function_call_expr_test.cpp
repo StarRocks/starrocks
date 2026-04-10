@@ -19,14 +19,16 @@
 
 #include <cmath>
 
+#include "base/testutil/assert.h"
 #include "butil/time.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "exprs/cast_expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
@@ -68,8 +70,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathPiExprTest) {
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -81,7 +83,7 @@ TEST_F(VectorizedFunctionCallExprTest, mathPiExprTest) {
         ASSERT_EQ(M_PI, value);
     }
 
-    Expr::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
@@ -111,8 +113,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -123,12 +125,12 @@ TEST_F(VectorizedFunctionCallExprTest, mathModExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(1, j);
         }
     }
 
-    Expr::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
@@ -168,8 +170,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
 
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
@@ -180,12 +182,12 @@ TEST_F(VectorizedFunctionCallExprTest, mathLeastExprTest) {
     {
         auto value = ColumnHelper::cast_to<TYPE_INT>(result);
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(1, j);
         }
     }
 
-    Expr::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
@@ -225,8 +227,8 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
     ExprContext exprContext(&expr);
     std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
-    ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
-    ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::prepare(expr_ctxs, &_runtime_state));
+    ASSERT_OK(ExprExecutor::open(expr_ctxs, &_runtime_state));
     ColumnPtr result = expr.evaluate(&exprContext, nullptr);
 
     ASSERT_FALSE(result->is_constant());
@@ -244,12 +246,12 @@ TEST_F(VectorizedFunctionCallExprTest, mathNullGreatestExprTest) {
             }
         }
 
-        for (int& j : value->get_data()) {
+        for (const int& j : value->get_data()) {
             ASSERT_EQ(20, j);
         }
     }
 
-    Expr::close(expr_ctxs, &_runtime_state);
+    ExprExecutor::close(expr_ctxs, &_runtime_state);
 }
 
 TEST_F(VectorizedFunctionCallExprTest, prepareFaileCase) {

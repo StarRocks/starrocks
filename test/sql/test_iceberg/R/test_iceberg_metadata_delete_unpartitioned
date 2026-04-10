@@ -1,0 +1,249 @@
+-- name: test_iceberg_metadata_delete_unpartitioned
+create external catalog iceberg_unpart_${uuid0}
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "iceberg.catalog.hive.metastore.uris" = "${hive_metastore_uris}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false"
+);
+-- result:
+-- !result
+create database iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}
+properties ("location" = "oss://${oss_bucket}/test_unpart_delete/${uuid0}/db");
+-- result:
+-- !result
+create table iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned (
+    id INT,
+    name STRING,
+    category STRING,
+    amount DECIMAL(10,2)
+);
+-- result:
+-- !result
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(1, 'Alice', 'Electronics', 100.00),
+(2, 'Bob', 'Electronics', 200.00),
+(3, 'Charlie', 'Clothing', 150.00),
+(4, 'David', 'Clothing', 300.00),
+(5, 'Eve', 'Food', 50.00),
+(6, 'Frank', 'Food', 75.00);
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id = 1", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id = 1;
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+2	Bob	Electronics	200.00
+3	Charlie	Clothing	150.00
+4	David	Clothing	300.00
+5	Eve	Food	50.00
+6	Frank	Food	75.00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id in (2, 3)", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id in (2, 3);
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+5	Eve	Food	50.00
+6	Frank	Food	75.00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id > 4", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id > 4;
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(7, 'Grace', 'Electronics', 120.00),
+(8, 'Henry', 'Clothing', 180.00);
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category = 'Electronics'", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category = 'Electronics';
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+8	Henry	Clothing	180.00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where name like 'H%'", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where name like 'H%';
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(10, 'Ivy', 'Food', 60.00),
+(11, 'Jack', 'Food', 90.00),
+(12, 'Kate', 'Food', 110.00);
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id between 10 and 11", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id between 10 and 11;
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+12	Kate	Food	110.00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category = 'Food' and amount < 100", "ICEBERG DELETE SINK")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category = 'Food' and amount < 100;
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+12	Kate	Food	110.00
+-- !result
+select operation, element_at(summary,'added-position-deletes') as added_position_deletes from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	2
+-- !result
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(20, 'Test1', 'Books', 50.00),
+(21, 'Test2', 'Books', 60.00);
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id = 20 or category = 'Books'", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id = 20 or category = 'Books';
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+12	Kate	Food	110.00
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(30, 'NullTest', null, 100.00),
+(31, 'NullTest2', null, 200.00);
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category is null", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where category is null;
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+12	Kate	Food	110.00
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+insert into iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned values
+(100, 'Alice', 'Electronics', 100.00),
+(101, 'Bob', 'Electronics', 200.00),
+(102, 'Charlie', 'Clothing', 150.00),
+(103, 'David', 'Clothing', 300.00);
+-- result:
+-- !result
+function: assert_explain_contains("delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id > 50", "ICEBERG METADATA DELETE")
+-- result:
+None
+-- !result
+delete from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned where id > 50;
+-- result:
+-- !result
+select * from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned order by id;
+-- result:
+4	David	Clothing	300.00
+12	Kate	Food	110.00
+-- !result
+select operation, element_at(summary,'deleted-data-files') as deleted_data_files from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 1;
+-- result:
+delete	1
+-- !result
+select operation from iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned$snapshots order by committed_at desc limit 5;
+-- result:
+delete
+append
+delete
+append
+delete
+-- !result
+drop table iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0}.test_unpartitioned force;
+-- result:
+-- !result
+drop database iceberg_unpart_${uuid0}.iceberg_unpart_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_unpart_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_unpart_delete/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

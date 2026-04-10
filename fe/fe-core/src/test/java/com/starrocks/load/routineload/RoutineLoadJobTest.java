@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -58,7 +59,6 @@ import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ImportColumnDesc;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
@@ -124,7 +124,7 @@ public class RoutineLoadJobTest {
         String txnStatusChangeReasonString = TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
     }
@@ -184,7 +184,7 @@ public class RoutineLoadJobTest {
         TableMetricsEntity entity =
                 TableMetricsRegistry.getInstance().getMetricsEntity(routineLoadTaskInfo.getJob().tableId);
         long prevValue = entity.counterRoutineLoadAbortedTasksTotal.getValue();
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
@@ -193,7 +193,7 @@ public class RoutineLoadJobTest {
         Assertions.assertEquals(Long.valueOf(prevValue + 1), entity.counterRoutineLoadAbortedTasksTotal.getValue());
 
         routineLoadTaskInfoList.clear();
-        routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
         Assertions.assertEquals(Long.valueOf(2), Deencapsulation.getField(routineLoadJob, "abortedTaskNum"));
         Assertions.assertEquals(Long.valueOf(prevValue + 2), entity.counterRoutineLoadAbortedTasksTotal.getValue());
     }
@@ -252,7 +252,7 @@ public class RoutineLoadJobTest {
         TableMetricsEntity entity =
                 TableMetricsRegistry.getInstance().getMetricsEntity(routineLoadTaskInfo.getJob().tableId);
         long prevValue = entity.counterRoutineLoadCommittedTasksTotal.getValue();
-        routineLoadJob.afterCommitted(transactionState, true);
+        routineLoadJob.afterCommitted(transactionState);
 
         Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         Assertions.assertEquals(Long.valueOf(1), Deencapsulation.getField(routineLoadJob, "committedTaskNum"));
@@ -847,6 +847,109 @@ public class RoutineLoadJobTest {
     }
 
     @Test
+    public void testAfterAbortedNonRetryableAttachment(@Injectable TransactionState transactionState,
+                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
+            throws StarRocksException {
+
+        List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+        routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        long txnId = 1L;
+
+        RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment();
+        Deencapsulation.setField(attachment, "nonRetryable", true);
+
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                minTimes = 0;
+                result = txnId;
+                routineLoadTaskInfo.getTxnId();
+                minTimes = 0;
+                result = txnId;
+                transactionState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+            }
+        };
+
+        new MockUp<RoutineLoadJob>() {
+            @Mock
+            void writeUnlock() {
+            }
+        };
+
+        // non-retryable attachment should cause pause even with unrecognized reason
+        String txnStatusChangeReasonString = "primary key size exceed the limit";
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+    }
+
+    @Test
+    public void testAfterAbortedRetryableAttachment(@Mocked RoutineLoadMgr routineLoadMgr,
+                                                     @Injectable TransactionState transactionState,
+                                                     @Injectable KafkaTaskInfo routineLoadTaskInfo)
+            throws StarRocksException {
+
+        Deencapsulation.setField(routineLoadTaskInfo, "routineLoadManager", routineLoadMgr);
+        List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+        routineLoadTaskInfoList.add(routineLoadTaskInfo);
+        long txnId = 1L;
+
+        RLTaskTxnCommitAttachment attachment = new RLTaskTxnCommitAttachment();
+        Deencapsulation.setField(attachment, "nonRetryable", false);
+        TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+        tKafkaRLTaskProgress.partitionCmtOffset = Maps.newHashMap();
+        KafkaProgress kafkaProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+        Deencapsulation.setField(attachment, "progress", kafkaProgress);
+
+        KafkaProgress currentProgress = new KafkaProgress(tKafkaRLTaskProgress.getPartitionCmtOffset());
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+
+        new Expectations() {
+            {
+                transactionState.getTransactionId();
+                minTimes = 0;
+                result = txnId;
+                routineLoadTaskInfo.getTxnId();
+                minTimes = 0;
+                result = txnId;
+                transactionState.getTxnCommitAttachment();
+                minTimes = 0;
+                result = attachment;
+                routineLoadTaskInfo.getPartitions();
+                minTimes = 0;
+                result = Lists.newArrayList();
+                routineLoadTaskInfo.getId();
+                minTimes = 0;
+                result = UUIDUtil.genUUID();
+                routineLoadMgr.getJob(anyLong);
+                minTimes = 0;
+                result = routineLoadJob;
+            }
+        };
+
+        new MockUp<RoutineLoadJob>() {
+            @Mock
+            void writeUnlock() {
+            }
+        };
+
+        // retryable attachment should keep job running
+        String txnStatusChangeReasonString = "some transient error";
+        Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+        Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+        Deencapsulation.setField(routineLoadJob, "progress", currentProgress);
+        routineLoadJob.afterAborted(transactionState, txnStatusChangeReasonString);
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+    }
+
+    @Test
     public void testPauseOnFatalParseError(@Injectable TransactionState transactionState,
                                            @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
@@ -893,7 +996,7 @@ public class RoutineLoadJobTest {
             RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
-            routineLoadJob.afterAborted(transactionState, true,
+            routineLoadJob.afterAborted(transactionState,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             System.out.println(routineLoadJob.getPauseReason());
             Assertions.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
@@ -908,7 +1011,7 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
             ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
                     .put("pause_on_fatal_parse_error", "true");
-            routineLoadJob.afterAborted(transactionState, true,
+            routineLoadJob.afterAborted(transactionState,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             Assertions.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
             String errorMsg =

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/schema_scanner.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_fwd.h"
 
 namespace starrocks {
 
@@ -33,7 +33,9 @@ private:
     static TypeDescriptor _dir_spaces_type;
     static SchemaScanner::ColumnDesc _s_columns[];
 
+#ifdef WITH_STARCACHE
     bool _is_fetched = false;
+#endif
 
     int64_t _be_id{-1};
 };

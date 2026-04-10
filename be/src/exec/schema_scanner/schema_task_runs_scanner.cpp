@@ -14,11 +14,11 @@
 
 #include "exec/schema_scanner/schema_task_runs_scanner.h"
 
+#include "base/time/timezone_utils.h"
 #include "exec/schema_scanner.h"
 #include "exec/schema_scanner/schema_helper.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
-#include "util/timezone_utils.h"
+#include "types/datetime_value.h"
 
 namespace starrocks {
 
@@ -30,6 +30,7 @@ SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"STATE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"WAREHOUSE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
         {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(Slice), true},
@@ -86,28 +87,28 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
         case 1: {
             // QUERY_ID
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(1);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
                 const std::string* str = &task_run_info.query_id;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 2: {
             // TASK_NAME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(2);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
                 const std::string* str = &task_run_info.task_name;
                 Slice value(str->c_str(), str->length());
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 3: {
             // CREATE_TIME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
+                auto* nullable_column = down_cast<NullableColumn*>(column);
                 if (task_run_info.__isset.create_time) {
                     int64_t create_time = task_run_info.create_time;
                     if (create_time <= 0) {
@@ -115,7 +116,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     } else {
                         DateTimeValue t;
                         t.from_unixtime(create_time, _runtime_state->timezone_obj());
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                     }
                 } else {
                     nullable_column->append_nulls(1);
@@ -126,8 +127,8 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
         case 4: {
             // FINISH_TIME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(4);
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(4);
+                auto* nullable_column = down_cast<NullableColumn*>(column);
                 if (task_run_info.__isset.finish_time) {
                     int64_t complete_time = task_run_info.finish_time;
                     if (complete_time <= 0) {
@@ -135,7 +136,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     } else {
                         DateTimeValue t;
                         t.from_unixtime(complete_time, _runtime_state->timezone_obj());
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                     }
                 } else {
                     nullable_column->append_nulls(1);
@@ -146,13 +147,13 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
         case 5: {
             // STATE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(5);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(5);
                 if (task_run_info.__isset.state) {
                     const std::string* str = &task_run_info.state;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
@@ -160,50 +161,63 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
         case 6: {
             // CATALOG
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(6);
                 if (task_run_info.__isset.catalog) {
                     const std::string* str = &task_run_info.catalog;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
         }
         case 7: {
-            // DATABASE
+            // WAREHOUSE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                if (task_run_info.__isset.database) {
-                    const std::string* str = &task_run_info.database;
-                    Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-                } else {
-                    fill_data_column_with_null(column.get());
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(7);
+                std::string warehouse_name = "default_warehouse";
+                if (task_run_info.__isset.warehouse) {
+                    warehouse_name = task_run_info.warehouse;
                 }
+                Slice value(warehouse_name.c_str(), warehouse_name.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
             }
             break;
         }
         case 8: {
-            // DEFINITION
+            // DATABASE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
-                if (task_run_info.__isset.definition) {
-                    const std::string* str = &task_run_info.definition;
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(8);
+                if (task_run_info.__isset.database) {
+                    const std::string* str = &task_run_info.database;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
         }
         case 9: {
+            // DEFINITION
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(9);
+                if (task_run_info.__isset.definition) {
+                    const std::string* str = &task_run_info.definition;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
+                }
+            }
+            break;
+        }
+        case 10: {
             // EXPIRE_TIME
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(9);
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(10);
+                auto* nullable_column = down_cast<NullableColumn*>(column);
                 if (task_run_info.__isset.expire_time) {
                     int64_t expire_time = task_run_info.expire_time;
                     if (expire_time <= 0) {
@@ -211,7 +225,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     } else {
                         DateTimeValue t;
                         t.from_unixtime(expire_time, _runtime_state->timezone_obj());
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                     }
                 } else {
                     nullable_column->append_nulls(1);
@@ -219,94 +233,94 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 10: {
+        case 11: {
             // ERROR_CODE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(10);
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(11);
                 if (task_run_info.__isset.error_code) {
                     int64_t value = task_run_info.error_code;
-                    fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_BIGINT>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
-                }
-            }
-            break;
-        }
-        case 11: {
-            // ERROR_MESSAGE
-            {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(11);
-                if (task_run_info.__isset.error_message) {
-                    const std::string* str = &task_run_info.error_message;
-                    Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-                } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
         }
         case 12: {
-            // progress
+            // ERROR_MESSAGE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(12);
-                if (task_run_info.__isset.progress) {
-                    const std::string* str = &task_run_info.progress;
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(12);
+                if (task_run_info.__isset.error_message) {
+                    const std::string* str = &task_run_info.error_message;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
         }
         case 13: {
-            // extra_message
+            // PROGRESS
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(13);
-                if (task_run_info.__isset.extra_message) {
-                    const std::string* str = &task_run_info.extra_message;
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(13);
+                if (task_run_info.__isset.progress) {
+                    const std::string* str = &task_run_info.progress;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
         }
         case 14: {
-            // properties
+            // EXTRA_MESSAGE
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(14);
-                if (task_run_info.__isset.properties) {
-                    const std::string* str = &task_run_info.properties;
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(14);
+                if (task_run_info.__isset.extra_message) {
+                    const std::string* str = &task_run_info.extra_message;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
         }
         case 15: {
-            // job_id
+            // PROPERTIES
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(15);
-                if (task_run_info.__isset.job_id) {
-                    const std::string* str = &task_run_info.job_id;
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(15);
+                if (task_run_info.__isset.properties) {
+                    const std::string* str = &task_run_info.properties;
                     Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
                 } else {
-                    fill_data_column_with_null(column.get());
+                    fill_data_column_with_null(column);
                 }
             }
             break;
         }
         case 16: {
-            // process_time
+            // JOB_ID
             {
-                ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
-                auto* nullable_column = down_cast<NullableColumn*>(column.get());
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(16);
+                if (task_run_info.__isset.job_id) {
+                    const std::string* str = &task_run_info.job_id;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
+                }
+            }
+            break;
+        }
+        case 17: {
+            // PROCESS_TIME
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(17);
+                auto* nullable_column = down_cast<NullableColumn*>(column);
                 if (task_run_info.__isset.process_time) {
                     int64_t complete_time = task_run_info.process_time;
                     if (complete_time <= 0) {
@@ -314,7 +328,7 @@ Status SchemaTaskRunsScanner::fill_chunk(ChunkPtr* chunk) {
                     } else {
                         DateTimeValue t;
                         t.from_unixtime(complete_time, _runtime_state->timezone_obj());
-                        fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
+                        fill_column_with_slot<TYPE_DATETIME>(column, (void*)&t);
                     }
                 } else {
                     nullable_column->append_nulls(1);

@@ -20,7 +20,7 @@ Iceberg のスナップショットブランチングとタグ付け機能を統
 
 ### ブランチの作成
 
-**構文**
+**`CREATE BRANCH` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -73,7 +73,7 @@ WITH SNAPSHOT RETENTION 2 SNAPSHOTS 2 DAYS;
 
 ### テーブルの特定のブランチにデータをロード
 
-**構文**
+**`VERSION AS OF` 構文**
 
 ```SQL
 INSERT INTO [catalog.][database.]table_name
@@ -98,7 +98,7 @@ SELECT c1, k1 FROM tbl;
 
 ### タグの作成
 
-**構文**
+**`CREATE TAG` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -123,72 +123,9 @@ AS OF VERSION 12345
 RETAIN 7 DAYS;
 ```
 
-### ブランチを別のブランチにファストフォワード
-
-**構文**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE fast_forward('<from_branch>', '<to_branch>')
-```
-
-**パラメータ**
-
-- `from_branch`: ファストフォワードしたいブランチ。ブランチ名をクォートで囲みます。
-- `to_branch`: `from_branch` をファストフォワードしたいブランチ。ブランチ名をクォートで囲みます。
-
-**例**
-
-`main` ブランチを `test-branch` ブランチにファストフォワードします。
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE fast_forward('main', 'test-branch');
-```
-
-### スナップショットを選択的に適用
-
-特定のスナップショットを選択してテーブルの現在の状態に適用できます。この操作により、既存のスナップショットに基づいて新しいスナップショットが作成され、元のスナップショットは影響を受けません。
-
-**構文**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE cherrypick_snapshot(<snapshot_id>)
-```
-
-**パラメータ**
-
-`snapshot_id`: 選択的に適用したいスナップショットの ID。
-
-**例**
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE cherrypick_snapshot(54321);
-```
-
-### スナップショットの期限切れ
-
-特定の時点よりも前のスナップショットを期限切れにできます。この操作により、期限切れのスナップショットのデータファイルが削除されます。
-
-**構文**
-
-```SQL
-ALTER TABLE [catalog.][database.]table_name
-EXECUTE expire_snapshot('<datetime>')
-```
-
-**例**
-
-```SQL
-ALTER TABLE iceberg.sales.order
-EXECUTE expire_snapshot('2023-12-17 00:14:38')
-```
-
 ### ブランチまたはタグの削除
 
-**構文**
+**`DROP BRANCH`、`DROP TAG` 構文**
 
 ```SQL
 ALTER TABLE [catalog.][database.]table_name
@@ -209,7 +146,7 @@ DROP TAG `test-tag`;
 
 ### 特定のブランチまたはタグへのタイムトラベル
 
-**構文**
+**`VERSION AS OF` 構文**
 
 ```SQL
 [FOR] VERSION AS OF '<branch_or_tag>'
@@ -230,7 +167,7 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 'test-tag';
 
 ### 特定のスナップショットへのタイムトラベル
 
-**構文**
+**`VERSION AS OF` 構文**
 
 ```SQL
 [FOR] VERSION AS OF '<snapshot_id>'
@@ -248,7 +185,7 @@ SELECT * FROM iceberg.sales.order VERSION AS OF 12345;
 
 ### 特定の日時または日付へのタイムトラベル
 
-**構文**
+**`TIMESTAMP AS OF` 構文**
 
 ```SQL
 [FOR] TIMESTAMP AS OF { '<datetime>' | '<date>' | date_and_time_function }

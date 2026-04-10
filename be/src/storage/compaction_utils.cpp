@@ -14,7 +14,7 @@
 
 #include "storage/compaction_utils.h"
 
-#include "common/config.h"
+#include "common/config_compaction_fwd.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
@@ -98,6 +98,7 @@ void CompactionUtils::split_column_into_groups(size_t num_columns, const std::ve
                                                std::vector<std::vector<uint32_t>>* column_groups) {
     column_groups->emplace_back(sort_key_idxes);
     std::vector<ColumnId> all_columns;
+    all_columns.reserve(num_columns);
     for (ColumnId i = 0; i < num_columns; ++i) {
         all_columns.push_back(i);
     }

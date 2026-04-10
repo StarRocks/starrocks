@@ -135,7 +135,7 @@ public class SecurityIntegrationTest {
         properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, "preferred_username");
 
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        authenticationMgr.createSecurityIntegration("oidc2", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc2", properties);
 
         Config.authentication_chain = new String[] {"native", "oidc2"};
 
@@ -176,7 +176,7 @@ public class SecurityIntegrationTest {
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
 
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        authenticationMgr.createSecurityIntegration("oidc", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc", properties);
 
         new MockUp<FileGroupProvider>() {
             @Mock
@@ -216,7 +216,7 @@ public class SecurityIntegrationTest {
 
         Map<String, String> alterProperties = new HashMap<>();
         alterProperties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group_5");
-        authenticationMgr.alterSecurityIntegration("oidc", alterProperties, true);
+        authenticationMgr.replayAlterSecurityIntegration("oidc", alterProperties);
         Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler.authenticate(
                 new ConnectContext(), "harbor", "127.0.0.1", outputStream.toByteArray()));
     }
@@ -268,7 +268,7 @@ public class SecurityIntegrationTest {
         properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_ROOT_PWD, "12345");
         properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_BASE_DN, "");
         properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_USER_SEARCH_ATTR, "");
-        authenticationMgr.createSecurityIntegration("ldap", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("ldap", properties);
 
         ShowResultSet resultSet =
                 ShowExecutor.execute(new ShowCreateSecurityIntegrationStatement("ldap", NodePosition.ZERO), null);
@@ -278,7 +278,7 @@ public class SecurityIntegrationTest {
         properties = new HashMap<>();
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_oauth2");
         properties.put(OAuth2AuthenticationProvider.OAUTH2_CLIENT_SECRET, "123");
-        authenticationMgr.createSecurityIntegration("oauth2", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("oauth2", properties);
         resultSet =
                 ShowExecutor.execute(new ShowCreateSecurityIntegrationStatement("oauth2", NodePosition.ZERO), null);
         Assert.assertTrue(
@@ -329,7 +329,7 @@ public class SecurityIntegrationTest {
         Assertions.assertEquals("sub", properties.get("principal_field"), "Principal field should match");
 
         // Actually create the security integration
-        authenticationMgr.createSecurityIntegration("oidc", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc", properties);
         Assertions.assertNotNull(authenticationMgr.getSecurityIntegration("oidc"),
                 "Security integration should be created successfully");
 
@@ -359,7 +359,7 @@ public class SecurityIntegrationTest {
                 "Principal field should be updated");
 
         // Actually alter the security integration
-        authenticationMgr.alterSecurityIntegration("oidc", alterStmt.getProperties(), true);
+        authenticationMgr.replayAlterSecurityIntegration("oidc", alterStmt.getProperties());
         SecurityIntegration alteredIntegration = authenticationMgr.getSecurityIntegration("oidc");
         Assertions.assertNotNull(alteredIntegration, "Altered security integration should exist");
 
@@ -385,7 +385,7 @@ public class SecurityIntegrationTest {
         Assertions.assertEquals("oidc", dropStmt.getName(), "Integration name should match");
 
         // Actually drop the security integration
-        authenticationMgr.dropSecurityIntegration("oidc", true);
+        authenticationMgr.replayDropSecurityIntegration("oidc");
         Assertions.assertNull(authenticationMgr.getSecurityIntegration("oidc"),
                 "Security integration should be dropped successfully");
     }
@@ -411,7 +411,7 @@ public class SecurityIntegrationTest {
 
         // Actually try to create with missing type - should throw exception
         Assertions.assertThrows(SemanticException.class, () -> {
-            authenticationMgr.createSecurityIntegration("oidc", missingTypeStmt.getPropertyMap(), true);
+            authenticationMgr.replayCreateSecurityIntegration("oidc", missingTypeStmt.getPropertyMap());
         }, "Creating security integration without type should fail");
 
         // Test 2: Valid statement with all required properties
@@ -429,29 +429,29 @@ public class SecurityIntegrationTest {
                 "Valid statement should have type property");
 
         // Actually create with valid properties - should succeed
-        authenticationMgr.createSecurityIntegration("oidc", validStmt.getPropertyMap(), true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc", validStmt.getPropertyMap());
         Assertions.assertNotNull(authenticationMgr.getSecurityIntegration("oidc"),
                 "Valid security integration should be created successfully");
 
         // Test 3: Duplicate creation - should fail
         Assertions.assertThrows(DdlException.class, () -> {
-            authenticationMgr.createSecurityIntegration("oidc", validStmt.getPropertyMap(), false);
+            authenticationMgr.createSecurityIntegration("oidc", validStmt.getPropertyMap());
         }, "Creating duplicate security integration should fail");
 
         // Test 4: Alter non-existent integration - should fail
         Map<String, String> alterProperties = new HashMap<>();
         alterProperties.put("principal_field", "preferred_name");
         Assertions.assertThrows(DdlException.class, () -> {
-            authenticationMgr.alterSecurityIntegration("non_existent", alterProperties, false);
+            authenticationMgr.alterSecurityIntegration("non_existent", alterProperties);
         }, "Altering non-existent security integration should fail");
 
         // Test 5: Drop non-existent integration - should fail
         Assertions.assertThrows(DdlException.class, () -> {
-            authenticationMgr.dropSecurityIntegration("non_existent", false);
+            authenticationMgr.dropSecurityIntegration("non_existent");
         }, "Dropping non-existent security integration should fail");
 
         // Clean up
-        authenticationMgr.dropSecurityIntegration("oidc", true);
+        authenticationMgr.replayDropSecurityIntegration("oidc");
     }
 
     /**
@@ -473,7 +473,7 @@ public class SecurityIntegrationTest {
         Assertions.assertEquals("oidc1", stmt1.getName(), "First integration name should match");
 
         // Actually create first integration
-        authenticationMgr.createSecurityIntegration("oidc1", stmt1.getPropertyMap(), true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc1", stmt1.getPropertyMap());
         SecurityIntegration integration1 = authenticationMgr.getSecurityIntegration("oidc1");
         Assertions.assertNotNull(integration1, "First integration should be created successfully");
 
@@ -490,7 +490,7 @@ public class SecurityIntegrationTest {
         Assertions.assertEquals("oidc2", stmt2.getName(), "Second integration name should match");
 
         // Actually create second integration
-        authenticationMgr.createSecurityIntegration("oidc2", stmt2.getPropertyMap(), true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc2", stmt2.getPropertyMap());
         SecurityIntegration integration2 = authenticationMgr.getSecurityIntegration("oidc2");
         Assertions.assertNotNull(integration2, "Second integration should be created successfully");
 
@@ -519,8 +519,8 @@ public class SecurityIntegrationTest {
                 "Show all should return at least 2 integrations");
 
         // Clean up
-        authenticationMgr.dropSecurityIntegration("oidc1", true);
-        authenticationMgr.dropSecurityIntegration("oidc2", true);
+        authenticationMgr.replayDropSecurityIntegration("oidc1");
+        authenticationMgr.replayDropSecurityIntegration("oidc2");
     }
 
     /**
@@ -562,7 +562,7 @@ public class SecurityIntegrationTest {
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "file_group_provider");
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "group1");
 
-        authenticationMgr.createSecurityIntegration("oidc_with_groups", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("oidc_with_groups", properties);
         SecurityIntegration integration = authenticationMgr.getSecurityIntegration("oidc_with_groups");
         Assertions.assertNotNull(integration, "Security integration with group provider should be created successfully");
 
@@ -582,7 +582,7 @@ public class SecurityIntegrationTest {
                 "Permitted group should match");
 
         // Clean up
-        authenticationMgr.dropSecurityIntegration("oidc_with_groups", true);
+        authenticationMgr.replayDropSecurityIntegration("oidc_with_groups");
     }
 
     /**
@@ -596,7 +596,7 @@ public class SecurityIntegrationTest {
         properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_oauth2");
         properties.put("client_secret", "secret123");
 
-        authenticationMgr.createSecurityIntegration("oauth2_test", properties, true);
+        authenticationMgr.replayCreateSecurityIntegration("oauth2_test", properties);
 
         // Test show create - sensitive properties should be masked
         ShowCreateSecurityIntegrationStatement showCreateStmt =
@@ -611,7 +611,7 @@ public class SecurityIntegrationTest {
                 "Sensitive properties should be masked in show create output");
 
         // Clean up
-        authenticationMgr.dropSecurityIntegration("oauth2_test", true);
+        authenticationMgr.replayDropSecurityIntegration("oauth2_test");
     }
 
     /**
@@ -738,7 +738,7 @@ public class SecurityIntegrationTest {
         validJwtProperties.put("issuer", "https://example.com");
         validJwtProperties.put("audience", "starrocks-client");
 
-        authenticationMgr.createSecurityIntegration("valid_jwt", validJwtProperties, true);
+        authenticationMgr.replayCreateSecurityIntegration("valid_jwt", validJwtProperties);
         SecurityIntegration validIntegration = authenticationMgr.getSecurityIntegration("valid_jwt");
         Assertions.assertNotNull(validIntegration, "Valid JWT integration should be created successfully");
 
@@ -754,7 +754,7 @@ public class SecurityIntegrationTest {
         fullProperties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "group1,group2");
         fullProperties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "allowed1,allowed2");
 
-        authenticationMgr.createSecurityIntegration("full_jwt", fullProperties, true);
+        authenticationMgr.replayCreateSecurityIntegration("full_jwt", fullProperties);
         SecurityIntegration fullIntegration = authenticationMgr.getSecurityIntegration("full_jwt");
         Assertions.assertNotNull(fullIntegration, "Full JWT integration should be created successfully");
 
@@ -763,8 +763,8 @@ public class SecurityIntegrationTest {
                 "Full integration should be JWT type");
 
         // Clean up
-        authenticationMgr.dropSecurityIntegration("valid_jwt", true);
-        authenticationMgr.dropSecurityIntegration("full_jwt", true);
+        authenticationMgr.replayDropSecurityIntegration("valid_jwt");
+        authenticationMgr.replayDropSecurityIntegration("full_jwt");
     }
 
 }

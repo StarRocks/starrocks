@@ -16,15 +16,16 @@
 
 #include <cstdint>
 
+#include "base/bit/bit_util.h"
+#include "base/simd/byte_stream_split.h"
+#include "base/string/faststring.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
-#include "util/bit_util.h"
-#include "util/byte_stream_split.h"
-#include "util/faststring.h"
-#include "util/slice.h"
 
 namespace starrocks::parquet {
 
@@ -40,6 +41,8 @@ public:
         }
     }
     ~ByteStreamSplitEncoder() override = default;
+
+    std::string to_string() const override { return fmt::format("ByteStreamSplitEncoder<{}>", typeid(T).name()); }
 
     void set_type_length(int byte_width) override {
         if constexpr (IS_FLBA) {
@@ -106,6 +109,7 @@ template <tparquet::Type::type PT>
 class ByteStreamSplitDecoder : public Decoder {
 public:
     using T = typename PhysicalTypeTraits<PT>::CppType;
+    static_assert(PT != tparquet::Type::BYTE_ARRAY, "ByteStreamSplitDecoder does not support BYTE_ARRAY");
     static constexpr bool IS_FLBA = (PT == tparquet::Type::FIXED_LEN_BYTE_ARRAY);
 
     ByteStreamSplitDecoder() {
@@ -114,6 +118,8 @@ public:
         }
     }
     ~ByteStreamSplitDecoder() override = default;
+
+    std::string to_string() const override { return fmt::format("ByteStreamSplitDecoder<{}>", typeid(T).name()); }
 
     void set_type_length(int byte_width) override {
         if constexpr (IS_FLBA) {
@@ -140,7 +146,7 @@ public:
             // decoded result is in decode_buffer_ if we pass nullptr.
             RETURN_IF_ERROR(Decode(nullptr, count));
             if (dst->is_nullable()) {
-                down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
+                down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
             }
             auto* binary_column = ColumnHelper::get_binary_column(dst);
             const char* string_buffer = (const char*)decode_buffer_.data();
@@ -148,7 +154,9 @@ public:
         } else {
             size_t cur_size = dst->size();
             dst->resize(cur_size + count);
-            T* data = reinterpret_cast<T*>(dst->mutable_raw_data()) + cur_size;
+            MutableRawDataVisitor visitor;
+            RETURN_IF_ERROR(dst->accept_mutable(&visitor));
+            T* data = reinterpret_cast<T*>(visitor.result()) + cur_size;
             RETURN_IF_ERROR(Decode(data, count));
         }
         return Status::OK();

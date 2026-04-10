@@ -45,7 +45,7 @@ LOG_FILTERED_WARN = "You can use `--log_filtered` to show the details..."
 
 class ChooseCase(object):
     class CaseTR(object):
-        def __init__(self, ctx, name, file, sql, result, info, cleanup=None):
+        def __init__(self, ctx, name, file, sql, result, info, cleanup=None, tags=None):
             """init"""
             super().__init__()
             self.ctx = ctx
@@ -57,6 +57,8 @@ class ChooseCase(object):
             self.result: List = result
             # custom cleanup commands
             self.cleanup: List = cleanup or []
+            # case tags (e.g., @arrow_flight_sql, @sequential)
+            self.tags: List = tags or []
 
             # # get db from lines
             # self.db = set()
@@ -422,6 +424,7 @@ class ChooseCase(object):
                                 copy.deepcopy(tmp_res),
                                 info,
                                 cleanup=copy.deepcopy(tmp_cleanup_stat),
+                                tags=copy.deepcopy(tags),
                             )
                         )
 
@@ -618,6 +621,7 @@ class ChooseCase(object):
                         copy.deepcopy(tmp_res),
                         info,
                         cleanup=copy.deepcopy(tmp_cleanup_stat),
+                        tags=copy.deepcopy(tags),
                     )
                 )
 

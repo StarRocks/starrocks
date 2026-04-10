@@ -37,14 +37,23 @@
 #include <cstddef>
 #include <memory>
 
+#include "base/simd/simd.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
+#include "object_column_writer.h"
 #include "storage/index/inverted/inverted_index_option.h"
+
 #ifndef __APPLE__
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
+#include "base/bit/rle_encoding.h"
+#include "base/string/faststring.h"
 #include "storage/rowset/array_column_writer.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -61,10 +70,10 @@
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
-#include "util/faststring.h"
-#include "util/rle_encoding.h"
 
 namespace starrocks {
+
+ColumnWriterOptions::ColumnWriterOptions() : data_page_size(config::data_page_size) {}
 
 #define INDEX_ADD_VALUES(index, data, size) \
     do {                                    \
@@ -256,7 +265,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 class DictColumnWriter final : public ColumnWriter {
@@ -299,7 +308,7 @@ public:
 private:
     std::unique_ptr<ScalarColumnWriter> _scalar_column_writer;
     bool _is_speculated = false;
-    ColumnPtr _buf_column = nullptr;
+    MutableColumnPtr _buf_column = nullptr;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterOptions& opts,
@@ -320,9 +329,14 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         dict_opts.need_speculate_encoding = true;
         auto column_writer = std::make_unique<ScalarColumnWriter>(dict_opts, type_info, wfile);
         return std::make_unique<DictColumnWriter>(dict_opts, std::move(type_info), std::move(column_writer));
-    } else if (column->type() == LogicalType::TYPE_JSON) {
+    } else if (is_object_type(column->type())) {
         auto column_writer = std::make_unique<ScalarColumnWriter>(opts, type_info, wfile);
-        return create_json_column_writer(opts, std::move(type_info), wfile, std::move(column_writer));
+        if (column->type() == TYPE_JSON) {
+            auto object_writer = std::make_unique<ObjectColumnWriter>(opts, type_info, std::move(column_writer));
+            return create_json_column_writer(opts, std::move(type_info), wfile, std::move(object_writer));
+        } else {
+            return std::make_unique<ObjectColumnWriter>(opts, std::move(type_info), std::move(column_writer));
+        }
     } else if (is_scalar_field_type(delegate_type(column->type()))) {
         ColumnWriterOptions str_opts = opts;
         str_opts.field_name = column->name();
@@ -347,8 +361,7 @@ ScalarColumnWriter::ScalarColumnWriter(const ColumnWriterOptions& opts, TypeInfo
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _opts(opts),
           _wfile(wfile),
-          _curr_page_format(_opts.page_format),
-          _data_size(0) {
+          _curr_page_format(_opts.page_format) {
     // these opts.meta fields should be set by client
     DCHECK(opts.meta->has_column_id());
     DCHECK(opts.meta->has_unique_id());
@@ -577,7 +590,7 @@ Status ScalarColumnWriter::write_bloom_filter_index() {
 Status ScalarColumnWriter::write_inverted_index() {
 #ifndef __APPLE__
     if (_inverted_index_builder != nullptr) {
-        return _inverted_index_builder->finish();
+        return _inverted_index_builder->finish(_wfile, _opts.meta);
     }
 #endif
     return Status::OK();
@@ -587,6 +600,7 @@ Status ScalarColumnWriter::write_inverted_index() {
 Status ScalarColumnWriter::_write_data_page(Page* page) {
     PagePointer pp;
     std::vector<Slice> compressed_body;
+    compressed_body.reserve(page->data.size());
     for (auto& data : page->data) {
         compressed_body.push_back(data.slice());
     }
@@ -690,10 +704,29 @@ Status ScalarColumnWriter::finish_current_page() {
 
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
-    const uint8_t* ptr = column.raw_data();
-    const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
-    return append(ptr, null, column.size(), column.has_null());
+    // Currently, ColumnWriter does not support null-only columns
+    const uint8_t* null = ColumnHelper::get_null_data_ptr(&column);
+    const Column* data_column = ColumnHelper::get_data_column(&column);
+    const uint8_t* ptr;
+    // TODO: Remove slice cache from column writer
+    if (data_column->is_binary() || data_column->is_large_binary()) {
+        data_column->is_large_binary() ? down_cast<const LargeBinaryColumn*>(data_column)->build_slices(_slice_buf)
+                                       : down_cast<const BinaryColumn*>(data_column)->build_slices(_slice_buf);
+        ptr = reinterpret_cast<const uint8_t*>(_slice_buf.data());
+    } else {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(data_column->accept(&visitor));
+        ptr = visitor.result();
+    }
+    return _append(ptr, null, column.size(), column.has_null());
+}
+
+Status ScalarColumnWriter::append(const Column& column, const Buffer<Slice>& data) {
+    _total_mem_footprint += column.byte_size();
+    // Currently, ColumnWriter does not support null-only columns
+    const auto* null = ColumnHelper::get_null_data_ptr(&column);
+    const auto* ptr = reinterpret_cast<const uint8_t*>(data.data());
+    return _append(ptr, null, column.size(), column.has_null());
 }
 
 Status ScalarColumnWriter::append_array_offsets(const Column& column) {
@@ -736,7 +769,7 @@ Status ScalarColumnWriter::append_array_offsets(const Column& column) {
     return Status::OK();
 }
 
-Status ScalarColumnWriter::append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
+Status ScalarColumnWriter::_append(const uint8_t* data, const uint8_t* null_flags, size_t count, bool has_null) {
     const size_t field_size = type_info()->size();
     size_t remaining = count;
     while (remaining > 0) {
@@ -920,7 +953,7 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     size_t limit = length();
     auto row_count = column.size();
     const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->immutable_null_column_data().data() : nullptr;
     const BinaryColumn* bin_col;
 
     if (is_nullable()) {

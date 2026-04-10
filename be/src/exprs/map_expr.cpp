@@ -14,12 +14,12 @@
 
 #include "exprs/map_expr.h"
 
+#include "base/container/raw_container.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
-#include "util/raw_container.h"
 
 namespace starrocks {
 
@@ -74,8 +74,8 @@ StatusOr<ColumnPtr> MapExpr::evaluate_checked(ExprContext* context, Chunk* chunk
             offsets->append(curr_offset);
         }
     } else if (num_pairs > 0) { // avoid copying for only one pair
-        key_col = pairs_columns[0]->as_mutable_ptr();
-        value_col = pairs_columns[1]->as_mutable_ptr();
+        key_col = std::move(*pairs_columns[0]).mutate();
+        value_col = std::move(*pairs_columns[1]).mutate();
         for (size_t i = 0; i < num_rows; ++i) {
             curr_offset++;
             offsets->append(curr_offset);

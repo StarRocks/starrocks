@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.List;
 
 public class HiveScanTest extends ConnectorPlanTestBase {
@@ -131,6 +130,20 @@ public class HiveScanTest extends ConnectorPlanTestBase {
                 assertNotContains(plan, "___count___");
             }
         }
+
+        // negative cases, because customer_union_view is a view.
+        {
+            String[] sqlString = {
+                    "select l_shipdate, count(*) from hive0.tpch.customer_union_view where l_shipdate = '1998-01-02' group by 1",
+                    "select count(*) from hive0.tpch.customer_union_view",
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
+                assertNotContains(plan, "ifnull");
+            }
+        }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
     }
 
@@ -175,14 +188,5 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             }
         }
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
-    }
-
-    private static File newFolder(File root, String... subDirs) throws IOException {
-        String subFolder = String.join("/", subDirs);
-        File result = new File(root, subFolder);
-        if (!result.mkdirs()) {
-            throw new IOException("Couldn't create folders " + root);
-        }
-        return result;
     }
 }

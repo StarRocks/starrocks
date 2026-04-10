@@ -34,16 +34,16 @@
 
 #pragma once
 
+#include "base/bit/rle_encoding.h"
+#include "base/coding.h"
+#include "base/string/slice.h"
 #include "column/column.h"
 #include "common/status.h"
 #include "storage/range.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_builder.h"
 #include "storage/rowset/page_decoder.h"
-#include "storage/type_traits.h"
-#include "util/coding.h"
-#include "util/rle_encoding.h"
-#include "util/slice.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
@@ -150,8 +150,8 @@ public:
     }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     PageBuilderOptions _options;
     uint32_t _count{0};
@@ -253,8 +253,8 @@ public:
     EncodingTypePB encoding_type() const override { return RLE; }
 
 private:
-    typedef typename TypeTraits<Type>::CppType CppType;
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    using CppType = StorageCppType<Type>;
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     Slice _data;
     bool _parsed{false};

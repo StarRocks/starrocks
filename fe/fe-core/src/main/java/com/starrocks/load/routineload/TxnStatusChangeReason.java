@@ -22,7 +22,7 @@ public enum TxnStatusChangeReason {
     TIMEOUT,
     OFFSET_OUT_OF_RANGE,
     PAUSE,
-    NO_PARTITIONS,
+    NO_ROWS_IMPORTED,
     FILTERED_ROWS,
     PARSE_ERROR;
 
@@ -44,8 +44,8 @@ public enum TxnStatusChangeReason {
         switch (this) {
             case OFFSET_OUT_OF_RANGE:
                 return "Offset out of range";
-            case NO_PARTITIONS:
-                return "No partitions have data available for loading";
+            case NO_ROWS_IMPORTED:
+                return "No rows were imported from upstream";
             case FILTERED_ROWS:
                 return "too many filtered rows";
             case PARSE_ERROR:

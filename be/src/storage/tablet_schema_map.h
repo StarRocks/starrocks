@@ -17,8 +17,8 @@
 #include <memory>
 #include <mutex>
 
+#include "base/phmap/phmap.h"
 #include "storage/tablet_schema.h"
-#include "util/phmap/phmap.h"
 
 namespace starrocks {
 

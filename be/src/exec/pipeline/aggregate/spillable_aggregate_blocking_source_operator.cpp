@@ -22,7 +22,7 @@
 namespace starrocks::pipeline {
 Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(AggregateBlockingSourceOperator::prepare(state));
-    RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_stream_aggregator->prepare(state, _unique_metrics.get()));
     RETURN_IF_ERROR(_stream_aggregator->open(state));
     _accumulator.set_max_size(state->chunk_size());
     return Status::OK();
@@ -31,9 +31,14 @@ Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
 void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
     AggregateBlockingSourceOperator::close(state);
     _stream_aggregator->close(state);
+    DCHECK(is_finished());
+    DCHECK(!has_output());
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {
+    if (_is_finished) {
+        return false;
+    }
     bool has_spilled = _aggregator->spiller()->spilled();
 
     if (!has_spilled && AggregateBlockingSourceOperator::has_output()) {
@@ -130,14 +135,14 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         RETURN_IF_ERROR(_stream_aggregator->evaluate_groupby_exprs(chunk.get()));
         RETURN_IF_ERROR(_stream_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
         ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
-        _accumulator.push(std::move(res));
+        _accumulator.push(res);
 
     } else if (_has_last_chunk) {
         DCHECK(_accumulator.need_input());
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {
-            _accumulator.push(std::move(res));
+            _accumulator.push(res);
         }
         _accumulator.finalize();
     }

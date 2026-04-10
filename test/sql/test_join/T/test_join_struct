@@ -1,4 +1,4 @@
--- name: test_join_struct
+-- name: test_join_struct @no_arrow_flight_sql
 CREATE TABLE struct_test (
 pk bigint not null,
 s0  struct<c0 int,c1 string>,

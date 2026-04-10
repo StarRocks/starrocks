@@ -20,6 +20,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.ExceptionChecker;
@@ -38,6 +39,7 @@ import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -45,6 +47,8 @@ import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TStorageType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
@@ -70,6 +74,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class DefaultSharedDataWorkerProviderTest {
     private Map<Long, ComputeNode> id2Backend;
@@ -466,9 +471,13 @@ public class DefaultSharedDataWorkerProviderTest {
         // copy from fe/fe-core/src/test/java/com/starrocks/qe/ColocatedBackendSelectorTest.java
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         OlapTable table = new OlapTable();
+        table.maySetDatabaseId(1L);
+        table.setBaseIndexMetaId(1L);
+        table.setIndexMeta(1L, "base", Collections.singletonList(new Column("c0", IntegerType.INT)),
+                0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
         table.setDefaultDistributionInfo(new HashDistributionInfo(numBuckets, Collections.emptyList()));
         desc.setTable(table);
-        return new OlapScanNode(new PlanNodeId(id), desc, "OlapScanNode");
+        return new OlapScanNode(new PlanNodeId(id), desc, "OlapScanNode", table.getBaseIndexMetaId());
     }
 
     private ArrayListMultimap<Integer, TScanRangeLocations> genBucketSeq2Locations(
@@ -843,5 +852,30 @@ public class DefaultSharedDataWorkerProviderTest {
             Long workerId = provider.selectNextWorker();
             assertThat(workerId).isNotNegative();
         }
+    }
+
+    @Test
+    public void testReportNotFoundException() {
+        WorkerProvider provider = new DefaultSharedDataWorkerProvider(
+                ImmutableMap.copyOf(id2AllNodes), ImmutableMap.copyOf(id2AllNodes), WarehouseManager.DEFAULT_RESOURCE);
+
+        assertThatThrownBy(provider::reportWorkerNotFoundException)
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
+                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+        assertThatThrownBy(() -> provider.reportWorkerNotFoundException("prefix:"))
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("prefix:Compute node not found. Check if any compute node is down. " +
+                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+
+        assertThatThrownBy(provider::reportDataNodeNotFoundException)
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
+                        "nodeId: -1 compute node: , compute resource: {warehouseId=0}");
+
+        assertThatThrownBy(() -> provider.selectWorker(9999)) // select a non-existing worker
+                .isInstanceOf(NonRecoverableException.class)
+                .hasMessageContaining("Compute node not found. Check if any compute node is down. " +
+                        "nodeId: 9999 compute node: , compute resource: {warehouseId=0");
     }
 }

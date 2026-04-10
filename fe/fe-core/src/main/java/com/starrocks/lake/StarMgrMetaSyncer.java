@@ -187,20 +187,26 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             try {
                 DeleteTabletResponse response = future.get();
                 Set<Long> shards = shardIdsByBeMap.get(entry.getKey());
-                if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    String errorMsg = "";
-                    if (response.status != null && response.status.errorMsgs != null &&
-                            !response.status.errorMsgs.isEmpty()) {
-                        errorMsg = response.status.errorMsgs.get(0);
-                    }
-                    TStatusCode stCode = TStatusCode.findByValue(response.status.statusCode);
-                    LOG.info("Fail to delete tablet from node: {}. StatusCode: {}, Error: {}, failedTablets: {}",
-                            nodeId, stCode, errorMsg, response.failedTablets);
+                if (response != null) {
+                    if (response.failedTablets != null && !response.failedTablets.isEmpty()) {
+                        // preserve failedTablets and log error
+                        String errorMsg = "";
+                        TStatusCode stCode = TStatusCode.UNKNOWN;
+                        if (response.status != null && response.status.errorMsgs != null &&
+                                !response.status.errorMsgs.isEmpty()) {
+                            errorMsg = response.status.errorMsgs.get(0);
+                        }
+                        if (response.status != null) {
+                            stCode = TStatusCode.findByValue(response.status.statusCode);
+                        }
+                        LOG.info("Fail to delete tablet from node: {}. StatusCode: {}, Error: {}, failedTablets: {}",
+                                nodeId, stCode, errorMsg, response.failedTablets);
 
-                    // ignore INVALID_ARGUMENT error, treat it as success
-                    if (stCode != TStatusCode.INVALID_ARGUMENT) {
-                        // preserve the shards that failed to delete, don't delete them from starMgr
-                        response.failedTablets.forEach(shards::remove);
+                        // ignore INVALID_ARGUMENT error, treat it as success
+                        if (stCode != TStatusCode.INVALID_ARGUMENT) {
+                            // preserve the shards that failed to delete, don't delete them from starMgr
+                            response.failedTablets.forEach(shards::remove);
+                        }
                     }
                     shardToDelete.addAll(shards);
                 }
@@ -257,6 +263,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                       shardGroupId);
             return false;
         }
+
+        if (GlobalStateMgr.getCurrentState().getStorageVolumeMgr().hasStorageVolumeBindAsVirtualGroup(shardGroupId)) {
+            LOG.debug("shard group {} can not be deleted for now, because it has been bind to storage volume",
+                    shardGroupId);
+            return false;
+        }
+
         return true;
     }
 
@@ -501,7 +514,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
                 // no need to check db/table/partition again, everything still works
                 for (MaterializedIndex materializedIndex :
-                        physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                        physicalPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long groupId = materializedIndex.getShardGroupId();
                     Set<Long> starmgrShardIdsSet = null;
                     if (redundantGroupToShards.get(groupId) != null) {

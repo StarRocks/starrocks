@@ -22,13 +22,12 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.thrift.TResultSinkType;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.FieldVector;
@@ -37,31 +36,25 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.pojo.ArrowType.Utf8;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.FieldType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CancellationException;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.concurrent.locks.ReentrantLock;
 
 // one connection will create one ArrowFlightSqlConnectContext
 public class ArrowFlightSqlConnectContext extends ConnectContext {
+    private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlConnectContext.class);
+
     private final BufferAllocator allocator;
 
     private final String arrowFlightSqlToken;
 
-    private StatementBase statement;
-
-    private String query;
-
-    private final ReentrantLock queryLock = new ReentrantLock();
-
-    private CompletableFuture<Coordinator> coordinatorFuture;
-
-    private boolean returnResultFromFE;
+    private final RunningToken runningToken = new RunningToken();
 
     // - Only contains the execution result of the most recent query.
     // - When the result of a query is taken away, the result will be cleared.
@@ -78,88 +71,30 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
             })
             .build();
 
+    private final Map<String, String> preparedStatements = new ConcurrentHashMap<>();
+
     public ArrowFlightSqlConnectContext(String arrowFlightSqlToken) {
         super();
         this.allocator = new RootAllocator(Long.MAX_VALUE);
         this.arrowFlightSqlToken = arrowFlightSqlToken;
-        this.statement = null;
-        this.query = "";
-        this.coordinatorFuture = new CompletableFuture<>();
-        this.returnResultFromFE = true;
     }
 
-    public void initWithStatement(String query) {
-        queryLock.lock(); 
-        try {
-            if (!this.query.isEmpty()) {
-                throw new IllegalStateException(
-                        "Query already in progress on this connection"
-                );
-            }
-            this.query = query;
-            this.setQueryId(UUIDUtil.genUUID());
-            this.setExecutionId(UUIDUtil.toTUniqueId(this.getQueryId()));
-        } finally {
-            queryLock.unlock();
-        }
+    public boolean acquireRunningToken(long timeoutMs) throws InterruptedException {
+        return runningToken.acquire(timeoutMs);
     }
 
-    public void reset() {
-        queryLock.lock(); 
-        try {
-            this.query = ""; 
-            this.statement = null; 
-
-            coordinatorFuture.complete(null);
-            coordinatorFuture = new CompletableFuture<>();
-            returnResultFromFE = true; 
-            removeAllResults();
-        } finally {
-            queryLock.unlock();
-        }
+    public void releaseRunningToken() {
+        runningToken.release();
     }
 
-    public StatementBase getStatement() {
-        return statement;
-    }
-
-    public void setStatement(StatementBase statement) {
-        this.statement = statement;
-    }
-
-    public Coordinator waitForDeploymentFinished(long timeoutMs)
-            throws ExecutionException, InterruptedException, TimeoutException, CancellationException {
-        return coordinatorFuture.get(timeoutMs, TimeUnit.MILLISECONDS);
-    }
-
-    public void setDeploymentFinished(Coordinator coordinator) {
-        this.coordinatorFuture.complete(coordinator);
-    }
-
-    public void setDeployFailed(Throwable e) {
-        this.coordinatorFuture.completeExceptionally(e);
+    public void resetForStatement() {
+        this.setQueryId(UUIDUtil.genUUID());
+        this.setExecutionId(UUIDUtil.toTUniqueId(this.getQueryId()));
     }
 
     public VectorSchemaRoot getResult(String queryId) {
         ArrowSchemaRootWrapper wrapper = resultCache.getIfPresent(queryId);
         return wrapper != null ? wrapper.getSchemaRoot() : null;
-    }
-
-    public String getQuery() {
-        queryLock.lock(); 
-        try {
-            return query;
-        } finally {
-            queryLock.unlock();
-        }
-    }
-
-    public boolean returnFromFE() {
-        return returnResultFromFE;
-    }
-
-    public void setReturnResultFromFE(boolean returnResultFromFE) {
-        this.returnResultFromFE = returnResultFromFE;
     }
 
     public String getArrowFlightSqlToken() {
@@ -174,6 +109,20 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
         resultCache.invalidate(queryId);
     }
 
+    public String addPreparedStatement(String query) {
+        String preparedStmtId = UUIDUtil.genUUID().toString();
+        preparedStatements.put(preparedStmtId, query);
+        return preparedStmtId;
+    }
+
+    public String getPreparedStatement(String preparedStmtId) {
+        return preparedStatements.get(preparedStmtId);
+    }
+
+    public void removePreparedStatement(String preparedStmtId) {
+        preparedStatements.remove(preparedStmtId);
+    }
+
     public void setStmtExecutor(StmtExecutor stmtExecutor) {
         this.executor = stmtExecutor;
     }
@@ -181,7 +130,6 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
     public void cancelQuery() {
         if (executor != null) {
             executor.cancel("Arrow Flight SQL client disconnected");
-            reset();
         }
     }
 
@@ -194,25 +142,24 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
 
     @Override
     public void kill(boolean isKillConnection, String cancelledMessage) {
+        if (hasPendingForwardRequest()) {
+            String killSQL = "KILL " + getConnectionId();
+            SimpleExecutor executor = new SimpleExecutor("ArrowFlightSQLCloseSession", TResultSinkType.MYSQL_PROTOCAL);
+            try {
+                executor.executeControl(killSQL);
+            } catch (Exception e) {
+                LOG.warn("Failed to kill the Arrow Flight SQL connection from the proxy to the leader.", e);
+            }
+        }
+
         StmtExecutor executorRef = executor;
         if (executorRef != null) {
             executorRef.cancel(cancelledMessage);
         }
 
-        if (coordinatorFuture != null && coordinatorFuture.isDone()) {
-            try {
-                Coordinator coordinator = coordinatorFuture.getNow(null);
-                if (coordinator != null) {
-                    coordinator.cancel(cancelledMessage);
-                }
-            } catch (Exception e) {
-                // Do nothing.
-            }
-        }
-
         if (isKillConnection) {
             isKilled = true;
-            this.cleanup();
+            cleanup();
             ExecuteEnv.getInstance().getScheduler().unregisterConnection(this);
         }
 
@@ -236,30 +183,58 @@ public class ArrowFlightSqlConnectContext extends ConnectContext {
             dataFields.add(varCharVector);
         }
 
-        for (int i = 0; i < resultData.size(); i++) {
-            List<String> row = resultData.get(i);
-            for (int j = 0; j < row.size(); j++) {
-                String item = row.get(j);
+        for (int rowIdx = 0; rowIdx < resultData.size(); rowIdx++) {
+            List<String> row = resultData.get(rowIdx);
+            for (int colIdx = 0; colIdx < row.size(); colIdx++) {
+                String item = row.get(colIdx);
                 if (item == null || item.equals(FeConstants.NULL_STRING)) {
-                    dataFields.get(j).setNull(i);
+                    dataFields.get(colIdx).setNull(rowIdx);
                 } else {
-                    ((VarCharVector) dataFields.get(j)).setSafe(i, item.getBytes());
+                    ((VarCharVector) dataFields.get(colIdx)).setSafe(rowIdx, item.getBytes());
                 }
             }
         }
 
         VectorSchemaRoot root = new VectorSchemaRoot(schemaFields, dataFields);
         root.setRowCount(resultData.size());
+
         resultCache.put(queryId, new ArrowSchemaRootWrapper(root));
     }
 
-    public boolean isFromFECoordinator() {
-        Coordinator coordinator = coordinatorFuture.getNow(null);
-        return !(coordinator instanceof DefaultCoordinator);
+    public void addExplainResult(String queryId, String explainString) {
+        List<Field> schemaFields = new ArrayList<>();
+        List<FieldVector> dataFields = new ArrayList<>();
+
+        schemaFields.add(new Field("Explain String", FieldType.nullable(new Utf8()), null));
+        VarCharVector varCharVector = ArrowUtil.createVarCharVector("Explain", allocator, 1);
+        dataFields.add(varCharVector);
+
+        int rowIdx = 0;
+        for (String item : explainString.split("\n")) {
+            varCharVector.setSafe(rowIdx, item.getBytes());
+            rowIdx++;
+        }
+
+        VectorSchemaRoot root = new VectorSchemaRoot(schemaFields, dataFields);
+        root.setRowCount(rowIdx);
+
+        resultCache.put(queryId, new ArrowSchemaRootWrapper(root));
     }
 
     @Override
     public String getCommandStr() {
         return "ARROW_FLIGHT_SQL.Query";
+    }
+
+    private static class RunningToken {
+        private final Semaphore semaphore = new Semaphore(1);
+
+        public boolean acquire(long timeoutMs) throws InterruptedException {
+            return semaphore.tryAcquire(timeoutMs, TimeUnit.MILLISECONDS);
+        }
+
+        public void release() {
+            semaphore.release();
+        }
     }
 }

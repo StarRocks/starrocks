@@ -27,7 +27,8 @@ issues where:
 """
 import logging
 
-from sqlalchemy import Column, Engine, MetaData, Table, text
+from sqlalchemy import Column, MetaData, Table, text
+from sqlalchemy.engine import Engine
 
 from starrocks.datatype import (
     ARRAY,
@@ -97,7 +98,7 @@ class TestDataTypeReflection:
             Column("decimal_col", DECIMAL(10, 2)),
             Column("decimal_no_scale_col", DECIMAL(8)),
             Column("float_col", FLOAT()),
-            Column("float_precision_col", FLOAT(10)),
+            Column("float_precision_col", FLOAT(10)),  # display_width is ignored
             Column("double_col", DOUBLE()),
             starrocks_distributed_by='HASH(int_col)',
             starrocks_properties={"replication_num": "1"},

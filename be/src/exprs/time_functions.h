@@ -19,7 +19,7 @@
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
-#include "runtime/datetime_value.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
 namespace starrocks {
 
@@ -885,8 +885,9 @@ private:
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime_with_format);
 
     // internal approach to process string content, based on any string format.
-    static void str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
-                                     ColumnBuilder<TYPE_DATETIME>* result);
+    // When allow_throw_exception is set and parsing fails, returns Status::InvalidArgument("Fail to parse date").
+    static Status str_to_date_internal(FunctionContext* context, TimestampValue* ts, const Slice& fmt, const Slice& str,
+                                       ColumnBuilder<TYPE_DATETIME>* result);
 
     static std::string convert_format(const Slice& format);
 

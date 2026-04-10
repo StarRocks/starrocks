@@ -30,6 +30,10 @@ import com.starrocks.proto.DeleteTxnLogRequest;
 import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
+import com.starrocks.proto.DropTabletCacheRequest;
+import com.starrocks.proto.DropTabletCacheResponse;
+import com.starrocks.proto.GetTabletMetadatasRequest;
+import com.starrocks.proto.GetTabletMetadatasResponse;
 import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -37,6 +41,8 @@ import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
+import com.starrocks.proto.RepairTabletMetadataRequest;
+import com.starrocks.proto.RepairTabletMetadataResponse;
 import com.starrocks.proto.RestoreSnapshotsRequest;
 import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.proto.TabletStatRequest;
@@ -119,6 +125,12 @@ public class LakeServiceWithMetrics implements LakeService {
     }
 
     @Override
+    public Future<DropTabletCacheResponse> dropTabletCache(DropTabletCacheRequest request) {
+        increaseMetrics();
+        return lakeService.dropTabletCache(request);
+    }
+
+    @Override
     public Future<PublishLogVersionResponse> publishLogVersion(PublishLogVersionRequest request) {
         increaseMetrics();
         return lakeService.publishLogVersion(request);
@@ -176,5 +188,17 @@ public class LakeServiceWithMetrics implements LakeService {
     public Future<VacuumFullResponse> vacuumFull(VacuumFullRequest request) {
         increaseMetrics();
         return lakeService.vacuumFull(request);
+    }
+
+    @Override
+    public Future<GetTabletMetadatasResponse> getTabletMetadatas(GetTabletMetadatasRequest request) {
+        increaseMetrics();
+        return lakeService.getTabletMetadatas(request);
+    }
+
+    @Override
+    public Future<RepairTabletMetadataResponse> repairTabletMetadata(RepairTabletMetadataRequest request) {
+        increaseMetrics();
+        return lakeService.repairTabletMetadata(request);
     }
 }

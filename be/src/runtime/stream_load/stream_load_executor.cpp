@@ -38,20 +38,23 @@
 
 #include <string_view>
 
-#include "agent/master_info.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
+#include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
+#include "runtime/message_body_sink.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/stream_load/stream_load_context.h"
-#include "testutil/sync_point.h"
-#include "util/defer_op.h"
-#include "util/starrocks_metrics.h"
+#include "storage/non_retryable_load_errors.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -232,7 +235,7 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
     // set attachment if has
     TTxnCommitAttachment attachment;
     if (collect_load_stat(ctx, &attachment)) {
-        request.txnCommitAttachment = std::move(attachment);
+        request.txnCommitAttachment = attachment;
         request.__isset.txnCommitAttachment = true;
     }
 
@@ -468,6 +471,9 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_receivedBytes(ctx->receive_bytes);
         rl_attach.__set_loadedBytes(ctx->loaded_bytes);
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
+        if (!ctx->status.ok() && is_non_retryable_load_error(ctx->status.message())) {
+            rl_attach.__set_nonRetryable(true);
+        }
 
         attach->rlTaskTxnCommitAttachment = rl_attach;
         attach->__isset.rlTaskTxnCommitAttachment = true;

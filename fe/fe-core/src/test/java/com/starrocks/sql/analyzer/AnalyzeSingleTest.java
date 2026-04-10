@@ -18,6 +18,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.AlterTaskStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -301,6 +302,33 @@ public class AnalyzeSingleTest {
         // Test ambiguous reference
         analyzeSuccess("select v1, v1 from t0 order by v1");
         analyzeFail("select v1 as v, v2 as v from t0 order by v");
+        analyzeSuccess("select v1 as v, v1 as v from t0 order by v");
+    }
+
+    @Test
+    public void testOrderAll() {
+        // Simple test
+        analyzeSuccess("select v1 from t0 order by all");
+        analyzeSuccess("select v1 from t0 order by all nulls first");
+        analyzeSuccess("select v1 from t0 order by all nulls last");
+        analyzeSuccess("select v1 from t0 order by all limit 2, 10");
+
+        // Test output scope resolve
+        analyzeSuccess("select v1+1 as v from t0 order by all");
+        analyzeSuccess("select v1+2 as v,* from t0 order by all nulls first");
+        analyzeSuccess("select v1, sum(v2) as v from t0 group by v1 order by all");
+        analyzeSuccess("select v1, sum(v2) as v from t0 group by v1 order by all");
+        analyzeSuccess("select v1+1 as v from t0 group by v1+1 order by all");
+        analyzeSuccess("select v1+1 as v from t0 group by v order by all");
+
+        // Test order by with aggregation
+        analyzeSuccess("select v1, sum(v2) from t0 group by v1 order by all");
+        analyzeSuccess("select v1,v3,sum(v2) from t0 group by v1,v3 order by all nulls first");
+
+        // Test ambiguous reference
+        analyzeFail("select v1, v1 from t0 order by v1, all");
+        analyzeSuccess("select v1 as v, v2 as v from t0 order by all");
+        analyzeSuccess("select v1, v1 from t0 order by all");
         analyzeSuccess("select v1 as v, v1 as v from t0 order by v");
     }
 
@@ -599,6 +627,24 @@ public class AnalyzeSingleTest {
                 "INTO TABLE `t0`) WITH BROKER hdfs_broker PROPERTIES (\"strict_mode\"=\"true\")");
         Assertions.assertEquals("1", loadStmt.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
+    }
+
+    @Test
+    public void testAlterTask() {
+        StatementBase statementBase = analyzeSuccess("alter task if exists t1 resume");
+        Assertions.assertTrue(statementBase instanceof AlterTaskStmt);
+        AlterTaskStmt alterTaskStmt = (AlterTaskStmt) statementBase;
+        Assertions.assertTrue(alterTaskStmt.isIfExists());
+        Assertions.assertEquals(AlterTaskStmt.AlterAction.RESUME, alterTaskStmt.getAction());
+
+        statementBase = analyzeSuccess("alter task t1 suspend");
+        alterTaskStmt = (AlterTaskStmt) statementBase;
+        Assertions.assertEquals(AlterTaskStmt.AlterAction.SUSPEND, alterTaskStmt.getAction());
+
+        statementBase = analyzeSuccess("alter task t1 set ('session.query_timeout'='5000')");
+        alterTaskStmt = (AlterTaskStmt) statementBase;
+        Assertions.assertEquals(AlterTaskStmt.AlterAction.SET, alterTaskStmt.getAction());
+        Assertions.assertEquals("5000", alterTaskStmt.getProperties().get("session.query_timeout"));
     }
 
     @Test

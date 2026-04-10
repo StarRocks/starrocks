@@ -150,7 +150,7 @@ public class MVRefreshPartitionSelector {
      * @return a set of actual partition names in the base table corresponding to the given logical partition name
      */
     private Set<String> resolveFinalPartitionNames(Table table, String logicalPartitionNames) {
-        if (table instanceof OlapTable) {
+        if (table.isNativeTableOrMaterializedView()) {
             return Collections.singleton(logicalPartitionNames);
         }
         PartitionNameSetMap mapping = externalPartitionMap.get(table);
@@ -175,7 +175,7 @@ public class MVRefreshPartitionSelector {
     private Map<String, Pair<Long, Long>> collectSelectedPartitionStats(Table table, Set<String> selectedPartitions) {
         Map<String, Pair<Long, Long>> result = new HashMap<>();
 
-        if (table instanceof OlapTable) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             for (String partitionName : selectedPartitions) {
                 Partition partition = olapTable.getPartition(partitionName);

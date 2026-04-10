@@ -15,12 +15,12 @@
 
 #include <utility>
 
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
-#include "util/threadpool.h"
 
 namespace starrocks::workgroup {
 
@@ -131,7 +131,6 @@ Status PipelineExecutorSet::start() {
                                            std::make_unique<WorkGroupScanTaskQueue>(ScanSchedEntityType::CONNECTOR),
                                            _conf.metrics->get_connector_scan_executor_metrics());
     _connector_scan_executor->initialize(num_connector_scan_threads());
-
     LOG(INFO) << "[WORKGROUP] start executors " << to_string();
 
     return Status::OK();
@@ -185,6 +184,22 @@ void PipelineExecutorSet::notify_config_changed() const {
     _connector_scan_executor->change_num_threads(num_connector_scan_threads());
 
     LOG(INFO) << "[WORKGROUP] change cpus and threads of executors " << to_string();
+}
+
+Status PipelineExecutorSet::update_exec_state_report_max_threads(int max_threads) const {
+    auto* executor = dynamic_cast<pipeline::GlobalDriverExecutor*>(_driver_executor.get());
+    if (executor != nullptr && executor->exec_state_reporter() != nullptr) {
+        return executor->exec_state_reporter()->update_max_threads(max_threads);
+    }
+    return Status::OK();
+}
+
+Status PipelineExecutorSet::update_priority_exec_state_report_max_threads(int max_threads) const {
+    auto* executor = dynamic_cast<pipeline::GlobalDriverExecutor*>(_driver_executor.get());
+    if (executor != nullptr && executor->exec_state_reporter() != nullptr) {
+        return executor->exec_state_reporter()->update_priority_max_threads(max_threads);
+    }
+    return Status::OK();
 }
 
 uint32_t PipelineExecutorSet::calculate_num_threads(uint32_t num_total_threads) const {

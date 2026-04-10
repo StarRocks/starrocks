@@ -16,18 +16,20 @@
 
 #include <random>
 
+#include "base/testutil/assert.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/util/thrift_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exprs/function_context.h"
+#include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
-#include "testutil/assert.h"
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::pipeline {
 
@@ -91,9 +93,9 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
-                                           _request.query_options, _request.query_globals, _exec_env));
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+            _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+            _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
     _fragment_future = _fragment_ctx->finish_future();
@@ -104,6 +106,7 @@ void PipelineTestBase::_prepare() {
     _runtime_state->set_be_number(_request.backend_num);
     _runtime_state->set_query_ctx(_query_ctx);
     _runtime_state->set_fragment_ctx(_fragment_ctx);
+    _runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
 
     _obj_pool = _runtime_state->obj_pool();
 
@@ -120,8 +123,10 @@ void PipelineTestBase::_prepare() {
 }
 
 void PipelineTestBase::_execute() {
-    _fragment_ctx->iterate_drivers(
-            [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { CHECK_OK(driver->prepare(state)); });
+    _fragment_ctx->iterate_drivers([state = _fragment_ctx->runtime_state()](const DriverPtr& driver) {
+        CHECK_OK(driver->prepare(state));
+        CHECK_OK(driver->prepare_local_state(state));
+    });
 
     _fragment_ctx->iterate_drivers(
             [exec_env = _exec_env](const DriverPtr& driver) { exec_env->wg_driver_executor()->submit(driver.get()); });
@@ -142,12 +147,11 @@ ChunkPtr PipelineTestBase::_create_and_fill_chunk(const std::vector<SlotDescript
     // add data
     for (size_t i = 0; i < slots.size(); ++i) {
         auto* slot = slots[i];
-        auto& column = chunk->columns()[i];
+        auto* data_column = chunk->get_column_raw_ptr_by_index(i);
 
-        Column* data_column = column.get();
         if (data_column->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(data_column);
-            data_column = nullable_column->data_column().get();
+            data_column = nullable_column->data_column_raw_ptr();
         }
 
         for (size_t j = 0; j < row_num; ++j) {

@@ -82,20 +82,25 @@ Example workflow:
 
 ```sql
 -- Enable the profiling feature.
-set enable_profile = true;
--- Run a simple query.
-select 1;
+SET enable_profile = true;
+
+-- Run a query that performs a scan and aggregation to generate a meaningful profile.
+-- (Using a system table ensures this works on any cluster)
+SELECT count(*) FROM information_schema.columns;
+
 -- Get the query_id of the query.
-select last_query_id();
+SELECT last_query_id();
 +--------------------------------------+
 | last_query_id()                      |
 +--------------------------------------+
-| bd3335ce-8dde-11ee-92e4-3269eb8da7d1 |
+| 019b364f-10c4-704c-b79a-af2cc3a77b89 |
 +--------------------------------------+
+
 -- Get the list of profiles
-show profilelist;
+SHOW PROFILELIST;
+
 -- Obtain the query profile.
-select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G
+SELECT get_query_profile('019b364f-10c4-704c-b79a-af2cc3a77b89')\G
 ```
 
 ### In Managed Version
@@ -108,7 +113,7 @@ In StarRocks Managed (Enterprise) environments, you can conveniently access quer
 
 Most users may find it challenging to analyze the raw text directly. StarRocks provides a [Text-based Query Profile Visualized Analysis](./query_profile_text_based_analysis.md) method for a more intuitive understanding.
 
-### Manged Version
+### Managed Version
 
 In the StarRocks Enterprise Edition (EE), the Managed Version provides a built-in visualization tool for query profiles. This tool offers an interactive, graphical interface that makes it much easier to interpret complex query execution details compared to raw text output.
 

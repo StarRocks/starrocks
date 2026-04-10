@@ -1282,15 +1282,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     if (t1.second.size() != t2.second.size()) {
                         return t2.second.size() - t1.second.size();
                     } else {
-                        double diff = diskBalanceChecker.getDiskUsedPercent(t2.first) -
-                                diskBalanceChecker.getDiskUsedPercent(t1.first);
-                        if (Math.abs(diff) < 1e-6) {
-                            return 0;
-                        } else if (diff > 0) {
-                            return 1;
-                        } else {
-                            return -1;
-                        }
+                        // Use Double.compare to handle NaN and Infinity correctly.
+                        double percent1 = diskBalanceChecker.getDiskUsedPercent(t1.first);
+                        double percent2 = diskBalanceChecker.getDiskUsedPercent(t2.first);
+                        return Double.compare(percent2, percent1);
                     }
                 });
 
@@ -1864,7 +1859,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         // Tablet in SHADOW index cannot be repaired or balanced
         for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(
+            for (MaterializedIndex idx : physicalPartition.getLatestMaterializedIndices(
                     MaterializedIndex.IndexExtState.VISIBLE)) {
                 PartitionStat pStat = new PartitionStat(db.getId(), olapTbl.getId(), 0, replicaNum, replicationFactor);
                 context.partitionStats.put(new Pair<>(physicalPartition.getId(), idx.getId()), pStat);
@@ -2080,7 +2075,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         public double getDiskUsedPercent(Long key) {
             Pair<Long, Long> cap = diskCap.get(key);
-            if (cap == null) {
+            if (cap == null || cap.first == 0) {
                 return 0;
             }
             return (double) cap.second / cap.first;

@@ -24,7 +24,9 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
@@ -91,8 +93,13 @@ public class ReplaceLakePartitionTest {
 
         new MockUp<EditLog>() {
             @Mock
-            public void logErasePartition(long partitionId) {
-                return;
+            public void logErasePartition(long partitionId, WALApplier walApplier) {
+                walApplier.apply(null);
+            }
+
+            @Mock
+            public void logEraseMultiTables(List<Long> tableIds, WALApplier walApplier) {
+                walApplier.apply(null);
             }
         };
     }
@@ -124,7 +131,6 @@ public class ReplaceLakePartitionTest {
         }
 
         partitionInfo.setReplicationNum(partitionId, (short) 1);
-        partitionInfo.setIsInMemory(partitionId, false);
         partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
 
         LakeTable table = new LakeTable(

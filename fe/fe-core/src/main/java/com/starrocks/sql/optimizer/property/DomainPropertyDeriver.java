@@ -70,10 +70,6 @@ public class DomainPropertyDeriver extends ScalarOperatorVisitor<Map<ScalarOpera
         }
 
         domainMap.put(left, new DomainMessage(binaryPredicate));
-        List<ColumnRefOperator> usedCols = left.getColumnRefs();
-        if (Sets.newHashSet(usedCols).size() == 1 && !domainMap.containsKey(usedCols.get(0))) {
-            domainMap.put(usedCols.get(0), new DomainMessage(binaryPredicate, false));
-        }
         return domainMap;
     }
 

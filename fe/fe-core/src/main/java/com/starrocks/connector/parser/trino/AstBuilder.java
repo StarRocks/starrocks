@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitIdentifier;
@@ -323,32 +324,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     @Override
     protected ParseNode visitExplain(Explain node, ParseTreeContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
-
         Optional<ExplainType> explainType = node.getOptions().stream().filter(option -> option instanceof ExplainType).
                 map(type -> (ExplainType) type).findFirst();
+        StatementBase.ExplainLevel explainLevel = StatementBase.ExplainLevel.NORMAL;
         if (explainType.isPresent()) {
             ExplainType.Type type = explainType.get().getType();
             if (type == ExplainType.Type.LOGICAL) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.LOGICAL);
+                explainLevel = StatementBase.ExplainLevel.LOGICAL;
             } else if (type == ExplainType.Type.DISTRIBUTED) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.VERBOSE);
+                explainLevel = StatementBase.ExplainLevel.VERBOSE;
             } else if (type == ExplainType.Type.IO) {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.COSTS);
-            } else {
-                queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
+                explainLevel = StatementBase.ExplainLevel.COSTS;
             }
-        } else {
-            queryStatement.setIsExplain(true, StatementBase.ExplainLevel.NORMAL);
         }
-        return queryStatement;
+        return applyExplain((StatementBase) visit(node.getStatement(), context), explainLevel);
     }
 
     @Override
     protected ParseNode visitExplainAnalyze(ExplainAnalyze node, ParseTreeContext context) {
-        QueryStatement queryStatement = (QueryStatement) visit(node.getStatement(), context);
-        queryStatement.setIsExplain(true, StatementBase.ExplainLevel.ANALYZE);
-        return queryStatement;
+        return applyExplain((StatementBase) visit(node.getStatement(), context), StatementBase.ExplainLevel.ANALYZE);
+    }
+
+    private StatementBase applyExplain(StatementBase statement, StatementBase.ExplainLevel explainLevel) {
+        if (statement instanceof QueryStatement) {
+            statement.setIsExplain(true, explainLevel);
+            return statement;
+        }
+        if (statement instanceof InsertStmt) {
+            ((InsertStmt) statement).getQueryStatement().setIsExplain(true, explainLevel);
+            return statement;
+        }
+        throw trinoParserUnsupportedException(String.format("Unsupported statement [%s] for EXPLAIN",
+                statement.getClass().getSimpleName()));
     }
 
     @Override
@@ -386,7 +393,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 RelationId.of(queryStatement.getQueryRelation()).hashCode(),
                 node.getName().getValue().toLowerCase(),
                 getColumnNames(node.getColumnNames()),
-                queryStatement);
+                queryStatement,
+                false,
+                true);
     }
 
     public List<String> getColumnNames(Optional<List<Identifier>> columnNames) {
@@ -1106,22 +1115,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitArithmeticBinary(ArithmeticBinaryExpression node, ParseTreeContext context) {
         Expr left = (Expr) visit(node.getLeft(), context);
         Expr right = (Expr) visit(node.getRight(), context);
+        ArithmeticExpr.Operator operator = BINARY_OPERATOR_MAP.get(node.getOperator());
 
         if (left instanceof com.starrocks.sql.ast.expression.IntervalLiteral) {
-            return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), right,
+            com.starrocks.sql.ast.expression.IntervalLiteral interval = (com.starrocks.sql.ast.expression.IntervalLiteral) left;
+            if (operator.isMultiplyOrDivide()) {
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, value, right);
+                return new com.starrocks.sql.ast.expression.IntervalLiteral(arithmetic, interval.getUnitIdentifier());
+            }
+            return alignWithInputDatetimeType(new TimestampArithmeticExpr(operator, right,
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) left).getValue(),
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) left).getUnitIdentifier().getDescription(),
                     true));
         }
 
         if (right instanceof com.starrocks.sql.ast.expression.IntervalLiteral) {
-            return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left,
+            com.starrocks.sql.ast.expression.IntervalLiteral interval = (com.starrocks.sql.ast.expression.IntervalLiteral) right;
+            if (operator.isMultiplyOrDivide()) {
+                if (operator == ArithmeticExpr.Operator.DIVIDE) {
+                    throw new ParsingException("Do not support expr divide IntervalLiteral syntax");
+                }
+                Expr value = interval.getValue();
+                ArithmeticExpr arithmetic = new ArithmeticExpr(operator, left, value);
+                return new com.starrocks.sql.ast.expression.IntervalLiteral(arithmetic, interval.getUnitIdentifier());
+            }
+            return alignWithInputDatetimeType(new TimestampArithmeticExpr(operator, left,
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) right).getValue(),
                     ((com.starrocks.sql.ast.expression.IntervalLiteral) right).getUnitIdentifier().getDescription(),
                     false));
         }
 
-        return new ArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left, right);
+        return new ArithmeticExpr(operator, left, right);
     }
 
     @Override
@@ -1321,7 +1346,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         String tableName = parts.get(parts.size() - 1);
         List<String> columnAliases = node.getColumns().isPresent() ? node.getColumns().get().stream().
                 map(Identifier::getValue).collect(Collectors.toList()) : null;
-        return new InsertStmt(qualifiedNameToTableName(convertQualifiedName(node.getTarget())), null,
+        QualifiedName qualifiedName = convertQualifiedName(node.getTarget());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new InsertStmt(tableRef, null,
                 tableName.concat(UUID.randomUUID().toString()), columnAliases,
                 (QueryStatement) visit(node.getQuery(), context), false, new HashMap<>(0), NodePosition.ZERO);
     }
@@ -1336,9 +1363,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
             }
         }
 
+        QualifiedName qualifiedName = convertQualifiedName(node.getName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
         CreateTableStmt createTableStmt = new CreateTableStmt(node.isNotExists(),
                 false,
-                qualifiedNameToTableName(convertQualifiedName(node.getName())),
+                tableRef,
                 null,
                 "",
                 null,
@@ -1357,8 +1386,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitDropTable(DropTable node, ParseTreeContext context) {
         boolean ifExists = node.isExists();
-        TableName tableName = qualifiedNameToTableName(convertQualifiedName(node.getTableName()));
-        return new DropTableStmt(ifExists, tableName, false, true);
+        QualifiedName qualifiedName = convertQualifiedName(node.getTableName());
+        TableRef tableRef = new TableRef(qualifiedName, null, NodePosition.ZERO);
+        return new DropTableStmt(ifExists, tableRef, false, true);
     }
 
     public Type getType(DataType dataType) {

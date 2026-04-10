@@ -132,24 +132,28 @@ public class InsertLoadJob extends LoadJob {
         writeLock();
         try {
             this.finishTimestamp = System.currentTimeMillis();
+            JobState finalState;
             if (Strings.isNullOrEmpty(failMsg)) {
-                this.state = JobState.FINISHED;
+                finalState = JobState.FINISHED;
                 this.progress = 100;
             } else {
-                this.state = JobState.CANCELLED;
+                finalState = JobState.CANCELLED;
                 this.failMsg = new FailMsg(CancelType.LOAD_RUN_FAIL, failMsg);
                 this.progress = 0;
             }
             this.loadingStatus.setTrackingUrl(trackingUrl);
             this.coordinator = null;
+            // persistent
+            GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
+                    new LoadJobFinalOperation(this.id, this.loadingStatus, this.progress,
+                            this.loadStartTimestamp, this.finishTimestamp, finalState, this.failMsg),
+                    wal -> {
+                        this.state = finalState;
+                    });
         } finally {
             writeUnlock();
             GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
         }
-        // persistent
-        GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
-                new LoadJobFinalOperation(this.id, this.loadingStatus, this.progress, 
-                this.loadStartTimestamp, this.finishTimestamp, this.state, this.failMsg));
     }
 
     @Override
@@ -266,13 +270,10 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void afterCommitted(TransactionState txnState, boolean txnOperated) throws StarRocksException {
-        if (!txnOperated) {
-            return;
-        }
+    public void afterCommitted(TransactionState txnState) throws StarRocksException {
         loadCommittedTimestamp = System.currentTimeMillis();
         if (txnCallback != null) {
-            txnCallback.afterCommitted(txnState, txnOperated);
+            txnCallback.afterCommitted(txnState);
         }
     }
 
@@ -281,7 +282,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
+    public void afterAborted(TransactionState txnState, String txnStatusChangeReason) {
     }
 
     @Override
@@ -289,7 +290,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     @Override
-    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+    public void afterVisible(TransactionState txnState) {
     }
 
     @Override

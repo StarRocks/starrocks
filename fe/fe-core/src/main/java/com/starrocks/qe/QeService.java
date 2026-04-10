@@ -58,5 +58,15 @@ public class QeService {
         }
         LOG.info("QE service start.");
     }
+
+    public boolean tryStart() {
+        if (mysqlServer.start()) {
+            LOG.info("QE service started.");
+            return true;
+        } else {
+            LOG.error("mysql server start failed");
+            return false;
+        }
+    }
 }
 

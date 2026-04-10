@@ -43,23 +43,30 @@
 
 #include "agent/agent_server.h"
 #include "agent/finish_task.h"
-#include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
 #include "agent/task_signatures_manager.h"
+#include "base/simd/simd.h"
 #include "cache/datacache.h"
 #include "cache/datacache_utils.h"
+#include "common/config_agent_fwd.h"
+#include "common/config_metrics_fwd.h"
+#include "common/config_network_fwd.h"
 #include "common/status.h"
+#include "common/system/backend_options.h"
+#include "common/system/master_info.h"
+#include "common/thread/thread.h"
+#include "common/util/misc.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/DataCache_types.h"
 #include "gen_cpp/Types_types.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/snapshot_loader.h"
-#include "service/backend_options.h"
-#include "simd/simd.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/data_dir.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
@@ -70,9 +77,6 @@
 #include "storage/task/engine_clone_task.h"
 #include "storage/update_manager.h"
 #include "storage/utils.h"
-#include "util/misc.h"
-#include "util/starrocks_metrics.h"
-#include "util/thread.h"
 
 namespace starrocks {
 
@@ -283,6 +287,7 @@ void TaskWorkerPool<AgentTaskRequest>::_spawn_callback_worker_thread(CALLBACK_FU
 }
 
 void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     static uint32_t s_worker_count = 0;
 
     auto* worker_pool_this = (PushTaskWorkerPool*)arg_this;
@@ -377,6 +382,7 @@ void* PushTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 }
 
 void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     static uint32_t s_worker_count = 0;
 
     auto* worker_pool_this = (DeleteTaskWorkerPool*)arg_this;
@@ -502,6 +508,7 @@ void* DeleteTaskWorkerPool::_worker_thread_callback(void* arg_this) {
 }
 
 void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::LOAD);
     auto* worker_pool_this = (PublishVersionTaskWorkerPool*)arg_this;
     auto* agent_server = worker_pool_this->_env->agent_server();
     auto token =
@@ -822,7 +829,7 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
 
         resource_usage.__set_group_usages(group_usage_recorder.get_resource_group_usages());
 
-        request.__set_resource_usage(std::move(resource_usage));
+        request.__set_resource_usage(resource_usage);
         TMasterResult result;
         status = report_task(request, &result);
 

@@ -17,9 +17,9 @@ package com.starrocks.alter;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.thrift.TTabletMetaType;
@@ -67,6 +67,15 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = compactionStrategy;
     }
 
+    protected LakeTableAlterMetaJob(LakeTableAlterMetaJob job) {
+        super(job);
+        this.metaType = job.metaType;
+        this.metaValue = job.metaValue;
+        this.persistentIndexType = job.persistentIndexType;
+        this.enableFileBundling = job.enableFileBundling;
+        this.compactionStrategy = job.compactionStrategy;
+    }
+
     @Override
     protected TabletMetadataUpdateAgentTask createTask(PhysicalPartition partition,
             MaterializedIndex index, long nodeId, Set<Long> tablets) {
@@ -96,7 +105,7 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
     }
 
     @Override
-    protected void updateCatalog(Database db, LakeTable table, boolean isReplay) {
+    protected void updateCatalog(Database db, OlapTable table, boolean isReplay) {
         if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             // re-use ENABLE_PERSISTENT_INDEX for both enable index and index's type.
             table.getTableProperty().modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
@@ -126,6 +135,8 @@ public class LakeTableAlterMetaJob extends LakeTableAlterMetaJobBase {
         this.compactionStrategy = other.compactionStrategy;
     }
 
-
-
+    @Override
+    public AlterJobV2 copyForPersist() {
+        return new LakeTableAlterMetaJob(this);
+    }
 }

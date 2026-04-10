@@ -16,7 +16,8 @@
 
 #include <utility>
 
-#include "util/filesystem_util.h"
+#include "base/path/filesystem_util.h"
+#include "fs/fs_factory.h"
 
 namespace starrocks {
 
@@ -26,9 +27,7 @@ BinlogBuilder::BinlogBuilder(int64_t tablet_id, int64_t version, int64_t change_
           _version(version),
           _change_event_timestamp(change_event_timestamp),
           _params(params),
-          _next_file_id(params->start_file_id),
-          _init_writer(false),
-          _next_seq_id(0) {}
+          _next_file_id(params->start_file_id) {}
 
 Status BinlogBuilder::add_empty() {
     RETURN_IF_ERROR(_switch_writer_if_full());
@@ -205,7 +204,7 @@ StatusOr<BinlogFileWriterPtr> BinlogBuilder::_create_binlog_writer() {
     }
 
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_path))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(file_path))
     st = fs->delete_file(file_path);
     if (st.ok()) {
         LOG(INFO) << "Delete binlog file after creating failed, tablet: " << _tablet_id << ", file path: " << file_path;
@@ -223,7 +222,7 @@ Status BinlogBuilder::delete_binlog_files(std::vector<std::string>& file_paths) 
     }
 
     std::shared_ptr<FileSystem> fs;
-    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_paths[0]))
+    ASSIGN_OR_RETURN(fs, FileSystemFactory::CreateSharedFromString(file_paths[0]))
     int32_t total_num = 0;
     int32_t fail_num = 0;
     for (auto& path : file_paths) {

@@ -17,14 +17,16 @@
 #include <atomic>
 #include <memory>
 
-#include "common/config.h"
+#include "common/config_ingest_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/thread/threadpool.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/global_dict/parser.h"
 #include "util/priority_thread_pool.hpp"
-#include "util/threadpool.h"
 
 namespace starrocks {
 
@@ -36,6 +38,11 @@ ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, c
     _name = "connector_scan";
     auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
     _connector_type = c->connector_type();
+    if (tnode.connector_scan_node.__isset.catalog_type) {
+        _catalog_type = tnode.connector_scan_node.catalog_type;
+    }
+    // else: leave _catalog_type empty. During rolling upgrades (old FE -> new BE),
+    // catalog_type is not set — skip catalog metrics rather than guess wrong values.
     _data_source_provider = c->create_data_source_provider(this, tnode);
 }
 
@@ -119,7 +126,7 @@ int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
     return capacity;
 }
 
-pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
 
@@ -403,7 +410,8 @@ bool ConnectorScanNode::_submit_scanner(ConnectorScanner* scanner, bool blockabl
         return _submit_streaming_load_scanner(scanner, blockable);
     }
 
-    auto* thread_pool = runtime_state()->exec_env()->thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    auto* thread_pool = query_execution_services->execution->thread_pool;
     int delta = static_cast<int>(!scanner->keep_priority());
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
 
@@ -430,7 +438,8 @@ bool ConnectorScanNode::_submit_streaming_load_scanner(ConnectorScanner* scanner
 #ifdef BE_TEST
     _use_stream_load_thread_pool = true;
 #endif
-    ThreadPool* thread_pool = runtime_state()->exec_env()->streaming_load_thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    ThreadPool* thread_pool = query_execution_services->execution->streaming_load_thread_pool;
     _running_threads.fetch_add(1, std::memory_order_release);
     // Assume the thread pool is large enough, so there is no need to set the priority
     Status status = thread_pool->submit_func([this, scanner] { _scanner_thread(scanner); });

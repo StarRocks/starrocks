@@ -150,6 +150,10 @@ public class MysqlScanNode extends ScanNode {
             sMap.put(slotRef, tmpRef);
         }
         ArrayList<Expr> mysqlConjuncts = ExprUtils.cloneList(conjuncts, sMap);
+        // Filters instead of conjuncts are used in BE to filter rows, the types of conjuncts' children
+        // would be unmatched after remove cast operator in PushDownPredicateTOExternalTableScanRule, which
+        // would cause BE report error "VectorizedInPredicate type not same";
+        conjuncts.clear();
         for (Expr p : mysqlConjuncts) {
             p = ExprUtils.replaceLargeStringLiteral(p);
             filters.add(ExprToSql.toMySql(p));
@@ -164,6 +168,8 @@ public class MysqlScanNode extends ScanNode {
         if (temporalClause != null && !temporalClause.isEmpty()) {
             msg.mysql_scan_node.setTemporal_clause(temporalClause);
         }
+
+        setConnectorCatalogType(msg);
     }
 
     /**

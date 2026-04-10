@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import org.junit.jupiter.api.BeforeAll;
@@ -79,6 +80,7 @@ public class InvalidPlanTest extends MVTestBase  {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");");
+        Config.max_scalar_operator_flat_children = 30000;
         String sql = ReplayFromDumpTestBase.geContentFromFile("bugs/large_binary_predicate1.sql");
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +

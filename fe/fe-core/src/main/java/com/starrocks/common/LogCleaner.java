@@ -53,7 +53,8 @@ public class LogCleaner extends FrontendDaemon {
             "fe.big_query.log",
             "fe.profile.log",
             "fe.features.log",
-            "fe.gc.log"
+            "fe.gc.log",
+            "fe.plan.log"
     };
 
     /**
@@ -78,7 +79,6 @@ public class LogCleaner extends FrontendDaemon {
         uniquePaths.add(Config.sys_log_dir);
         uniquePaths.add(Config.audit_log_dir);
         uniquePaths.add(Config.internal_log_dir);
-        uniquePaths.add(Config.dump_log_dir);
         uniquePaths.add(Config.big_query_log_dir);
         uniquePaths.add(Config.profile_log_dir);
         uniquePaths.add(Config.feature_log_dir);

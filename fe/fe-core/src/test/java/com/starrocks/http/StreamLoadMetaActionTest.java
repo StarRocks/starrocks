@@ -16,6 +16,7 @@ package com.starrocks.http;
 
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Multimap;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.load.batchwrite.BatchWriteMgr;
 import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
@@ -107,7 +108,8 @@ public class StreamLoadMetaActionTest extends StarRocksHttpTestCase {
 
         new MockUp<BatchWriteMgr>() {
             @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+            public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                    TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity) {
                 return new RequestCoordinatorBackendResult(new TStatus(TStatusCode.OK), computeNodes);
             }
         };
@@ -131,7 +133,8 @@ public class StreamLoadMetaActionTest extends StarRocksHttpTestCase {
         Request request = buildRequest(headers, HashMultimap.create());
         new MockUp<BatchWriteMgr>() {
             @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+            public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                    TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity) {
                 ComputeNode node = new ComputeNode(1, "192.0.0.1", 9050);
                 node.setHttpPort(8040);
                 node.setBrpcPort(8060);
@@ -163,7 +166,8 @@ public class StreamLoadMetaActionTest extends StarRocksHttpTestCase {
 
         new MockUp<BatchWriteMgr>() {
             @Mock
-            public RequestCoordinatorBackendResult requestCoordinatorBackends(TableId tableId, StreamLoadKvParams params) {
+            public RequestCoordinatorBackendResult requestCoordinatorBackends(
+                    TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity) {
                 TStatus status = new TStatus();
                 status.setStatus_code(TStatusCode.INTERNAL_ERROR);
                 status.addToError_msgs("artificial failure");

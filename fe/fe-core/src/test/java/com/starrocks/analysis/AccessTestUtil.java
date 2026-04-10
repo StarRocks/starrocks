@@ -39,7 +39,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FakeEditLog;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
@@ -51,6 +50,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.FloatType;
@@ -85,10 +85,10 @@ public class AccessTestUtil {
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
                 KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, null);
-        table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
+        table.setIndexMeta(baseIndex.getMetaId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
         table.addPartition(partition);
-        table.setBaseIndexId(baseIndex.getId());
+        table.setBaseIndexMetaId(baseIndex.getMetaId());
         db.registerTableUnlocked(table);
         return globalStateMgr;
     }
@@ -103,17 +103,24 @@ public class AccessTestUtil {
                 index.getId();
                 minTimes = 0;
                 result = 30000L;
+                index.getMetaId();
+                minTimes = 0;
+                result = 30000L;
             }
         };
 
         PhysicalPartition physicalPartition = Deencapsulation.newInstance(PhysicalPartition.class);
         new Expectations(physicalPartition) {
             {
-                physicalPartition.getBaseIndex();
+                physicalPartition.getLatestBaseIndex();
                 minTimes = 0;
                 result = index;
 
                 physicalPartition.getIndex(30000L);
+                minTimes = 0;
+                result = index;
+
+                physicalPartition.getLatestIndex(30000L);
                 minTimes = 0;
                 result = index;
             }

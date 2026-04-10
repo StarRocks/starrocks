@@ -60,6 +60,8 @@ public class IdleStatus {
         Long runningTaskCnt;
         @SerializedName("lastFinishedJobTime")
         Long lastFinishedJobTime;
+        @SerializedName("lastFinishedJobInfo")
+        String lastFinishedJobInfo;
 
         public WarehouseStatus(long id, String name, boolean isIdle, long idleTime) {
             this.id = id;

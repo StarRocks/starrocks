@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/boolor.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -21,7 +21,7 @@
 namespace starrocks {
 
 void AggregateFuncResolver::register_boolean() {
-    auto bool_or_func = std::make_shared<BoolOrAggregateFunction>();
+    auto bool_or_func = new BoolOrAggregateFunction();
     add_aggregate_mapping_notnull<TYPE_BOOLEAN, TYPE_BOOLEAN>("bool_or", true, bool_or_func);
 }
 

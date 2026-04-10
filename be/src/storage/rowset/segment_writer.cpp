@@ -37,14 +37,20 @@
 #include <memory>
 #include <utility>
 
+#include "base/hash/crc32c.h"
+#include "base/string/faststring.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config_json_flat_fwd.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
+#include "storage/chunk_variant_helper.h"
 #include "storage/index/index_descriptor.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
@@ -52,10 +58,8 @@
 #include "storage/rowset/page_io.h"
 #include "storage/seek_tuple.h"
 #include "storage/short_key_index.h"
+#include "types/json_value.h"
 #include "types/logical_type.h"
-#include "util/crc32c.h"
-#include "util/faststring.h"
-#include "util/json.h"
 
 namespace starrocks {
 
@@ -110,6 +114,7 @@ Status SegmentWriter::init() {
 
 Status SegmentWriter::init(bool has_key) {
     std::vector<uint32_t> all_column_indexes;
+    all_column_indexes.reserve(_tablet_schema->num_columns());
     for (uint32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
         all_column_indexes.emplace_back(i);
     }
@@ -408,7 +413,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     size_t chunk_num_rows = chunk.num_rows();
     size_t chunk_num_columns = chunk.num_columns();
     for (size_t i = 0; i < chunk_num_columns; ++i) {
-        const Column* col = chunk.get_column_by_index(i).get();
+        const Column* col = chunk.get_column_raw_ptr_by_index(i);
         RETURN_IF_ERROR(_column_writers[i]->append(*col));
     }
 
@@ -429,6 +434,15 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     }
 
     if (_has_key) {
+        if (chunk_num_rows > 0) {
+            if (_sort_key_min.empty()) {
+                // The append_chunk is ordered, so the first is min
+                _sort_key_min = build_variant_tuple_from_chunk_row(chunk, 0, _sort_column_indexes);
+            }
+            // The append_chunk is ordered, so the last is max
+            _sort_key_max = build_variant_tuple_from_chunk_row(chunk, chunk_num_rows - 1, _sort_column_indexes);
+        }
+
         for (size_t i = 0; i < chunk_num_rows; i++) {
             // At the begin of one block, so add a short key index entry
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {

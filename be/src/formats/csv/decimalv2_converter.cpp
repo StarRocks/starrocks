@@ -17,17 +17,17 @@
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
-#include "runtime/decimalv2_value.h"
+#include "types/decimalv2_value.h"
 
 namespace starrocks::csv {
 
-Status DecimalV2Converter::write_string(OutputStream* os, const Column& column, size_t row_num,
+Status DecimalV2Converter::write_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                         const Options& options) const {
     auto decimal_column = down_cast<const FixedLengthColumn<DecimalV2Value>*>(&column);
     return os->write(decimal_column->immutable_data()[row_num]);
 }
 
-Status DecimalV2Converter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
+Status DecimalV2Converter::write_quoted_string(io::FormattedOutputStream* os, const Column& column, size_t row_num,
                                                const Options& options) const {
     return write_string(os, column, row_num, options);
 }

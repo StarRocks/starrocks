@@ -36,6 +36,10 @@ public class CloneExpr extends Expr {
         getChild(0).setType(type);
     }
 
+    @Override
+    public boolean isNullable() {
+        return getChild(0).isNullable();
+    }
 
     @Override
     public Expr clone() {

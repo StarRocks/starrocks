@@ -31,12 +31,12 @@ public class TableConstraintsSystemTable {
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarchar(512))
-                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarchar(64))
-                        .column("CONSTRAINT_NAME", TypeFactory.createVarchar(64))
-                        .column("TABLE_SCHEMA", TypeFactory.createVarchar(64))
-                        .column("TABLE_NAME", TypeFactory.createVarchar(64))
-                        .column("CONSTRAINT_TYPE", TypeFactory.createVarchar(64))
+                        .column("CONSTRAINT_CATALOG", TypeFactory.createVarcharType(512))
+                        .column("CONSTRAINT_SCHEMA", TypeFactory.createVarcharType(64))
+                        .column("CONSTRAINT_NAME", TypeFactory.createVarcharType(64))
+                        .column("TABLE_SCHEMA", TypeFactory.createVarcharType(64))
+                        .column("TABLE_NAME", TypeFactory.createVarcharType(64))
+                        .column("CONSTRAINT_TYPE", TypeFactory.createVarcharType(64))
                         .column("ENFORCED", TypeFactory.createVarcharType(3))
                         .build(), TSchemaTableType.SCH_TABLE_CONSTRAINTS);
     }

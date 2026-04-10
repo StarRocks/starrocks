@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <base/testutil/assert.h>
 #include <benchmark/benchmark.h>
-#include <testutil/assert.h>
 
 #include <memory>
 #include <random>
@@ -21,9 +21,9 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
-#include "runtime/types.h"
 #include "storage/chunk_helper.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -109,10 +109,10 @@ ColumnPtr ShuffleChunkPerf::init_dest_column(const TypeDescriptor& type) {
 ChunkPtr ShuffleChunkPerf::init_src_chunk() {
     auto chunk = std::make_unique<Chunk>();
     auto col = init_src_key_column(_types[0]);
-    chunk->append_column(col, 0);
+    chunk->append_column(std::move(col), 0);
     for (int i = 1; i < _column_count; i++) {
         col = init_src_column(_types[i]);
-        chunk->append_column(col, i);
+        chunk->append_column(std::move(col), i);
     }
     return chunk;
 }
@@ -137,7 +137,7 @@ ChunkPtr ShuffleChunkPerf::init_dest_chunk() {
     auto chunk = std::make_unique<Chunk>();
     for (int i = 0; i < _column_count; i++) {
         auto col = init_dest_column(_types[i]);
-        chunk->append_column(col, i);
+        chunk->append_column(std::move(col), i);
     }
     return chunk;
 }
@@ -311,7 +311,7 @@ public:
         auto chunk = std::make_unique<Chunk>();
         for (int i = 0; i < _column_count; i++) {
             auto col = init_dest_column(_types[i], chunk_size);
-            chunk->append_column(col, i);
+            chunk->append_column(std::move(col), i);
         }
         return chunk;
     }

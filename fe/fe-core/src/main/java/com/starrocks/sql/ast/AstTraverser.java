@@ -68,6 +68,11 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
     }
 
     @Override
+    public R visitAlterTaskStatement(AlterTaskStmt statement, C context) {
+        return null;
+    }
+
+    @Override
     public R visitCreatePipeStatement(CreatePipeStmt statement, C context) {
         if (statement.getInsertStmt() != null) {
             visit(statement.getInsertStmt(), context);
@@ -174,6 +179,10 @@ public class AstTraverser<R, C> implements AstVisitorExtendInterface<R, C> {
 
     @Override
     public R visitCTE(CTERelation node, C context) {
+        if (node.isRecursive() && !node.isAnchor()) {
+            // For recursive CTE, only traverse the non-recursive part (anchor member)
+            return null;
+        }
         return visit(node.getCteQueryStatement(), context);
     }
 

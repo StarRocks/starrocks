@@ -39,9 +39,9 @@ public class RoleEdges {
     public static SystemTable create() {
         return new SystemTable(SystemId.ROLE_EDGES_ID, NAME, Table.TableType.SCHEMA,
                 builder()
-                        .column("FROM_ROLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TO_ROLE", TypeFactory.createVarchar(NAME_CHAR_LEN))
-                        .column("TO_USER", TypeFactory.createVarchar(NAME_CHAR_LEN))
+                        .column("FROM_ROLE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TO_ROLE", TypeFactory.createVarcharType(NAME_CHAR_LEN))
+                        .column("TO_USER", TypeFactory.createVarcharType(NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.STARROCKS_ROLE_EDGES);
     }

@@ -14,11 +14,11 @@
 
 #pragma once
 
+#include "common/util/thrift_util.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "formats/parquet/utils.h"
-#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 
@@ -39,9 +39,7 @@ public:
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override {
-        return Status::NotSupported("Not implemented");
-    }
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) override;
 
     StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                              CompoundNodeType pred_relation, const uint64_t rg_first_row,

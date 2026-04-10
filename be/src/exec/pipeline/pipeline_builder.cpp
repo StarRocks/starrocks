@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "adaptive/event.h"
-#include "common/config.h"
+#include "common/config_exec_flow_fwd.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
@@ -31,6 +31,7 @@
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
 #include "exec/pipeline/wait_operator.h"
 #include "exec/query_cache/cache_manager.h"
@@ -38,6 +39,7 @@
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 
@@ -45,14 +47,17 @@ void PipelineBuilderContext::init_colocate_groups(std::unordered_map<int32_t, Ex
     _group_id_to_colocate_groups = std::move(colocate_groups);
     for (auto& [group_id, group] : _group_id_to_colocate_groups) {
         _execution_groups.emplace_back(group);
+        // Build reverse mapping for O(1) lookup in find_exec_group_by_plan_node_id.
+        for (int32_t node_id : group->plan_node_ids()) {
+            _plan_node_to_colocate_group[node_id] = group.get();
+        }
     }
 }
 
 ExecutionGroupRawPtr PipelineBuilderContext::find_exec_group_by_plan_node_id(int32_t plan_node_id) {
-    for (auto& [group_id, group] : _group_id_to_colocate_groups) {
-        if (group->contains(plan_node_id)) {
-            return group.get();
-        }
+    auto it = _plan_node_to_colocate_group.find(plan_node_id);
+    if (it != _plan_node_to_colocate_group.end()) {
+        return it->second;
     }
     return _normal_exec_group;
 }
@@ -317,7 +322,7 @@ void PipelineBuilderContext::interpolate_spill_process(size_t plan_node_id,
     spill_process_operators.emplace_back(std::move(spill_process_factory));
     auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(next_operator_id(), plan_node_id);
     spill_process_operators.emplace_back(std::move(noop_sink_factory));
-    add_pipeline(std::move(spill_process_operators));
+    add_pipeline(spill_process_operators);
 }
 
 OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_node_id, OpFactories& pred_operators) {
@@ -372,6 +377,10 @@ OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* 
     for (const auto& pred_ops : pred_operators_list) {
         auto* source_op = source_operator(pred_ops);
         max_input_dop += source_op->degree_of_parallelism();
+    }
+
+    if (config::local_exchange_buffer_mem_limit_by_consumer_dop) {
+        max_input_dop = std::min(max_input_dop, degree_of_parallelism());
     }
 
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(max_input_dop,
@@ -438,7 +447,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState
     auto last_plan_node_id = pred_operators[pred_operators.size() - 1]->plan_node_id();
     pred_operators.emplace_back(std::make_shared<CollectStatsSinkOperatorFactory>(next_operator_id(), last_plan_node_id,
                                                                                   collect_stats_ctx));
-    add_pipeline(std::move(pred_operators));
+    add_pipeline(pred_operators);
 
     auto downstream_source_op = std::make_shared<CollectStatsSourceOperatorFactory>(
             next_operator_id(), last_plan_node_id, std::move(collect_stats_ctx));
@@ -508,7 +517,7 @@ bool PipelineBuilderContext::should_interpolate_cache_operator(int32_t plan_node
     if (cache_param.plan_node_id != plan_node_id) {
         return false;
     }
-    return dynamic_cast<pipeline::OperatorFactory*>(source_op.get()) != nullptr;
+    return dynamic_cast<pipeline::ScanOperatorFactory*>(source_op.get()) != nullptr;
 }
 
 OpFactories PipelineBuilderContext::interpolate_cache_operator(
@@ -538,7 +547,9 @@ OpFactories PipelineBuilderContext::interpolate_cache_operator(
         upstream_pipeline[i] = std::move(ml_op);
     }
 
-    auto cache_mgr = ExecEnv::GetInstance()->cache_mgr();
+    auto* runtime_state = _fragment_context->runtime_state();
+    auto* query_execution_services = runtime_state->query_execution_services();
+    auto cache_mgr = query_execution_services->runtime->cache_mgr;
     auto cache_op = std::make_shared<query_cache::CacheOperatorFactory>(next_operator_id(), plan_node_id, cache_mgr,
                                                                         cache_param);
     upstream_pipeline.push_back(cache_op);
@@ -599,8 +610,9 @@ void PipelineBuilderContext::_subscribe_pipeline_event(Pipeline* pipeline) {
     }
 }
 
-OpFactories PipelineBuilder::decompose_exec_node_to_pipeline(const FragmentContext& fragment, ExecNode* exec_node) {
-    pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
+StatusOr<OpFactories> PipelineBuilder::decompose_exec_node_to_pipeline(const FragmentContext& fragment,
+                                                                       ExecNode* exec_node) {
+    ASSIGN_OR_RETURN(pipeline::OpFactories operators, exec_node->decompose_to_pipeline(&_context));
     operators = _context.maybe_interpolate_grouped_exchange(exec_node->id(), operators);
     return operators;
 }

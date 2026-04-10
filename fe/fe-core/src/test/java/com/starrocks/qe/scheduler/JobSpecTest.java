@@ -60,6 +60,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class JobSpecTest extends SchedulerTestBase {
@@ -149,7 +150,7 @@ public class JobSpecTest extends SchedulerTestBase {
      */
     @Test
     public void testQueryResourceGroup() throws Exception {
-        BackendResourceStat.getInstance().setNumHardwareCoresOfBe(BACKEND1_ID, 16);
+        BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, BACKEND1_ID, 16);
         GlobalStateMgr.getCurrentState().getResourceGroupMgr().createBuiltinResourceGroupsIfNotExist();
 
         new MockUp<ResourceGroupMgr>() {

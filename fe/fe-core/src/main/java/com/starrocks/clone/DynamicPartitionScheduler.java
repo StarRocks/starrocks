@@ -384,7 +384,8 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
                 return true;
             }
 
-            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            if (olapTable.getState() != OlapTable.OlapTableState.NORMAL
+                    && olapTable.getState() != OlapTable.OlapTableState.TABLET_RESHARD) {
                 String errorMsg = "Table[" + olapTable.getName() + "]'s state is not NORMAL." +
                             "Do not allow doing dynamic add partition. table state=" + olapTable.getState();
                 runtimeInfoCollector.recordCreatePartitionFailedMsg(db.getOriginName(), olapTable.getName(), errorMsg);

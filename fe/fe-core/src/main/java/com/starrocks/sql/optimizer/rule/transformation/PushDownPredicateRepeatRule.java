@@ -87,6 +87,10 @@ public class PushDownPredicateRepeatRule extends TransformationRule {
      * it proves that the expression may contains null value, can not push down
      */
     private boolean canPushDownPredicate(ScalarOperator predicate, Set<ColumnRefOperator> repeatColumns) {
+        // if predicate is not pushable, return false
+        if (!Utils.canPushDownPredicate(predicate)) {
+            return false;
+        }
         ColumnRefSet usedRefs = predicate.getUsedColumns();
         if (!usedRefs.containsAny(repeatColumns)) {
             return false;

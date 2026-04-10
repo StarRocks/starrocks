@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "column/chunk.h"
+#include "common/runtime_profile.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
 #include "exec/pipeline/hash_partition_context.h"
@@ -29,14 +30,14 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/agg/count.h"
 #include "exprs/expr.h"
+#include "exprs/expr_factory.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 
 AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ExecNode(pool, tnode, descs),
+        : PipelineNode(pool, tnode, descs),
           _tnode(tnode),
           _result_tuple_desc(descs.get_tuple_descriptor(tnode.analytic_node.output_tuple_id)) {}
 
@@ -47,35 +48,12 @@ Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
                                 _tnode.analytic_node.use_hash_based_partition;
 
     if (!tnode.analytic_node.partition_exprs.empty()) {
-        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_partition_exprs, state));
+        RETURN_IF_ERROR(
+                ExprFactory::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_partition_exprs, state));
     }
     DCHECK(_conjunct_ctxs.empty());
 
     return Status::OK();
-}
-
-Status AnalyticNode::prepare(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::prepare(state));
-    DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
-
-    _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc, false);
-    RETURN_IF_ERROR(_analytor->prepare(state, _pool, runtime_profile()));
-
-    return Status::OK();
-}
-
-Status AnalyticNode::open(RuntimeState* state) {
-    SCOPED_TIMER(_runtime_profile->total_time_counter());
-    RETURN_IF_ERROR(ExecNode::open(state));
-    RETURN_IF_CANCELLED(state);
-    RETURN_IF_ERROR(child(0)->open(state));
-
-    return _analytor->open(state);
-}
-
-Status AnalyticNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
-    return Status::InternalError("should not call get_next() in AnalyticNode");
 }
 
 void AnalyticNode::close(RuntimeState* state) {
@@ -91,10 +69,10 @@ void AnalyticNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_sink, _children[0]->decompose_to_pipeline(context));
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     bool is_skewed = _tnode.analytic_node.__isset.is_skewed && _tnode.analytic_node.is_skewed;
 

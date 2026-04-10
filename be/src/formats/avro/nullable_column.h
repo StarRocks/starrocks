@@ -20,7 +20,7 @@
 #include "column/column.h"
 #include "common/status.h"
 #include "numeric_column.h"
-#include "runtime/types.h"
+#include "types/type_descriptor.h"
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -31,9 +31,9 @@ extern "C" {
 
 namespace starrocks {
 
-Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                            const avro_value_t& value, bool invalid_as_null);
 
-Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_desc, std::string_view name,
                                     const avro_value_t& value, bool invalid_as_null);
 } // namespace starrocks

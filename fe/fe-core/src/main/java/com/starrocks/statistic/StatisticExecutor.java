@@ -233,6 +233,16 @@ public class StatisticExecutor {
         }
     }
 
+    public boolean dropTableStatistics(ConnectContext statsConnectCtx, List<Long> tableIds,
+                                       StatsConstants.AnalyzeType analyzeType) {
+        if (tableIds == null || tableIds.isEmpty()) {
+            return true;
+        }
+        String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
+        LOG.debug("Expire statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
     public void dropTableMultiColumnStatistics(ConnectContext statsConnectCtx, Long tableIds) {
         String sql = StatisticSQLBuilder.buildDropMultipleStatisticsSQL(tableIds);
         LOG.debug("Expire statistic SQL: {}", sql);
@@ -241,6 +251,24 @@ public class StatisticExecutor {
         if (!result) {
             LOG.warn("Execute statistic table expire fail.");
         }
+    }
+
+    public boolean dropTableMultiColumnStatistics(ConnectContext statsConnectCtx, List<Long> tableIds) {
+        if (tableIds == null || tableIds.isEmpty()) {
+            return true;
+        }
+        String sql = StatisticSQLBuilder.buildDropMultipleStatisticsSQL(tableIds);
+        LOG.debug("Expire statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
+    public boolean dropHistogramByTableIds(ConnectContext statsConnectCtx, List<Long> tableIds) {
+        if (tableIds == null || tableIds.isEmpty()) {
+            return true;
+        }
+        String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableIds);
+        LOG.debug("Expire histogram statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
     }
 
     public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
@@ -291,6 +319,9 @@ public class StatisticExecutor {
     }
 
     public void dropHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return;
+        }
         String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
@@ -299,6 +330,9 @@ public class StatisticExecutor {
     }
 
     public void dropExternalHistogram(ConnectContext statsConnectCtx, String tableUUID, List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return;
+        }
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(tableUUID, columnNames);
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
@@ -308,6 +342,9 @@ public class StatisticExecutor {
 
     public void dropExternalHistogram(ConnectContext statsConnectCtx, String catalogName, String dbName, String tableName,
                                       List<String> columnNames) {
+        if (columnNames == null || columnNames.isEmpty()) {
+            return;
+        }
         String sql = StatisticSQLBuilder.buildDropExternalHistogramSQL(catalogName, dbName, tableName, columnNames);
         boolean result = executeDML(statsConnectCtx, sql);
         if (!result) {
@@ -520,6 +557,10 @@ public class StatisticExecutor {
 
         try {
             Stopwatch watch = Stopwatch.createStarted();
+            // Set start time if not already set
+            if (analyzeStatus.getStartTime() == null) {
+                analyzeStatus.setStartTime(LocalDateTime.now());
+            }
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
             // Only update running status without edit log, make restart job status is failed

@@ -38,12 +38,13 @@
 #include <functional>
 #include <memory>
 
+#include "base/hash/hash_std.hpp"
+#include "base/hash/murmur_hash3.h"
+#include "common/ngram_bloom_filter_state.h"
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "storage/utils.h"
-#include "util/hash_util.hpp"
-#include "util/murmur_hash3.h"
 
 namespace starrocks {
 class Slice;
@@ -105,13 +106,6 @@ struct BloomFilterOptions {
 struct NgramBloomFilterReaderOptions {
     size_t index_gram_num = 0;
     bool index_case_sensitive = true;
-};
-
-struct NgramBloomFilterState {
-    bool initialized = false;
-    // whether this index can be used for predicate or not
-    bool index_useful = false;
-    std::vector<std::string> ngram_set;
 };
 
 // Base class for bloom filter

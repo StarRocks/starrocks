@@ -19,6 +19,8 @@
 #include <memory>
 #include <utility>
 
+#include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -26,10 +28,8 @@
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
-#include "runtime/types.h"
-#include "testutil/assert.h"
 #include "testutil/desc_tbl_helper.h"
-#include "util/defer_op.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
 
@@ -105,7 +105,8 @@ class ParquetScannerTest : public ::testing::Test {
         /// Init RuntimeState
         auto query_globals = TQueryGlobals();
         query_globals.time_zone = timezone;
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, static_cast<ExecEnv*>(nullptr)));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
 
@@ -141,7 +142,11 @@ class ParquetScannerTest : public ::testing::Test {
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
 
-        return std::make_unique<ParquetScanner>(state, profile, *broker_scan_range, counter);
+        auto scanner = std::make_unique<ParquetScanner>(state, profile, *broker_scan_range, counter);
+        EXPECT_EQ("parquet", scanner->file_format());
+        // scan_type is not set in TBrokerScanRangeParams, default to LOAD
+        EXPECT_EQ("load", scanner->scan_type());
+        return scanner;
     }
 
     void validate(std::unique_ptr<ParquetScanner>& scanner, const size_t expect_num_rows,
@@ -271,6 +276,7 @@ class ParquetScannerTest : public ::testing::Test {
             }
         };
         validate(scanner, 36865, check);
+        ASSERT_EQ(file_names.size(), scanner->TEST_scanner_counter()->num_files_read);
     }
 
     template <bool is_nullable>
@@ -309,7 +315,8 @@ class ParquetScannerTest : public ::testing::Test {
         RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
         ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
         auto query_globals = TQueryGlobals();
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, static_cast<ExecEnv*>(nullptr)));
 
         auto ranges = generate_ranges({path}, 0, {});
         TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());
@@ -466,6 +473,7 @@ TEST_F(ParquetScannerTest, test_parquet_data) {
         }
     };
     validate(scanner, 36865, check);
+    ASSERT_EQ(_file_names.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_F(ParquetScannerTest, test_parquet_data_with_1_column_from_path) {
@@ -646,6 +654,8 @@ TEST_F(ParquetScannerTest, test_arrow_null) {
     auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
     auto check = [](const ChunkPtr& chunk) {};
     validate(scanner, 3, check);
+    // single file split
+    ASSERT_EQ(file_names.size(), scanner->TEST_scanner_counter()->num_files_read);
 }
 
 TEST_F(ParquetScannerTest, int96_timestamp) {

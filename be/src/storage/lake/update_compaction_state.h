@@ -22,15 +22,13 @@
 #include "storage/olap_common.h"
 #include "storage/tablet_schema.h"
 
-namespace starrocks {
-
-namespace lake {
+namespace starrocks::lake {
 class Rowset;
 class UpdateManager;
 
 class CompactionState {
 public:
-    CompactionState() {}
+    CompactionState() = default;
     ~CompactionState();
 
     CompactionState(const CompactionState&) = delete;
@@ -44,7 +42,7 @@ public:
 
     std::string to_string() const;
 
-    std::vector<MutableColumnPtr> pk_cols;
+    MutableColumns pk_cols;
 
 private:
     Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);
@@ -63,6 +61,4 @@ inline std::ostream& operator<<(std::ostream& os, const CompactionState& o) {
     return os;
 }
 
-} // namespace lake
-
-} // namespace starrocks
+} // namespace starrocks::lake

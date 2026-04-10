@@ -49,8 +49,11 @@ public class PushDownPredicateAggRule extends TransformationRule {
 
         for (Iterator<ScalarOperator> iter = filters.iterator(); iter.hasNext(); ) {
             ScalarOperator scalar = iter.next();
+            // if filter cannot be pushed down, skip it
+            if (!Utils.canPushDownPredicate(scalar)) {
+                continue;
+            }
             List<ColumnRefOperator> columns = Utils.extractColumnRef(scalar);
-
             // push down predicate
             if (groupColumns.containsAll(columns) && !columns.isEmpty()) {
                 // remove from filter

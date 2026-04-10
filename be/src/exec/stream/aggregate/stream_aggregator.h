@@ -20,7 +20,7 @@
 #include "exec/aggregator.h"
 #include "exec/stream/aggregate/agg_group_state.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::stream {
 
@@ -57,9 +57,9 @@ public:
         }
     }
 
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
+    Status prepare(RuntimeState* state, RuntimeProfile* runtime_profile);
 
-    Status open(RuntimeState* state);
+    Status open(RuntimeState* state) override;
 
     // Process input's chunks util `Epoch` chunk is received.
     Status process_chunk(StreamChunk* chunk);

@@ -21,10 +21,10 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
+#include "base/string/parse_util.h"
 #include "cache/mem_cache/local_mem_cache_engine.h"
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
-#include "util/parse_util.h"
 
 namespace starrocks {
 
@@ -107,7 +107,7 @@ Status DataCacheUtils::parse_conf_datacache_disk_paths(const std::string& config
             continue;
         }
 
-        string canonicalized_path;
+        std::string canonicalized_path;
         status = FileSystem::Default()->canonicalize(item, &canonicalized_path);
         if (!status.ok()) {
             LOG(WARNING) << "datacache path can not be canonicalized. may be not exist. path: " << item;

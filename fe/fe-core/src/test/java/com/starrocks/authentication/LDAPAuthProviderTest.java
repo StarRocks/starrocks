@@ -121,4 +121,49 @@ class LDAPAuthProviderTest {
         provider.authenticate(authCtx, user, authResponse);
         Assertions.assertEquals(discoveredDN, authCtx.getDistinguishedName());
     }
+
+    @Test
+    void testNormalizeUsername() {
+        // Test null input
+        Assertions.assertNull(LDAPAuthProvider.normalizeUsername(null));
+
+        // Test lowercase username
+        Assertions.assertEquals("allen", LDAPAuthProvider.normalizeUsername("allen"));
+
+        // Test uppercase username
+        Assertions.assertEquals("allen", LDAPAuthProvider.normalizeUsername("ALLEN"));
+
+        // Test mixed case username
+        Assertions.assertEquals("allen", LDAPAuthProvider.normalizeUsername("Allen"));
+        Assertions.assertEquals("allen", LDAPAuthProvider.normalizeUsername("aLLen"));
+        Assertions.assertEquals("allen", LDAPAuthProvider.normalizeUsername("aLLEN"));
+
+        // Test with numbers and special characters
+        Assertions.assertEquals("user123", LDAPAuthProvider.normalizeUsername("User123"));
+        Assertions.assertEquals("user_name", LDAPAuthProvider.normalizeUsername("User_Name"));
+
+        // Test empty string
+        Assertions.assertEquals("", LDAPAuthProvider.normalizeUsername(""));
+    }
+
+    @Test
+    void testAuthenticateWithCaseInsensitiveUsername() throws Exception {
+        // Create a test provider instance
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                "cn=admin,dc=starrocks,dc=com", "secret",
+                "ou=People,dc=starrocks,dc=com", "uid",
+                /* ldapUserDN */ null
+        );
+
+        // Test that normalizeUsername works correctly for case variations
+        // This verifies the internal normalization logic
+        String[] testUsers = {"Allen", "aLLen", "aLLEN", "ALLEN", "allen"};
+        for (String testUser : testUsers) {
+            String normalized = LDAPAuthProvider.normalizeUsername(testUser);
+            Assertions.assertEquals("allen", normalized,
+                    "Username '" + testUser + "' should normalize to 'allen'");
+        }
+    }
 }

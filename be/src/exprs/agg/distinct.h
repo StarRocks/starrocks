@@ -18,11 +18,13 @@
 #include <cstring>
 #include <string>
 
+#include "base/phmap/phmap_dump.h"
+#include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/aggregator_fwd.h"
 #include "exprs/agg/aggregate.h"
@@ -35,8 +37,6 @@
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "thrift/protocol/TJSONProtocol.h"
-#include "util/phmap/phmap_dump.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -53,7 +53,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
     using SumType = RunTimeCppType<SumLT>;
     using MyHashSet = HashSetWithAggStateAllocator<T>;
 
-    void update(T key) { set.insert(key); }
+    void update([[maybe_unused]] MemPool* mem_pool, T key) { set.insert(key); }
 
     void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
 
@@ -245,7 +245,7 @@ struct AdaptiveSliceHashSet {
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
+struct DistinctAggregateState<LT, SumLT, StringOrBinaryGuard<LT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
@@ -296,7 +296,7 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
         sum = SumType{};
     }
 
-    void update(T key) {
+    void update([[maybe_unused]] MemPool* mempool, T key) {
         [[maybe_unused]] const auto result = set.insert(key);
         if constexpr (compute_sum) {
             if (result.second) {
@@ -376,7 +376,8 @@ struct DistinctAggregateStateV2Base<LT, SumLT, compute_sum, FixedLengthLTGuard<L
 };
 
 template <LogicalType LT, LogicalType SumLT>
-struct DistinctAggregateStateV2Base<LT, SumLT, false, StringLTGuard<LT>> : public DistinctAggregateState<LT, SumLT> {};
+struct DistinctAggregateStateV2Base<LT, SumLT, false, StringOrBinaryGuard<LT>>
+        : public DistinctAggregateState<LT, SumLT> {};
 
 template <LogicalType LT, LogicalType SumLT, typename = guard::Guard>
 struct DistinctAggregateStateV2 : public DistinctAggregateStateV2Base<LT, SumLT, false> {};
@@ -389,13 +390,7 @@ struct FusedMultiDistinctAggregateState : public DistinctAggregateStateV2Base<LT
     using Base::update;
     MemPool mem_pool;
 
-    void update(CppType key) {
-        if constexpr (IsSlice<CppType>) {
-            this->Base::update(&mem_pool, key);
-        } else {
-            this->Base::update(key);
-        }
-    }
+    void update(CppType key) { this->Base::update(&mem_pool, key); }
 
     void reset() {
         this->Base::reset();
@@ -414,13 +409,8 @@ public:
     using ColumnType = RunTimeColumnType<LT>;
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
-        if constexpr (IsSlice<T>) {
-            this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
-        } else {
-            const auto immutable_data = column->immutable_data();
-            this->data(state).update(immutable_data[row_num]);
-        }
+        auto value = GetContainer<LT>::get_data(columns[0], row_num);
+        this->data(state).update(ctx->mem_pool(), value);
     }
 
     // The following two functions are specialized because of performance issue.
@@ -428,7 +418,6 @@ public:
     // And this is a quite useful pattern for phmap::flat_hash_table.
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
         auto& agg_state = this->data(state);
 
         struct CacheEntry {
@@ -436,7 +425,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto container_data = GetContainer<LT>::get_data(column);
+        const auto& container_data = GetContainer<LT>::get_data(columns[0]);
         for (size_t i = 0; i < chunk_size; ++i) {
             size_t hash_value = agg_state.set.hash_function()(container_data[i]);
             cache[i] = CacheEntry{hash_value};
@@ -456,8 +445,6 @@ public:
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
-        const auto* column = down_cast<const ColumnType*>(columns[0]);
-
         // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
         // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
         // exploit cache locality further, but I don't see much steady performance gain by doing that.
@@ -467,7 +454,7 @@ public:
         };
 
         std::vector<CacheEntry> cache(chunk_size);
-        const auto container_data = GetContainer<LT>::get_data(column);
+        const auto& container_data = GetContainer<LT>::get_data(columns[0]);
         for (size_t i = 0; i < chunk_size; ++i) {
             AggDataPtr state = states[i] + state_offset;
             auto& agg_state = this->data(state);
@@ -502,7 +489,7 @@ public:
             } else {
                 T key;
                 memcpy(&key, slice.data, sizeof(T));
-                this->data(state).update(key);
+                this->data(state).update(ctx->mem_pool(), key);
             }
         }
     }
@@ -517,9 +504,9 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
-        DCHECK((*dst)->is_binary());
-        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(dst->is_binary());
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
         Bytes& bytes = dst_column->get_bytes();
 
         const auto* src_column = down_cast<const ColumnType*>(src[0].get());
@@ -631,15 +618,14 @@ public:
             const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
             const auto off = array_column->offsets().immutable_data();
-            const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+            const auto& datas = GetContainer<TYPE_VARCHAR>::get_data(column);
             for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
                 if (!column->is_null(i)) {
-                    agg_state.update(mem_pool, binary_column->get_slice(i));
+                    agg_state.update(mem_pool, datas[i]);
                 }
             }
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(*data_column);
-            agg_state.update(mem_pool, binary_column.get_slice(row_num));
+            agg_state.update(mem_pool, GetContainer<TYPE_VARCHAR>::get_data(data_column, row_num));
         }
 
         agg_state.update_over_limit();
@@ -683,7 +669,7 @@ public:
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK(false) << "this method shouldn't be called";
     }
 
@@ -728,7 +714,7 @@ public:
             size_t new_size = old_size + result_value.size();
 
             auto& data = binary_column->get_bytes();
-            data.resize(old_size + new_size);
+            data.resize(new_size);
 
             memcpy(data.data() + old_size, result_value.data(), result_value.size());
 
@@ -784,8 +770,9 @@ struct TFusedMultiDistinctFunction final
         auto* struct_column = down_cast<StructColumn*>(dst);
         // compute count
         {
-            auto* count_column = struct_column->field_column("count").get();
-            auto* count_data_column = down_cast<Int64Column*>(ColumnHelper::get_data_column(count_column));
+            auto* count_column = struct_column->field_column_raw_ptr("count").value();
+            Column* count_data_col = const_cast<Column*>(ColumnHelper::get_data_column(count_column));
+            auto* count_data_column = static_cast<Int64Column*>(count_data_col);
             const auto count = state_impl.distinct_count();
             for (auto i = start; i < end; ++i) {
                 count_data_column->get_data()[i] = count;
@@ -794,8 +781,9 @@ struct TFusedMultiDistinctFunction final
 
         // compute sum
         if constexpr (lt_is_numeric<LT> && enable_bit_sum(compute_bits)) {
-            auto* sum_column = struct_column->field_column("sum").get();
-            auto* sum_data_column = down_cast<SumColumn*>(ColumnHelper::get_data_column(sum_column));
+            auto* sum_column = struct_column->field_column_raw_ptr("sum").value();
+            Column* sum_data_col = const_cast<Column*>(ColumnHelper::get_data_column(sum_column));
+            auto* sum_data_column = static_cast<SumColumn*>(sum_data_col);
             const auto sum = state_impl.sum;
             for (auto i = start; i < end; ++i) {
                 sum_data_column->get_data()[i] = sum;
@@ -804,14 +792,16 @@ struct TFusedMultiDistinctFunction final
 
         // compute avg
         if constexpr (lt_is_numeric<LT> && enable_bit_avg(compute_bits)) {
-            auto* avg_column = struct_column->field_column("avg").get();
-            auto* avg_data_column = down_cast<AvgColumn*>(ColumnHelper::get_data_column(avg_column));
+            auto* avg_column = struct_column->field_column_raw_ptr("avg").value();
+            Column* avg_data_col = const_cast<Column*>(ColumnHelper::get_data_column(avg_column));
+            auto* avg_data_column = static_cast<AvgColumn*>(avg_data_col);
             const auto sum = state_impl.sum;
             const auto count = state_impl.distinct_count();
 
             if (count == 0) {
                 DCHECK(avg_column->is_nullable());
-                auto& null_data = down_cast<NullableColumn*>(avg_column)->null_column()->get_data();
+                auto* nullable_avg = down_cast<NullableColumn*>(avg_column);
+                auto& null_data = nullable_avg->null_column_data();
                 for (auto i = start; i < end; ++i) {
                     null_data[i] = DATUM_NULL;
                 }
@@ -835,28 +825,15 @@ struct TFusedMultiDistinctFunction final
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        const auto* column = down_cast<const InputColumn*>(columns[0]);
-        if constexpr (IsSlice<T>) {
-            this->data(state).update(column->get_slice(row_num));
-        } else {
-            const auto immutable_data = column->immutable_data();
-            this->data(state).update(immutable_data[row_num]);
-        }
+        this->data(state).update(ctx->mem_pool(), GetContainer<LT>::get_data(columns[0], row_num));
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        const auto* column = down_cast<const InputColumn*>(columns[0]);
-        if constexpr (IsSlice<T>) {
-            for (auto i = frame_start; i < frame_end; ++i) {
-                this->data(state).update(column->get_slice(i));
-            }
-        } else {
-            const auto* data = column->immutable_data().data();
-            for (size_t i = frame_start; i < frame_end; ++i) {
-                this->data(state).update(data[i]);
-            }
+        const auto& datas = GetContainer<LT>::get_data(columns[0]);
+        for (auto i = frame_start; i < frame_end; ++i) {
+            this->data(state).update(datas[i]);
         }
     }
 
@@ -875,7 +852,7 @@ struct TFusedMultiDistinctFunction final
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
-                                     ColumnPtr* dst) const override {
+                                     MutableColumnPtr& dst) const override {
         DCHECK(false) << "Shouldn't call this method for window function!";
     }
 };

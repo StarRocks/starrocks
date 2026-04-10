@@ -20,6 +20,7 @@
 #include "butil/time.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "exprs/string_functions.h"
+#include "storage/olap_define.h"
 
 namespace starrocks {
 
@@ -65,7 +66,7 @@ TEST_F(StringFunctionConcatTest, concatNormalTest) {
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ("test" + std::to_string(k) + "hello" + std::to_string(k), v->get_data()[k].to_string());
+        ASSERT_EQ("test" + std::to_string(k) + "hello" + std::to_string(k), v->get_slice(k).to_string());
     }
 }
 
@@ -102,7 +103,7 @@ TEST_F(StringFunctionConcatTest, concatConstTest) {
 
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ("test" + std::to_string(k) + "_abcd_1234_道可道,非常道", v->get_data()[k].to_string());
+        ASSERT_EQ("test" + std::to_string(k) + "_abcd_1234_道可道,非常道", v->get_slice(k).to_string());
     }
 }
 
@@ -139,7 +140,7 @@ TEST_F(StringFunctionConcatTest, concatNullTest) {
         if (k % 2 == 0) {
             ASSERT_TRUE(nv->is_null(k));
         } else {
-            ASSERT_EQ("test" + std::to_string(k) + "hello" + std::to_string(k), v->get_data()[k].to_string());
+            ASSERT_EQ("test" + std::to_string(k) + "hello" + std::to_string(k), v->get_slice(k).to_string());
         }
     }
 }
@@ -176,9 +177,9 @@ TEST_F(StringFunctionConcatTest, concatWsTest) {
 
     for (int j = 0; j < 20; ++j) {
         if (j % 2) {
-            ASSERT_EQ("a|" + std::to_string(j), v->get_data()[j].to_string());
+            ASSERT_EQ("a|" + std::to_string(j), v->get_slice(j).to_string());
         } else {
-            ASSERT_EQ("a|" + std::to_string(j) + "|b", v->get_data()[j].to_string());
+            ASSERT_EQ("a|" + std::to_string(j) + "|b", v->get_slice(j).to_string());
         }
     }
 }
@@ -215,18 +216,18 @@ TEST_F(StringFunctionConcatTest, concatWs1Test) {
 
     for (int j = 0; j < 20; ++j) {
         if (j % 2) {
-            ASSERT_EQ("a-----" + std::to_string(j), v->get_data()[j].to_string());
+            ASSERT_EQ("a-----" + std::to_string(j), v->get_slice(j).to_string());
         } else {
-            ASSERT_EQ("a-----" + std::to_string(j) + "-----b", v->get_data()[j].to_string());
+            ASSERT_EQ("a-----" + std::to_string(j) + "-----b", v->get_slice(j).to_string());
         }
     }
 }
 TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
-    BinaryColumn::Ptr col0 = BinaryColumn::create();
-    BinaryColumn::Ptr col1 = BinaryColumn::create();
-    BinaryColumn::Ptr col2 = BinaryColumn::create();
-    BinaryColumn::Ptr col3 = BinaryColumn::create();
-    NullColumn::Ptr null_col = NullColumn::create();
+    auto col0 = BinaryColumn::create();
+    auto col1 = BinaryColumn::create();
+    auto col2 = BinaryColumn::create();
+    auto col3 = BinaryColumn::create();
+    auto null_col = NullColumn::create();
     for (int i = 0; i < 10; ++i) {
         col0->append(Slice(std::string(get_olap_string_max_length() - i, 'x')));
         col0->append(Slice(std::string(i + 1, 'y')));
@@ -260,15 +261,15 @@ TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
     auto result = StringFunctions::concat(context.get(), columns).value();
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     ASSERT_EQ(result_binary->size(), col0->size());
     ASSERT_EQ(result_binary->size(), row_num);
     for (auto i = 0; i < row_num; ++i) {
         if (i % 3 == 0) {
-            ASSERT_EQ(null_col->get_data()[i], 1);
+            ASSERT_EQ(null_col->immutable_data()[i], 1);
             ASSERT_TRUE(columns[0]->is_null(i));
             ASSERT_TRUE(result->is_null(i));
             continue;
@@ -294,9 +295,9 @@ static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns 
     auto result = StringFunctions::concat(context.get(), columns).value();
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     const auto row_num = columns[0]->size();
     ASSERT_EQ(result_binary->size(), columns[0]->size());
@@ -426,9 +427,9 @@ static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullC
     auto union_null_col = FunctionHelper::union_null_column(sep_null_col, null_col);
 
     ASSERT_TRUE(result->is_nullable());
-    auto result_nullable = down_cast<NullableColumn*>(result.get());
+    auto result_nullable = down_cast<const NullableColumn*>(result.get());
     ASSERT_TRUE(result_nullable != nullptr);
-    auto result_binary = down_cast<BinaryColumn*>(result_nullable->data_column().get());
+    auto result_binary = down_cast<const BinaryColumn*>(result_nullable->data_column().get());
     ASSERT_TRUE(result_binary != nullptr);
     const auto row_num = columns[0]->size();
     ASSERT_EQ(result_binary->size(), columns[0]->size());

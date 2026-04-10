@@ -30,7 +30,8 @@ public class InvertedIndexParams {
             .collect(Collectors.toSet());
 
     public enum InvertedIndexImpType {
-        CLUCENE
+        CLUCENE,
+        BUILTIN,
     }
 
     public enum CommonIndexParamKey implements ParamsKey {
@@ -50,7 +51,12 @@ public class InvertedIndexParams {
         /**
          * Whether to omit term frequency and term position when indexing
          */
-        OMIT_TERM_FREQ_AND_POSITION("false");
+        OMIT_TERM_FREQ_AND_POSITION("false"),
+
+        /**
+         * Gram num for the dictionary of builtin inverted index.
+         */
+        DICT_GRAM_NUM("-1");
 
         private final String defaultValue;
         private boolean needDefault = false;

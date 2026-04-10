@@ -16,9 +16,10 @@
 
 #include <numeric>
 
-#include "util/metrics.h"
-#include "util/starrocks_metrics.h"
-#include "util/threadpool.h"
+#include "base/metrics.h"
+#include "common/thread/threadpool.h"
+#include "runtime/starrocks_metrics.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::pipeline {
 
@@ -84,10 +85,11 @@ void ScanExecutorMetrics::register_all_metrics(MetricRegistry* registry, const s
     registry->register_metric(base_name + "pending_tasks", &pending_tasks);
 }
 
-#define ACCUMULATED(array, field)                                                                                     \
-    [this]() {                                                                                                        \
-        std::lock_guard guard(_mutex);                                                                                \
-        return std::accumulate(array.begin(), array.end(), 0, [](int64_t a, const auto& b) { return a + b->field; }); \
+#define ACCUMULATED(array, field)                                                      \
+    [this]() {                                                                         \
+        std::lock_guard guard(_mutex);                                                 \
+        return std::accumulate(array.begin(), array.end(), (int64_t)0,                 \
+                               [](int64_t a, const auto& b) { return a + b->field; }); \
     }
 
 #define REGISTER_POOLS_METRICS(name, threadpool)                                                                     \

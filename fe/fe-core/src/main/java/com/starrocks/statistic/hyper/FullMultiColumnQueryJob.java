@@ -26,8 +26,9 @@ import java.util.List;
 
 public class FullMultiColumnQueryJob extends MultiColumnQueryJob {
 
-    public FullMultiColumnQueryJob(ConnectContext context, Database db, Table table, List<ColumnStats> columnStats) {
-        super(context, db, table, columnStats);
+    public FullMultiColumnQueryJob(ConnectContext context, long analyzeId,
+                                   Database db, Table table, List<ColumnStats> columnStats) {
+        super(context, analyzeId, db, table, columnStats);
     }
 
     @Override
@@ -40,7 +41,8 @@ public class FullMultiColumnQueryJob extends MultiColumnQueryJob {
             context.put("tableName", table.getName());
             context.put("columnIdsStr", columnStats.getColumnNameStr());
             context.put("ndvFunction", columnStats.getNDV());
-            String sql = HyperStatisticSQLs.build(context, HyperStatisticSQLs.FULL_MULTI_COLUMN_STATISTICS_SELECT_TEMPLATE);
+            String sql = HyperStatisticSQLs.build(
+                    context, HyperStatisticSQLs.FULL_MULTI_COLUMN_STATISTICS_SELECT_TEMPLATE);
             sqlList.add(sql);
         }
 

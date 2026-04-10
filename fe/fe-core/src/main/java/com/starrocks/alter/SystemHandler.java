@@ -80,7 +80,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -331,8 +330,8 @@ public class SystemHandler extends AlterHandler {
                 return false;
             }
 
-            Map<Long, Replica> replicas = invertedIndex.getReplicas(tabletId);
-            if (replicas == null) {
+            List<Replica> replicas = invertedIndex.getReplicasByTabletId(tabletId);
+            if (replicas.isEmpty()) {
                 continue;
             }
             // It means the replica can be migrated to retained backends.
@@ -342,7 +341,7 @@ public class SystemHandler extends AlterHandler {
 
             // Make sure there is at least one normal replica on retained backends.
             boolean hasNormalReplica = false;
-            for (Replica replica : replicas.values()) {
+            for (Replica replica : replicas) {
                 if (replica.getState() == ReplicaState.NORMAL && retainedBackendIds.contains(replica.getBackendId())) {
                     hasNormalReplica = true;
                     break;

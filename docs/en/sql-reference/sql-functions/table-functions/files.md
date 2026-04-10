@@ -29,7 +29,7 @@ From v3.2 onwards, FILES() further supports complex data types including `ARRAY`
 
 ## `FILES()` for loading
 
-From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function `FILES()`. It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT.md), load the data rows into an existing table using [`INSERT`](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md). From v3.3.4, you can also view the schema of a data file using `FILES()` with [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md).
+From v3.1.0 onwards, StarRocks supports defining read-only files in remote storage using the table function `FILES()`. It can access remote storage with the path-related properties of the files, infers the table schema of the data in the files, and returns the data rows. You can directly query the data rows using [`SELECT`](../../sql-statements/table_bucket_part_index/SELECT/SELECT.md), load the data rows into an existing table using [`INSERT`](../../sql-statements/loading_unloading/INSERT.md), or create a new table and load the data rows into it using [`CREATE TABLE AS SELECT`](../../sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md). From v3.3.4, you can also view the schema of a data file using `FILES()` with [`DESC`](../../sql-statements/table_bucket_part_index/DESCRIBE.md).
 
 ### Syntax
 
@@ -47,7 +47,7 @@ The URI used to access the files.
 
 You can specify a path or a file. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` to load a data file named `20210411` from the path `/user/data/tablename` on the HDFS server.
 
-You can also specify this parameter as the save path of multiple data files by using wildcards `?`, `*`, `[]`, `{}`, or `^`. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` or `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` to load the data files from all partitions or only `202104` partitions in the path `/user/data/tablename` on the HDFS server.
+You can also specify this parameter as the save path of multiple data files by using wildcards `?`, `*`, `[]`, or `^`. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` or `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` to load the data files from all partitions or only `202104` partitions in the path `/user/data/tablename` on the HDFS server.
 
 :::note
 
@@ -168,7 +168,7 @@ Example for the CSV format:
 "format"="csv",
 "csv.column_separator"="\\t",
 "csv.enclose"='"',
-"csv.skip_header"="1",
+"csv.skip_header"="1",  -- for loading only
 "csv.escape"="\\"
 ```
 
@@ -193,7 +193,7 @@ If a field value contains an `enclose`-specified character, you can use the same
 
 ###### `csv.skip_header`
 
-Specifies the number of header rows to skip in the CSV-formatted data. Type: `INTEGER`. Default value: `0`.
+Specifies the number of header rows to skip in the CSV-formatted data. Type: `INTEGER`. Default value: `0`. This property is only supported for data loading.
 
 In some CSV-formatted data files, a number of header rows are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip these header rows. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.
 
@@ -218,6 +218,7 @@ You can configure the sampling rule using the following parameters:
 
 - `auto_detect_sample_files`: the number of random data files to sample in each batch. By default, the first and last files are selected. Range: `[0, + ∞]`. Default: `2`.
 - `auto_detect_sample_rows`: the number of data rows to scan in each sampled data file. Range: `[0, + ∞]`. Default: `500`.
+- `auto_detect_types`: (valid for CSV only) - whether to guess the data types of sampled columns, or just assume String. `{true | false}`. Default: `true`.
 
 After the sampling, StarRocks unionizes the columns from all the data files according to these rules:
 
@@ -227,6 +228,7 @@ After the sampling, StarRocks unionizes the columns from all the data files acco
   - Integer columns together with `FLOAT` type columns will be unionized as the DECIMAL type.
   - String types are used for unionizing other types.
 - Generally, the `STRING` type can be used to unionize all data types.
+- If type auto-detection is turned off, all columns will return as `STRING`
 
 You can refer to Example 5.
 
@@ -236,13 +238,26 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 All data files in a single batch must be of the same file format.
 :::
 
-##### Push down target table schema check
+##### Push down target table column types / schema
 
-From v3.4.0 onwards, the system supports pushing down the target table schema check to the Scan stage of `FILES()`.
+From v3.4.0 onwards, the system supports pushing down target table column types to the Scan stage of `FILES()` to improve type inference accuracy.
 
-Schema detection of `FILES()` is not fully strict. For example, any integer column in CSV files is inferred and checked as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the `TINYINT` type, the CSV data records that exceed the BIGINT type will not be filtered. Instead, they will be filled with `NULL` implicitly.
+Schema detection of `FILES()` is not fully strict. For example, any integer column in CSV files is inferred as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the `TINYINT` type, the CSV data records that exceed the TINYINT range will not be filtered. Instead, they will be filled with `NULL` implicitly.
 
-To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_schema` to control whether to push down the target table schema check to the Scan stage of `FILES()`. By setting `files_enable_insert_push_down_schema` to `true`, the system will filter the data records which fail the target table schema check at the file reading.
+To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_column_type` (alias: `files_enable_insert_push_down_schema`) to control whether to push down the target table column types to the Scan stage of `FILES()`. By setting `files_enable_insert_push_down_column_type` to `true`, the system will rewrite the types of matched file columns with the target table column types at the file reading stage. Only columns that already exist in the inferred file schema are affected; no columns are added or removed.
+
+For full schema push-down (both column names and types), you can set the INSERT property `enable_push_down_schema` to `true`. Unlike the FE configuration, this is specified on the INSERT statement itself rather than in the `FILES()` properties:
+
+```sql
+INSERT INTO target_table
+PROPERTIES ("enable_push_down_schema" = "true")
+SELECT * FROM FILES(
+    "path" = "s3://...",
+    "format" = "parquet"
+);
+```
+
+When `enable_push_down_schema` is `true`, StarRocks reshapes the `FILES()` schema to match the target table columns — adding columns that are missing from the inferred schema and trimming the schema to only the columns actually read by the SELECT list. Note that in `BY NAME` mode with `SELECT *`, the `*` is expanded to the target table's column names rather than the file's original columns, so extra file columns are dropped even with `SELECT *`.
 
 ##### Union files with different schema
 

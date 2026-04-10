@@ -214,7 +214,7 @@ public class TablesProcDir implements ProcDirInterface {
     private String findIndexNum(Table table) {
         if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
-            return String.valueOf(olapTable.getIndexNameToId().size());
+            return String.valueOf(olapTable.getIndexNameToMetaId().size());
         }
         return NULL_STRING_DEFAULT;
     }

@@ -15,8 +15,18 @@ displayed_sidebar: docs
 ```sql
 CREATE TABLE smallintDemo (
     pk SMALLINT COMMENT "range [-32768, 32767]"
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(pk)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(pk);
+DISTRIBUTED BY HASH(pk) BUCKETS 1;
+
+INSERT INTO smallintDemo VALUES (32767);
+```
+
+```Plaintext
+MySQL > SELECT * FROM smallintDemo;
++-------+
+| pk    |
++-------+
+| 32767 |
++-------+
 ```

@@ -14,18 +14,21 @@
 
 #include "exec/pipeline/exchange/exchange_merge_sort_source_operator.h"
 
+#include "common/config_exec_flow_fwd.h"
 #include "exec/sort_exec_exprs.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/runtime_state_helper.h"
 #include "runtime/sorted_chunks_merger.h"
 
 namespace starrocks::pipeline {
 Status ExchangeMergeSortSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
-    auto query_statistic_recv = state->query_recv();
-    _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
+    auto query_statistic_recv = RuntimeStateHelper::query_recv(state);
+    auto* query_execution_services = state->query_execution_services();
+    _stream_recvr = query_execution_services->runtime->stream_mgr->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
             config::exchg_node_buffer_size_bytes, true, query_statistic_recv, true, 1, true);
     _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
@@ -102,7 +105,7 @@ Status ExchangeMergeSortSourceOperator::get_next_merging(RuntimeState* state, Ch
             *chunk = tmp_chunk->clone_empty_with_slot(rewind_size);
             for (size_t c = 0; c < tmp_chunk->num_columns(); ++c) {
                 const ColumnPtr& src = tmp_chunk->get_column_by_index(c);
-                ColumnPtr& dest = (*chunk)->get_column_by_index(c);
+                auto* dest = (*chunk)->get_column_raw_ptr_by_index(c);
                 dest->append(*src, offset_in_chunk, rewind_size);
                 // resize constant column as same as other non-constant columns, so Chunk::num_rows()
                 // can return a right number if this ConstColumn is the first column of the chunk.

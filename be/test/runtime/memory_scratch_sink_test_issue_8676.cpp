@@ -48,8 +48,11 @@
 #include <cstdlib>
 #include <iostream>
 
+#include "base/concurrency/blocking_queue.hpp"
 #include "column/chunk.h"
-#include "common/config.h"
+#include "common/config_exec_fwd.h"
+#include "common/config_metrics_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "exec/file_scanner/csv_scanner.h"
 #include "exprs/expr.h"
@@ -64,7 +67,6 @@
 #include "storage/options.h"
 #include "testutil/desc_tbl_builder.h"
 #include "types/logical_type.h"
-#include "util/blocking_queue.hpp"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -165,7 +167,8 @@ public:
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
 
@@ -230,7 +233,8 @@ void MemoryScratchSinkIssue8676Test::init_runtime_state() {
     TUniqueId query_id;
     query_id.lo = 10;
     query_id.hi = 100;
-    _state = new RuntimeState(query_id, query_options, TQueryGlobals(), _exec_env);
+    _state = new RuntimeState(query_id, query_options, TQueryGlobals(), &_exec_env->query_execution_services(),
+                              _exec_env);
     _state->init_instance_mem_tracker();
     _state->set_desc_tbl(_desc_tbl);
     _state->init_mem_trackers(TUniqueId());
@@ -262,10 +266,9 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
         t_slot_desc.__set_slotType(gen_type_desc(TPrimitiveType::DOUBLE));
         t_slot_desc.__set_columnPos(i);
         t_slot_desc.__set_byteOffset(offset);
-        t_slot_desc.__set_nullIndicatorByte(0);
-        t_slot_desc.__set_nullIndicatorBit(-1);
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);
+        t_slot_desc.__set_isNullable(false);
         t_slot_desc.__set_colName("first_column");
         t_slot_desc.__set_parent(0);
 
@@ -281,10 +284,9 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
         t_slot_desc.__set_slotType(gen_type_desc(TPrimitiveType::INT));
         t_slot_desc.__set_columnPos(i);
         t_slot_desc.__set_byteOffset(offset);
-        t_slot_desc.__set_nullIndicatorByte(0);
-        t_slot_desc.__set_nullIndicatorBit(-1);
         t_slot_desc.__set_slotIdx(i);
         t_slot_desc.__set_isMaterialized(true);
+        t_slot_desc.__set_isNullable(false);
         t_slot_desc.__set_colName("second_column");
         t_slot_desc.__set_parent(0);
 

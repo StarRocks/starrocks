@@ -189,6 +189,19 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private List<Integer> collectExecStatsIds;
 
+    // If all scan nodes in the entire plan are OLAP scan nodes and at most one tablet is used,
+    // then all fragments will have at most one instance (running on a single BE).
+    // In this case, there is no need to put the ResultSink in a dedicated gather fragment.
+    //
+    // CN mode(prefer_compute_node is true or share-data mode) needs special handling here, because its strategy for selecting
+    // BE/CN nodes for remote fragments (whose left-deep node is not a scan node) is different from non-CN mode:
+    // - CN mode: selects all CN nodes as instances, which will be more than 1 here,
+    //   causing the fragment that contains the ResultSink to also have more than 1 instance.
+    // - None-CN mode: selects the BE node(s) where the child fragment is running.
+    //
+    // Therefore, if isSingleTabletGatherOutputFragment is true, CN mode should use the same selection strategy as none-CN mode.
+    private boolean isSingleTabletGatherOutputFragment = false;
+
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
      */
@@ -260,11 +273,13 @@ public class PlanFragment extends TreeNode<PlanFragment> {
      */
     private void setParallelExecNumIfExists() {
         if (ConnectContext.get() != null) {
-            if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            ConnectContext connectContext = ConnectContext.get();
+            SessionVariable sv = connectContext.getSessionVariable();
+            if (sv.isEnablePipelineEngine()) {
                 this.parallelExecNum = 1;
-                this.pipelineDop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
+                this.pipelineDop = sv.getDegreeOfParallelism(connectContext.getCurrentWarehouseId());
             } else {
-                this.parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
+                this.parallelExecNum = sv.getParallelExecInstanceNum();
                 this.pipelineDop = 1;
             }
         }
@@ -762,8 +777,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             HashJoinNode hashJoinNode = (HashJoinNode) root;
             if (hashJoinNode.isSkewBroadJoin()) {
                 HashJoinNode shuffleJoinNode = hashJoinNode.getSkewJoinFriend();
-                // TODO(fixme): ensure broadcast jion 's rf size is equal to shuffle join's rf size, if not clear the specific
+                // TODO(fixme): ensure broadcast join 's rf size is equal to shuffle join's rf size, if not clear the specific
                 //  broadcast's rf.
+                if (shuffleJoinNode == null || shuffleJoinNode.getBuildRuntimeFilters() == null) {
+                   return;
+                }
                 if (shuffleJoinNode.getBuildRuntimeFilters().size() != hashJoinNode.getBuildRuntimeFilters().size()) {
                     shuffleJoinNode.clearBuildRuntimeFilters();
                     hashJoinNode.clearBuildRuntimeFilters();
@@ -771,7 +789,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 }
                 for (RuntimeFilterDescription description : hashJoinNode.getBuildRuntimeFilters()) {
                     int filterId = shuffleJoinNode.getRfIdByEqJoinConjunctsIndex(description.getExprOrder());
-                    // skew join's boradcast join rf need to remember the filter id of corresponding skew shuffle join
+                    // skew join's broadcast join rf need to remember the filter id of corresponding shuffle join
                     description.setSkew_shuffle_filter_id(filterId);
                 }
             }
@@ -1049,4 +1067,11 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         }
     }
 
+    public boolean isSingleTabletGatherOutputFragment() {
+        return isSingleTabletGatherOutputFragment;
+    }
+
+    public void setSingleTabletGatherOutputFragment(boolean singleTabletGatherOutputFragment) {
+        isSingleTabletGatherOutputFragment = singleTabletGatherOutputFragment;
+    }
 }

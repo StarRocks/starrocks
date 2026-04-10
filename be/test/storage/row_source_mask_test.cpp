@@ -16,7 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "fs/fs_util.h"
 #include "storage/olap_define.h"
 

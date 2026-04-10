@@ -14,12 +14,12 @@
 
 #pragma once
 
+#include "base/phmap/phmap.h"
+#include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/column_hash.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_pool.h"
-#include "util/phmap/phmap.h"
-#include "util/slice.h"
 
 namespace starrocks {
 
@@ -70,7 +70,7 @@ public:
     Status refine_intersect_row(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
                                 int hit_times);
 
-    void deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size);
+    void deserialize_to_columns(KeyVector& keys, MutableColumns& key_columns, size_t chunk_size);
 
     int64_t mem_usage() const;
 

@@ -223,7 +223,7 @@ inline ColumnPB create_with_default_value_pb(const std::string& col_type, std::s
 }
 
 template <LogicalType type>
-inline TabletColumn create_with_default_value(std::string default_value) {
+inline TabletColumn create_with_default_value(const std::string& default_value) {
     TabletColumn column;
     column.set_type(type);
     column.set_is_nullable(true);

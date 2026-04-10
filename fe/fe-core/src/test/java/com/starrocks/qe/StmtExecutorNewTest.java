@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -25,6 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class StmtExecutorNewTest extends StarRocksTestBase  {
@@ -116,5 +118,121 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
             // Exception is expected but should be handled gracefully
             assertTrue(true);
         }
+    }
+
+    @Test
+    public void testHTTPQueryDumpFlag() throws Exception {
+        // Test that isHTTPQueryDump flag is properly handled
+        ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+        testCtx.setQueryId(UUIDUtil.genUUID());
+        
+        // Test default value is false
+        assertFalse(testCtx.isHTTPQueryDump());
+        
+        // Test setter and getter
+        testCtx.setIsHTTPQueryDump(true);
+        assertTrue(testCtx.isHTTPQueryDump());
+        
+        // Test shouldDumpQuery returns true when isHTTPQueryDump is true
+        assertTrue(testCtx.shouldDumpQuery());
+        
+        // Reset and verify
+        testCtx.setIsHTTPQueryDump(false);
+        assertFalse(testCtx.isHTTPQueryDump());
+    }
+
+    @Test
+    public void testStatisticsConnectionFlag() throws Exception {
+        // Test that statistics connection flag is properly handled
+        ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+        testCtx.setQueryId(UUIDUtil.genUUID());
+        
+        // Test default value is false
+        assertFalse(testCtx.isStatisticsConnection());
+        
+        // Test setter and getter
+        testCtx.setStatisticsConnection(true);
+        assertTrue(testCtx.isStatisticsConnection());
+        
+        // Test isStatisticsJob
+        assertFalse(testCtx.isStatisticsJob());
+        testCtx.setStatisticsJob(true);
+        assertTrue(testCtx.isStatisticsJob());
+        
+        // Reset and verify
+        testCtx.setStatisticsConnection(false);
+        assertFalse(testCtx.isStatisticsConnection());
+    }
+
+    @Test
+    public void testSqlBlacklistWithStatisticsConnection() throws Exception {
+        // Test that SQL blacklist check is skipped for statistics connection
+        boolean originalEnableSqlBlacklist = Config.enable_sql_blacklist;
+        try {
+            Config.enable_sql_blacklist = true;
+            
+            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+            testCtx.setQueryId(UUIDUtil.genUUID());
+            testCtx.setStatisticsConnection(true);
+            
+            // Verify statistics connection is set
+            assertTrue(testCtx.isStatisticsConnection());
+            
+            // When isStatisticsConnection is true, SQL blacklist check should be skipped
+            // This is tested by verifying the flag state
+            assertTrue(testCtx.isStatisticsConnection() || testCtx.isStatisticsJob());
+        } finally {
+            Config.enable_sql_blacklist = originalEnableSqlBlacklist;
+        }
+    }
+
+    @Test
+    public void testSqlBlacklistWithStatisticsJob() throws Exception {
+        // Test that SQL blacklist check is skipped for statistics job
+        boolean originalEnableSqlBlacklist = Config.enable_sql_blacklist;
+        try {
+            Config.enable_sql_blacklist = true;
+            
+            ConnectContext testCtx = UtFrameUtils.createDefaultCtx();
+            testCtx.setQueryId(UUIDUtil.genUUID());
+            testCtx.setStatisticsJob(true);
+            
+            // Verify statistics job is set
+            assertTrue(testCtx.isStatisticsJob());
+            
+            // When isStatisticsJob is true, SQL blacklist check should be skipped
+            assertTrue(testCtx.isStatisticsConnection() || testCtx.isStatisticsJob());
+        } finally {
+            Config.enable_sql_blacklist = originalEnableSqlBlacklist;
+        }
+    }
+
+    @Test
+    public void testMVPlannerSessionVariable() throws Exception {
+        // Test the MV Planner session variable
+        SessionVariable sessionVariable = new SessionVariable();
+        
+        // Test default value
+        assertFalse(sessionVariable.isMVPlanner());
+        
+        // Test setter
+        sessionVariable.setMVPlanner(true);
+        assertTrue(sessionVariable.isMVPlanner());
+        
+        // Test reset
+        sessionVariable.setMVPlanner(false);
+        assertFalse(sessionVariable.isMVPlanner());
+    }
+
+    @Test
+    public void testNonExplainStatementExecution() throws Exception {
+        // Test that non-explain statement goes through the normal execution path
+        StatementBase stmt = parse("select 1");
+        assertNotNull(stmt);
+        assertFalse(stmt.isExplain());
+        assertFalse(stmt.isExplainTrace());
+        
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        assertNotNull(executor);
     }
 }

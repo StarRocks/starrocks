@@ -1,0 +1,52 @@
+-- name: test_is_json_scalar
+SELECT is_json_scalar(parse_json('123')) as test_number;
+SELECT is_json_scalar(parse_json('123.456')) as test_float;
+SELECT is_json_scalar(parse_json('-999')) as test_negative;
+SELECT is_json_scalar(parse_json('"hello"')) as test_string;
+SELECT is_json_scalar(parse_json('""')) as test_empty_string;
+SELECT is_json_scalar(parse_json('true')) as test_true;
+SELECT is_json_scalar(parse_json('false')) as test_false;
+SELECT is_json_scalar(json_query(parse_json('{"a": null}'), '$.a')) as test_json_null;
+SELECT is_json_scalar(parse_json('{}')) as test_empty_object;
+SELECT is_json_scalar(parse_json('{"user": {"name": "Bob", "age": 30}}')) as test_nested_object;
+SELECT is_json_scalar(parse_json('[[1, 2], [3, 4]]')) as test_nested_array;
+SELECT is_json_scalar(NULL) as test_sql_null;
+
+CREATE TABLE test_json_scalar (
+    id INT,
+    json_data JSON,
+    description VARCHAR(100)
+)
+ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`)
+BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+INSERT INTO test_json_scalar VALUES
+(1, parse_json('123'), 'number'),
+(2, parse_json('"hello"'), 'string'),
+(3, parse_json('true'), 'boolean'),
+(4, json_query(parse_json('{"a": null}'), '$.a'), 'json null'),
+(5, parse_json('{}'), 'empty object'),
+(6, parse_json('{"key": "value"}'), 'object'),
+(7, parse_json('[]'), 'empty array'),
+(8, parse_json('[1, 2, 3]'), 'array'),
+(9, NULL, 'sql null'),
+(10, parse_json('3.14159'), 'float');
+
+SELECT 
+    id,
+    description,
+    is_json_scalar(json_data) as is_scalar,
+    json_string(json_data) as json_value
+FROM test_json_scalar
+ORDER BY id;
+
+SELECT is_json_scalar(parse_json('9223372036854775807')) as test_large_number;
+SELECT is_json_scalar(parse_json('-9223372036854775808')) as test_small_number;
+SELECT is_json_scalar(parse_json(repeat('a', 1000))) as test_long_string;
+SELECT is_json_scalar(parse_json('"\\n\\t\\r"')) as test_special_chars;

@@ -36,16 +36,17 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "cache/mem_cache/lrucache_engine.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 
 class StoragePageCacheTest : public testing::Test {
-protected:
+public:
     StoragePageCacheTest() = default;
     ~StoragePageCacheTest() override = default;
 
+protected:
     void SetUp() override;
 
     std::shared_ptr<LRUCacheEngine> _lru_cache;
@@ -62,7 +63,7 @@ void StoragePageCacheTest::SetUp() {
 
 TEST_F(StoragePageCacheTest, insert_with_deleter) {
     struct Value {
-        Value(std::string v) : value(std::move(v)) {}
+        Value(const std::string& v) : value(std::move(v)) {}
         std::string value;
     };
     auto deleter = [](const starrocks::CacheKey& key, void* value) { delete (Value*)value; };

@@ -42,7 +42,7 @@ public class StringVariant extends Variant {
     }
 
     @Override
-    public int compareTo(Variant other) {
+    protected int compareToImpl(Variant other) {
         // compare string with utf-8 byte array, same with DM,BE,StorageEngine
         return StringUtils.compareStringWithUTF8ByteArray(value, other.getStringValue());
     }

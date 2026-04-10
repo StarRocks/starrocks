@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
+import com.starrocks.sql.optimizer.operator.OpRuleBit;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -57,6 +58,10 @@ public class LogicalTopNOperator extends LogicalOperator {
     // only set when rank <=1 with preAgg optimization is triggered
     // please refer to PushDownPredicateRankingWindowRule and PushDownLimitRankingWindowRule  for more details
     private ImmutableMap<ColumnRefOperator, CallOperator> partitionPreAggCall;
+
+    public record TopNSortInfo(List<Ordering> orderByElements, SortPhase sortPhase,
+                               TopNType topNType, long limit, long offset) {
+    }
 
     public LogicalTopNOperator(List<Ordering> orderByElements) {
         this(DEFAULT_LIMIT, null, null, null, DEFAULT_LIMIT, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL,
@@ -147,6 +152,14 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     public boolean isPerPipeline() {
         return perPipeline;
+    }
+
+    public boolean isTopNPushDownAgg() {
+        return isOpRuleBitSet(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
+    }
+
+    public void setTopNPushDownAgg() {
+        setOpRuleBit(OpRuleBit.OP_PUSH_DOWN_TOPN_AGG);
     }
 
     @Override

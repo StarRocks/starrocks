@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 
+#include "base/utility/defer_op.h"
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -26,10 +27,9 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/base64.h"
-#include "runtime/types.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -67,7 +67,7 @@ TEST_F(JavaNativeMethodTest, get_addrs_int) {
         const auto* binary_column = down_cast<const BinaryColumn*>(data_column);
         ASSERT_EQ(results[0], (jlong)nullable_column->null_column_data().data());
         ASSERT_EQ(results[1], (jlong)binary_column->get_offset().data());
-        ASSERT_EQ(results[2], (jlong)binary_column->get_bytes().data());
+        ASSERT_EQ(results[2], (jlong)binary_column->get_immutable_bytes().data());
         env->DeleteLocalRef(arr);
     }
     // test array/map

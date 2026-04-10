@@ -36,7 +36,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
+import com.starrocks.sql.parser.NodePosition;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.Logger;
 
@@ -69,7 +70,7 @@ public class MVPCTRefreshPlanBuilder {
     private final Database mvDb;
     private final MaterializedView mv;
     private final MvTaskRunContext mvContext;
-    private final MVPCTRefreshPartitioner mvRefreshPartitioner;
+    private final PCTPredicateBuilder pctPredicateBuilder;
 
     // push down partition predicates into table relation
     private static final String EXTRA_PREDICATE_KEY = "_EXTRA_";
@@ -104,11 +105,11 @@ public class MVPCTRefreshPlanBuilder {
     public MVPCTRefreshPlanBuilder(Database mvDb,
                                    MaterializedView mv,
                                    MvTaskRunContext mvContext,
-                                   MVPCTRefreshPartitioner mvRefreshPartitioner) {
+                                   PCTPredicateBuilder pctPredicateBuilder) {
         this.mvDb = mvDb;
         this.mv = mv;
         this.mvContext = mvContext;
-        this.mvRefreshPartitioner = mvRefreshPartitioner;
+        this.pctPredicateBuilder = pctPredicateBuilder;
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshPlanBuilder.class);
     }
 
@@ -142,8 +143,10 @@ public class MVPCTRefreshPlanBuilder {
         Multimap<String, TableRelation> tableRelations = AnalyzerUtils.collectAllTableRelation(queryStatement);
         Map<Table, List<SlotRef>> refBaseTablePartitionSlots = mv.getRefBaseTablePartitionSlots();
         if (CollectionUtils.sizeIsEmpty(refBaseTablePartitionSlots)) {
-            throw new AnalysisException(String.format("MV refresh cannot generate partition predicates " +
-                    "because of mv %s contains no ref base table's partitions", mv.getName()));
+            throw new AnalysisException(String.format("Materialized view %s.%s refresh failed: " +
+                    "cannot generate partition predicates because the MV has no ref base table partition slots. " +
+                    "Check if the MV is partitioned and references a valid base table partition column.",
+                    mvDb.getFullName(), mv.getName()));
         }
 
         Set<String> uniqueTableNames = tableRelations.keySet().stream().collect(Collectors.toSet());
@@ -165,8 +168,10 @@ public class MVPCTRefreshPlanBuilder {
             TableRelation tableRelation = relations.iterator().next();
             Table table = tableRelation.getTable();
             if (table == null) {
-                throw new AnalysisException(String.format("Optimize materialized view %s refresh task, generate table relation " +
-                        "%s failed: table is null", mv.getName(), tableRelation.getName()));
+                throw new AnalysisException(String.format("Materialized view %s.%s refresh failed: " +
+                        "table relation '%s' resolved to null when building refresh plan. " +
+                        "The base table may have been dropped or is inaccessible.",
+                        mvDb.getFullName(), mv.getName(), tableRelation.getName()));
             }
             // skip it table is not ref base table.
             if (!refBaseTablePartitionSlots.containsKey(table)) {
@@ -176,8 +181,10 @@ public class MVPCTRefreshPlanBuilder {
             }
             List<SlotRef> refTablePartitionSlotRefs = refBaseTablePartitionSlots.get(table);
             if (CollectionUtils.isEmpty(refTablePartitionSlotRefs)) {
-                throw new AnalysisException(String.format("Generate partition predicate failed: " +
-                        "cannot find partition slot ref %s from query relation"));
+                throw new AnalysisException(String.format("Materialized view %s.%s refresh failed: " +
+                        "cannot find partition slot refs for base table '%s' from query relation. " +
+                        "The partition column mapping may be missing or invalid.",
+                        mvDb.getFullName(), mv.getName(), table.getName()));
             }
 
             // If there are multiple table relations, don't push down partition predicate into table relation
@@ -280,7 +287,7 @@ public class MVPCTRefreshPlanBuilder {
                                                     InsertStmt insertStmt)
             throws AnalysisException {
         TableName tableName = new TableName(mvDb.getFullName(), mv.getName());
-        Expr mvPartitionPredicate = mvRefreshPartitioner.generateMVPartitionPredicate(tableName, mvToRefreshedPartitions);
+        Expr mvPartitionPredicate = pctPredicateBuilder.buildMVPartitionPredicate(tableName, mvToRefreshedPartitions);
         if (mvPartitionPredicate == null) {
             logger.warn("Generate mv partition predicate failed, mv:{}", mv.getName());
             return null;
@@ -340,7 +347,7 @@ public class MVPCTRefreshPlanBuilder {
                         "relation {}, filtered partition names:{} ",
                 mv.getName(), tableRelation.getName(), tablePartitionNames);
         tableRelation.setPartitionNames(
-                new PartitionNames(false, new ArrayList<>(tablePartitionNames.getPartitionNames())));
+                new PartitionRef(new ArrayList<>(tablePartitionNames.getPartitionNames()), false, NodePosition.ZERO));
         tracePartitionNames(table, tablePartitionNames);
         return true;
     }
@@ -479,7 +486,7 @@ public class MVPCTRefreshPlanBuilder {
             // If the updated partition names are empty, it means that the table should not be refreshed.
             return new BoolLiteral(false);
         }
-        return mvRefreshPartitioner.generatePartitionPredicate(table, tablePartitionNames, mvPartitionOutputExprs);
+        return pctPredicateBuilder.buildPartitionPredicate(table, tablePartitionNames, mvPartitionOutputExprs);
     }
 
     /**

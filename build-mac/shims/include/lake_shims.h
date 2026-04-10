@@ -129,7 +129,6 @@ public:
     int32_t num_key_columns() const;
     int32_t num_short_key_columns() const;
     int32_t num_rows_per_row_block() const;
-    bool is_in_memory() const;
 };
 
 class Tablet {

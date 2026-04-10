@@ -15,8 +15,8 @@
 #pragma once
 
 #include "column/field.h"
+#include "common/memory/mem_hook_allocator.h"
 #include "common/statusor.h"
-#include "runtime/memory/mem_hook_allocator.h"
 #include "storage/column_aggregator.h"
 
 namespace starrocks {

@@ -18,8 +18,8 @@
 
 #include <map>
 
-#include "testutil/assert.h"
-#include "util/failpoint/fail_point.h"
+#include "base/failpoint/fail_point.h"
+#include "base/testutil/assert.h"
 
 namespace starrocks::lake {
 

@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Config;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -43,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
@@ -503,6 +505,18 @@ public class ScalarOperatorsReuse {
         for (ScalarOperator operator : columnRefMap.values()) {
             ScalarOperator rewriteOperator =
                     ScalarOperatorsReuse.rewriteOperatorWithCommonOperator(operator, commonSubOperators);
+
+            // array_sort_lambda/array_map contains non-deterministic functions like rand(), should not
+            // be extracted CSE from.
+            boolean shouldNotReplace = ScalarOperatorUtil.getStream(operator)
+                    .filter(child -> (child instanceof CallOperator))
+                    .map(child -> (CallOperator) child)
+                    .filter(child -> child.getFnName().equals(FunctionSet.ARRAY_SORT_LAMBDA) ||
+                            child.getFnName().equals(FunctionSet.ARRAY_MAP))
+                    .anyMatch(Utils::hasNonDeterministicFunc);
+            if (shouldNotReplace) {
+                continue;
+            }
             if (!rewriteOperator.equals(operator)) {
                 hasRewritten = true;
                 break;

@@ -17,10 +17,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include "column/fixed_length_column.h"
 #include "exprs/math_functions.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "testutil/column_test_helper.h"
 
 namespace starrocks {
 
@@ -36,7 +34,7 @@ public:
     StatusOr<ColumnPtr> test_to_binary(const std::string& input, BinaryFormatType type) {
         Columns columns;
         columns.emplace_back(BinaryColumn::create());
-        auto* arg1 = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]);
+        auto* arg1 = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]->as_mutable_raw_ptr());
         arg1->append(input);
         state->to_binary_type = type;
         return BinaryFunctions::to_binary(ctx.get(), columns);
@@ -45,7 +43,7 @@ public:
     StatusOr<ColumnPtr> test_from_binary(const Slice& input, BinaryFormatType type) {
         Columns columns;
         columns.emplace_back(BinaryColumn::create());
-        auto* arg1 = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]);
+        auto* arg1 = ColumnHelper::as_raw_column<BinaryColumn>(columns[0]->as_mutable_raw_ptr());
         arg1->append(input);
         state->to_binary_type = type;
         return BinaryFunctions::from_binary(ctx.get(), columns);
@@ -87,9 +85,9 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
         ASSERT_TRUE(!v->is_null(0));
         ASSERT_EQ(v->size(), 1);
         if (binary_type == BinaryFormatType::HEX) {
-            ASSERT_EQ(Slice(expect).to_string(), hex_binary(v->get_data()[0]));
+            ASSERT_EQ(Slice(expect).to_string(), hex_binary(v->get_slice(0)));
         } else {
-            ASSERT_EQ(Slice(expect), v->get_data()[0]);
+            ASSERT_EQ(Slice(expect), v->get_slice(0));
         }
     }
 
@@ -104,7 +102,7 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
         auto v = ColumnHelper::as_column<BinaryColumn>(result.value());
         // TODO: Return null if input is invalid.
         ASSERT_FALSE(v->is_null(0));
-        ASSERT_EQ(Slice(""), v->get_data()[0]);
+        ASSERT_EQ(Slice(""), v->get_slice(0));
     }
 }
 
@@ -140,11 +138,11 @@ TEST_F(BinaryFunctionsTest, TestFromToBinaryNormal) {
         ASSERT_TRUE(!v->is_null(0));
         ASSERT_EQ(v->size(), 1);
 
-        auto result_vv = test_from_binary(v->get_data()[0], binary_type);
+        auto result_vv = test_from_binary(v->get_slice(0), binary_type);
         auto vv = ColumnHelper::as_column<BinaryColumn>(result_vv.value());
         ASSERT_TRUE(!vv->is_null(0));
         ASSERT_EQ(vv->size(), 1);
-        ASSERT_EQ(Slice(expect), vv->get_data()[0]);
+        ASSERT_EQ(Slice(expect), vv->get_slice(0));
     }
 }
 

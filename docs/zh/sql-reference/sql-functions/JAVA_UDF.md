@@ -18,7 +18,7 @@ sidebar_position: 0.9
 使用 StarRocks 的 Java UDF 功能前，您需要:
 
 - [安装 Apache Maven](https://maven.apache.org/download.cgi) 以创建并编写相关 Java 项目。
-- 在服务器上安装 JDK 1.8。
+- 在服务器上安装 JDK 17。
 - 开启 UDF 功能。在 FE 配置文件 **fe/conf/fe.conf** 中设置配置项 `enable_udf` 为 `true`，并重启 FE 节点使配置项生效。详细操作以及配置项列表参考[配置参数](../../administration/management/FE_configuration.md)。
 
 ## 开发并使用 UDF
@@ -56,8 +56,8 @@ sidebar_position: 0.9
     <version>1.0-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
     </properties>
 
     <dependencies>

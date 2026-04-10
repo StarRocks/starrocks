@@ -14,12 +14,13 @@
 
 #include "exprs/dict_query_expr.h"
 
-#include "agent/master_info.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/system/master_info.h"
 #include "exec/tablet_info.h"
+#include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"
 #include "runtime/client_cache.h"
 #include "storage/chunk_helper.h"
@@ -61,7 +62,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
             return Status::InternalError("invalid parameter : get NULL paramenter");
         }
         if (column->is_nullable()) {
-            column = ColumnHelper::update_column_nullable(false, column, column->size());
+            column = ColumnHelper::update_column_nullable(false, std::move(column), column->size());
         }
     }
 

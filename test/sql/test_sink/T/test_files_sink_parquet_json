@@ -1,4 +1,4 @@
--- name: test_files_sink_parquet_json
+-- name: test_files_sink_parquet_json @no_arrow_flight_sql
 
 create database db_${uuid0};
 use db_${uuid0};

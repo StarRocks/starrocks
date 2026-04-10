@@ -57,7 +57,7 @@ public class ReplicationsProcNode implements ProcNodeInterface {
             row.add(TimeUtils.longToTimeString(job.getCreatedTimeMs()));
             row.add(TimeUtils.longToTimeString(job.getFinishedTimeMs()));
             row.add(job.getState().toString());
-            row.add(job.getState().isRunning() ? (job.getRunningTaskNum() + "/" + job.getTotalTaskNum()) : "");
+            row.add(job.getState().isRunning() ? (job.getFinishedTaskNum() + "/" + job.getTotalTaskNum()) : "");
             row.add(Strings.nullToEmpty(job.getErrorMessage()));
             result.addRow(row);
         }

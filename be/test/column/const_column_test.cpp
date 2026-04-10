@@ -16,19 +16,19 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/parallel_test.h"
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
-#include "testutil/parallel_test.h"
 
 namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_const_column_upgrade_if_overflow) {
-    Int32Column::Ptr data_column = Int32Column::create();
+    auto data_column = Int32Column::create();
     data_column->append(1);
 
-    ConstColumn::Ptr column = ConstColumn::create(std::move(data_column), 1024);
+    auto column = ConstColumn::create(std::move(data_column), 1024);
     auto ret = column->upgrade_if_overflow();
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
@@ -42,15 +42,15 @@ PARALLEL_TEST(ConstColumnTest, test_const_column_upgrade_if_overflow) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_const_column_downgrade) {
-    BinaryColumn::Ptr data_column = BinaryColumn::create();
+    auto data_column = BinaryColumn::create();
     ASSERT_FALSE(data_column->has_large_column());
     data_column->append_string("1");
-    ConstColumn::Ptr const_column = ConstColumn::create(data_column, 1024);
+    auto const_column = ConstColumn::create(data_column, 1024);
     auto ret = const_column->downgrade();
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
 
-    LargeBinaryColumn::Ptr large_data_column = LargeBinaryColumn::create();
+    auto large_data_column = LargeBinaryColumn::create();
     large_data_column->append_string("1");
     const_column = ConstColumn::create(large_data_column, 1024);
     ASSERT_TRUE(const_column->has_large_column());
@@ -66,7 +66,7 @@ PARALLEL_TEST(ConstColumnTest, test_basic) {
     auto data_column = FixedLengthColumn<int32_t>::create();
     data_column->append(2020);
 
-    ConstColumn::Ptr column = ConstColumn::create(std::move(data_column), 1024);
+    auto column = ConstColumn::create(std::move(data_column), 1024);
 
     ASSERT_EQ(true, column->is_constant());
     ASSERT_EQ(1024, column->size());
@@ -90,7 +90,7 @@ PARALLEL_TEST(ConstColumnTest, test_basic) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_compare_at) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -105,7 +105,7 @@ PARALLEL_TEST(ConstColumnTest, test_compare_at) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_assign) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -127,7 +127,7 @@ PARALLEL_TEST(ConstColumnTest, test_assign) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_reset_column) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -141,7 +141,7 @@ PARALLEL_TEST(ConstColumnTest, test_reset_column) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_swap_column) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -161,7 +161,7 @@ PARALLEL_TEST(ConstColumnTest, test_swap_column) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_copy_constructor) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -170,25 +170,25 @@ PARALLEL_TEST(ConstColumnTest, test_copy_constructor) {
 
     ASSERT_EQ(100, c1->size());
 
-    auto c2(*c1);
-    ASSERT_EQ(100, c2.size());
-    ASSERT_TRUE(c2.data_column()->use_count() == 1);
+    auto c2 = ConstColumn::static_pointer_cast(c1->clone());
+    ASSERT_EQ(100, c2->size());
+    ASSERT_EQ(1, c2->data_column()->use_count());
     for (int i = 0; i < 100; i++) {
-        ASSERT_EQ(1, c2.get(i).get_int32());
+        ASSERT_EQ(1, c2->get(i).get_int32());
     }
 
     c1->reset_column();
-    ASSERT_EQ(100, c2.size());
-    ASSERT_TRUE(c2.data_column()->use_count() == 1);
+    ASSERT_EQ(100, c2->size());
+    ASSERT_EQ(1, c2->data_column()->use_count());
     for (int i = 0; i < 100; i++) {
-        ASSERT_EQ(1, c2.get(i).get_int32());
+        ASSERT_EQ(1, c2->get(i).get_int32());
     }
 }
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_move_constructor) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -199,7 +199,7 @@ PARALLEL_TEST(ConstColumnTest, test_move_constructor) {
 
     auto c2(std::move(*c1));
     ASSERT_EQ(100, c2.size());
-    ASSERT_TRUE(c2.data_column()->use_count() == 1);
+    ASSERT_EQ(1, c2.data_column()->use_count());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2.get(i).get_int32());
     }
@@ -208,7 +208,7 @@ PARALLEL_TEST(ConstColumnTest, test_move_constructor) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_copy_assignment) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -217,18 +217,17 @@ PARALLEL_TEST(ConstColumnTest, test_copy_assignment) {
 
     ASSERT_EQ(100, c1->size());
 
-    auto c2 = create_const_column(100, 1);
-    *c2 = *c1;
+    auto c2 = ConstColumn::static_pointer_cast(c1->clone());
 
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column()->use_count() == 1);
+    ASSERT_EQ(1, c2->data_column()->use_count());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
 
     c1->reset_column();
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column()->use_count() == 1);
+    ASSERT_EQ(1, c2->data_column()->use_count());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
@@ -237,7 +236,7 @@ PARALLEL_TEST(ConstColumnTest, test_copy_assignment) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_move_assignment) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -250,7 +249,7 @@ PARALLEL_TEST(ConstColumnTest, test_move_assignment) {
     *c2 = std::move(*c1);
 
     ASSERT_EQ(100, c2->size());
-    ASSERT_TRUE(c2->data_column()->use_count() == 1);
+    ASSERT_EQ(1, c2->data_column()->use_count());
     for (int i = 0; i < 100; i++) {
         ASSERT_EQ(1, c2->get(i).get_int32());
     }
@@ -259,7 +258,7 @@ PARALLEL_TEST(ConstColumnTest, test_move_assignment) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_clone) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -287,7 +286,7 @@ PARALLEL_TEST(ConstColumnTest, test_clone) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_clone_shared) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -316,7 +315,7 @@ PARALLEL_TEST(ConstColumnTest, test_clone_shared) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_clone_empty) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -334,7 +333,7 @@ PARALLEL_TEST(ConstColumnTest, test_clone_empty) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ConstColumnTest, test_replicate) {
     auto create_const_column = [](int32_t value, size_t size) {
-        Int32Column::Ptr c = Int32Column::create();
+        auto c = Int32Column::create();
         c->append_numbers(&value, sizeof(value));
         return ConstColumn::create(c, size);
     };
@@ -344,10 +343,10 @@ PARALLEL_TEST(ConstColumnTest, test_replicate) {
     ASSERT_EQ(3, c1->size());
 
     Offsets offsets;
-    offsets.push_back(0);
-    offsets.push_back(2);
-    offsets.push_back(5);
-    offsets.push_back(7);
+    offsets.emplace_back(0);
+    offsets.emplace_back(2);
+    offsets.emplace_back(5);
+    offsets.emplace_back(7);
 
     auto c2 = c1->replicate(offsets).value();
 
@@ -358,7 +357,7 @@ PARALLEL_TEST(ConstColumnTest, test_replicate) {
 PARALLEL_TEST(ConstColumnTest, test_reference_memory_usage) {
     {
         auto create_int_const_column = [](int32_t value, size_t size) {
-            Int32Column::Ptr c = Int32Column::create();
+            auto c = Int32Column::create();
             c->append_numbers(&value, sizeof(value));
             return ConstColumn::create(c, size);
         };
@@ -368,7 +367,7 @@ PARALLEL_TEST(ConstColumnTest, test_reference_memory_usage) {
     }
     {
         auto create_json_const_column = [](const std::string& json_str, size_t size) {
-            JsonColumn::Ptr c = JsonColumn::create();
+            auto c = JsonColumn::create();
             auto json_value = JsonValue::parse(json_str).value();
             c->append_datum(&json_value);
             return ConstColumn::create(c, size);

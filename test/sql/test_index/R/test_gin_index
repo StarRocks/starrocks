@@ -1,4 +1,4 @@
--- name: test_gin_index_table
+-- name: test_gin_index_table @native
 create database test_gin_index;
 -- result:
 -- !result

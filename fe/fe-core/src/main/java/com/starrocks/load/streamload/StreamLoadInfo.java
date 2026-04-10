@@ -17,6 +17,7 @@ package com.starrocks.load.streamload;
 import com.google.common.collect.Lists;
 import com.google.re2j.Pattern;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PartitionNames;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.CompressionUtils;
@@ -30,7 +31,6 @@ import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
-import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.ParsingException;
@@ -49,8 +49,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Optional;
-
-import static com.starrocks.server.WarehouseManager.DEFAULT_WAREHOUSE_NAME;
 
 public class StreamLoadInfo {
 
@@ -280,21 +278,19 @@ public class StreamLoadInfo {
     }
 
     public static StreamLoadInfo fromHttpStreamLoadRequest(
-            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params)
+            TUniqueId id, long txnId, Optional<Integer> timeout, StreamLoadKvParams params, CRAcquireContext acquireContext)
             throws StarRocksException {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(id, txnId,
                 params.getFileType().orElse(TFileType.FILE_STREAM),
                 params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
         streamLoadInfo.setOptionalFromStreamLoad(params);
-        String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
 
         // acquire compute resource from warehouse
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseName);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
         streamLoadInfo.setComputeResource(computeResource);
         LOG.info("Acquired compute resource for stream load, warehouse: {}, resource: {}",
-                warehouseName, computeResource);
+                acquireContext.getWarehouseId(), computeResource);
 
         return streamLoadInfo;
     }

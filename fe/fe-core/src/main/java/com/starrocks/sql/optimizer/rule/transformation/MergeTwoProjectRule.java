@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 public class MergeTwoProjectRule extends TransformationRule {
     public MergeTwoProjectRule() {
@@ -65,8 +66,14 @@ public class MergeTwoProjectRule extends TransformationRule {
             }
         }
 
+        // minimum value of limits on projections, but have to exclude unlimited(-1) case
+        long limit = Stream.of(firstProject.getLimit(), secondProject.getLimit())
+                .filter(l -> l >= 0)
+                .min(Long::compare)
+                .orElse(-1L);
+
         OptExpression optExpression = new OptExpression(
-                new LogicalProjectOperator(resultMap, Math.min(firstProject.getLimit(), secondProject.getLimit())));
+                new LogicalProjectOperator(resultMap, limit));
         optExpression.getInputs().addAll(input.getInputs().get(0).getInputs());
         return Lists.newArrayList(optExpression);
     }

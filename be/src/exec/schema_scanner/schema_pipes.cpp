@@ -17,9 +17,9 @@
 #include "exec/schema_scanner.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
+#include "types/datetime_value.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -89,7 +89,7 @@ Status SchemaTablePipes::_fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     auto datum_array = _build_row();
     for (const auto& [slot_id, index] : slot_id_map) {
-        Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
+        auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(slot_id);
         column->append_datum(datum_array[slot_id - 1]);
     }
     return {};

@@ -1,4 +1,4 @@
--- name: test_array_functions @mac
+-- name: test_array_functions @mac @no_arrow_flight_sql
 CREATE TABLE array_test ( 
 pk bigint not null ,
 s_1   Array<String>, 

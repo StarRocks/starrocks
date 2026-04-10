@@ -31,7 +31,7 @@ public class HivePartitionPruneLimitTest extends ConnectorPlanTestBase {
         try {
             connectContext.changeCatalogDb("hive0.partitioned_db");
             connectContext.getSessionVariable().setAllowHiveWithoutPartitionFilter(false);
-            connectContext.getSessionVariable().setScanHivePartitionNumLimit(10);
+            connectContext.getSessionVariable().setScanLakePartitionNumLimit(10);
         } catch (DdlException e) {
             throw new RuntimeException(e);
         }

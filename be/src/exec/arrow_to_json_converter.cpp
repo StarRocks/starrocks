@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <velocypack/Builder.h>
+#include <velocypack/Value.h>
+
 #include <memory>
 #include <string>
 
@@ -23,7 +26,7 @@
 #include "common/statusor.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
+#include "types/json_value.h"
 
 namespace starrocks {
 

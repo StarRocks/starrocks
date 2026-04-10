@@ -25,7 +25,9 @@ add_library(Tools STATIC
 # make sure BE can start without real java runtime
 add_library(mockjvm SHARED mock_jvm.c)
 # define `A` SUNWprivate_1.1 symbol to mockjvm to suppress some warning 
-target_link_options(mockjvm PRIVATE "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/mock_jvm.lds")
+if (NOT APPLE)
+    target_link_options(mockjvm PRIVATE "LINKER:--version-script=${CMAKE_CURRENT_SOURCE_DIR}/mock_jvm.lds")
+endif()
 install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib/)
 install(TARGETS mockjvm
     DESTINATION ${OUTPUT_DIR}/lib/)

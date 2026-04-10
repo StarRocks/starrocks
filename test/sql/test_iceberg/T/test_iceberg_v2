@@ -109,7 +109,7 @@ select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_
 select k1,k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table group by k1,k3 having count(1) > 1;
 
 function: assert_explain_verbose_contains('select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table', '[1, INT, true] | [2, VARCHAR(1073741824), true] | [3, VARCHAR(1073741824), true]')
-function: assert_explain_verbose_contains('select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table', '[11: k1, INT, true] | [12: k2, VARCHAR(1073741824), true] | [13: k3, VARCHAR(1073741824), true]')
-function: assert_explain_verbose_contains('select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table', '[4: k1, INT, true] | [5: k2, VARCHAR(1073741824), true] | [6: k3, VARCHAR(1073741824), true]')
+function: assert_explain_verbose_contains('select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table', '[15: k1, INT, true] | [16: k2, VARCHAR(1073741824), true] | [17: k3, VARCHAR(1073741824), true]')
+function: assert_explain_verbose_contains('select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_orc_partitioned_table', '[6: k1, INT, true] | [7: k2, VARCHAR(1073741824), true] | [8: k3, VARCHAR(1073741824), true]')
 
 drop catalog iceberg_sql_test_${uuid0};

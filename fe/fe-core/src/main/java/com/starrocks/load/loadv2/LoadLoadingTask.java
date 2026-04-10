@@ -44,6 +44,7 @@ import com.starrocks.common.Version;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.ProfileKeyDictionary;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
@@ -141,14 +142,15 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     public void prepare() throws StarRocksException {
-        loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
-                timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
-                brokerDesc, fileGroups, fileStatusList, fileNum);
-        loadPlanner.setPartialUpdateMode(partialUpdateMode);
-        loadPlanner.setMergeConditionStr(mergeConditionStr);
-        loadPlanner.setJsonOptions(jsonOptions);
-        loadPlanner.setComputeResource(computeResource);
-        loadPlanner.plan();
+        try (var scope = context.bindScope()) {
+            loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
+                    timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
+                    brokerDesc, fileGroups, fileStatusList, fileNum, computeResource);
+            loadPlanner.setPartialUpdateMode(partialUpdateMode);
+            loadPlanner.setMergeConditionStr(mergeConditionStr);
+            loadPlanner.setJsonOptions(jsonOptions);
+            loadPlanner.plan();
+        }
     }
 
     public TUniqueId getLoadId() {
@@ -179,18 +181,20 @@ public class LoadLoadingTask extends LoadTask {
     public RuntimeProfile buildTopLevelProfile(boolean isFinished) {
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(getLoadId()));
         summaryProfile.addInfoString(ProfileManager.START_TIME,
-                TimeUtils.longToTimeString(createTimestamp));
+                TimeUtils.longToTimeStringWithTimeZone(createTimestamp, profileZone));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - createTimestamp;
-        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+        summaryProfile.addInfoString(ProfileManager.END_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(currentTimestamp, profileZone));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");
         summaryProfile.addInfoString(ProfileManager.QUERY_STATE, isFinished ? "Finished" : "Running");
-        summaryProfile.addInfoString("StarRocks Version",
+        summaryProfile.addInfoString(ProfileKeyDictionary.STARROCKS_VERSION,
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
@@ -226,7 +230,8 @@ public class LoadLoadingTask extends LoadTask {
             sb.deleteCharAt(sb.length() - 1);
             summaryProfile.addInfoString(ProfileManager.VARIABLES, sb.toString());
 
-            summaryProfile.addInfoString("NonDefaultSessionVariables", variables.getNonDefaultVariablesJson());
+            summaryProfile.addInfoString(ProfileKeyDictionary.NON_DEFAULT_SESSION_VARIABLES,
+                    variables.getNonDefaultVariablesJson());
         }
 
         profile.addChild(summaryProfile);

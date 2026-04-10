@@ -21,10 +21,10 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/macros.h"
+#include "runtime/exec_env_fwd.h"
 
 namespace starrocks {
 class DataSink;
-class ExecEnv;
 class RuntimeProfile;
 class TPlanFragmentExecParams;
 class RuntimeState;
@@ -110,8 +110,10 @@ public:
     static Status append_incremental_scan_ranges(ExecEnv* exec_env, const TExecPlanFragmentParams& request,
                                                  TExecPlanFragmentResult* response);
 
-private:
+    Status prepare_global_state(ExecEnv* exec_env, const TExecPlanFragmentParams& common_request);
     void _fail_cleanup(bool fragment_has_registed);
+
+private:
     uint32_t _calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     uint32_t _calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const;
     int _calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const;

@@ -16,9 +16,9 @@
 
 #include <gtest/gtest.h>
 
+#include "base/testutil/assert.h"
 #include "column/column_helper.h"
 #include "runtime/runtime_state.h"
-#include "testutil/assert.h"
 
 namespace starrocks {
 

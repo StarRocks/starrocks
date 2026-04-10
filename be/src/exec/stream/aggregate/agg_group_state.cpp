@@ -76,6 +76,7 @@ Status AggGroupState::_prepare_mem_state_tables(RuntimeState* state,
     // intermediate agg_state is created when intermediate/detail agg states are not empty.
     if (!intermediate_agg_states.empty()) {
         std::vector<SlotDescriptor*> intermediate_slots;
+        intermediate_slots.reserve(key_size);
         for (int32_t i = 0; i < key_size; i++) {
             intermediate_slots.push_back(_intermediate_tuple_desc->slots()[i]);
         }
@@ -95,6 +96,7 @@ Status AggGroupState::_prepare_mem_state_tables(RuntimeState* state,
             // detail state table schema:
             // group_by_keys + agg_key -> count
             std::vector<SlotDescriptor*> detail_table_slots;
+            detail_table_slots.reserve(key_size);
             for (auto i = 0; i < key_size; i++) {
                 detail_table_slots.push_back(input_slots[i]);
             }
@@ -215,7 +217,7 @@ Status AggGroupState::output_results(size_t chunk_size, const Columns& group_by_
                                      const Buffer<AggDataPtr>& agg_group_data, Columns output_columns) const {
     // TODO: use `batch_finalize_with_selection` to filter count=0 rows.
     for (auto& agg_state : _agg_states) {
-        auto* to = output_columns[agg_state->agg_func_id()].get();
+        auto* to = output_columns[agg_state->agg_func_id()]->as_mutable_raw_ptr();
         StateTable* state_table = nullptr;
         if (!_detail_state_tables.empty() && agg_state->is_detail_agg_state()) {
             state_table = _find_detail_state_table(agg_state);
@@ -265,7 +267,7 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
             SlotId slot_id = 0;
             for (size_t j = 0; j < group_by_columns.size(); j++) {
                 ASSIGN_OR_RETURN(auto replicated_col,
-                                 group_by_columns[j]->as_mutable_ptr()->replicate(replicate_offsets))
+                                 group_by_columns[j]->as_mutable_raw_ptr()->replicate(replicate_offsets))
                 detail_result_chunk->append_column(replicated_col, slot_id++);
             }
             // TODO: take care slot_ids.

@@ -16,22 +16,49 @@
 
 #include <vector>
 
+#include "base/string/string_parser.hpp"
+#include "base/testutil/sync_point.h"
 #include "column/column_access_path.h"
+#include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/config_starlet_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/scan/glm_manager.h"
+#include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/expr_factory.h"
+#include "exprs/jsonpath.h"
+#include "fs/fs.h"
+#include "fs/key_cache.h"
+#include "runtime/current_thread.h"
+#include "runtime/global_dict/fragment_dict_state.h"
 #include "runtime/global_dict/parser.h"
+#include "runtime/service_contexts.h"
+#include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
-#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/runtime_range_pruner.hpp"
-#include "util/starrocks_metrics.h"
+#include "storage/virtual_column_utils.h"
 
 namespace starrocks::connector {
+
+namespace {
+
+lake::TabletManager* lake_tablet_manager(RuntimeState* state) {
+    const auto* query_execution_services = state->query_execution_services();
+    return query_execution_services != nullptr && query_execution_services->lake != nullptr
+                   ? query_execution_services->lake->lake_tablet_manager
+                   : nullptr;
+}
+
+} // namespace
 
 LakeDataSource::LakeDataSource(const LakeDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.internal_scan_range) {}
@@ -106,7 +133,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
     opts.driver_sequence = runtime_membership_filter_eval_context.driver_sequence;
 
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     ScanConjunctsManager& cm = *_conjuncts_manager;
 
     // Parse conjuncts via _conjuncts_manager.
@@ -140,7 +167,12 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
     do {
         RETURN_IF_ERROR(state->check_mem_limit("read chunk from storage"));
-        RETURN_IF_ERROR(_prj_iter->get_next(chunk_ptr));
+        Status status = _prj_iter->get_next(chunk_ptr);
+        // update counter when eof or error
+        if (UNLIKELY(!status.ok())) {
+            update_realtime_counter(chunk_ptr);
+            return status;
+        }
 
         TRY_CATCH_ALLOC_SCOPE_START()
 
@@ -161,7 +193,7 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         if (!_not_push_down_conjuncts.empty()) {
             SCOPED_TIMER(_expr_filter_timer);
             size_t before_rows = chunk_ptr->num_rows();
-            RETURN_IF_ERROR(ExecNode::eval_conjuncts(_not_push_down_conjuncts, chunk_ptr));
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_not_push_down_conjuncts, chunk_ptr));
             size_t after_rows = chunk_ptr->num_rows();
             DCHECK_CHUNK(chunk_ptr);
             COUNTER_UPDATE(_expr_filter_counter, before_rows - after_rows);
@@ -175,15 +207,32 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     int64_t tablet_id = scan_range.tablet_id;
     int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
-    ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(tablet_id, version));
-    _tablet_schema = _tablet.get_schema();
+    auto* tablet_manager = _provider->tablet_manager();
+    ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
+    auto& lake_scan_node = _provider->_t_lake_scan_node;
+    if (lake_scan_node.__isset.schema_key) {
+        const auto& t_schema_key = lake_scan_node.schema_key;
+        TableSchemaKeyPB schema_key_pb;
+        schema_key_pb.set_schema_id(t_schema_key.schema_id);
+        schema_key_pb.set_db_id(t_schema_key.db_id);
+        schema_key_pb.set_table_id(t_schema_key.table_id);
+        ASSIGN_OR_RETURN(_tablet_schema, tablet_manager->table_schema_service()->get_schema_for_scan(
+                                                 schema_key_pb, tablet_id, _runtime_state->query_id(),
+                                                 _runtime_state->fragment_ctx()->fe_addr(), _tablet.metadata()));
+    } else {
+        // no table schema meta indicates FE has not been upgraded to use fast schema evolution v2,
+        // so fallback to the old way to get schema from tablet metadata
+        _tablet_schema = _tablet.get_schema();
+    }
     return Status::OK();
 }
 
 // mapping a slot-column-id to schema-columnid
 Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
-    const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
+    const auto* fragment_dict_state = _runtime_state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    const auto& global_dict_map = fragment_dict_state->query_global_dicts();
     auto global_dict = _obj_pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     const TupleDescriptor* tuple_desc = _runtime_state->desc_tbl().get_tuple_descriptor(thrift_lake_scan_node.tuple_id);
@@ -206,7 +255,7 @@ Status LakeDataSource::init_global_dicts(TabletReaderParams* params) {
 Status LakeDataSource::init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
         int32_t index = _tablet_schema->field_index(col_name);
-        if (index < 0) {
+        if (index < 0 && !is_virtual_column(col_name)) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
             LOG(WARNING) << ss.str();
@@ -282,6 +331,11 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+
+    if (thrift_lake_scan_node.__isset.sorted_by_keys_per_tablet) {
+        _params.sorted_by_keys_per_tablet = thrift_lake_scan_node.sorted_by_keys_per_tablet;
+    }
+
     _params.runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
     _params.lake_io_opts.cache_file_only = _runtime_state->query_options().__isset.enable_cache_select &&
                                            _runtime_state->query_options().enable_cache_select &&
@@ -289,7 +343,19 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
+    if (thrift_lake_scan_node.__isset.enable_prune_column_after_index_filter) {
+        _params.prune_column_after_index_filter = thrift_lake_scan_node.enable_prune_column_after_index_filter;
+    }
+    if (thrift_lake_scan_node.__isset.enable_gin_filter) {
+        _params.enable_gin_filter = thrift_lake_scan_node.enable_gin_filter;
+    }
+
     ASSIGN_OR_RETURN(auto pred_tree, _conjuncts_manager->get_predicate_tree(parser, _predicate_free_pool));
+    _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
+    if (_params.enable_join_runtime_filter_pushdown) {
+        ASSIGN_OR_RETURN(_params.runtime_filter_preds,
+                         _conjuncts_manager->get_runtime_filter_predicates(&_obj_pool, parser));
+    }
     decide_chunk_size(!pred_tree.empty());
     _has_any_predicate = !pred_tree.empty();
 
@@ -348,10 +414,40 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(get_tablet(_scan_range));
+
+    bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
+                      thrift_lake_scan_node.enable_global_late_materialization;
+    if (enable_glm) {
+        int32_t scan_node_id = _provider->_scan_node->id();
+        auto* glm_mgr = runtime_state->query_ctx()->global_late_materialization_ctx_mgr();
+        auto* obj_pool = runtime_state->query_ctx()->object_pool();
+        auto creator = [&]() {
+            auto* ctx = obj_pool->add(new LakeScanLazyMaterializationContext());
+            return ctx;
+        };
+        auto* glm_ctx = (LakeScanLazyMaterializationContext*)glm_mgr->get_or_create_ctx(scan_node_id, creator);
+        glm_ctx->set_scan_node(thrift_lake_scan_node);
+        int64_t version = strtoul(_scan_range.version.c_str(), nullptr, 10);
+        glm_ctx->capture_rowsets(_scan_range.tablet_id, version, _morsel->rowsets());
+    }
+
     RETURN_IF_ERROR(_extend_schema_by_access_paths());
+    ASSIGN_OR_RETURN(_tablet_schema, extend_schema_by_virtual_columns(_tablet_schema, *_slots));
     RETURN_IF_ERROR(init_global_dicts(&_params));
     RETURN_IF_ERROR(init_unused_output_columns(thrift_lake_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges));
+
+    // Setup SST warmup callback for CACHE SELECT on PK tables
+    if (_params.lake_io_opts.cache_file_only && _slots != nullptr &&
+        has_all_pk_columns_selected(_tablet_schema.get(), *_slots)) {
+        auto metadata = _tablet.metadata();
+        auto* tablet_mgr = _provider->tablet_manager();
+        _params.lake_io_opts.sst_warmup_done = std::make_shared<std::atomic<bool>>(false);
+        _params.lake_io_opts.sst_warmup_fn = [metadata, tablet_mgr]() -> Status {
+            return warmup_pk_index_sst_files(metadata.get(), tablet_mgr);
+        };
+    }
+
     RETURN_IF_ERROR(init_scanner_columns(scanner_columns, reader_columns));
 
     if (_split_context != nullptr) {
@@ -411,6 +507,103 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+// Inherit default value from JSON parent column for extended subcolumn.
+// This method extracts the default value of a JSON subfield based on the access path
+// and sets it to the column if extraction succeeds.
+void LakeDataSource::_inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
+                                                      const ColumnAccessPath* path) {
+    if (!root_column.has_default_value() || root_column.type() != TYPE_JSON) {
+        return;
+    }
+
+    const std::string& json_default = root_column.default_value();
+    auto json_value_or = JsonValue::parse_json_or_string(Slice(json_default));
+    if (!json_value_or.ok()) {
+        LOG(WARNING) << "Failed to parse JSON default value: " << json_value_or.status();
+        return;
+    }
+
+    // Extract the sub path from linear path, e.g. "profile.level" -> "$.level"
+    const std::string& linear = path->linear_path();
+    const std::string& parent = path->path();
+    std::string json_path_str;
+    if (linear.size() > parent.size() && linear.compare(0, parent.size(), parent) == 0) {
+        // linear = "profile.level", parent = "profile" -> sub = ".level" -> "$level"
+        json_path_str = "$" + linear.substr(parent.size());
+    } else {
+        json_path_str = "$";
+    }
+
+    auto json_path_or = JsonPath::parse(Slice(json_path_str));
+    if (!json_path_or.ok()) {
+        LOG(WARNING) << "Failed to parse JSON path: " << json_path_str;
+        return;
+    }
+
+    vpack::Builder builder;
+    vpack::Slice extracted = JsonPath::extract(&json_value_or.value(), json_path_or.value(), &builder);
+    if (extracted.isNone() || extracted.isNull()) {
+        return;
+    }
+
+    const LogicalType value_type = column->type();
+    std::string default_value_str;
+
+    if (value_type == TYPE_VARCHAR || value_type == TYPE_CHAR) {
+        if (extracted.isString()) {
+            default_value_str = extracted.copyString();
+        } else {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
+        }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (value_type == TYPE_BOOLEAN) {
+        if (extracted.isString()) {
+            vpack::ValueLength len;
+            const char* str = extracted.getStringUnchecked(len);
+            StringParser::ParseResult parse_result;
+            auto as_int = StringParser::string_to_int<int32_t>(str, len, &parse_result);
+            if (parse_result == StringParser::PARSE_SUCCESS) {
+                default_value_str = (as_int != 0) ? "1" : "0";
+            } else {
+                bool b = StringParser::string_to_bool(str, len, &parse_result);
+                if (parse_result != StringParser::PARSE_SUCCESS) {
+                    return;
+                }
+                default_value_str = b ? "1" : "0";
+            }
+        } else if (extracted.isBool()) {
+            default_value_str = extracted.getBool() ? "1" : "0";
+        } else if (extracted.isNumber()) {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            default_value_str = extracted.toJson(&options);
+        } else {
+            return;
+        }
+        column->set_default_value(default_value_str);
+        return;
+    }
+
+    if (extracted.isString()) {
+        default_value_str = extracted.copyString();
+    } else if (extracted.isBool()) {
+        default_value_str = extracted.getBool() ? "1" : "0";
+    } else if (extracted.isNumber()) {
+        vpack::Options options = vpack::Options::Defaults;
+        options.singleLinePrettyPrint = true;
+        default_value_str = extracted.toJson(&options);
+    } else {
+        return;
+    }
+
+    column->set_default_value(default_value_str);
+}
+
 // Extend the schema fields based on the column access paths.
 // This ensures that only the necessary subfields required by the query are retained in the schema.
 Status LakeDataSource::_extend_schema_by_access_paths() {
@@ -422,7 +615,7 @@ Status LakeDataSource::_extend_schema_by_access_paths() {
     }
 
     TabletSchemaSPtr tmp_schema = TabletSchema::copy(*_tablet_schema);
-    int field_number = tmp_schema->num_columns();
+    int field_number = _provider->next_uniq_id();
     for (auto& path : access_paths) {
         if (!path->is_extended()) {
             continue;
@@ -439,6 +632,10 @@ Status LakeDataSource::_extend_schema_by_access_paths() {
         column.set_is_nullable(true);
         int32_t root_uid = _tablet_schema->column(static_cast<size_t>(root_column_index)).unique_id();
         column.set_extended_info(std::make_unique<ExtendedColumnInfo>(path.get(), root_uid));
+
+        // Inherit default value from parent column if exists
+        const auto& root_column = _tablet_schema->column(static_cast<size_t>(root_column_index));
+        _inherit_default_value_from_json(&column, root_column, path.get());
 
         // For UNIQUE/AGG tables, extended flat JSON subcolumns behave like value columns
         // and must carry a valid aggregation for pre-aggregation. Use REPLACE.
@@ -538,7 +735,7 @@ Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
             }
         }
 
-        field->set_sub_fields(std::move(new_fields));
+        field->set_sub_fields(new_fields);
     }
     return Status::OK();
 }
@@ -568,11 +765,87 @@ Status LakeDataSource::prune_schema_by_access_paths(Schema* schema) {
     return Status::OK();
 }
 
+bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>& slots) {
+    if (tablet_schema == nullptr) {
+        return false;
+    }
+    if (tablet_schema->keys_type() != KeysType::PRIMARY_KEYS) {
+        return false;
+    }
+    size_t num_key_columns = tablet_schema->num_key_columns();
+    if (num_key_columns == 0) {
+        return false;
+    }
+    std::unordered_set<std::string_view> slot_names;
+    slot_names.reserve(slots.size());
+    for (const auto* slot : slots) {
+        slot_names.emplace(slot->col_name());
+    }
+    for (size_t i = 0; i < num_key_columns; i++) {
+        if (!slot_names.contains(tablet_schema->column(i).name())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletManager* tablet_mgr) {
+#ifndef USE_STAROS
+    return Status::OK();
+#else
+    if (metadata == nullptr) {
+        return Status::OK();
+    }
+
+    // Check if the table is a PK table with cloud-native persistent index
+    if (!metadata->enable_persistent_index() ||
+        metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return Status::OK();
+    }
+
+    if (!metadata->has_sstable_meta() || metadata->sstable_meta().sstables_size() == 0) {
+        return Status::OK();
+    }
+
+    int64_t tablet_id = metadata->id();
+    size_t buf_size = config::starlet_fs_stream_buffer_size_bytes;
+    if (buf_size <= 0) {
+        buf_size = 1048576; // 1MB
+    }
+
+    const auto& sstable_meta = metadata->sstable_meta();
+    VLOG(2) << "Warmup PK index SST files: tablet_id=" << tablet_id << " sst_count=" << sstable_meta.sstables_size();
+    for (const auto& sstable_pb : sstable_meta.sstables()) {
+        std::string sst_path = tablet_mgr->sst_location(tablet_id, sstable_pb.filename());
+        RandomAccessFileOptions opts;
+        if (!sstable_pb.encryption_meta().empty()) {
+            ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(sstable_pb.encryption_meta()));
+            opts.encryption_info = std::move(info);
+        }
+        ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, sst_path));
+        int64_t file_size = sstable_pb.filesize();
+        if (file_size <= 0) {
+            ASSIGN_OR_RETURN(file_size, rf->get_size());
+        }
+        for (int64_t offset = 0; offset < file_size;) {
+            int64_t cur_size = std::min(static_cast<int64_t>(buf_size), file_size - offset);
+            RETURN_IF_ERROR(rf->touch_cache(offset, cur_size));
+            offset += cur_size;
+        }
+    }
+
+    return Status::OK();
+#endif // USE_STAROS
+}
+
 Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager->get_key_ranges(&_key_ranges));
     _conjuncts_manager->get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
+    auto* fragment_dict_state = state->fragment_dict_state();
+    DCHECK(fragment_dict_state != nullptr);
+    RETURN_IF_ERROR(
+            fragment_dict_state->mutable_dict_optimize_parser()->rewrite_conjuncts(state, &_not_push_down_conjuncts));
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();
@@ -616,6 +889,10 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
+    _seg_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentMetadataFilterRows", TUnit::UNIT, segment_init_name);
+    _segs_metadata_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentsMetadataFiltered", TUnit::UNIT, segment_init_name);
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, segment_init_name);
     _zm_filtered_counter =
@@ -631,6 +908,19 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
 
+    const std::string gin_filter_name = "GinFilter";
+    _gin_filtered_timer = ADD_CHILD_TIMER(_runtime_profile, gin_filter_name, segment_init_name);
+    _gin_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinFilterRows", TUnit::UNIT, gin_filter_name);
+    _gin_prefix_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinPrefixFilter", gin_filter_name);
+    _gin_ngram_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinNgramDictFilter", gin_filter_name);
+    _gin_predicate_dict_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "GinDictFilter", gin_filter_name);
+    _gin_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_counter = ADD_CHILD_COUNTER(_runtime_profile, "GinNGramDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_ngram_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinNGramFilteredDictNum", TUnit::UNIT, gin_filter_name);
+    _gin_predicate_dict_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "GinPredicateFilteredDictNum", TUnit::UNIT, gin_filter_name);
+
     // SegmentRead
     const std::string segment_read_name = "SegmentRead";
     _block_load_timer = ADD_TIMER(_runtime_profile, segment_read_name);
@@ -640,6 +930,9 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _block_seek_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockSeekCount", TUnit::UNIT, segment_read_name);
     _pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "PredFilter", segment_read_name);
     _pred_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT, segment_read_name);
+    _rf_pred_filter_timer = ADD_TIMER(_runtime_profile, "RuntimeFilterEvalTime");
+    _rf_pred_input_rows = ADD_COUNTER(_runtime_profile, "RuntimeFilterInputRows", TUnit::UNIT);
+    _rf_pred_output_rows = ADD_COUNTER(_runtime_profile, "RuntimeFilterOutputRows", TUnit::UNIT);
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "DelVecFilterRows", TUnit::UNIT, segment_read_name);
     _chunk_copy_timer = ADD_CHILD_TIMER(_runtime_profile, "ChunkCopy", segment_read_name);
     _decompress_timer = ADD_CHILD_TIMER(_runtime_profile, "DecompressT", segment_read_name);
@@ -647,9 +940,6 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _segments_read_count = ADD_CHILD_COUNTER(_runtime_profile, "SegmentsReadCount", TUnit::UNIT, segment_read_name);
     _total_columns_data_page_count =
             ADD_CHILD_COUNTER(_runtime_profile, "TotalColumnsDataPageCount", TUnit::UNIT, segment_read_name);
-    _record_predicate_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "RecPredFilter", segment_read_name);
-    _record_predicate_filter_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "RecPredFilterRows", TUnit::UNIT, segment_read_name);
 
     // IO statistics
     // IOTime
@@ -730,16 +1020,20 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     cond_evaluate_ns += _reader->stats().vec_cond_evaluate_ns;
     cond_evaluate_ns += _reader->stats().branchless_cond_evaluate_ns;
     cond_evaluate_ns += _reader->stats().expr_cond_evaluate_ns;
+
     // In order to avoid exposing too detailed metrics, we still record these infos on `_pred_filter_timer`
     // When we support metric classification, we can disassemble it again.
+    COUNTER_UPDATE(_rf_pred_filter_timer, _reader->stats().rf_cond_evaluate_ns);
+    COUNTER_UPDATE(_rf_pred_input_rows, _reader->stats().rf_cond_input_rows);
+    COUNTER_UPDATE(_rf_pred_output_rows, _reader->stats().rf_cond_output_rows);
+
     COUNTER_UPDATE(_pred_filter_timer, cond_evaluate_ns);
     COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
 
-    COUNTER_UPDATE(_record_predicate_filter_timer, _reader->stats().record_predicate_evaluate_ns);
-    COUNTER_UPDATE(_record_predicate_filter_counter, _reader->stats().rows_record_predicate_filtered);
-
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
+    COUNTER_UPDATE(_seg_metadata_filtered_counter, _reader->stats().segment_metadata_filtered);
+    COUNTER_UPDATE(_segs_metadata_filtered_counter, _reader->stats().segments_metadata_filtered);
     COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
@@ -750,6 +1044,16 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);
     COUNTER_UPDATE(_bi_filter_timer, _reader->stats().bitmap_index_filter_timer);
     COUNTER_UPDATE(_block_seek_counter, _reader->stats().block_seek_num);
+
+    COUNTER_UPDATE(_gin_filtered_timer, _reader->stats().gin_index_filter_ns);
+    COUNTER_UPDATE(_gin_filtered_counter, _reader->stats().rows_gin_filtered);
+    COUNTER_UPDATE(_gin_prefix_filter_timer, _reader->stats().gin_prefix_filter_ns);
+    COUNTER_UPDATE(_gin_ngram_dict_filter_timer, _reader->stats().gin_ngram_filter_dict_ns);
+    COUNTER_UPDATE(_gin_predicate_dict_filter_timer, _reader->stats().gin_predicate_filter_dict_ns);
+    COUNTER_UPDATE(_gin_dict_counter, _reader->stats().gin_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_counter, _reader->stats().gin_ngram_dict_count);
+    COUNTER_UPDATE(_gin_ngram_dict_filtered_counter, _reader->stats().gin_ngram_dict_filtered);
+    COUNTER_UPDATE(_gin_predicate_dict_filtered_counter, _reader->stats().gin_predicate_dict_filtered);
 
     COUNTER_UPDATE(_rowsets_read_count, _reader->stats().rowsets_read_count);
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
@@ -909,11 +1213,15 @@ DataSourcePtr LakeDataSourceProvider::create_data_source(const TScanRange& scan_
 }
 
 Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
+    if (_tablet_manager == nullptr) {
+        _tablet_manager = lake_tablet_manager(state);
+    }
+    RETURN_IF(_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     if (_t_lake_scan_node.__isset.bucket_exprs) {
         const auto& bucket_exprs = _t_lake_scan_node.bucket_exprs;
         _partition_exprs.resize(bucket_exprs.size());
         for (int i = 0; i < bucket_exprs.size(); ++i) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(pool, bucket_exprs[i], &_partition_exprs[i], state));
         }
     }
     return Status::OK();
@@ -944,19 +1252,20 @@ StatusOr<pipeline::MorselQueuePtr> LakeDataSourceProvider::convert_scan_range_to
         }
     }
 
-    return DataSourceProvider::convert_scan_range_to_morsel_queue(
-            scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
-            num_total_scan_ranges, (size_t)lake_scan_parallelism);
+    ASSIGN_OR_RETURN(auto morsel_queue,
+                     DataSourceProvider::convert_scan_range_to_morsel_queue(
+                             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel,
+                             tablet_internal_parallel_mode, num_total_scan_ranges, (size_t)lake_scan_parallelism));
+    if (_could_split) {
+        morsel_queue->set_has_more_from_split(true);
+    }
+    return morsel_queue;
 }
 
 StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_parallelism,
         int64_t* splitted_scan_rows) const {
-    //if (_t_lake_scan_node.use_pk_index) {
-    //    return false;
-    //}
-
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
     if (!force_split && num_total_scan_ranges >= pipeline_dop) {
@@ -973,7 +1282,7 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
 #else
         ASSIGN_OR_RETURN(auto tablet_num_rows,
-                         ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_num_rows(
+                         _tablet_manager->get_tablet_num_rows(
                                  tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
 #endif
@@ -993,6 +1302,12 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
 
     bool could =
             *scan_parallelism >= pipeline_dop || *scan_parallelism >= config::tablet_internal_parallel_min_scan_dop;
+    // if don't use tablet internal parallel scan, we choose the number of tablets as the dop of scan node
+    // which is the same as olap scan
+    if (!could) {
+        *scan_parallelism = scan_ranges.size();
+    }
+
     return could;
 }
 
@@ -1007,9 +1322,9 @@ StatusOr<bool> LakeDataSourceProvider::_could_split_tablet_physically(
             _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
     keys_type = first_tablet_schema->keys_type();
 #else
-    ASSIGN_OR_RETURN(auto first_tablet_schema,
-                     ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet_schema(
-                             scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
+    ASSIGN_OR_RETURN(
+            auto first_tablet_schema,
+            _tablet_manager->get_tablet_schema(scan_ranges[0].scan_range.internal_scan_range.tablet_id, &version));
     keys_type = first_tablet_schema->keys_type();
 #endif
 

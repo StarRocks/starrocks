@@ -129,7 +129,7 @@ Release date: January 21, 2022
 ### Improvements
 
 - Hive's implicit_cast operations can be read when StarRocks uses external tables to query Hive data. [#2829](https://github.com/StarRocks/starrocks/pull/2829)
-- The read/write lock is used to fix high CPU usage when StarRocks CBO collects statistics to support high-concurrency queries. [#2901](https://github.com/StarRocks/starrocks/pull/2901)
+- The read/write lock is used to fix high CPU usage when StarRocks CBO collects statistics to support high concurrency queries. [#2901](https://github.com/StarRocks/starrocks/pull/2901)
 - CBO statistics gathering and UNION operator are optimized.
 
 ### Bug Fixes

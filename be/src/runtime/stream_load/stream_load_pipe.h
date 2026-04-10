@@ -37,13 +37,14 @@
 #include <condition_variable>
 #include <deque>
 #include <mutex>
+#include <utility>
 
+#include "base/bit/bit_util.h"
 #include "gen_cpp/Types_types.h"
-#include "io/input_stream.h"
+#include "io/core/input_stream.h"
 #include "runtime/message_body_sink.h"
-#include "util/bit_util.h"
 #include "util/byte_buffer.h"
-#include "util/compression/stream_compression.h"
+#include "util/compression/stream_decompressor.h"
 
 namespace starrocks {
 
@@ -140,8 +141,8 @@ private:
 
 class StreamLoadPipeReader {
 public:
-    StreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe) : _pipe(pipe) {}
-    virtual ~StreamLoadPipeReader() {}
+    StreamLoadPipeReader(std::shared_ptr<StreamLoadPipe> pipe) : _pipe(std::move(pipe)) {}
+    virtual ~StreamLoadPipeReader() = default;
     virtual StatusOr<ByteBufferPtr> read() { return _pipe->read(); }
 
 private:
@@ -159,7 +160,7 @@ private:
     const size_t MAX_DECOMPRESS_BUFFER_SIZE = 128 * 1024 * 1024;
     TCompressionType::type _compression_type;
     ByteBufferPtr _decompressed_buffer;
-    std::unique_ptr<StreamCompression> _decompressor;
+    std::unique_ptr<StreamDecompressor> _decompressor;
 };
 
 // TODO: Make `StreamLoadPipe` as a derived class of `io::InputStream`.

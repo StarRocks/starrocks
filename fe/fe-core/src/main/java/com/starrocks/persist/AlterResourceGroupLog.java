@@ -31,8 +31,14 @@ public class AlterResourceGroupLog implements Writable {
     @SerializedName(value = "cpuCoreLimit")
     private Integer cpuWeight;
 
+    @SerializedName(value = "cpuWeightPercent")
+    private Integer cpuWeightPercent;
+
     @SerializedName(value = "exclusiveCpuCores")
     private Integer exclusiveCpuCores;
+
+    @SerializedName(value = "exclusiveCpuPercent")
+    private Integer exclusiveCpuPercent;
 
     @SerializedName(value = "maxCpuCores")
     private Integer maxCpuCores;
@@ -64,6 +70,9 @@ public class AlterResourceGroupLog implements Writable {
     @SerializedName(value = "version")
     private long version;
 
+    @SerializedName(value = "warehouses")
+    private List<String> warehouses;
+
     public List<ResourceGroupClassifier> getClassifiers() {
         return classifiers;
     }
@@ -88,12 +97,28 @@ public class AlterResourceGroupLog implements Writable {
         this.cpuWeight = cpuWeight;
     }
 
+    public Integer getCpuWeightPercent() {
+        return cpuWeightPercent;
+    }
+
+    public void setCpuWeightPercent(Integer cpuWeightPercent) {
+        this.cpuWeightPercent = cpuWeightPercent;
+    }
+
     public Integer getExclusiveCpuCores() {
         return exclusiveCpuCores;
     }
 
     public void setExclusiveCpuCores(Integer exclusiveCpuCores) {
         this.exclusiveCpuCores = exclusiveCpuCores;
+    }
+
+    public Integer getExclusiveCpuPercent() {
+        return exclusiveCpuPercent;
+    }
+
+    public void setExclusiveCpuPercent(Integer exclusiveCpuPercent) {
+        this.exclusiveCpuPercent = exclusiveCpuPercent;
     }
 
     public Integer getMaxCpuCores() {
@@ -174,5 +199,13 @@ public class AlterResourceGroupLog implements Writable {
 
     public void setVersion(long version) {
         this.version = version;
+    }
+
+    public List<String> getWarehouses() {
+        return warehouses;
+    }
+
+    public void setWarehouses(List<String> warehouses) {
+        this.warehouses = warehouses;
     }
 }

@@ -19,7 +19,8 @@ from alembic.autogenerate import api
 from alembic.operations import Operations
 from alembic.operations.ops import AlterTableOp, ModifyTableOps
 from alembic.runtime.migration import MigrationContext
-from sqlalchemy import Column, Engine, MetaData, Table, text
+from sqlalchemy import Column, MetaData, Table, text
+from sqlalchemy.engine import Engine
 
 from starrocks.alembic.compare import include_object_for_view_mv
 from starrocks.alembic.ops import AlterViewOp, CreateViewOp, DropViewOp

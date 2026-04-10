@@ -76,6 +76,7 @@ StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(
     std::unique_ptr<TabletReader> res;
     if (!base_rowsets.empty()) {
         std::vector<std::shared_ptr<Rowset>> rowsets;
+        rowsets.reserve(base_rowsets.size());
         for (auto& rowset : base_rowsets) {
             rowsets.emplace_back(std::dynamic_pointer_cast<Rowset>(rowset));
         }
@@ -146,7 +147,6 @@ TabletBasicInfo VersionedTablet::get_basic_info() const {
                 index_disk_usage += sst.filesize();
             }
             info.index_disk_usage = index_disk_usage;
-            info.data_size += index_disk_usage;
         }
     }
 

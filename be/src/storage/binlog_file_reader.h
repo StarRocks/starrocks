@@ -152,12 +152,12 @@ private:
     std::string _file_path;
     std::shared_ptr<BinlogFileMetaPB> _file_meta;
     std::unique_ptr<RandomAccessFile> _file;
-    int64_t _file_size;
-    int64_t _current_file_pos;
+    int64_t _file_size{0};
+    int64_t _current_file_pos{0};
     std::unique_ptr<BinlogFileHeaderPB> _file_header;
 
     // the index of next page to read
-    int64_t _next_page_index;
+    int64_t _next_page_index{0};
     std::unique_ptr<LogEntryInfo> _current_log_entry;
     std::unique_ptr<PageContext> _current_page_context;
 };

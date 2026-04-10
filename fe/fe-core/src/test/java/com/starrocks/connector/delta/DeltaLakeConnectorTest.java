@@ -81,7 +81,7 @@ public class DeltaLakeConnectorTest {
         CatalogConnector catalogConnector = ConnectorFactory.createConnector(
                 new ConnectorContext("delta0", "deltalake", properties), false);
         Assertions.assertTrue(catalogConnector.supportMemoryTrack());
-        Assertions.assertEquals(0, catalogConnector.estimateSize());
+        Assertions.assertEquals(840, catalogConnector.estimateSize());
         Assertions.assertEquals(4, catalogConnector.estimateCount().size());
     }
 

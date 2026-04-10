@@ -77,6 +77,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         executor = new StmtExecutor(ctx, parsedStmt);
         ctx.setExecutor(executor);
 
+        // http sql doesn't support multi stmt
         ctx.setIsLastStmt(true);
 
         //  for http protocal, if current FE can't read, just let client talk with leader
@@ -131,6 +132,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
     public void processOnce() throws IOException {
         // set status of query to OK.
         ctx.getState().reset();
+        ctx.setMultiStmt(false);
         executor = null;
 
         // only handle query，so no need to dispatch

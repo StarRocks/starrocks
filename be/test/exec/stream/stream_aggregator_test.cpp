@@ -92,7 +92,8 @@ public:
     }
 
     void SetUp() override {
-        _runtime_state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        _runtime_state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         _runtime_profile = _runtime_state->runtime_profile();
         _mem_tracker = std::make_unique<MemTracker>();
     }
@@ -160,7 +161,7 @@ public:
 };
 
 TEST_F(CountStreamAggregateTest, TestNoRetracts_NoGenerateRetracts) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     // 0: StreamRowOp::INSERT,
@@ -181,7 +182,7 @@ TEST_F(CountStreamAggregateTest, TestNoRetracts_NoGenerateRetracts) {
 }
 
 TEST_F(CountStreamAggregateTest, TestWithRetracts_NoGenerateRetracts) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     // 0: StreamRowOp::INSERT,
@@ -204,7 +205,7 @@ TEST_F(CountStreamAggregateTest, TestWithRetracts_NoGenerateRetracts) {
 }
 
 TEST_F(CountStreamAggregateTest, TestNoRetracts_MultiRuns) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     // 0: StreamRowOp::INSERT,
@@ -268,7 +269,7 @@ TEST_F(CountStreamAggregateTest, TestNoRetracts_MultiRuns) {
 }
 
 TEST_F(CountStreamAggregateTestWithGenerateRetracts, TestWithRetracts_GenerateRetracts) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     // 0: StreamRowOp::INSERT,
@@ -290,7 +291,7 @@ TEST_F(CountStreamAggregateTestWithGenerateRetracts, TestWithRetracts_GenerateRe
 }
 
 TEST_F(CountStreamAggregateTestWithGenerateRetracts, TestWithRetracts_MultiRuns) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     // 0: StreamRowOp::INSERT,
@@ -400,7 +401,7 @@ public:
 };
 
 TEST_F(SumAvgStreamAggregateTestWithoutRetract, TestNoRetracts_OneRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     auto result_chunk_ptr = std::make_shared<StreamChunk>();
@@ -428,7 +429,7 @@ TEST_F(SumAvgStreamAggregateTestWithoutRetract, TestNoRetracts_OneRun) {
 }
 
 TEST_F(SumAvgStreamAggregateTestWithoutRetract, TestNoRetracts_MultiRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
     // Run 1
     auto result_chunk_ptr = std::make_shared<StreamChunk>();
@@ -536,7 +537,7 @@ public:
 };
 
 TEST_F(MinMaxCountStreamAggregateTestWithoutRetract, TestNoRetracts_OneRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     RunBatchAndCheck(1, StreamRowData<int64_t>{{{1, 2, 1}, {1, 2, 2}}, {0, 0, 0}},
@@ -545,7 +546,7 @@ TEST_F(MinMaxCountStreamAggregateTestWithoutRetract, TestNoRetracts_OneRun) {
 }
 
 TEST_F(MinMaxCountStreamAggregateTestWithoutRetract, TestNoRetracts_MultiRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
     // Run 1
     RunBatchAndCheck(1, StreamRowData<int64_t>{{{1, 2, 1}, {1, 2, 2}}, {0, 0, 0}},
@@ -565,7 +566,7 @@ public:
 };
 
 TEST_F(MinMaxCountStreamAggregateTestWithRetract, TestWihRetracts_OneRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     RunBatchAndCheck(1, StreamRowData<int64_t>{{{1, 2, 1}, {1, 2, 1}}, {0, 0, 1}},
@@ -574,7 +575,7 @@ TEST_F(MinMaxCountStreamAggregateTestWithRetract, TestWihRetracts_OneRun) {
 }
 
 TEST_F(MinMaxCountStreamAggregateTestWithRetract, TestWihRetracts_MultiRun1) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
     // Run 1
     // Input:
@@ -618,7 +619,7 @@ TEST_F(MinMaxCountStreamAggregateTestWithRetract, TestWihRetracts_MultiRun1) {
 }
 
 TEST_F(MinMaxCountStreamAggregateTestWithRetract, TestWihRetracts_MultiRun2) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     // key <-> min <-> max <-> count
@@ -717,7 +718,7 @@ public:
 };
 
 TEST_F(AllStreamAggregateFunctionsTestWithoutRetract, TestNoRetracts_OneRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     auto result_chunk_ptr = std::make_shared<StreamChunk>();
@@ -748,7 +749,7 @@ TEST_F(AllStreamAggregateFunctionsTestWithoutRetract, TestNoRetracts_OneRun) {
 }
 
 TEST_F(AllStreamAggregateFunctionsTestWithoutRetract, TestNoRetracts_MultiRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
     auto result_chunk_ptr = std::make_shared<StreamChunk>();
     auto intermediate_chunk_ptr = std::make_shared<Chunk>();
@@ -876,7 +877,7 @@ public:
 };
 
 TEST_F(AllStreamAggregateFunctionsTestWithoutRetractWithString, TestNoRetracts_OneRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     auto result_chunk_ptr = std::make_shared<StreamChunk>();
@@ -902,7 +903,7 @@ TEST_F(AllStreamAggregateFunctionsTestWithoutRetractWithString, TestNoRetracts_O
 }
 
 TEST_F(AllStreamAggregateFunctionsTestWithoutRetractWithString, TestNoRetracts_MultiRun) {
-    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, &_obj_pool, _runtime_profile));
+    DCHECK_IF_ERROR(_stream_aggregator->prepare(_runtime_state, _runtime_profile));
     DCHECK_IF_ERROR(_stream_aggregator->open(_runtime_state));
 
     // NOTE: binary/slice is not copied into datum, need this vector to track all chunk of state' life .

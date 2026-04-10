@@ -18,7 +18,7 @@
 
 #include <filesystem>
 
-#include "testutil/parallel_test.h"
+#include "base/testutil/parallel_test.h"
 
 namespace starrocks::parquet {
 class ParquetCLIReaderTest : public testing::Test {

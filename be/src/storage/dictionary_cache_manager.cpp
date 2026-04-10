@@ -57,7 +57,7 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
     std::vector<SlotId> key_slot_ids;
     std::vector<SlotId> value_slot_ids;
     for (int i = 0; i < schema->tuple_desc()->slots().size(); ++i) {
-        const string& name = schema->tuple_desc()->slots()[i]->col_name();
+        const auto name = schema->tuple_desc()->slots()[i]->col_name();
         col_names.emplace_back(name.data(), name.size());
 
         if (i < request->key_size()) {
@@ -96,7 +96,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
             ori_key_column = ColumnHelper::unpack_and_duplicate_const_column(ori_key_column->size(), ori_key_column);
         }
         if (ori_key_column->is_nullable()) {
-            ori_key_column = ColumnHelper::update_column_nullable(false, ori_key_column, ori_key_column->size());
+            ori_key_column =
+                    ColumnHelper::update_column_nullable(false, std::move(ori_key_column), ori_key_column->size());
         }
         key_chunk->get_column_by_index(i).swap(ori_key_column);
     }
@@ -108,7 +109,8 @@ Status DictionaryCacheManager::refresh(const PProcessDictionaryCacheRequest* req
                     ColumnHelper::unpack_and_duplicate_const_column(ori_value_column->size(), ori_value_column);
         }
         if (ori_value_column->is_nullable()) {
-            ori_value_column = ColumnHelper::update_column_nullable(false, ori_value_column, ori_value_column->size());
+            ori_value_column =
+                    ColumnHelper::update_column_nullable(false, std::move(ori_value_column), ori_value_column->size());
         }
         value_chunk->get_column_by_index(i).swap(ori_value_column);
     }

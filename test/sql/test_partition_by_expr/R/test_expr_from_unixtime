@@ -98,7 +98,7 @@ START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
 -- result:
 E: (1064, 'Getting analyzing error from line 7, column 19 to line 7, column 44. Detail message: Unsupported partition expression from_unixtime for column create_time type VARCHAR(100).')
 -- !result
--- name: test_partition_by_expr_unixtime_ms
+-- name: test_partition_by_expr_unixtime_ms @native
 CREATE TABLE partition_unixtime_ms (
         create_time bigint,
         sku_id varchar(100),

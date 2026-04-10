@@ -108,11 +108,14 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
 
     // still choose two stage agg even it's a high cardinality scene to cover bad case when statistics is uncorrect
     @Test
-    public void testAggWithHighCardinality(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
-        new Expectations() {
-            {
-                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
-                result = ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
+    public void testAggWithHighCardinality() throws Exception {
+        new MockUp<MockTpchStatisticStorage>() {
+            @Mock
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                if (columns.size() == 1 && columns.contains("v2")) {
+                    return ImmutableList.of(new ColumnStatistic(0.0, 100, 0.0, 10, 7000));
+                }
+                return List.of();
             }
         };
 
@@ -849,7 +852,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
                 .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
-                        .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
+                        .getLatestBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         ArrayList<String> plans = new ArrayList<>();
         /// ===== union =====
@@ -1019,7 +1022,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
         List<String> tabletIdsStrList = new ArrayList<>();
         tables.forEach(olapTable -> tabletIdsStrList.add(Joiner.on(",")
                 .join(olapTable.getPartition(olapTable.getAllPartitionIds().get(0)).getDefaultPhysicalPartition()
-                        .getBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
+                        .getLatestBaseIndex().getTablets().stream().map(t -> t.getId()).collect(Collectors.toList()))));
 
         setTableStatistics(t1, 400000);
         setTableStatistics(t2, 100);
@@ -1687,6 +1690,19 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
                     "  2:EXCHANGE");
+
+            // case 10: SELECT DISTINCT should preserve withLocalShuffle in single-phase agg
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "SELECT DISTINCT v2 FROM colocate_t0";
+            execPlan = getExecPlan(sql);
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            
+            assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
             connectContext.getSessionVariable().setEnableEliminateAgg(prevEliminateAgg);

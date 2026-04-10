@@ -15,15 +15,16 @@
 # limitations under the License.
 
 import argparse
-import pyarrow as pa
-import pyarrow.flight as flight
-import pyarrow
+import base64
+import json
+import os
 import sys
 import time
-import json
-import base64
 import zipimport
 import ast
+
+import pyarrow as pa
+import pyarrow.flight as flight
 
 class CallStub(object):
     def __init__(self, symbol, output_type, location, content):
@@ -148,8 +149,13 @@ def main(unix_socket_path):
     sys.stdout.flush()
     server.wait()
 
+def build_socket_url(prefix):
+    pid = os.getpid()
+    return prefix + str(pid)
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run an Arrow Flight echo server over Unix socket.")
     parser.add_argument("unix_socket_path", type=str, help="The path to the Unix socket.")
     args = parser.parse_args()
-    main(args.unix_socket_path)
+    url = build_socket_url(args.unix_socket_path)
+    main(url)

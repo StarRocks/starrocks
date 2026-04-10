@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.CreateUserInfo;
@@ -35,6 +36,7 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.SetUserPropertyVar;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
@@ -66,6 +68,14 @@ public class AuthenticationManagerTest {
     @AfterAll
     public static void teardown() throws Exception {
         UtFrameUtils.tearDownForPersisTest();
+    }
+
+    private List<Pair<String, String>> buildPropertyPairs(SetUserPropertyStmt stmt) {
+        List<Pair<String, String>> properties = new ArrayList<>();
+        for (SetUserPropertyVar property : stmt.getPropertyList()) {
+            properties.add(Pair.create(property.getPropertyKey(), property.getPropertyValue()));
+        }
+        return properties;
     }
 
     @Test
@@ -421,7 +431,7 @@ public class AuthenticationManagerTest {
         // 3. alter user with properties
         sql = "alter user user1 set properties (\"max_user_connections\" = \"200\", \"catalog\" = \"new_catalog\")";
         SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.updateUserProperty(setUserPropertyStmt.getUser(), setUserPropertyStmt.getPropertyPairList());
+        masterManager.updateUserProperty(setUserPropertyStmt.getUser(), buildPropertyPairs(setUserPropertyStmt));
         Assertions.assertEquals(1, userProperty.getSessionVariables().size());
         Assertions.assertEquals(200, userProperty.getMaxConn());
         Assertions.assertEquals(newCatalogName, userProperty.getCatalog());
@@ -511,7 +521,7 @@ public class AuthenticationManagerTest {
         // 3.1 update user property
         sql = "set property for 'test' 'max_user_connections' = '555'";
         SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.updateUserProperty("test", setUserPropertyStmt.getPropertyPairList());
+        masterManager.updateUserProperty("test", buildPropertyPairs(setUserPropertyStmt));
         Assertions.assertEquals(555, masterManager.getMaxConn("test"));
 
         // 4. save image after alter
@@ -775,7 +785,7 @@ public class AuthenticationManagerTest {
         // 2. update user property
         String sql = "set property for 'root' 'max_user_connections' = '555'";
         SetUserPropertyStmt setUserPropertyStmt = (SetUserPropertyStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        masterManager.updateUserProperty("root", setUserPropertyStmt.getPropertyPairList());
+        masterManager.updateUserProperty("root", buildPropertyPairs(setUserPropertyStmt));
         Assertions.assertEquals(555, masterManager.getMaxConn("root"));
 
         // 3. save final image

@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.delta;
 
-import com.starrocks.common.Pair;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -26,7 +25,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -93,12 +91,12 @@ public class DeltaLakeConnector implements Connector {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        return metastore.getSamples();
+    public Map<String, Long> estimateCount() {
+        return metastore.estimateCount();
     }
 
     @Override
-    public Map<String, Long> estimateCount() {
-        return metastore.estimateCount();
+    public long estimateSize() {
+        return metastore.estimateSize();
     }
 }

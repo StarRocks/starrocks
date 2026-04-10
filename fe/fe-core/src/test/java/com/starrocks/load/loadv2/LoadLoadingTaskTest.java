@@ -16,7 +16,6 @@ package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.CatalogIdGenerator;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -27,6 +26,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.GlobalTransactionMgr;

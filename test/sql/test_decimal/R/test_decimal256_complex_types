@@ -1,4 +1,4 @@
--- name: test_decimal256_complex_types
+-- name: test_decimal256_complex_types @no_arrow_flight_sql
 DROP DATABASE IF EXISTS test_decimal256_complex;
 -- result:
 -- !result

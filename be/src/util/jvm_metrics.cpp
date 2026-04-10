@@ -16,11 +16,11 @@
 
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "jni.h"
 #include "udf/java/java_udf.h"
-#include "util/defer_op.h"
 
 #define CHECK_JNI_EXCEPTION(env, message)                                                          \
     if (jthrowable thr = env->ExceptionOccurred(); thr) {                                          \

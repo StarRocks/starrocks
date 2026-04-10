@@ -17,6 +17,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include "common/statusor.h"
 #include "fs/fs.h"
@@ -29,6 +30,7 @@
 
 namespace starrocks {
 class TabletSchema;
+class TableSchemaKeyPB;
 class ThreadPool;
 } // namespace starrocks
 
@@ -59,14 +61,14 @@ public:
                     TabletMetadataPtr tablet_metadata)
             : _mgr(mgr), _id(id) {
         _location_provider = std::move(location_provider);
-        _tablet_metadata = tablet_metadata;
+        _tablet_metadata = std::move(tablet_metadata);
     }
 
     explicit Tablet(TabletManager* mgr, int64_t id, std::shared_ptr<LocationProvider> location_provider,
                     std::shared_ptr<TabletSchema> tablet_schema)
             : _mgr(mgr), _id(id) {
         _location_provider = std::move(location_provider);
-        _tablet_schema = tablet_schema;
+        _tablet_schema = std::move(tablet_schema);
     }
 
     ~Tablet() override = default;
@@ -136,7 +138,17 @@ public:
 
     [[nodiscard]] std::string sst_location(std::string_view sst_name) const;
 
-    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate);
+    // Deletes data from the tablet based on the given delete predicate.
+    //
+    // @param txn_id The transaction ID for this delete operation.
+    // @param delete_predicate The predicate that specifies which rows to delete.
+    // @param schema_key Optional schema key for fast schema evolution v2. The delete predicate is generated
+    //                   based on this schema. When provided, it will be persisted into the transaction log
+    //                   and used during publishing to update the tablet metadata schema if needed.
+    //                   If nullptr, the operation maintains backward compatibility with legacy delete operations.
+    // @return Status::OK() on success, otherwise an error status.
+    Status delete_data(int64_t txn_id, const DeletePredicatePB& delete_predicate,
+                       const TableSchemaKeyPB* schema_key = nullptr);
 
     StatusOr<bool> has_delete_predicates(int64_t version);
 

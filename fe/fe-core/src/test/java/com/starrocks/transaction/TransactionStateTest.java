@@ -22,6 +22,8 @@ import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
@@ -45,7 +47,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -71,6 +75,47 @@ public class TransactionStateTest {
         String json = GsonUtils.GSON.toJson(transactionState);
         TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
         Assertions.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
+    }
+
+    @Test
+    public void testCopyConstructor() {
+        TxnCoordinator coordinator = new TxnCoordinator(TxnSourceType.BE, "127.0.0.1");
+        TransactionState original = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label123", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, coordinator, 50000L, 60 * 1000L);
+
+        Set<Long> errorReplicas = Sets.newHashSet(10001L);
+        original.setErrorReplicas(errorReplicas);
+
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(20000L);
+        PartitionCommitInfo partitionCommitInfo = new PartitionCommitInfo(30000L, 10L, 100L);
+        partitionCommitInfo.setDataVersion(11L);
+        partitionCommitInfo.setVersionEpoch(12L);
+        partitionCommitInfo.setIsDoubleWrite(true);
+        partitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().put(40000L, 123L);
+        tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
+        original.putIdToTableCommitInfo(20000L, tableCommitInfo);
+
+        TransactionState copied = new TransactionState(original);
+        Assertions.assertSame(original.getTableIdList(), copied.getTableIdList());
+        Assertions.assertSame(original.getCoordinator(), copied.getCoordinator());
+        Assertions.assertSame(original.getErrorReplicas(), copied.getErrorReplicas());
+
+        Assertions.assertNotSame(original.getIdToTableCommitInfos(), copied.getIdToTableCommitInfos());
+        TableCommitInfo copiedTableCommitInfo = copied.getTableCommitInfo(20000L);
+        Assertions.assertNotSame(tableCommitInfo, copiedTableCommitInfo);
+        Assertions.assertNotNull(copiedTableCommitInfo);
+
+        PartitionCommitInfo copiedPartitionCommitInfo = copiedTableCommitInfo.getPartitionCommitInfo(30000L);
+        Assertions.assertNotSame(partitionCommitInfo, copiedPartitionCommitInfo);
+        Assertions.assertNotNull(copiedPartitionCommitInfo);
+
+        tableCommitInfo.removePartition(30000L);
+        Assertions.assertNotNull(copiedTableCommitInfo.getPartitionCommitInfo(30000L));
+
+        partitionCommitInfo.setVersion(20L);
+        assertEquals(10L, copiedPartitionCommitInfo.getVersion());
+        assertEquals(Long.valueOf(123L), copiedPartitionCommitInfo.getTabletIdToRowCountForPartitionFirstLoad().get(40000L));
     }
 
     @Test
@@ -259,5 +304,88 @@ public class TransactionStateTest {
         assertEquals(2, ids.size());
         assertEquals(id1, ids.get(0));
         assertEquals(id2, ids.get(1));
+    }
+
+    @Test
+    public void testPartitionLoadedIndexes() {
+        long tableId = 100L;
+        long physicalPartitionId = 200L;
+        long indexMetaId1 = 300L;
+        long indexId11 = 300L;
+        long indexId12 = 301L;
+        long indexMetaId2 = 400L;
+        long indexId21 = 400L;
+        long indexId22 = 401L;
+
+        TransactionState txn = new TransactionState(1000L, Lists.newArrayList(tableId),
+                3000, "label_partition_indexes", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        // Mock PhysicalPartition and MaterializedIndex
+        MaterializedIndex baseIndex1 = new MaterializedIndex(indexId11, indexMetaId1, MaterializedIndex.IndexState.NORMAL, 0L);
+        PhysicalPartition physicalPartition = new PhysicalPartition(physicalPartitionId, physicalPartitionId, baseIndex1);
+        MaterializedIndex rollupIndex1 = new MaterializedIndex(indexId21, indexMetaId2, MaterializedIndex.IndexState.NORMAL, 1L);
+        physicalPartition.createRollupIndex(rollupIndex1);
+
+        // Test fallback (no indexes added yet)
+        List<MaterializedIndex> loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size()); // Should return all indexes by default
+        List<Long> loadedIndexIds = loadedIndexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList());
+        assertTrue(loadedIndexIds.contains(indexId11));
+        assertTrue(loadedIndexIds.contains(indexId21));
+
+        // Multi-version materialized index
+        MaterializedIndex baseIndex2 = new MaterializedIndex(indexId12, indexMetaId1, MaterializedIndex.IndexState.NORMAL, 0L);
+        physicalPartition.addMaterializedIndex(baseIndex2, true);
+        MaterializedIndex rollupIndex2 = new MaterializedIndex(indexId22, indexMetaId2, MaterializedIndex.IndexState.NORMAL, 1L);
+        physicalPartition.addMaterializedIndex(rollupIndex2, false);
+
+        // Test fallback (no indexes added yet)
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size()); // Should return all latest indexes by default
+        loadedIndexIds = loadedIndexes.stream().map(MaterializedIndex::getId).collect(Collectors.toList());
+        assertTrue(loadedIndexIds.contains(indexId12));
+        assertTrue(loadedIndexIds.contains(indexId22));
+
+        // Add 2 specific indexes
+        loadedIndexIds = Lists.newArrayList(indexId11, indexId21);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+
+        // Test retrieval
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId11, loadedIndexes.get(0).getId());
+        assertEquals(indexId21, loadedIndexes.get(1).getId());
+
+        // Add same physicalPartitionId with 2 specific latest indexes failed
+        loadedIndexIds = Lists.newArrayList(indexId12, indexId22);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId11, loadedIndexes.get(0).getId()); // Still indexId11
+        assertEquals(indexId21, loadedIndexes.get(1).getId()); // Still indexId21
+
+        // Clear loadedTblPartitionIndexes
+        Map<Long, Map<Long, List<Long>>> loadedTblPartitionIndexes = Deencapsulation.getField(txn, "loadedTblPartitionIndexes");
+        loadedTblPartitionIndexes.clear();
+
+        // Add 2 specific latest indexes
+        loadedIndexIds = Lists.newArrayList(indexId12, indexId22);
+        txn.addPartitionLoadedIndexes(tableId, physicalPartitionId, loadedIndexIds);
+
+        // Test retrieval
+        loadedIndexes = txn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, loadedIndexes.size());
+        assertEquals(indexId12, loadedIndexes.get(0).getId());
+        assertEquals(indexId22, loadedIndexes.get(1).getId());
+
+        // Test Serialization/Deserialization
+        String json = GsonUtils.GSON.toJson(txn);
+        TransactionState readTxn = GsonUtils.GSON.fromJson(json, TransactionState.class);
+        List<MaterializedIndex> readLoadedIndexes = readTxn.getPartitionLoadedIndexes(tableId, physicalPartition);
+        assertEquals(2, readLoadedIndexes.size());
+        assertEquals(indexId12, readLoadedIndexes.get(0).getId());
+        assertEquals(indexId22, readLoadedIndexes.get(1).getId());
     }
 }

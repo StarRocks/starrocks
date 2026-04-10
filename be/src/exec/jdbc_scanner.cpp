@@ -16,20 +16,23 @@
 
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exprs/cast_expr.h"
 #include "exprs/clone_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
-#include "runtime/types.h"
+#include "exprs/expr_executor.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 #include "types/type_checker_manager.h"
+#include "types/type_descriptor.h"
 #include "udf/java/java_udf.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -110,9 +113,10 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     DCHECK(scan_context_cls != nullptr);
     LOCAL_REF_GUARD_ENV(env, scan_context_cls);
 
-    jmethodID constructor = env->GetMethodID(
-            scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIIII)V");
+    static constexpr const char* scan_context_constructor_signature =
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;"
+            "Ljava/lang/String;IIIIIJJ)V";
+    jmethodID constructor = env->GetMethodID(scan_context_cls, "<init>", scan_context_constructor_signature);
     jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     LOCAL_REF_GUARD_ENV(env, driver_class_name);
     jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
@@ -123,6 +127,18 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     LOCAL_REF_GUARD_ENV(env, passwd);
     jstring sql = env->NewStringUTF(_scan_ctx.sql.c_str());
     LOCAL_REF_GUARD_ENV(env, sql);
+    // could be deleted, only for compatibilty
+    bool needs_query_time_zone = false;
+    for (SlotDescriptor* slot_desc : _slot_descs) {
+        auto type = slot_desc->type().type;
+        if (type == TYPE_DATETIME || type == TYPE_TIME) {
+            needs_query_time_zone = true;
+            break;
+        }
+    }
+    const std::string& query_time_zone_str = needs_query_time_zone ? state->timezone() : "";
+    jstring query_time_zone = env->NewStringUTF(query_time_zone_str.c_str());
+    LOCAL_REF_GUARD_ENV(env, query_time_zone);
     int statement_fetch_size = state->chunk_size();
     int connection_pool_size = config::jdbc_connection_pool_size;
     if (UNLIKELY(connection_pool_size <= 0)) {
@@ -143,9 +159,29 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     // some driver (like sqlserver) needs connection timeout less than 65536
     connection_timeout_ms = std::max(connection_timeout_ms, 30 * 1000);
     connection_timeout_ms = std::min(connection_timeout_ms, 65535 * 1000);
+
+    // maximum lifetime of a connection in the pool
+    int64_t max_lifetime_ms = config::jdbc_connection_max_lifetime_ms;
+    if (max_lifetime_ms < MINIMUM_MAX_LIFETIME_MS) {
+        LOG(WARNING) << "jdbc_connection_max_lifetime_ms=" << max_lifetime_ms << " is below minimum "
+                     << MINIMUM_MAX_LIFETIME_MS << ", using default " << DEFAULT_MAX_LIFETIME_MS;
+        max_lifetime_ms = DEFAULT_MAX_LIFETIME_MS;
+    }
+
+    // keepalive frequency: 0 = disabled (HikariCP semantics), otherwise must be >= 30s and < maxLifetime
+    int64_t keepalive_time_ms = config::jdbc_connection_keepalive_time_ms;
+    if (keepalive_time_ms != KEEPALIVE_DISABLED) {
+        if (keepalive_time_ms < MINIMUM_KEEPALIVE_TIME_MS || keepalive_time_ms >= max_lifetime_ms) {
+            LOG(WARNING) << "jdbc_connection_keepalive_time_ms=" << keepalive_time_ms
+                         << " is invalid (must be 0 or >= " << MINIMUM_KEEPALIVE_TIME_MS << " and < " << max_lifetime_ms
+                         << "), disabling keepalive";
+            keepalive_time_ms = KEEPALIVE_DISABLED;
+        }
+    }
     auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
-                                   statement_fetch_size, connection_pool_size, minimum_idle_connections,
-                                   idle_timeout_ms, connection_timeout_ms);
+                                   query_time_zone, statement_fetch_size, connection_pool_size,
+                                   minimum_idle_connections, idle_timeout_ms, connection_timeout_ms,
+                                   static_cast<jlong>(max_lifetime_ms), static_cast<jlong>(keepalive_time_ms));
     _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
     LOCAL_REF_GUARD_ENV(env, scan_ctx);
     CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
@@ -249,8 +285,8 @@ Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
 
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
     }
-    RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
-    RETURN_IF_ERROR(Expr::open(_cast_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::prepare(_cast_exprs, state));
+    RETURN_IF_ERROR(ExprExecutor::open(_cast_exprs, state));
 
     return Status::OK();
 }
@@ -322,11 +358,10 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
         for (size_t i = 0; i < _slot_descs.size(); i++) {
             ASSIGN_OR_RETURN(jobject jcolumn, list_stub.get(i));
             LOCAL_REF_GUARD_ENV(env, jcolumn);
-            auto& result_column = _result_chunk->columns()[i];
-            auto st =
-                    helper.get_result_from_boxed_array(_result_column_types[i], result_column.get(), jcolumn, num_rows);
+            auto* result_column = _result_chunk->get_column_raw_ptr_by_index(i);
+            auto st = helper.get_result_from_boxed_array(_result_column_types[i], result_column, jcolumn, num_rows);
             RETURN_IF_ERROR(st);
-            down_cast<NullableColumn*>(result_column.get())->update_has_null();
+            down_cast<NullableColumn*>(result_column)->update_has_null();
         }
     }
 
@@ -349,7 +384,7 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
                 return Status::DataQualityError(
                         fmt::format("Unexpected NULL value occurs on NOT NULL column[{}]", slot_desc->col_name()));
             }
-            column = down_cast<NullableColumn*>(result.get())->data_column();
+            column = down_cast<const NullableColumn*>(result.get())->data_column();
         }
     }
     return Status::OK();

@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
@@ -43,12 +42,15 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.OriginStatement;
+import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TStatisticData;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
@@ -138,7 +140,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
             String sql = Joiner.on(" UNION ALL ").join(sqlUnion);
 
-            collectStatisticSync(sql, context);
+            collectStatisticSync(sql, context, analyzeStatus);
             finishedSQLNum++;
             analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
@@ -289,7 +291,10 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
-    public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
+    public void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        // Calculate and set remaining timeout for this SQL task
+        calculateAndSetRemainingTimeout(context, analyzeStatus);
+
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
 
@@ -384,7 +389,9 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String sql = "INSERT INTO external_column_statistics(" + String.join(", ", targetColumnNames) +
                 ") values " + String.join(", ", sqlBuffer) + ";";
         QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
-        InsertStmt insert = new InsertStmt(new TableName("_statistics_", "external_column_statistics"), qs);
+        TableRef tableRef = new TableRef(QualifiedName.of(Lists.newArrayList("_statistics_", "external_column_statistics")),
+                null, NodePosition.ZERO);
+        InsertStmt insert = new InsertStmt(tableRef, qs);
         insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;

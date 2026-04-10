@@ -18,6 +18,15 @@
 
 #include <cstdlib>
 
+#include "base/coding.h"
+#include "base/failpoint/fail_point.h"
+#include "base/string/faststring.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "base/utility/defer_op.h"
+#include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_memory.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
@@ -30,11 +39,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/update_manager.h"
-#include "testutil/assert.h"
-#include "testutil/parallel_test.h"
-#include "util/coding.h"
-#include "util/failpoint/fail_point.h"
-#include "util/faststring.h"
 
 namespace starrocks {
 
@@ -1322,7 +1326,7 @@ TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
     ASSERT_TRUE(idx->flush_to_immutable_index(writer, nshard, npage_hint, page_size, nbucket, true).ok());
     writer->finish();
 
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file("./index.l1.1.1"));
     auto st_load = ImmutableIndex::load(std::move(rf), true);
     if (!st_load.ok()) {
@@ -1361,7 +1365,7 @@ TEST_P(PersistentIndexTest, test_flush_fixlen_to_immutable) {
 
 TEST_P(PersistentIndexTest, test_flush_varlen_to_immutable) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_varlen_to_immutable";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     PersistentIndex index(kPersistentIndexDir);
@@ -1472,7 +1476,7 @@ RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_
     size_t size = (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) ? varlen_keys.size() : keys.size();
     LOG(INFO) << "key column type: " << tablet->tablet_schema()->column(0).type() << ", size: " << size;
     auto chunk = ChunkHelper::new_chunk(schema, size);
-    auto& cols = chunk->columns();
+    auto cols = chunk->mutable_columns();
     if (tablet->tablet_schema()->column(0).type() == TYPE_VARCHAR) {
         for (size_t i = 0; i < size; i++) {
             cols[0]->append_datum(Datum(varlen_keys[i]));
@@ -1542,7 +1546,7 @@ void build_persistent_index_from_tablet(size_t N) {
         LOG(WARNING) << "failed to load rowset update state: " << st.to_string();
         ASSERT_TRUE(false);
     }
-    const std::vector<MutableColumnPtr>& upserts = state.upserts();
+    const MutableColumns& upserts = state.upserts();
 
     PersistentIndex persistent_index(kPersistentIndexDir);
     ASSERT_TRUE(persistent_index.load_from_tablet(tablet.get()).ok());
@@ -2033,7 +2037,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
 TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_for_pindex";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     config::l0_max_mem_usage = 10240;
@@ -2183,7 +2187,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 TEST_P(PersistentIndexTest, test_bloom_filter_working) {
     write_pindex_bf = true;
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_bloom_filter_working";
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString("posix://"));
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
     bool created;
     ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
     const int64_t old_l0_max_mem_usage = config::l0_max_mem_usage;

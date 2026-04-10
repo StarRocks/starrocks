@@ -1,7 +1,10 @@
 -- name: testFilesSink
 
 insert into files ( 
-	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
+	"path" = "s3://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
 	"format"="parquet", 
 	"compression" = "uncompressed"
 )
@@ -10,7 +13,10 @@ select 1 as k1, "A" as k2;
 set pipeline_sink_dop = 1;
 
 insert into files ( 
-	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
+	"path" = "s3://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
 	"format"="parquet", 
 	"compression" = "uncompressed"
 )
@@ -18,6 +24,9 @@ select 2 as k1, "B" as k2;
 
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
 	"format" = "parquet"
 );
 
@@ -30,7 +39,10 @@ create table t1 (c1 int, c2 binary);
 insert into t1 select 1, bitmap_to_binary(bitmap_agg(generate_series)) from TABLE(generate_series(1,10));
 
 insert into files (
-	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/",
+	"path" = "s3://${oss_bucket}/test_sink/test_files_sink/${uuid0}/",
+    "aws.s3.endpoint" = "${oss_endpoint}",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
 	"format"="parquet",
 	"compression" = "uncompressed"
 ) select * from t1;
@@ -40,6 +52,9 @@ create table t2 (c1 int, c2 binary);
 
 insert into t2 select * from files (
     "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "parquet"
 );
 select c1, bitmap_to_string(bitmap_from_binary(c2)) from t2;
@@ -48,6 +63,9 @@ select c1, bitmap_to_string(bitmap_from_binary(c2)) from t2;
 create table t3 (c1 int, c2 string);
 insert into t3 select * from files (
     "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "parquet"
 );
 select c1, bitmap_to_string(bitmap_from_binary(c2)) from t3;
@@ -55,6 +73,9 @@ select c1, bitmap_to_string(bitmap_from_binary(c2)) from t3;
 -- create table as
 create table t4 as select * from files (
     "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "fs.oss.endpoint" = "${oss_endpoint}",
+    "fs.oss.accessKeyId" = "${oss_ak}",
+    "fs.oss.accessKeySecret" = "${oss_sk}",
     "format" = "parquet"
 );
 select c1, bitmap_to_string(bitmap_from_binary(c2)) from t4;

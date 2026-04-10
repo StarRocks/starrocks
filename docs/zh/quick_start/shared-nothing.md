@@ -34,7 +34,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### curl
 
-`curl` 命令用于向 StarRocks 中导入数据以及下载数据集。您可以通过在终端运行 `curl` 或 `curl.exe` 来检查您的操作系统是否已安装 curl。如果未安装 curl，[请点击此处获取 curl](https://curl.se/dlwiz/?type=bin)。
+`curl` 命令用于向 StarRocks 中导入数据以及下载数据集。您可以通过在终端运行 `curl` 或 `curl.exe` 来检查您的操作系统是否已安装 curl。如果未安装 curl，[请点击此处获取 curl](https://curl.se/download.html)。
 
 ---
 

@@ -14,10 +14,10 @@
 
 #pragma once
 
+#include "base/concurrency/race_detect.h"
 #include "exec/partition/chunks_partitioner.h"
 #include "exec/pipeline/hash_partition_context.h"
 #include "exec/pipeline/operator.h"
-#include "util/race_detect.h"
 
 /**
  * HashPartition{Sink/Source}Operator pair is used to reorder the input sequence by

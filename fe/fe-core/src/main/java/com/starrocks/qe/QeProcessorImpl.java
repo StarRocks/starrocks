@@ -35,16 +35,15 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
@@ -63,9 +62,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.time.Instant;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -75,7 +76,6 @@ import static com.starrocks.mysql.MysqlCommand.COM_STMT_EXECUTE;
 
 public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(QeProcessorImpl.class);
-    private static final int MEMORY_QUERY_SAMPLES = 10;
     private final Map<TUniqueId, QueryInfo> coordinatorMap = Maps.newConcurrentMap();
     private final Map<TUniqueId, Long> monitorQueryMap = Maps.newConcurrentMap();
 
@@ -104,6 +104,7 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     public List<Coordinator> getCoordinators() {
         return coordinatorMap.values().stream()
                 .map(QueryInfo::getCoord)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
@@ -187,11 +188,17 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             }
 
             final String queryIdStr = DebugUtil.printId(info.getConnectContext().getExecutionId());
-            String execState = (
-                    info.getConnectContext().isPending() ?
-                            LogicalSlot.State.REQUIRING :
-                            LogicalSlot.State.ALLOCATED).toQueryStateString();
-            final QueryStatisticsItem item = new QueryStatisticsItem.Builder()
+
+            String execState;
+            if (context.isPlanning()) {
+                execState = LogicalSlot.State.CREATED.toQueryStateString();
+            } else {
+                execState = (context.isPending()
+                        ? LogicalSlot.State.REQUIRING
+                        : LogicalSlot.State.ALLOCATED).toQueryStateString();
+            }
+
+            final QueryStatisticsItem.Builder itemBuilder = new QueryStatisticsItem.Builder()
                     .customQueryId(context.getCustomQueryId())
                     .queryId(queryIdStr)
                     .executionId(info.getConnectContext().getExecutionId())
@@ -200,14 +207,22 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
                     .user(context.getQualifiedUser())
                     .connId(String.valueOf(context.getConnectionId()))
                     .db(context.getDatabase())
-                    .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
-                    .profile(info.getCoord().getQueryProfile())
-                    .warehouseName(info.coord.getWarehouseName())
-                    .resourceGroupName(info.coord.getResourceGroupName())
-                    .execState(execState)
-                    .build();
+                    .execState(execState);
 
-            querySet.put(queryIdStr, item);
+            if (info.getCoord() != null) {
+                itemBuilder
+                        .fragmentInstanceInfos(info.getCoord().getFragmentInstanceInfos())
+                        .profile(info.getCoord().getQueryProfile())
+                        .warehouseName(info.coord.getWarehouseName())
+                        .resourceGroupName(info.coord.getResourceGroupName());
+            } else {
+                itemBuilder
+                        .fragmentInstanceInfos(Collections.emptyList())
+                        .warehouseName(context.getCurrentWarehouseName())
+                        .resourceGroupName("");
+            }
+
+            querySet.put(queryIdStr, itemBuilder.build());
         }
         return querySet;
     }
@@ -344,17 +359,13 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
-    public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> samples = coordinatorMap.values()
-                .stream()
-                .limit(MEMORY_QUERY_SAMPLES)
-                .collect(Collectors.toList());
-        return Lists.newArrayList(Pair.create(samples, (long) coordinatorMap.size()));
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
     }
 
     @Override
-    public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("QueryCoordinator", (long) coordinatorMap.size());
+    public long estimateSize() {
+        return Estimator.estimate(coordinatorMap, 20);
     }
 
     public static final class QueryInfo {
@@ -383,6 +394,10 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
             QueryInfo res = new QueryInfo(connectContext, null, null);
             res.isMVJob = true;
             return res;
+        }
+
+        public static QueryInfo fromPlanningQuery(ConnectContext connectContext, String sql) {
+            return new QueryInfo(connectContext, sql, null);
         }
 
         public ConnectContext getConnectContext() {

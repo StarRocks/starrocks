@@ -21,11 +21,13 @@
 #include <avrocpp/ValidSchema.hh>
 
 #include "column/adaptive_nullable_column.h"
+#include "column/chunk.h"
 #include "exec/file_scanner/file_scanner.h"
 #include "formats/avro/cpp/avro_schema_builder.h"
 #include "formats/avro/cpp/utils.h"
 #include "fs/fs.h"
-#include "runtime/runtime_state.h"
+#include "runtime/descriptors.h"
+#include "runtime/runtime_state_helper.h"
 
 namespace starrocks {
 
@@ -131,7 +133,7 @@ Status AvroReader::init(std::unique_ptr<avro::InputStream> input_stream, const s
             }
 
             size_t index = 0;
-            if (schema.root()->nameIndex(desc->col_name(), index)) {
+            if (schema.root()->nameIndex(std::string(desc->col_name()), index)) {
                 _field_indexes[i] = index;
             }
         }
@@ -164,7 +166,7 @@ void AvroReader::TEST_init(const std::vector<SlotDescriptor*>* slot_descs,
         }
 
         size_t index = 0;
-        if (schema.root()->nameIndex(desc->col_name(), index)) {
+        if (schema.root()->nameIndex(std::string(desc->col_name()), index)) {
             _field_indexes[i] = index;
         }
     }
@@ -186,7 +188,7 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
             continue;
         }
 
-        column_raw_ptrs[i] = down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_slot_id(desc->id()).get());
+        column_raw_ptrs[i] = down_cast<AdaptiveNullableColumn*>(chunk->get_column_raw_ptr_by_slot_id(desc->id()));
     }
 
     try {
@@ -201,7 +203,7 @@ Status AvroReader::read_chunk(ChunkPtr& chunk, int rows_to_read) {
                 if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                     std::string json_str;
                     (void)AvroUtils::datum_to_json(*_datum, &json_str);
-                    _state->append_error_msg_to_file(json_str, std::string(st.message()));
+                    RuntimeStateHelper::append_error_msg_to_file(_state, json_str, std::string(st.message()));
                     LOG(WARNING) << "Failed to read row. error: " << st;
                 }
 

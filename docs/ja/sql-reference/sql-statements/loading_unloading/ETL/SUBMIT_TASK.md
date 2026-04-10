@@ -21,7 +21,7 @@ ETL ステートメントを非同期タスクとして送信します。
 
 タスクの一覧は `INFORMATION_SCHEMA.tasks` をクエリすることで確認でき、タスクの実行履歴は `INFORMATION_SCHEMA.task_runs` をクエリすることで確認できます。詳細については、[使用上の注意](#usage-notes)を参照してください。
 
-非同期タスクを削除するには [DROP TASK](DROP_TASK.md) を使用できます。
+非同期タスクを変更するには [ALTER TASK](ALTER_TASK.md) を使用でき、非同期タスクを削除するには [DROP TASK](DROP_TASK.md) を使用できます。
 
 ## 構文
 

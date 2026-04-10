@@ -16,8 +16,8 @@
 
 #include <glog/logging.h>
 
+#include "base/utility/defer_op.h"
 #include "gen_cpp/parquet_types.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 class Column;

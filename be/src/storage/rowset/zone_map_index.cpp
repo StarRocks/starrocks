@@ -36,27 +36,27 @@
 
 #include <bthread/sys_futex.h>
 
+#include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
-#include "common/config.h"
+#include "common/config_rowset_fwd.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/chunk_helper.h"
-#include "storage/decimal_type_info.h"
 #include "storage/olap_define.h"
 #include "storage/olap_type_infra.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
-#include "storage/type_traits.h"
 #include "storage/types.h"
-#include "util/unaligned_access.h"
+#include "types/storage_type_traits.h"
+#include "types/type_info.h"
 
 namespace starrocks {
 
 template <LogicalType type>
 struct ZoneMapDatumBase {
-    using CppType = typename TypeTraits<type>::CppType;
+    using CppType = StorageCppType<type>;
     CppType value;
 
     virtual ~ZoneMapDatumBase() = default;
@@ -178,7 +178,7 @@ struct ZoneMap {
 
 template <LogicalType type>
 class ZoneMapIndexWriterImpl final : public ZoneMapIndexWriter {
-    using CppType = typename TypeTraits<type>::CppType;
+    using CppType = StorageCppType<type>;
 
 public:
     // TypeInfo is used for all kinds of types. It is used to change the content of datum of the max/min value.
@@ -402,7 +402,7 @@ Status ZoneMapIndexReader::_do_load(const IndexReadOptions& opts, const ZoneMapI
 
     _page_zone_maps.resize(reader.num_values());
 
-    ColumnPtr column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
+    MutableColumnPtr column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
     // read and cache all page zone maps
     for (int i = 0; i < reader.num_values(); ++i) {
         RETURN_IF_ERROR(iter->seek_to_ordinal(i));
@@ -508,6 +508,7 @@ CreateIndexDecision ZoneMapIndexQualityJudgerImpl<type>::make_decision() const {
     }
 
     std::vector<ZoneMapWrapper<type>> parsed_zonemap;
+    parsed_zonemap.reserve(_page_zone_maps.size());
     for (auto& zonemap : _page_zone_maps) {
         parsed_zonemap.emplace_back(zonemap);
     }

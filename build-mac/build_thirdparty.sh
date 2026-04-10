@@ -218,7 +218,7 @@ GFLAGS_VERSION="2.2.2"
 GLOG_VERSION="0.7.1"
 PROTOBUF_VERSION="3.14.0"
 BOOST_VERSION="1.86.0"
-THRIFT_VERSION="0.20.0"
+THRIFT_VERSION="0.22.0"
 LEVELDB_VERSION="1.20"
 BRPC_VERSION="1.9.0"
 ROCKSDB_VERSION="6.22.1"
@@ -234,10 +234,10 @@ BOOST_SOURCE="boost_1_86_0"
 BOOST_MD5SUM="2575e74ffc3ef1cd0babac2c1ee8bdb5"
 
 # Thrift
-THRIFT_DOWNLOAD="http://archive.apache.org/dist/thrift/0.20.0/thrift-0.20.0.tar.gz"
-THRIFT_NAME="thrift-0.20.0.tar.gz"
-THRIFT_SOURCE="thrift-0.20.0"
-THRIFT_MD5SUM="aadebde599e1f5235acd3c730721b873"
+THRIFT_DOWNLOAD="https://archive.apache.org/dist/thrift/0.22.0/thrift-0.22.0.tar.gz"
+THRIFT_NAME="thrift-0.22.0.tar.gz"
+THRIFT_SOURCE="thrift-0.22.0"
+THRIFT_MD5SUM="29f4ef82e6ebc336c69ef4f26fb4d2a1"
 
 # datasketches-cpp
 DATASKETCHES_VERSION="4.0.0"
@@ -379,8 +379,8 @@ build_gflags() {
         -DGFLAGS_BUILD_TESTING=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "gflags built successfully"
 }
@@ -433,8 +433,8 @@ build_glog() {
         -DWITH_GTEST=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "glog built successfully"
 }
@@ -887,8 +887,8 @@ build_brpc() {
         -DGLOG_LIB="$INSTALL_DIR/lib/libglog.a" \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     # Verify brpc library
     ls -la "$INSTALL_DIR/lib/libbrpc.a"
@@ -960,8 +960,8 @@ build_rocksdb() {
         -DWITH_TOOLS=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS" rocksdb
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS" --target rocksdb
+    cmake --install .
 
     log_success "rocksdb built successfully"
 }
@@ -1006,8 +1006,8 @@ build_velocypack() {
         -DBuildAsmTest=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "velocypack built successfully"
 }
@@ -1380,9 +1380,11 @@ build_vectorscan() {
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
     # Build only the main library components, skip all tests
-    make -j"$PARALLEL_JOBS" hs hs_compile hs_runtime
+    cmake --build . --parallel "$PARALLEL_JOBS" --target hs
+    cmake --build . --parallel "$PARALLEL_JOBS" --target hs_compile
+    cmake --build . --parallel "$PARALLEL_JOBS" --target hs_runtime
     # Install the libraries that were built
-    make install
+    cmake --install .
 
     # Inject libc++ hash memory shim into libhs.a for macOS arm64
     if [[ -f "$INSTALL_DIR/lib/libhs.a" ]]; then
@@ -1506,8 +1508,8 @@ build_simdutf() {
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "simdutf built successfully"
 }
@@ -1548,8 +1550,8 @@ build_fmt() {
         -DFMT_DOC=OFF \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 
-    make -j"$PARALLEL_JOBS"
-    make install
+    cmake --build . --parallel "$PARALLEL_JOBS"
+    cmake --install .
 
     log_success "fmt built successfully"
 }
@@ -1812,8 +1814,8 @@ EOF
         fi
     else
         # CMake succeeded, continue with normal build
-        make -j"$PARALLEL_JOBS"
-        make install
+        cmake --build . --parallel "$PARALLEL_JOBS"
+        cmake --install .
 
         # Copy C++ header if exists (CMake might not install it)
         if [[ -f "../cpp/roaring.hh" ]]; then

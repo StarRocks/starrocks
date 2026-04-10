@@ -26,6 +26,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ProcedureArgument;
+import com.starrocks.sql.ast.QualifiedName;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.parser.NodePosition;
@@ -112,7 +114,9 @@ public class IcebergTableOperationTest extends TableTestBase {
         clause.setAnalyzedArgs(Map.of(RollbackToSnapshotProcedure.SNAPSHOT_ID,
                 ConstantOperator.createBigint(1)));
         IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(
-                new AlterTableStmt(tableName, List.of(clause)),
+                new AlterTableStmt(new TableRef(QualifiedName.of(List.of(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO), List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()),
                 icebergHiveCatalog,
                 connectContext,
@@ -153,7 +157,9 @@ public class IcebergTableOperationTest extends TableTestBase {
         clause.setTableProcedure(RemoveOrphanFilesProcedure.getInstance());
 
         IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(new AlterTableStmt(
-                tableName,
+                new TableRef(QualifiedName.of(List.of(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO),
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
                 connectContext,
@@ -168,7 +174,9 @@ public class IcebergTableOperationTest extends TableTestBase {
         clause.setTableProcedure(RemoveOrphanFilesProcedure.getInstance());
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
-                tableName,
+                new TableRef(QualifiedName.of(List.of(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO),
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
                 connectContext,
@@ -183,7 +191,9 @@ public class IcebergTableOperationTest extends TableTestBase {
         clause.setTableProcedure(RemoveOrphanFilesProcedure.getInstance());
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
-                tableName,
+                new TableRef(QualifiedName.of(List.of(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO),
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
                 connectContext,
@@ -228,7 +238,9 @@ public class IcebergTableOperationTest extends TableTestBase {
         clause.setTableProcedure(RemoveOrphanFilesProcedure.getInstance());
 
         executor = new IcebergAlterTableExecutor(new AlterTableStmt(
-                tableName,
+                new TableRef(QualifiedName.of(List.of(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl())),
+                        null, NodePosition.ZERO),
                 List.of(clause)),
                 icebergHiveCatalog.getTable(connectContext, tableName.getDb(), tableName.getTbl()), icebergHiveCatalog,
                 connectContext,

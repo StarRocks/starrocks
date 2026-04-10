@@ -16,15 +16,23 @@ package com.starrocks.sql.optimizer;
 
 import com.github.benmanes.caffeine.cache.AsyncCacheLoader;
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.catalog.DeltaLakeTable;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.LightWeightDeltaLakeTable;
+import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.mv.MVTimelinessMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -34,6 +42,7 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.formatter.AST2SQLVisitor;
 import com.starrocks.sql.formatter.FormatOptions;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,6 +53,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -57,7 +67,7 @@ public class CachingMvPlanContextBuilder {
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
     private static final ExecutorService MV_PLAN_CACHE_EXECUTOR = Executors.newFixedThreadPool(
-            Config.mv_plan_cache_thread_pool_size,
+            ThreadPoolManager.cpuIntensiveThreadPoolSize(),
             new ThreadFactoryBuilder().setDaemon(true).setNameFormat("mv-plan-cache-%d").build());
 
     private static final AsyncCacheLoader<MaterializedView, List<MvPlanContext>> MV_PLAN_CACHE_LOADER =
@@ -91,6 +101,30 @@ public class CachingMvPlanContextBuilder {
 
     // store the ast of mv's define query to mvs
     private static final Map<AstKey, Set<MaterializedView>> AST_TO_MV_MAP = Maps.newConcurrentMap();
+    private static final Set<Long> MV_PLAN_CACHE_LOAD_IN_FLIGHT = ConcurrentHashMap.newKeySet();
+    private static final Map<Long, MaterializedView> MV_PLAN_CACHE_PENDING = Maps.newConcurrentMap();
+
+    public static class MVCacheEntity {
+        private final Cache<Object, Object> cache = Caffeine.newBuilder()
+                .maximumSize(Config.mv_global_context_cache_max_size)
+                .recordStats()
+                .build();
+
+        public void invalidateAll() {
+            cache.invalidateAll();
+        }
+
+        public Object get(Object key, Supplier<Object> valueSupplier) {
+            return cache.get(key, k -> valueSupplier.get());
+        }
+
+        public Object getIfPresent(Object key) {
+            return cache.getIfPresent(key);
+        }
+    }
+    // Cache mv context entity for each materialized view, this cache's lifetime is same as materialized view.
+    // We can cache some mv level context info in MVCacheEntity to avoid recomputing them frequently.
+    private static final Map<MaterializedView, MVCacheEntity> MV_GLOBAL_CONTEXT_CACHE_MAP = Maps.newConcurrentMap();
 
     public static class AstKey {
         private final String sql;
@@ -129,7 +163,6 @@ public class CachingMvPlanContextBuilder {
         }
     }
 
-
     private CachingMvPlanContextBuilder() {
     }
 
@@ -139,6 +172,10 @@ public class CachingMvPlanContextBuilder {
 
     private CompletableFuture<List<MvPlanContext>> getPlanContextFuture(MaterializedView mv) {
         return MV_PLAN_CONTEXT_CACHE.get(mv);
+    }
+
+    public static MVCacheEntity getMVCache(MaterializedView mv) {
+        return MV_GLOBAL_CONTEXT_CACHE_MAP.computeIfAbsent(mv, k -> new MVCacheEntity());
     }
 
     /**
@@ -174,6 +211,9 @@ public class CachingMvPlanContextBuilder {
                                                        long timeoutMs) {
         CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.getIfPresent(mv);
         if (future == null) {
+            // if not present, trigger async load for next time
+            triggerLoadMVPlanCacheAsync(mv);
+
             return Lists.newArrayList();
         }
         return getMvPlanCacheFromFuture(mv, future, timeoutMs);
@@ -184,10 +224,47 @@ public class CachingMvPlanContextBuilder {
      */
     private static List<MvPlanContext> loadMvPlanContext(MaterializedView mv) {
         try {
-            return MvPlanContextBuilder.getPlanContext(mv, false);
+            List<MvPlanContext> contexts = MvPlanContextBuilder.getPlanContext(mv, false);
+            for (MvPlanContext context : contexts) {
+                if (context.getLogicalPlan() != null) {
+                    removeHeavyObjectsFromTable(context.getLogicalPlan());
+                }
+            }
+            return contexts;
         } catch (Throwable e) {
             LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
             return Lists.newArrayList();
+        }
+    }
+
+    private static void removeHeavyObjectsFromTable(OptExpression optExpression) {
+        if (optExpression.getOp() instanceof LogicalScanOperator) {
+            LogicalScanOperator scan = (LogicalScanOperator) optExpression.getOp();
+            Table table = scan.getTable();
+            if (table instanceof IcebergTable && !(table instanceof LightWeightIcebergTable)) {
+                IcebergTable t = (IcebergTable) table;
+                IcebergTable light = new LightWeightIcebergTable(t);
+                ConnectorTableInfo info = GlobalStateMgr.getCurrentState()
+                        .getConnectorTblMetaInfoMgr()
+                        .getConnectorTableInfo(t.getCatalogName(), t.getCatalogDBName(), t.getTableIdentifier());
+                if (info != null && info.getRelatedMaterializedViews() != null) {
+                    light.getRelatedMaterializedViews().addAll(info.getRelatedMaterializedViews());
+                }
+                scan.setTable(light);
+            } else if (table instanceof DeltaLakeTable && !(table instanceof LightWeightDeltaLakeTable)) {
+                DeltaLakeTable t = (DeltaLakeTable) table;
+                DeltaLakeTable light = new LightWeightDeltaLakeTable(t);
+                ConnectorTableInfo info = GlobalStateMgr.getCurrentState()
+                        .getConnectorTblMetaInfoMgr()
+                        .getConnectorTableInfo(t.getCatalogName(), t.getCatalogDBName(), t.getTableIdentifier());
+                if (info != null && info.getRelatedMaterializedViews() != null) {
+                    light.getRelatedMaterializedViews().addAll(info.getRelatedMaterializedViews());
+                }
+                scan.setTable(light);
+            }
+        }
+        for (OptExpression input : optExpression.getInputs()) {
+            removeHeavyObjectsFromTable(input);
         }
     }
 
@@ -237,8 +314,7 @@ public class CachingMvPlanContextBuilder {
         evictMaterializedViewCache(mv);
         // then put mv into ast cache and load plan context
         try {
-            putAstIfAbsent(mv);
-            loadPlanContextAsync(mv);
+            triggerLoadMVPlanCacheAsync(mv);
         } catch (Exception e) {
             LOG.warn("cacheMaterializedView failed: {}", mv.getName(), e);
         }
@@ -252,6 +328,9 @@ public class CachingMvPlanContextBuilder {
         try {
             // invalidate mv from plan cache
             MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
+
+            // invalidate mv from mv level cache
+            MV_GLOBAL_CONTEXT_CACHE_MAP.remove(mv);
 
             // invalidate mv from timeline cache
             MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
@@ -283,10 +362,55 @@ public class CachingMvPlanContextBuilder {
     }
 
     /**
-     * Load plan context asynchronously and put it into cache.
-     * @param mv: the materialized view to load plan context for.
+     * Load all mv related plan contexts asynchronously and put it into cache.
      */
-    public void loadPlanContextAsync(MaterializedView mv) {
+    public void triggerLoadMVPlanCacheAsync(MaterializedView mv) {
+        if (mv == null || !GlobalStateMgr.getCurrentState().isReady()) {
+            LOG.debug("Skip loading mv plan context before catalog ready: {}", mv.getName());
+            MV_PLAN_CACHE_PENDING.put(mv.getId(), mv);
+            return;
+        }
+
+        // if mv is already in cache, no need to load again, just return directly.
+        long mvId = mv.getId();
+        if (!MV_PLAN_CACHE_LOAD_IN_FLIGHT.add(mvId)) {
+            LOG.debug("Skip duplicate mv plan cache load: {}", mv.getName());
+            return;
+        }
+
+        try {
+            // load mv ast cache synchronously
+            loadMVAstCache(mv);
+
+            CompletableFuture<List<MvPlanContext>> future = loadMVPlanCache(mv);
+            future.whenComplete((ignored, e) -> MV_PLAN_CACHE_LOAD_IN_FLIGHT.remove(mvId));
+        } catch (Throwable e) {
+            LOG.warn("loadMVAstCache failed: {}", mv.getName(), e);
+        } finally {
+            MV_PLAN_CACHE_LOAD_IN_FLIGHT.remove(mvId);
+        }
+    }
+
+    public void triggerPendingMVPlanCacheLoads() {
+        if (!GlobalStateMgr.getCurrentState().isReady()) {
+            LOG.warn("Skip loading pending mv plan context before catalog ready");
+            return;
+        }
+        if (MV_PLAN_CACHE_PENDING.isEmpty()) {
+            return;
+        }
+        long startTime = System.currentTimeMillis();
+        LOG.info("Trigger loading {} pending mv plan caches", MV_PLAN_CACHE_PENDING.size());
+        MV_PLAN_CACHE_PENDING.values().forEach(this::triggerLoadMVPlanCacheAsync);
+        MV_PLAN_CACHE_PENDING.clear();
+        LOG.info("Finish triggering pending mv plan caches, costs: {}ms",
+                System.currentTimeMillis() - startTime);
+    }
+
+    /**
+     * Load mv plan cache asynchronously.
+     */
+    private CompletableFuture<List<MvPlanContext>> loadMVPlanCache(MaterializedView mv) {
         long startTime = System.currentTimeMillis();
         CompletableFuture<List<MvPlanContext>> future = MV_PLAN_CONTEXT_CACHE.get(mv);
         // do not join.
@@ -299,12 +423,13 @@ public class CachingMvPlanContextBuilder {
                 LOG.warn("adding mv plan into cache failed: {}, cost: {}ms", mv.getName(), duration, e);
             }
         });
+        return future;
     }
 
     /**
      * This method is used to put mv into ast cache, this will be only called in the first time.
      */
-    private void putAstIfAbsent(MaterializedView mv) {
+    private void loadMVAstCache(MaterializedView mv) {
         if (!Config.enable_materialized_view_text_based_rewrite || mv == null || !mv.isEnableRewrite()) {
             return;
         }
@@ -357,13 +482,28 @@ public class CachingMvPlanContextBuilder {
     }
 
     /**
+     * NOTE: This method will refresh the metadata of mvs to avoid using stale mv.
      * @return: null if parseNode is null or astToMvsMap doesn't contain this ast, otherwise return the mvs
      */
     public Set<MaterializedView> getMvsByAst(AstKey ast) {
         if (ast == null) {
             return null;
         }
-        return AST_TO_MV_MAP.get(ast);
+        Set<MaterializedView> candidateMVs = AST_TO_MV_MAP.get(ast);
+        // check & refresh mv's metadata to avoid using stale mv
+        if (candidateMVs == null) {
+            return Sets.newHashSet();
+        }
+        Set<MaterializedView> validMVs = Sets.newHashSet();
+        for (MaterializedView mv : candidateMVs) {
+            MaterializedView curMV = GlobalStateMgr.getCurrentState().getLocalMetastore().getMaterializedView(mv.getMvId());
+            if (curMV == null) {
+                LOG.warn("mv {} is not found in metastore, skip it.", mv.getName());
+                continue;
+            }
+            validMVs.add(curMV);
+        }
+        return validMVs;
     }
 
     /**
@@ -398,5 +538,17 @@ public class CachingMvPlanContextBuilder {
                 LOG.warn("async task {} failed: {}, cost: {}ms", taskName, e.getMessage(), duration, e);
             }
         });
+    }
+
+    public static String getMVPlanCacheStats() {
+        return MV_PLAN_CONTEXT_CACHE.synchronous().stats().toString();
+    }
+
+    public static String getMVGlobalContextCacheStats(MaterializedView mv) {
+        MVCacheEntity mvCacheEntity = MV_GLOBAL_CONTEXT_CACHE_MAP.get(mv);
+        if (mvCacheEntity != null) {
+            return mvCacheEntity.cache.stats().toString();
+        }
+        return "";
     }
 }

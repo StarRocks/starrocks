@@ -28,6 +28,7 @@ import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAdaptiveDopParam;
+import com.starrocks.thrift.TArrowFlightSQLVersion;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFunctionVersion;
@@ -120,6 +121,7 @@ public class TFragmentInstanceFactory {
         result.setFragment(fragment.toThrift());
         result.setDesc_tbl(descTable);
         result.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_3.getValue());
+        result.setArrow_flight_sql_version(TArrowFlightSQLVersion.V1.getValue());
         result.setCoord(coordAddress);
 
         result.setParams(new TPlanFragmentExecParams());
@@ -133,6 +135,7 @@ public class TFragmentInstanceFactory {
         }
         result.setIs_stream_pipeline(jobSpec.isEnableStreamPipeline());
         result.params.setPer_exch_num_senders(execFragment.getNumSendersPerExchange());
+        result.params.setPer_look_up_num_fetchers(execFragment.getNumFetchersPerLookUp());
         if (execFragment.getRuntimeFilterParams().isSetRuntime_filter_builder_number()) {
             result.params.setRuntime_filter_params(execFragment.getRuntimeFilterParams());
         }

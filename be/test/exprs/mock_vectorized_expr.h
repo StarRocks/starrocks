@@ -20,18 +20,36 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "glog/logging.h"
 
 namespace starrocks {
 
-TypeDescriptor array_type(const TypeDescriptor& child_type);
+inline TypeDescriptor array_type(const TypeDescriptor& child_type) {
+    TypeDescriptor t;
+    t.type = TYPE_ARRAY;
+    t.children.emplace_back(child_type);
+    return t;
+}
 
-TypeDescriptor array_type(const LogicalType& child_type);
+inline TypeDescriptor array_type(const LogicalType& child_type) {
+    TypeDescriptor t;
+    t.type = TYPE_ARRAY;
+    t.children.resize(1);
+    t.children[0].type = child_type;
+    t.children[0].len = child_type == TYPE_VARCHAR ? 10 : child_type == TYPE_CHAR ? 10 : -1;
+    return t;
+}
 
-TypeDescriptor map_type(LogicalType key, LogicalType value);
+inline TypeDescriptor map_type(LogicalType key, LogicalType value) {
+    TypeDescriptor t;
+    t.type = TYPE_MAP;
+    t.children.emplace_back(key);
+    t.children.emplace_back(value);
+    return t;
+}
 
 class MockExpr : public starrocks::Expr {
 public:

@@ -35,7 +35,7 @@ private:
 
     Status fill_chunk(ChunkPtr* chunk);
 
-    ColumnPtr _columns[2];
+    MutableColumnPtr _columns[2];
     int64_t _be_id{0};
     size_t _cur_idx{0};
     size_t _chunk_size;
