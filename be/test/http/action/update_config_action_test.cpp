@@ -25,8 +25,8 @@
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
-#include "testutil/sync_point.h"
 #include "testutil/scoped_updater.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks {
 
