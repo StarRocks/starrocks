@@ -119,7 +119,7 @@ struct ReadIOStat {
     int64_t block_read_io_us = 0;
     int64_t block_cache_insert_us = 0;
     int64_t block_alloc_us = 0;
-    int64_t block_read_max_io_us = 0;  // single slowest ReadBlock
+    int64_t block_read_max_io_us = 0; // single slowest ReadBlock
 };
 
 // Options that control read operations

@@ -18,7 +18,6 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
-#include "storage/olap_common.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_starlet_fwd.h"
 #include "fs/fs.h"
@@ -28,6 +27,7 @@
 #include "runtime/starrocks_metrics.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/utils.h"
+#include "storage/olap_common.h"
 #include "storage/sstable/table_builder.h"
 
 namespace starrocks::lake {
