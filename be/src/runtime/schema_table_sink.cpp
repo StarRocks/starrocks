@@ -81,6 +81,7 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
     auto* closure = new RefCountClosure<ExecuteCommandResultPB>();
     closure->cntl.set_timeout_ms(10000);
     closure->ref();
+    closure->ref();
     DeferOp op([&]() {
         if (closure->unref()) {
             delete closure;
