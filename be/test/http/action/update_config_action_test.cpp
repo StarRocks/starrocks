@@ -17,21 +17,9 @@
 #include <gtest/gtest.h>
 
 #include "agent/agent_server.h"
-<<<<<<< HEAD
 #include "cache/block_cache/block_cache.h"
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/scoped_updater.h"
 #include "base/testutil/sync_point.h"
-#include "cache/datacache.h"
-#include "cache/disk_cache/starcache_engine.h"
-#include "cache/disk_cache/test_cache_utils.h"
-#include "common/config_cache_fwd.h"
-#include "common/config_lake_fwd.h"
-#include "common/system/cpu_info.h"
-#include "common/util/bthreads/executor.h"
->>>>>>> 1d0970ca75 ([BugFix] Fix incorrect update for parallel_clone_task_per_path (#71484))
-        #include "fs/fs_util.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "storage/persistent_index_load_executor.h"
