@@ -292,19 +292,8 @@ static StatusOr<VariantValue> seek_variant_value(const VariantMetadata& metadata
     for (size_t i = seg_offset; i < variant_path->segments.size(); ++i) {
         const auto& seg = variant_path->segments[i];
         if (seg.is_object()) {
-            // If the current node is not an OBJECT (e.g. a leaf scalar/string), the path does
-            // not exist in this row — treat as null rather than propagating a type-mismatch error.
-            // This can happen when a CASE expression references a deep path that is shorter in
-            // some rows (e.g. nesting_level=8 row evaluated against a 20-level path).
-            if (current.basic_type() != VariantValue::BasicType::OBJECT) {
-                return VariantValue{};
-            }
             ASSIGN_OR_RETURN(current, current.get_object_by_key(metadata, seg.get_key()));
         } else {
-            // Similarly, treat a non-ARRAY node as null when an array index is requested.
-            if (current.basic_type() != VariantValue::BasicType::ARRAY) {
-                return VariantValue{};
-            }
             ASSIGN_OR_RETURN(current, current.get_element_at_index(metadata, seg.get_index()));
         }
         if (current.is_null()) break;

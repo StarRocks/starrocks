@@ -1390,13 +1390,11 @@ Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBind
 
     auto field = VariantPath::seek_view(full_row, parsed_path.value(), 0);
     if (!field.ok()) {
-        return field.status().clone_and_prepend(
-                strings::Substitute("seek variant binding path failed, path=$0", binding.path));
-    }
-    if (field.value().is_null()) {
+        // Path not found (e.g. type mismatch at intermediate node): treat as missing.
         append_null();
         return Status::OK();
     }
+    // Field found — append even if the value is JSON null (basic_type=Null).
     append_value_ref(field.value());
     return Status::OK();
 }
