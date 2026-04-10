@@ -132,6 +132,7 @@ import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -196,6 +197,7 @@ import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -674,6 +676,23 @@ public class IcebergMetadata implements ConnectorMetadata {
             throw e;
         } catch (NoSuchTableException e) {
             return getView(context, dbName, tblName);
+        }
+    }
+
+    static void checkUnsupportedEncryption(org.apache.iceberg.Table icebergTable) {
+        if (icebergTable.properties().containsKey(ENCRYPTION_TABLE_KEY)) {
+            throw new StarRocksConnectorException(
+                    "Iceberg table encryption is not supported. Table '%s' has encryption property '%s' set.",
+                    icebergTable.name(), ENCRYPTION_TABLE_KEY);
+        }
+
+        if (icebergTable instanceof BaseTable) {
+            TableMetadata metadata = ((BaseTable) icebergTable).operations().current();
+            if (metadata.encryptionKeys() != null && !metadata.encryptionKeys().isEmpty()) {
+                throw new StarRocksConnectorException(
+                        "Iceberg table encryption is not supported. Table '%s' has encryption keys set.",
+                        icebergTable.name());
+            }
         }
     }
 
@@ -1238,6 +1257,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = icebergTable.getCatalogTableName();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        checkUnsupportedEncryption(nativeTbl);
         traceIcebergMetricsConfig(nativeTbl);
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
