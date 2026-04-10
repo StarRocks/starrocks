@@ -17,6 +17,7 @@ package com.starrocks.metric;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
@@ -50,12 +51,19 @@ public class ComputeNodeMetricTest {
         cn = new ComputeNode(1234, CN_HOST, CN_HEARTBEAT_PORT);
         cn.setStarletPort(CN_STARLET_PORT);
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addComputeNode(cn);
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
     }
 
     @AfterAll
     public static void afterClass() {
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         clusterInfo.dropComputeNode(cn);
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     @Test
@@ -80,7 +88,7 @@ public class ComputeNodeMetricTest {
             }
         };
 
-        MetricRepo.generateComputeNodesTabletMetrics();
+        MetricRepo.generateBackendsTabletMetrics();
 
         List<Metric> tabletNumMetrics = MetricRepo.getMetricsByName(MetricRepo.TABLET_NUM);
         Assertions.assertFalse(tabletNumMetrics.isEmpty());
@@ -106,7 +114,7 @@ public class ComputeNodeMetricTest {
             }
         };
 
-        MetricRepo.generateComputeNodesTabletMetrics();
+        MetricRepo.generateBackendsTabletMetrics();
 
         String label = CN_HOST + ":" + CN_HEARTBEAT_PORT;
         List<Metric> tabletNumMetrics = MetricRepo.getMetricsByName(MetricRepo.TABLET_NUM);
@@ -120,7 +128,7 @@ public class ComputeNodeMetricTest {
     private Metric<Long> findMetricByLabel(List<Metric> metrics, String label) {
         for (Metric metric : metrics) {
             boolean matches = metric.getLabels().stream()
-                    .anyMatch((Predicate<MetricLabel>) l -> l.getValue().equals(label));
+                    .anyMatch((Predicate<MetricLabel>) l -> "backend".equals(l.getKey()) && l.getValue().equals(label));
             if (matches) {
                 return metric;
             }

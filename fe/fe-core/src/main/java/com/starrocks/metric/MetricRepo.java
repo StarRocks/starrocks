@@ -897,20 +897,11 @@ public final class MetricRepo {
             STARROCKS_METRIC_REGISTER.addMetric(tabletMaxCompactionScore);
 
         } // end for backends
-    }
 
-    // to generate the metrics related to tablets of each compute node
-    // this metric is reentrant, so that we can add or remove metric along with the compute node add or remove
-    // at runtime.
-    public static void generateComputeNodesTabletMetrics() {
-        StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-        if (starOsAgent == null) {
+        if (!RunMode.isSharedDataMode()) {
             return;
         }
-        // remove all previous 'tablet' metric
-        STARROCKS_METRIC_REGISTER.removeMetrics(TABLET_NUM);
-
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
 
         for (Long cnId : infoService.getComputeNodeIds(false)) {
             ComputeNode cn = infoService.getComputeNode(cnId);
@@ -919,11 +910,11 @@ public final class MetricRepo {
             }
 
             // tablet number of each compute node
+            String workerAddr = cn.getHost() + ":" + cn.getStarletPort();
             Metric<Long> tabletNum = new LeaderAwareGaugeMetricLong(TABLET_NUM,
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
                 public Long getValueLeader() {
-                    String workerAddr = cn.getHost() + ":" + cn.getStarletPort();
                     return starOsAgent.getWorkerTabletNum(workerAddr);
                 }
             };

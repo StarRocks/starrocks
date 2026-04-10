@@ -240,7 +240,7 @@ public class SystemInfoService implements GsonPostProcessable {
         LOG.info("finished to add {} ", newComputeNode);
 
         // compute nodes are changed, regenerated tablet number metrics
-        MetricRepo.generateComputeNodesTabletMetrics();
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     public boolean isSingleBackendAndComputeNode() {
@@ -641,7 +641,7 @@ public class SystemInfoService implements GsonPostProcessable {
         LOG.info("finished to drop {}", dropComputeNode);
 
         // compute nodes are changed, regenerated tablet number metrics
-        MetricRepo.generateComputeNodesTabletMetrics();
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
