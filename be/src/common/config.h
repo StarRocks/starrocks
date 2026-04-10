@@ -1319,6 +1319,10 @@ CONF_mInt64(experimental_lake_wait_per_get_ms, "0");
 CONF_mInt64(experimental_lake_wait_per_delete_ms, "0");
 CONF_mBool(experimental_lake_ignore_pk_consistency_check, "false");
 CONF_mInt64(lake_publish_version_slow_log_ms, "1000");
+// When a tablet is already being published, wait up to this duration (ms) for it to finish
+// before returning ResourceBusy. This avoids FE retry cascading that causes high P99 latency.
+// Set to 0 to disable waiting (original behavior).
+CONF_mInt64(lake_publish_version_tablet_wait_timeout_ms, "10000");
 CONF_mBool(lake_enable_publish_version_trace_log, "false");
 CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");

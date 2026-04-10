@@ -14,8 +14,15 @@
 
 #include "storage/lake/transactions.h"
 
+#include <array>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+#include <unordered_set>
+
 #include "base/container/lru_cache.h"
 #include "base/utility/defer_op.h"
+#include "common/config.h"
 #include "common/config_lake_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -34,10 +41,53 @@
 
 namespace {
 
-template <class T>
-using ParallelSet = phmap::parallel_flat_hash_set<T, phmap::priv::hash_default_hash<T>, phmap::priv::hash_default_eq<T>,
-                                                  phmap::priv::Allocator<T>, 4, std::mutex, true>;
-ParallelSet<int64_t> tablet_txns;
+// TabletPublishLock replaces the original non-blocking ParallelSet<int64_t>.
+//
+// Problem: When compaction publish holds a tablet for 1-8s (delvec loading),
+// stream load publishes for the same tablet immediately get ResourceBusy.
+// The FE retries every ~1s daemon cycle, causing cascading delays up to 57s P99.
+//
+// Solution: Instead of failing immediately, wait up to a configurable timeout
+// for the tablet to become available. This eliminates the FE retry cascade
+// and reduces wait_for_publish from 30-57s to the actual lock hold time (1-8s).
+class TabletPublishLock {
+public:
+    bool try_lock(int64_t tablet_id, int64_t timeout_ms) {
+        auto& shard = _shards[tablet_id & (_kNumShards - 1)];
+        std::unique_lock<std::mutex> lock(shard.mu);
+        if (timeout_ms <= 0) {
+            return shard.locked_tablets.insert(tablet_id).second;
+        }
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{timeout_ms};
+        while (shard.locked_tablets.count(tablet_id) > 0) {
+            if (shard.cv.wait_until(lock, deadline) == std::cv_status::timeout) {
+                return shard.locked_tablets.insert(tablet_id).second;
+            }
+        }
+        shard.locked_tablets.insert(tablet_id);
+        return true;
+    }
+
+    void unlock(int64_t tablet_id) {
+        auto& shard = _shards[tablet_id & (_kNumShards - 1)];
+        {
+            std::unique_lock<std::mutex> lock(shard.mu);
+            shard.locked_tablets.erase(tablet_id);
+        }
+        shard.cv.notify_all();
+    }
+
+private:
+    static constexpr size_t _kNumShards = 16;
+    struct Shard {
+        std::mutex mu;
+        std::condition_variable cv;
+        std::unordered_set<int64_t> locked_tablets;
+    };
+    std::array<Shard, _kNumShards> _shards;
+};
+
+TabletPublishLock tablet_publish_lock;
 
 // publish version with EMPTY_TXNLOG_TXNID means there is no txnlog
 // and need to increase version number of the tablet,
@@ -45,12 +95,12 @@ ParallelSet<int64_t> tablet_txns;
 const int64_t EMPTY_TXNLOG_TXNID = -1;
 
 bool add_tablet(int64_t tablet_id) {
-    auto [_, ok] = tablet_txns.insert(tablet_id);
-    return ok;
+    int64_t wait_ms = starrocks::config::lake_publish_version_tablet_wait_timeout_ms;
+    return tablet_publish_lock.try_lock(tablet_id, wait_ms);
 }
 
 void remove_tablet(int64_t tablet_id) {
-    tablet_txns.erase(tablet_id);
+    tablet_publish_lock.unlock(tablet_id);
 }
 
 } // namespace
