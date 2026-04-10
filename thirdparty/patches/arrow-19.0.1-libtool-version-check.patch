@@ -1,0 +1,24 @@
+diff --git a/cpp/cmake_modules/BuildUtils.cmake b/cpp/cmake_modules/BuildUtils.cmake
+--- a/cpp/cmake_modules/BuildUtils.cmake
++++ b/cpp/cmake_modules/BuildUtils.cmake
+@@ -113,10 +113,19 @@
+     endif()
+ 
+     # confirm that the libtool we found is Apple's libtool
+     execute_process(COMMAND ${LIBTOOL_MACOS} -V
++                    ERROR_VARIABLE LIBTOOL_V_ERROR
+                     OUTPUT_VARIABLE LIBTOOL_V_OUTPUT
++                    ERROR_STRIP_TRAILING_WHITESPACE
+                     OUTPUT_STRIP_TRAILING_WHITESPACE)
+-    if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools-([0-9.]+).*")
++    if("${LIBTOOL_V_ERROR}" STREQUAL "")
++      set(LIBTOOL_V_OUTPUT "${LIBTOOL_V_OUTPUT}")
++    elseif("${LIBTOOL_V_OUTPUT}" STREQUAL "")
++      set(LIBTOOL_V_OUTPUT "${LIBTOOL_V_ERROR}")
++    else()
++      set(LIBTOOL_V_OUTPUT "${LIBTOOL_V_OUTPUT}\n${LIBTOOL_V_ERROR}")
++    endif()
++    if(NOT "${LIBTOOL_V_OUTPUT}" MATCHES ".*cctools[^ ]*-([0-9.]+).*")
+       message(FATAL_ERROR "libtool found appears not to be Apple's libtool: ${LIBTOOL_MACOS}"
+       )
+     endif()

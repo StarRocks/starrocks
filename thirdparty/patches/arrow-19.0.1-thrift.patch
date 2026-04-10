@@ -1,6 +1,6 @@
 diff --git a/cpp/thirdparty/versions.txt b/cpp/thirdparty/versions.txt
---- versions.txt        2026-03-31 15:41:01.192981524 +0000
-+++ versions2.txt       2026-03-31 15:43:53.235785450 +0000
+--- a/cpp/thirdparty/versions.txt
++++ b/cpp/thirdparty/versions.txt
 @@ -107,8 +107,8 @@
  ARROW_SUBSTRAIT_BUILD_SHA256_CHECKSUM=f989a862f694e7dbb695925ddb7c4ce06aa6c51aca945105c075139aed7e55a2
  ARROW_S2N_TLS_BUILD_VERSION=v1.3.35
