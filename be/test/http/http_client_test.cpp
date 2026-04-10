@@ -27,6 +27,7 @@
 #include "http/http_channel.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
+#include "http/utils.h"
 
 namespace starrocks {
 
