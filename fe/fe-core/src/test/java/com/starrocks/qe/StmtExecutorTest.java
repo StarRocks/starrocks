@@ -323,6 +323,108 @@ public class StmtExecutorTest {
     }
 
     @Test
+    public void testBuildTopLevelProfileAuditEncryptBranchRedactsCredentials() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+                return "default_warehouse";
+            }
+        };
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "CREATE USER 'u1' IDENTIFIED BY 'secret'",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
+        RuntimeProfile summaryProfile = profile.getChild("Summary");
+        String sqlInProfile = summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(sqlInProfile);
+        Assertions.assertFalse(sqlInProfile.contains("secret"));
+        Assertions.assertTrue(sqlInProfile.contains("***"));
+    }
+
+    @Test
+    public void testBuildTopLevelProfileDesensitizeBranchUsesDigestSql() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+                return "default_warehouse";
+            }
+        };
+        boolean oldDesensitize = Config.enable_sql_desensitize_in_log;
+        Config.enable_sql_desensitize_in_log = true;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            StatementBase stmt = SqlParser.parseSingleStatement(
+                    "SELECT * FROM t0 WHERE k1 = 12345",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
+            RuntimeProfile summaryProfile = profile.getChild("Summary");
+            String sqlInProfile = summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+            Assertions.assertNotNull(sqlInProfile);
+            Assertions.assertFalse(sqlInProfile.contains("12345"),
+                    "Digest mode should desensitize SQL literals in profile");
+        } finally {
+            Config.enable_sql_desensitize_in_log = oldDesensitize;
+        }
+    }
+
+    @Test
+    public void testBuildTopLevelProfileCredentialMarkerBranchRedactsFilesSecret() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+                return "default_warehouse";
+            }
+        };
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"PROFILE_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
+        RuntimeProfile summaryProfile = profile.getChild("Summary");
+        String sqlInProfile = summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(sqlInProfile);
+        Assertions.assertFalse(sqlInProfile.contains("PROFILE_SECRET"));
+        Assertions.assertTrue(sqlInProfile.contains("***"));
+    }
+
+    @Test
+    public void testAddRunningQueryDetailRedactsFilesSecretWhenMarkerDetected() {
+        boolean oldCollect = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            StatementBase stmt = SqlParser.parseSingleStatement(
+                    "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                            "\"aws.s3.secret_key\"=\"DETAIL_SECRET\")",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            executor.addRunningQueryDetail(stmt);
+            QueryDetail queryDetail = ctx.getQueryDetail();
+            Assertions.assertNotNull(queryDetail);
+            Assertions.assertFalse(queryDetail.getSql().contains("DETAIL_SECRET"));
+            Assertions.assertTrue(queryDetail.getSql().contains("***"));
+        } finally {
+            Config.enable_collect_query_detail_info = oldCollect;
+        }
+    }
+
+    @Test
     public void testExecuteAnalyzeProfileStmtBranchSetsErrorWhenProfileMissing() throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ConnectContext.threadLocalInfo.set(ctx);
