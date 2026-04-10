@@ -910,11 +910,12 @@ public final class MetricRepo {
             }
 
             // tablet number of each compute node
-            String workerAddr = cn.getHost() + ":" + cn.getStarletPort();
             Metric<Long> tabletNum = new LeaderAwareGaugeMetricLong(TABLET_NUM,
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
                 public Long getValueLeader() {
+                    ComputeNode cn = infoService.getComputeNode(cnId);
+                    String workerAddr = cn.getHost() + ":" + cn.getStarletPort();
                     return starOsAgent.getWorkerTabletNum(workerAddr);
                 }
             };
