@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
@@ -46,6 +47,7 @@ import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
@@ -626,6 +628,7 @@ public class ExternalResourceCleanupTest {
         Mockito.when(scan.filter(Mockito.any())).thenReturn(scan);
         Mockito.when(scan.targetSplitSize()).thenReturn(128L);
         Mockito.when(scan.planFiles()).thenReturn(CloseableIterable.withNoopClose(List.of()));
+        Mockito.when(scan.getMetricsReporter()).thenReturn(reporter);
 
         IcebergGetRemoteFilesParams.Builder builder = IcebergGetRemoteFilesParams.newBuilder();
         builder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
@@ -634,10 +637,17 @@ public class ExternalResourceCleanupTest {
         builder.setAllParams(IcebergTableMORParams.EMPTY);
         builder.setParams(IcebergMORParams.EMPTY);
 
-        RemoteFileInfoSource source = metadata.getRemoteFilesAsync(table, builder.build());
-        Assertions.assertFalse(source.hasMoreOutput());
-        Mockito.verify(scan).select(List.of());
-        source.close();
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        Tracers.register(ctx);
+        try {
+            RemoteFileInfoSource source = metadata.getRemoteFilesAsync(table, builder.build());
+            Assertions.assertFalse(source.hasMoreOutput());
+            Mockito.verify(scan).select(List.of());
+            source.close();
+        } finally {
+            Tracers.close();
+        }
     }
 
     @Test
@@ -690,48 +700,55 @@ public class ExternalResourceCleanupTest {
         MetaPreparationItem item = new MetaPreparationItem(table, ConstantOperator.TRUE, -1L,
                 TvrTableSnapshot.of(Optional.of(1L)), List.of("id"));
 
-        Assertions.assertTrue(metadata.prepareMetadata(item, null, null));
-        Mockito.verify(scan).select(List.of("id"));
+        ConnectContext ctx = new ConnectContext();
+        ctx.setThreadLocalInfo();
+        Tracers.register(ctx);
+        try {
+            Assertions.assertTrue(metadata.prepareMetadata(item, Tracers.get(), ctx));
+            Mockito.verify(scan).select(List.of("id"));
 
-        IcebergMetricsReporter secondReporter = new IcebergMetricsReporter();
-        reporterRef.set(secondReporter);
+            IcebergMetricsReporter secondReporter = new IcebergMetricsReporter();
+            reporterRef.set(secondReporter);
 
-        IcebergGetRemoteFilesParams.Builder dataBuilder = IcebergGetRemoteFilesParams.newBuilder();
-        dataBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
-        dataBuilder.setPredicate(ConstantOperator.TRUE);
-        dataBuilder.setFieldNames(List.of("data"));
-        dataBuilder.setAllParams(IcebergTableMORParams.EMPTY);
-        dataBuilder.setParams(IcebergMORParams.EMPTY);
+            IcebergGetRemoteFilesParams.Builder dataBuilder = IcebergGetRemoteFilesParams.newBuilder();
+            dataBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            dataBuilder.setPredicate(ConstantOperator.TRUE);
+            dataBuilder.setFieldNames(List.of("data"));
+            dataBuilder.setAllParams(IcebergTableMORParams.EMPTY);
+            dataBuilder.setParams(IcebergMORParams.EMPTY);
 
-        RemoteFileInfoSource source = metadata.getRemoteFilesAsync(table, dataBuilder.build());
-        Assertions.assertFalse(source.hasMoreOutput());
-        Assertions.assertNotNull(secondReporter.getScanReport());
-        Assertions.assertEquals(List.of(2), secondReporter.getScanReport().projectedFieldIds());
-        Assertions.assertEquals(List.of("data"), secondReporter.getScanReport().projectedFieldNames());
-        source.close();
+            RemoteFileInfoSource source = metadata.getRemoteFilesAsync(table, dataBuilder.build());
+            Assertions.assertFalse(source.hasMoreOutput());
+            Assertions.assertNotNull(secondReporter.getScanReport());
+            Assertions.assertEquals(List.of(2), secondReporter.getScanReport().projectedFieldIds());
+            Assertions.assertEquals(List.of("data"), secondReporter.getScanReport().projectedFieldNames());
+            source.close();
 
-        Field splitField = IcebergMetadata.class.getDeclaredField("splitTasks");
-        splitField.setAccessible(true);
-        Map<PredicateSearchKey, List<FileScanTask>> splitTasks =
-                (Map<PredicateSearchKey, List<FileScanTask>>) splitField.get(metadata);
+            Field splitField = IcebergMetadata.class.getDeclaredField("splitTasks");
+            splitField.setAccessible(true);
+            Map<PredicateSearchKey, List<FileScanTask>> splitTasks =
+                    (Map<PredicateSearchKey, List<FileScanTask>>) splitField.get(metadata);
 
-        IcebergGetRemoteFilesParams.Builder idBuilder = IcebergGetRemoteFilesParams.newBuilder();
-        idBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
-        idBuilder.setPredicate(ConstantOperator.TRUE);
-        idBuilder.setFieldNames(List.of("id"));
-        idBuilder.setAllParams(IcebergTableMORParams.EMPTY);
-        idBuilder.setParams(IcebergMORParams.EMPTY);
+            IcebergGetRemoteFilesParams.Builder idBuilder = IcebergGetRemoteFilesParams.newBuilder();
+            idBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            idBuilder.setPredicate(ConstantOperator.TRUE);
+            idBuilder.setFieldNames(List.of("id"));
+            idBuilder.setAllParams(IcebergTableMORParams.EMPTY);
+            idBuilder.setParams(IcebergMORParams.EMPTY);
 
-        IcebergGetRemoteFilesParams.Builder fullBuilder = IcebergGetRemoteFilesParams.newBuilder();
-        fullBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
-        fullBuilder.setPredicate(ConstantOperator.TRUE);
-        fullBuilder.setAllParams(IcebergTableMORParams.EMPTY);
-        fullBuilder.setParams(IcebergMORParams.EMPTY);
+            IcebergGetRemoteFilesParams.Builder fullBuilder = IcebergGetRemoteFilesParams.newBuilder();
+            fullBuilder.setTableVersionRange(TvrTableSnapshot.of(Optional.of(1L)));
+            fullBuilder.setPredicate(ConstantOperator.TRUE);
+            fullBuilder.setAllParams(IcebergTableMORParams.EMPTY);
+            fullBuilder.setParams(IcebergMORParams.EMPTY);
 
-        Assertions.assertTrue(splitTasks.containsKey(PredicateSearchKey.of("db", "tbl", idBuilder.build())));
-        Assertions.assertTrue(splitTasks.containsKey(PredicateSearchKey.of("db", "tbl", fullBuilder.build())));
-        Assertions.assertEquals(1, splitTasks.size());
-        Mockito.verify(scan, Mockito.times(1)).planFiles();
+            Assertions.assertTrue(splitTasks.containsKey(PredicateSearchKey.of("db", "tbl", idBuilder.build())));
+            Assertions.assertTrue(splitTasks.containsKey(PredicateSearchKey.of("db", "tbl", fullBuilder.build())));
+            Assertions.assertEquals(1, splitTasks.size());
+            Mockito.verify(scan, Mockito.times(1)).planFiles();
+        } finally {
+            Tracers.close();
+        }
     }
 
     @Test

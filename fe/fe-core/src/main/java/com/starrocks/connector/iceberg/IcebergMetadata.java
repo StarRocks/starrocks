@@ -1245,28 +1245,40 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     private ScanReport withProjectedFields(IcebergTable icebergTable, ScanReport baseReport, List<String> fieldNames) {
-        List<String> projectedFieldNames = fieldNames == null
-                ? icebergTable.getNativeTable().schema().columns().stream()
+        org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        List<String> candidates = fieldNames == null
+                ? nativeTbl.schema().columns().stream()
                 .map(Types.NestedField::name)
-                .collect(toImmutableList())
-                : fieldNames.stream().collect(toImmutableList());
+                .collect(Collectors.toList())
+                : filterToIcebergColumns(nativeTbl, fieldNames);
 
-        List<Integer> projectedFieldIds = projectedFieldNames.stream()
-                .map(fieldName -> {
-                    Types.NestedField field = icebergTable.getNativeTable().schema().findField(fieldName);
-                    if (field == null) {
-                        throw new StarRocksConnectorException("Failed to resolve projected field %s for table %s.%s",
-                                fieldName, icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
-                    }
-                    return field.fieldId();
-                })
-                .collect(toImmutableList());
+        List<String> resolvedNames = new ArrayList<>();
+        List<Integer> resolvedIds = new ArrayList<>();
+        for (String name : candidates) {
+            Types.NestedField field = nativeTbl.schema().findField(name);
+            if (field == null) {
+                LOG.warn("Skip unresolved projected field '{}' for table {}.{}",
+                        name, icebergTable.getCatalogDBName(), icebergTable.getCatalogTableName());
+                continue;
+            }
+            resolvedNames.add(name);
+            resolvedIds.add(field.fieldId());
+        }
 
         return ImmutableScanReport.builder()
                 .from(baseReport)
-                .projectedFieldIds(projectedFieldIds)
-                .projectedFieldNames(projectedFieldNames)
+                .projectedFieldIds(resolvedIds)
+                .projectedFieldNames(resolvedNames)
                 .build();
+    }
+
+    private static List<String> filterToIcebergColumns(org.apache.iceberg.Table nativeTable, List<String> fieldNames) {
+        Set<String> schemaColumns = nativeTable.schema().columns().stream()
+                .map(Types.NestedField::name)
+                .collect(Collectors.toSet());
+        return fieldNames.stream()
+                .filter(schemaColumns::contains)
+                .collect(Collectors.toList());
     }
 
     private CloseableIterator<FileScanTask> buildFileScanTaskIterator(IcebergTable icebergTable,
@@ -1340,9 +1352,10 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         if (fieldNames != null) {
-            // Preserve zero-column projections such as count(*) so ScanReport.projectedFieldIds
-            // reflects the actual scan projection instead of the full table schema.
-            scan = (Scan) scan.select(fieldNames);
+            // Filter out pseudo-columns (e.g. _row_id, $data_sequence_number, _file) that exist
+            // in StarRocks metadata but not in the Iceberg native schema.
+            List<String> icebergFieldNames = filterToIcebergColumns(nativeTbl, fieldNames);
+            scan = (Scan) scan.select(icebergFieldNames);
         }
 
         if (enableCollectColumnStats) {
