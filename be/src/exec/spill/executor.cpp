@@ -20,4 +20,8 @@ namespace starrocks::spill {
 
 TraceInfo::TraceInfo(RuntimeState* state) : query_id(state->query_id()), fragment_id(state->fragment_instance_id()) {}
 
+std::weak_ptr<pipeline::QueryContext> spill_query_ctx_weak_ptr(RuntimeState* state) {
+    return state->query_ctx()->weak_from_this();
+}
+
 } // namespace starrocks::spill

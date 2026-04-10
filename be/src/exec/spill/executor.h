@@ -37,6 +37,8 @@ struct TraceInfo {
     TUniqueId fragment_id;
 };
 
+std::weak_ptr<pipeline::QueryContext> spill_query_ctx_weak_ptr(RuntimeState* state);
+
 struct EmptyMemGuard {
     bool scoped_begin() const { return true; }
     void scoped_end() const {}
@@ -173,7 +175,7 @@ struct SyncTaskExecutor {
 #define DEFER_GUARD_END(guard) auto VARNAME_LINENUM(defer) = DeferOp([&]() { guard.scoped_end(); });
 
 #define RESOURCE_TLS_MEMTRACER_GUARD(state, ...) \
-    spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(), ##__VA_ARGS__)
+    spill::ResourceMemTrackerGuard(tls_mem_tracker, spill::spill_query_ctx_weak_ptr(state), ##__VA_ARGS__)
 
 #define TRACKER_WITH_SPILLER_GUARD(state, spiller) RESOURCE_TLS_MEMTRACER_GUARD(state, spiller->weak_from_this())
 
