@@ -452,14 +452,6 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.4.0
 
-<!--
-### enable_collect_table_level_scan_stats (Invisible to users)
-
-This variable is introduced to solve compatibility issues.
-
-Default value: `true`.
--->
-
 ### enable_datacache_async_populate_mode
 
 * **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
@@ -956,16 +948,6 @@ Used for MySQL client compatibility. No practical usage. Table names in StarRock
   * `true` (Default): Enable low cardinality optimization on data lake queries.
   * `false`: Disable low cardinality optimization on data lake queries.
 * **Introduced in**: v3.5.0
-
-<!--
-### always_collect_low_card_dict_on_lake
-
-* **Default**: false
-* **Type**: Boolean
-* **Unit**: -
-* **Description**: Whether to collect low cardinality information via statistics.
-* **Introduced in**: v3.5.0
--->
 
 ### materialized_view_rewrite_mode (v3.2 and later)
 

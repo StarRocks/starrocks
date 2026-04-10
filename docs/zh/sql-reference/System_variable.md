@@ -446,14 +446,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：false
 * 引入版本：v3.4.0
 
-<!--
-### enable_collect_table_level_scan_stats (Invisible to users)
-
-解决升级中的兼容问题，用户不可见。
-
-默认值：`true`。
--->
-
 ### enable_connector_adaptive_io_tasks
 
 * 描述：外表查询时是否使用自适应策略来调整 I/O 任务的并发数。默认打开。如果未开启自适应策略，可以通过 `connector_io_tasks_per_scan_operator` 变量来手动设置外表查询时的 I/O 任务并发数。
@@ -955,16 +947,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
   * `true`（默认）：在数据湖查询中启用低基数优化。
   * `false`: 在数据湖查询中禁用低基数优化。
 * 引入版本：v3.5.0
-
-<!--
-### always_collect_low_card_dict_on_lake
-
-* 默认值：false
-* 类型：Boolean
-* 单位：-
-* 描述：是否基于统计信息收集低基数信息。
-* 引入版本：v3.5.0
--->
 
 ### materialized_view_rewrite_mode（3.2 及以后）
 
