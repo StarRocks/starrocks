@@ -3919,8 +3919,7 @@ TEST_P(LakePartialUpdateTest, test_parallel_column_mode_partial_update_multi_seg
     // Step 3: Verify correctness - the last partial update set c1 = c0 * (5 + kNumPartialUpdates - 1)
     // while c2 should remain unchanged (c0 * 4, set by original full writes).
     const int expected_c1_ratio = 5 + kNumPartialUpdates - 1;
-    ASSERT_EQ(kChunkSize * kNumSourceWrites,
-              check(version, [expected_c1_ratio](int c0, int c1, int c2) {
+    ASSERT_EQ(kChunkSize * kNumSourceWrites, check(version, [expected_c1_ratio](int c0, int c1, int c2) {
                   return (c0 * expected_c1_ratio == c1) && (c0 * 4 == c2);
               }));
 
