@@ -139,6 +139,9 @@ message SegmentMetadataPB {
     // non-contiguous after operations such as partial compaction or batch merge.
     // Backward compatibility: if absent, consumers should fallback to positional index.
     optional uint32 segment_idx = 4;
+    // IDs of vector indexes that need .vi files for this segment.
+    // Only populated when the segment meets the build threshold.
+    repeated int64 vector_index_ids = 5;
 }
 
 message RowsetMetadataPB {

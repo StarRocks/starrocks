@@ -192,7 +192,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                     GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
                                                                    _opts.segment_file_mark.rowset_id, _segment_id,
                                                                    opts.tablet_index.at(GIN).index_id()));
-        } else if (opts.need_vector_index) {
+        } else if (opts.need_vector_index && !_opts.skip_vector_index) {
             int64_t index_id = opts.tablet_index.at(IndexType::VECTOR).index_id();
             auto it = _opts.vector_index_file_paths.find(index_id);
             if (it == _opts.vector_index_file_paths.end()) {
@@ -344,6 +344,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // Track vector index storage type for footer
         if (standalone_index_size > 0) {
             _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_STANDALONE);
+            _has_vector_index_written = true;
         } else {
             _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_NONE);
         }

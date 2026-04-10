@@ -221,6 +221,9 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
             file.sort_key_max.to_proto(segment_meta->mutable_sort_key_max());
             segment_meta->set_num_rows(file.num_rows);
             segment_meta->set_segment_idx(next_segment_id++);
+            for (int64_t vi_id : file.vector_index_ids) {
+                segment_meta->add_vector_index_ids(vi_id);
+            }
         }
     }
     op_compaction->set_new_segment_count(writer->segments().size());

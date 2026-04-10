@@ -185,8 +185,6 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
 
     opts.global_dicts = _global_dicts;
 
-    fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
-
     WritableFileOptions wopts;
     if (config::enable_transparent_data_encryption) {
         ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
@@ -201,14 +199,21 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
             return fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name));
         }
     };
-    if (_bundle_file_context != nullptr && _segments.empty() && eos) {
+    bool is_bundle = _bundle_file_context != nullptr && _segments.empty() && eos;
+    if (is_bundle) {
         // If this is the first data file writer and it is the end of stream,
         // then we will create a shared file for this segment writer.
         RETURN_IF_ERROR(_bundle_file_context->try_create_bundle_file(create_file_fn));
         of = std::make_unique<BundleWritableFile>(_bundle_file_context, wopts.encryption_info);
+        // Bundle segments skip vector index: the segment filename in metadata is the
+        // shared bundle filename, which differs from the independent segment name used
+        // to generate .vi file paths. Vector indexes will be built after compaction.
+        opts.skip_vector_index = true;
     } else {
         ASSIGN_OR_RETURN(of, create_file_fn());
+        fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
     }
+
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -233,9 +238,12 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         segment_file_info.sort_key_min = _seg_writer->get_sort_key_min();
         segment_file_info.sort_key_max = _seg_writer->get_sort_key_max();
         segment_file_info.num_rows = _seg_writer->num_rows();
-        // Record which vector indexes actually generated .vi files
-        for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-            segment_file_info.vector_index_ids.push_back(index_id);
+        // Record vector index IDs only when .vi files were actually produced.
+        // VectorIndexWriter::finish skips file creation when the build threshold is not reached.
+        if (_seg_writer->has_vector_index_written()) {
+            for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
+                segment_file_info.vector_index_ids.push_back(index_id);
+            }
         }
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
@@ -378,9 +386,12 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         segment_file_info.sort_key_min = segment_writer->get_sort_key_min();
         segment_file_info.sort_key_max = segment_writer->get_sort_key_max();
         segment_file_info.num_rows = segment_writer->num_rows();
-        // Record which vector indexes actually generated .vi files
-        for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
-            segment_file_info.vector_index_ids.push_back(index_id);
+        // Record vector index IDs only when .vi files were actually produced.
+        // VectorIndexWriter::finish skips file creation when the build threshold is not reached.
+        if (segment_writer->has_vector_index_written()) {
+            for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
+                segment_file_info.vector_index_ids.push_back(index_id);
+            }
         }
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
