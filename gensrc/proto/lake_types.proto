@@ -344,6 +344,8 @@ message TxnLogPB {
         optional TabletSchemaPB source_schema = 4;
         // used for shared-data replication to store the tablet meta replicated
         optional TabletMetadataPB tablet_metadata = 5;
+        // delta column group metadata for partial update and generated column replication
+        optional DeltaColumnGroupMetadataPB dcg_meta = 6;
     }
 
     optional int64 tablet_id = 1;
