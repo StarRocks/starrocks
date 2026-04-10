@@ -1876,14 +1876,8 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
 const ColumnReader* VariantColumnReader::filterable_typed_value_reader_for_path(const VariantPath& path) const {
     const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
     if (found_node == nullptr) return nullptr;
-    // Only SCALAR leaf nodes carry reliable typed statistics.
-    // NONE means no typed_value was shredded; ARRAY means the leaf is an array boundary —
-    // neither has meaningful scalar min/max for zone-map filtering.
     if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
     if (found_node->typed_value_reader == nullptr) return nullptr;
-    // Binary types (BINARY, VARBINARY) store raw variant-encoded bytes whose Parquet
-    // min/max reflects byte-order, not semantic value order.  Filtering on them would
-    // produce incorrect results (false negatives), so bail out conservatively.
     if (found_node->typed_value_read_type == nullptr) return nullptr;
     {
         LogicalType lt = found_node->typed_value_read_type->type;
@@ -1909,7 +1903,7 @@ bool VariantColumnReader::fallback_values_all_null_in_row_group_for_path(const V
         !chunk_meta->meta_data.statistics.__isset.null_count) {
         return false;
     }
-    return chunk_meta->meta_data.statistics.null_count == rg_num_rows;
+    return chunk_meta->meta_data.statistics.null_count == (int64_t)rg_num_rows;
 }
 
 StatusOr<bool> VariantVirtualZoneMapReader::_prepare_delegate_predicates(

@@ -1320,8 +1320,10 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
     // virtual columns with conjuncts always use active sources, so this is correct.
     ChunkPtr eval_chunk = std::make_shared<Chunk>();
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
-        if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
-            if (_deferred_conjunct_slot_ids.count(slot_id)) {
+        bool source_in_chunk = active_chunk->is_slot_exist(projection.source_slot_id);
+        bool has_conjunct = _deferred_conjunct_slot_ids.count(slot_id) > 0;
+        if (!source_in_chunk) {
+            if (has_conjunct) {
                 return Status::InternalError(
                         fmt::format("variant virtual column {} has deferred conjunct but source slot {} "
                                     "is not in active_chunk",
@@ -1346,6 +1348,10 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
                                                _deferred_variant_virtual_conjunct_ctxs, eval_chunk.get(), &filter));
     if (hit_count == 0) {
         _param.stats->late_materialize_skip_rows += raw_count;
+        // eval_conjuncts_into_filter returns 0 (all rows rejected) without zeroing the filter
+        // when it short-circuits early (e.g. true_count == 0 path). Zero it out explicitly so
+        // the caller's count_nonzero check correctly skips the chunk.
+        filter.assign(filter.size(), 0);
     }
 
     // active_chunk is NOT filtered here; the caller merges this filter with
