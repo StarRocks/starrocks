@@ -22,7 +22,6 @@
 #include "agent/publish_version.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
-#include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
