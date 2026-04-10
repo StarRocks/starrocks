@@ -191,4 +191,49 @@ TEST_F(ColumnHelperTest, append_column_value_large_binary) {
     EXPECT_EQ(col->debug_string(), "['foo', 'bar']");
 }
 
+// ColumnHelper::build_slices
+TEST_F(ColumnHelperTest, build_slices_binary_column) {
+    auto col = ColumnTestHelper::build_column<Slice>({"foo", "bar", "baz"});
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(col.get(), slices);
+    ASSERT_EQ(slices.size(), 3);
+    EXPECT_EQ(slices[0].to_string(), "foo");
+    EXPECT_EQ(slices[1].to_string(), "bar");
+    EXPECT_EQ(slices[2].to_string(), "baz");
+}
+
+TEST_F(ColumnHelperTest, build_slices_large_binary_column) {
+    auto col = LargeBinaryColumn::create();
+    col->append_string("hello");
+    col->append_string("world");
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(col.get(), slices);
+    ASSERT_EQ(slices.size(), 2);
+    EXPECT_EQ(slices[0].to_string(), "hello");
+    EXPECT_EQ(slices[1].to_string(), "world");
+}
+
+TEST_F(ColumnHelperTest, build_slices_nullable_column) {
+    auto nullable = ColumnTestHelper::build_nullable_column<Slice>({"a", "bb"});
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(nullable.get(), slices);
+    ASSERT_EQ(slices.size(), 2);
+    EXPECT_EQ(slices[0].to_string(), "a");
+    EXPECT_EQ(slices[1].to_string(), "bb");
+}
+
+TEST_F(ColumnHelperTest, build_slices_const_column) {
+    auto inner = BinaryColumn::create();
+    inner->append(Slice("const"));
+    ColumnPtr const_col = ConstColumn::create(std::move(inner), 3);
+
+    Buffer<Slice> slices;
+    ColumnHelper::build_slices(const_col.get(), slices);
+    ASSERT_EQ(slices.size(), 1);
+    EXPECT_EQ(slices[0].to_string(), "const");
+}
+
 } // namespace starrocks

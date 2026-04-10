@@ -622,6 +622,18 @@ public:
         return down_cast<const BinaryColumn*>(get_data_column(column));
     }
 
+    // Build a slice buffer from a binary/large-binary column.
+    // Unwraps NullableColumn and ConstColumn before dispatch.
+    // Supports BinaryColumn (uint32_t offsets) and LargeBinaryColumn (uint64_t offsets).
+    static void build_slices(const Column* column, Buffer<Slice>& slices) {
+        const Column* data_col = get_data_column(column);
+        if (data_col->is_large_binary()) {
+            down_cast<const LargeBinaryColumn*>(data_col)->build_slices(slices);
+        } else {
+            down_cast<const BinaryColumn*>(data_col)->build_slices(slices);
+        }
+    }
+
     // If column[row] is not null and is a binary column, writes the slice to *out and returns true.
     // Handles ConstColumn (normalises row to 0) and NullableColumn (null check).
     static bool get_binary_slice_at(const Column* column, size_t row, Slice* out);

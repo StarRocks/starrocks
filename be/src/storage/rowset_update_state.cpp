@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
@@ -552,8 +553,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     */
     _auto_increment_partial_update_states[idx].delete_pks = _upserts[idx]->clone_empty();
     std::vector<uint32_t> delete_idxes;
-    const auto* data =
-            reinterpret_cast<const int64*>(_auto_increment_partial_update_states[idx].write_column->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_auto_increment_partial_update_states[idx].write_column->accept(&visitor));
+    const auto* data = reinterpret_cast<const int64*>(visitor.result());
 
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user

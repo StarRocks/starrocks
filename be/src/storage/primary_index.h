@@ -173,8 +173,8 @@ public:
     }
 
     // Return the pointer of specific position of slice array.
-    static const Slice* build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin, uint32_t idx_end,
-                                              std::vector<Slice>* key_slices);
+    static StatusOr<const Slice*> build_persistent_keys(const Column& pks, size_t key_size, uint32_t idx_begin,
+                                                        uint32_t idx_end, Buffer<Slice>* key_slices);
 
     bool need_rebuild() const;
 

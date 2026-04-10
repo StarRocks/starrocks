@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "column/binary_column.h"
 #include "column/json_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
@@ -483,7 +484,9 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, Mutabl
     auto op_column = src->get_column_by_index(op_column_id);
     src->remove_column_by_index(op_column_id);
     size_t nrows = src->num_rows();
-    auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(op_column->accept(&visitor));
+    const auto* ops = visitor.result();
     size_t ndel = 0;
     for (size_t i = 0; i < nrows; i++) {
         ndel += (ops[i] == TOpType::DELETE);
