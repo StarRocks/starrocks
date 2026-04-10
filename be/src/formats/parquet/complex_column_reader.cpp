@@ -1393,6 +1393,10 @@ Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBind
         return field.status().clone_and_prepend(
                 strings::Substitute("seek variant binding path failed, path=$0", binding.path));
     }
+    if (field.value().is_null()) {
+        append_null();
+        return Status::OK();
+    }
     append_value_ref(field.value());
     return Status::OK();
 }
