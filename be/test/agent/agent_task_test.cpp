@@ -22,14 +22,7 @@
 #include "agent/publish_version.h"
 #include "agent/task_signatures_manager.h"
 #include "agent/task_worker_pool.h"
-<<<<<<< HEAD
-=======
-#include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "base/uuid/uuid_generator.h"
-#include "common/config_storage_fwd.h"
->>>>>>> 1d0970ca75 ([BugFix] Fix incorrect update for parallel_clone_task_per_path (#71484))
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/AgentService_types.h"
