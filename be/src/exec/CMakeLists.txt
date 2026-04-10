@@ -191,6 +191,7 @@ set(PIPELINE_EXTENSIONS_SRCS
     query_cache/conjugate_operator.cpp
     query_cache/ticket_checker.cpp
     spill/spill_components.cpp
+    spill/executor.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
     spill/spill_components.cpp

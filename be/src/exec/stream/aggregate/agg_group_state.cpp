@@ -19,6 +19,7 @@
 
 #include "exprs/agg/stream/stream_detail_state.h"
 #include "fmt/format.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::stream {
 

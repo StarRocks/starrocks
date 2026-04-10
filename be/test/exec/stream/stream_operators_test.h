@@ -17,6 +17,7 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/pipeline/stream_epoch_manager.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::stream {
 
@@ -35,6 +36,7 @@ struct GeneratorStreamSourceParam {
 
 using SourceOperator = pipeline::SourceOperator;
 using Operator = pipeline::Operator;
+using OperatorFactory = pipeline::OperatorFactory;
 
 class GeneratorStreamSourceOperator final : public SourceOperator {
 public:
@@ -47,12 +49,7 @@ public:
     ~GeneratorStreamSourceOperator() override = default;
 
     // Use mv epoch manager to interact with FE
-    Status prepare(RuntimeState* state) override {
-        (void)SourceOperator::prepare(state);
-        _stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
-        DCHECK(_stream_epoch_manager);
-        return Status::OK();
-    }
+    Status prepare(RuntimeState* state) override;
 
     int64_t tablet_id() { return _tablet_id; }
     bool is_trigger_finished(const EpochInfo& epoch_info);

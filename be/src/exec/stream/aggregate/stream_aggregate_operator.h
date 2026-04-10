@@ -30,8 +30,8 @@ using StreamAggregatorFactoryPtr = std::shared_ptr<StreamAggregatorFactory>;
 
 class StreamAggregateOperator : public pipeline::SourceOperator {
 public:
-    StreamAggregateOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                            StreamAggregatorPtr aggregator)
+    StreamAggregateOperator(pipeline::OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                            int32_t driver_sequence, StreamAggregatorPtr aggregator)
             : pipeline::SourceOperator(factory, id, "stream_aggregate", plan_node_id, false, driver_sequence),
               _aggregator(std::move(aggregator)) {
         _aggregator->ref();

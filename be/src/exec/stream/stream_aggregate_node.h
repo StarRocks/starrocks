@@ -16,6 +16,7 @@
 
 #include "column/chunk.h"
 #include "common/statusor.h"
+#include "exec/exec_node.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/stream/aggregate/stream_aggregate_operator.h"
 

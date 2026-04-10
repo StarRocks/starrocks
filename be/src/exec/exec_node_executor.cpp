@@ -14,6 +14,7 @@
 
 #include "exec/exec_node.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_builder.h"
 
 namespace starrocks {

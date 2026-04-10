@@ -22,9 +22,12 @@
 #include "base/testutil/assert.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 

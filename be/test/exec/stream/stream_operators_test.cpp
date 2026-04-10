@@ -24,6 +24,7 @@
 #include "exec/stream/aggregate/stream_aggregator.h"
 #include "exec/stream/stream_pipeline_test.h"
 #include "exec/stream/stream_test.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::stream {
 
@@ -43,6 +44,13 @@ bool GeneratorStreamSourceOperator::is_trigger_finished(const EpochInfo& epoch_i
         VLOG_ROW << "Unsupported trigger_mode: " + std::to_string((int)(trigger_mode));
     }
     return false;
+}
+
+Status GeneratorStreamSourceOperator::prepare(RuntimeState* state) {
+    (void)SourceOperator::prepare(state);
+    _stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
+    DCHECK(_stream_epoch_manager);
+    return Status::OK();
 }
 
 StatusOr<ChunkPtr> GeneratorStreamSourceOperator::pull_chunk(starrocks::RuntimeState* state) {

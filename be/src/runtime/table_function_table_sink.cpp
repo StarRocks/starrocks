@@ -18,6 +18,7 @@
 #include "connector/file_chunk_sink.h"
 #include "exec/data_sink.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"

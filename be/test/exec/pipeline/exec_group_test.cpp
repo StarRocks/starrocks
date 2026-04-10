@@ -23,6 +23,8 @@
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

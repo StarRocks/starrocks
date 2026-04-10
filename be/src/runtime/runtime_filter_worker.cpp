@@ -26,7 +26,9 @@
 #include "common/config_runtime_fwd.h"
 #include "common/system/backend_options.h"
 #include "common/thread/thread.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exec/runtime_filter/runtime_filter_registry.h"
 #include "gen_cpp/Types_types.h" // for TUniqueId

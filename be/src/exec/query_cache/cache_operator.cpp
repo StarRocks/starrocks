@@ -22,6 +22,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"

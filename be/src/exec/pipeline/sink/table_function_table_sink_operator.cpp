@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "base/url_coding.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exprs/expr_executor.h"
 #include "formats/parquet/file_writer.h"
 #include "glog/logging.h"

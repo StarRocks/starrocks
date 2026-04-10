@@ -25,6 +25,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/workgroup/scan_executor.h"

@@ -23,8 +23,11 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "runtime/bucket_aware_partition.h"

@@ -14,18 +14,18 @@
 
 #pragma once
 
+#include <functional>
+#include <list>
 #include <unordered_map>
 
 #include "exec/pipeline/exchange/local_exchange.h"
 #include "exec/pipeline/exchange/local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 class ExecNode;
@@ -34,35 +34,20 @@ namespace pipeline {
 class PipelineBuilderContext {
 public:
     PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism, size_t sink_dop,
-                           bool is_stream_pipeline)
-            : _fragment_context(fragment_context),
-              _degree_of_parallelism(degree_of_parallelism),
-              _data_sink_dop(sink_dop),
-              _is_stream_pipeline(is_stream_pipeline),
-              _enable_group_execution(fragment_context->enable_group_execution()) {
-        // init the default execution group
-        _execution_groups.emplace_back(ExecutionGroupBuilder::create_normal_exec_group());
-        _normal_exec_group = _execution_groups.back().get();
-        _current_execution_group = _execution_groups.back().get();
-    }
+                           bool is_stream_pipeline);
 
     void init_colocate_groups(std::unordered_map<int32_t, ExecutionGroupPtr>&& colocate_groups);
     ExecutionGroupRawPtr find_exec_group_by_plan_node_id(int32_t plan_node_id);
     void set_current_execution_group(ExecutionGroupRawPtr exec_group) { _current_execution_group = exec_group; }
     ExecutionGroupRawPtr current_execution_group() { return _current_execution_group; }
 
-    void add_pipeline(const OpFactories& operators, ExecutionGroupRawPtr execution_group) {
-        // TODO: refactor Pipelines to PipelineRawPtrs
-        _pipelines.emplace_back(std::make_shared<Pipeline>(next_pipe_id(), operators, execution_group));
-        execution_group->add_pipeline(_pipelines.back().get());
-        _subscribe_pipeline_event(_pipelines.back().get());
-    }
+    void add_pipeline(const OpFactories& operators, ExecutionGroupRawPtr execution_group);
 
-    void add_pipeline(const OpFactories& operators) { add_pipeline(operators, _current_execution_group); }
+    void add_pipeline(const OpFactories& operators);
 
-    void add_independent_pipeline(const OpFactories& operators) { add_pipeline(operators, _normal_exec_group); }
+    void add_independent_pipeline(const OpFactories& operators);
 
-    bool is_colocate_group() const { return _current_execution_group->type() == ExecutionGroupType::COLOCATE; }
+    bool is_colocate_group() const;
 
     OpFactories maybe_interpolate_local_broadcast_exchange(RuntimeState* state, int32_t plan_node_id,
                                                            OpFactories& pred_operators, int num_receivers);
@@ -147,7 +132,7 @@ public:
         return _pipelines[_pipelines.size() - 1].get();
     }
 
-    RuntimeState* runtime_state() { return _fragment_context->runtime_state(); }
+    RuntimeState* runtime_state();
     FragmentContext* fragment_context() { return _fragment_context; }
     bool enable_group_execution() const { return _enable_group_execution; }
 

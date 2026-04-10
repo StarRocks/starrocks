@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
@@ -23,16 +24,19 @@
 #include "base/concurrency/spinlock.h"
 #include "base/hash/hash.h"
 #include "base/hash/hash_std.hpp"
+#include "base/metrics.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/spill/query_spill_manager.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/descriptors_fwd.h"
 #include "runtime/exec_env_fwd.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state_fwd.h"

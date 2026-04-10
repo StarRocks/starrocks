@@ -27,6 +27,7 @@
 #include "exec/spill/serde.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
 

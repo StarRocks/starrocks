@@ -41,6 +41,7 @@
 #endif
 
 #include <curl/curl.h>
+#include <gflags/gflags.h>
 #include <thrift/TOutput.h>
 
 #ifndef __APPLE__
