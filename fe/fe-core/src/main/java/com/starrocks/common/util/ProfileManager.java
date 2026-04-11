@@ -98,12 +98,6 @@ public class ProfileManager implements MemoryTrackable {
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
-<<<<<<< HEAD
-        public byte[] profileContent;
-        public ProfilingExecPlan plan;
-
-        public List<String> toRow() {
-=======
         public long startTimeMs = -1;
         public long endTimeMs = -1;
         private byte[] profileContent;
@@ -150,7 +144,6 @@ public class ProfileManager implements MemoryTrackable {
 
         public List<String> toRow(ConnectContext context) {
             ZoneId sessionZone = getSessionZoneId(context);
->>>>>>> fc5770df2e ([BugFix] Display profile START_TIME/END_TIME with session timezone (#71429))
             List<String> res = Lists.newArrayList();
             res.add(infoStrings.get(QUERY_ID));
             res.add(formatTimestamp(startTimeMs, sessionZone));
