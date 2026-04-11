@@ -23,6 +23,7 @@
 #include "common/runtime_profile.h"
 #include "common/system/backend_options.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
