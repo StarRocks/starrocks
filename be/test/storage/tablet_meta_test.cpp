@@ -38,13 +38,9 @@
 
 #include <string>
 
-<<<<<<< HEAD
 #include "runtime/decimalv2_value.h"
-=======
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_meta.h"
-#include "types/decimalv2_value.h"
->>>>>>> 332c1b3dfc ([BugFix] Report be_tablets DATA_SIZE as rowset column data bytes (#70735))
 
 namespace starrocks {
 namespace {
