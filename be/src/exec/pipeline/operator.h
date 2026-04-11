@@ -19,8 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
-#include "exec/pipeline/runtime_filter_types.h"
-#include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "gutil/strings/substitute.h"
@@ -37,6 +36,9 @@ using RuntimeFilterProbeCollector = starrocks::RuntimeFilterProbeCollector;
 namespace pipeline {
 class Operator;
 class OperatorFactory;
+class PipelineObserver;
+class RuntimeFilterHolder;
+class RuntimeFilterHub;
 using OperatorPtr = std::shared_ptr<Operator>;
 using Operators = std::vector<OperatorPtr>;
 using LocalRFWaitingSet = std::set<TPlanNodeId>;
