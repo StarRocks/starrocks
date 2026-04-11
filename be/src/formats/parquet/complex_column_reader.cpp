@@ -14,6 +14,8 @@
 
 #include "formats/parquet/complex_column_reader.h"
 
+#include <fmt/core.h>
+
 #include <algorithm>
 #include <optional>
 
@@ -28,15 +30,82 @@
 #include "column/variant_builder.h"
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
+#include "common/object_pool.h"
 #include "exprs/literal.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
+#include "types/type_info.h"
 #include "types/variant_value.h"
 
 namespace starrocks::parquet {
+
+namespace {
+
+TypeDescriptor resolve_virtual_slot_type(VariantColumnReader* source, const VariantPath& leaf_path) {
+    if (source == nullptr) {
+        return TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+    }
+    const TypeDescriptor* leaf_type = source->typed_value_read_type_for_path(leaf_path);
+    if (leaf_type == nullptr) {
+        return TypeDescriptor(LogicalType::TYPE_UNKNOWN);
+    }
+    return *leaf_type;
+}
+
+const ShreddedFieldNode* find_shredded_field_node_for_path(const std::vector<ShreddedFieldNode>& shredded_fields,
+                                                           const VariantPath& path) {
+    if (path.empty()) return nullptr;
+    const std::vector<ShreddedFieldNode>* current = &shredded_fields;
+    const ShreddedFieldNode* found_node = nullptr;
+    for (size_t i = 0; i < path.segments.size(); ++i) {
+        const auto& seg = path.segments[i];
+        if (!seg.is_object()) return nullptr;
+        found_node = nullptr;
+        for (const auto& node : *current) {
+            if (node.name == seg.key) {
+                found_node = &node;
+                break;
+            }
+        }
+        if (found_node == nullptr) return nullptr;
+        if (i + 1 < path.segments.size()) {
+            current = &found_node->children;
+        }
+    }
+    return found_node;
+}
+
+Status rewrite_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates,
+                                   const TypeDescriptor& target_type_desc, ObjectPool* pool,
+                                   std::vector<const ColumnPredicate*>* rewritten_predicates) {
+    DCHECK(pool != nullptr);
+    DCHECK(rewritten_predicates != nullptr);
+
+    TypeInfoPtr target_type_info = get_type_info(target_type_desc);
+    if (target_type_info == nullptr) {
+        return Status::NotSupported(fmt::format("unsupported delegate leaf type: {}", target_type_desc.debug_string()));
+    }
+
+    rewritten_predicates->reserve(predicates.size());
+    for (const ColumnPredicate* predicate : predicates) {
+        if (predicate == nullptr) {
+            return Status::InvalidArgument("predicate should not be null");
+        }
+
+        const ColumnPredicate* rewritten = nullptr;
+        RETURN_IF_ERROR(predicate->convert_to(&rewritten, target_type_info, pool));
+        if (rewritten == nullptr) {
+            return Status::InternalError("predicate convert_to returned null");
+        }
+        rewritten_predicates->emplace_back(rewritten);
+    }
+    return Status::OK();
+}
+
+} // namespace
 
 // File-scope helper — avoids repeated construction and deduplicate the several
 // `static const TypeDescriptor k_variant_type` locals scattered through the file.
@@ -1321,9 +1390,11 @@ Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBind
 
     auto field = VariantPath::seek_view(full_row, parsed_path.value(), 0);
     if (!field.ok()) {
-        return field.status().clone_and_prepend(
-                strings::Substitute("seek variant binding path failed, path=$0", binding.path));
+        // Path not found (e.g. type mismatch at intermediate node): treat as missing.
+        append_null();
+        return Status::OK();
     }
+    // Field found — append even if the value is JSON null (basic_type=Null).
     append_value_ref(field.value());
     return Status::OK();
 }
@@ -1612,6 +1683,16 @@ Status VariantColumnReader::prepare() {
     return Status::OK();
 }
 
+VariantVirtualZoneMapReader::VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path)
+        : VariantVirtualZoneMapReader(source, leaf_path, resolve_virtual_slot_type(source, leaf_path)) {}
+
+VariantVirtualZoneMapReader::VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path,
+                                                         TypeDescriptor virtual_slot_type)
+        : ColumnReader(nullptr),
+          _source(source),
+          _leaf_path(std::move(leaf_path)),
+          _virtual_slot_type(std::move(virtual_slot_type)) {}
+
 void VariantColumnReader::get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) {
     // Only value_reader carries def/rep levels; metadata_reader levels would be dead-written.
     // _top_level.value_reader != nullptr is guaranteed by the constructor DCHECK.
@@ -1792,6 +1873,132 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     }
 
     return Status::OK();
+}
+
+const ColumnReader* VariantColumnReader::filterable_typed_value_reader_for_path(const VariantPath& path) const {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr) return nullptr;
+    if (found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    if (found_node->typed_value_reader == nullptr) return nullptr;
+    if (found_node->typed_value_read_type == nullptr) return nullptr;
+    {
+        LogicalType lt = found_node->typed_value_read_type->type;
+        if (lt == TYPE_BINARY || lt == TYPE_VARBINARY) return nullptr;
+    }
+    return found_node->typed_value_reader.get();
+}
+
+const TypeDescriptor* VariantColumnReader::typed_value_read_type_for_path(const VariantPath& path) const {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return nullptr;
+    return found_node->typed_value_read_type.get();
+}
+
+bool VariantColumnReader::fallback_values_all_null_in_row_group_for_path(const VariantPath& path,
+                                                                         uint64_t rg_num_rows) const {
+    const ShreddedFieldNode* found_node = find_shredded_field_node_for_path(_shredded_fields, path);
+    if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return false;
+    if (found_node->value_reader == nullptr) return true;
+
+    const tparquet::ColumnChunk* chunk_meta = found_node->value_reader->get_chunk_metadata();
+    if (chunk_meta == nullptr || !chunk_meta->meta_data.__isset.statistics ||
+        !chunk_meta->meta_data.statistics.__isset.null_count) {
+        return false;
+    }
+    return chunk_meta->meta_data.statistics.null_count == (int64_t)rg_num_rows;
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::_prepare_delegate_predicates(
+        const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool, const uint64_t rg_num_rows,
+        const ColumnReader** leaf_reader, std::vector<const ColumnPredicate*>* rewritten_predicates) const {
+    DCHECK(pool != nullptr);
+    DCHECK(leaf_reader != nullptr);
+    DCHECK(rewritten_predicates != nullptr);
+
+    if (_source == nullptr) {
+        return Status::NotFound("variant virtual leaf reader is not available");
+    }
+    *leaf_reader = _source->filterable_typed_value_reader_for_path(_leaf_path);
+    const TypeDescriptor* leaf_type = _source->typed_value_read_type_for_path(_leaf_path);
+    if (*leaf_reader == nullptr || leaf_type == nullptr) {
+        return Status::NotFound("variant virtual leaf reader is not available");
+    }
+    // Variant shredding only permits data skipping on typed_value statistics when the paired
+    // fallback `value` column is null for the entire row group. Otherwise min/max/bloom on
+    // typed_value cover only the typed subset, while the engine may still match fallback rows
+    // via implicit variant casts (for example Variant -> STRING), so skipping would be unsafe.
+    if (!_source->fallback_values_all_null_in_row_group_for_path(_leaf_path, rg_num_rows)) {
+        LOG(INFO) << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+                  << " because fallback value column may contain non-null rows in this row group";
+        return false;
+    }
+
+    // TODO(variant): remove virtual-slot/leaf duality by materializing rewritten predicates
+    // once during planning instead of per filter invocation.
+    Status st = rewrite_delegate_predicates(predicates, *leaf_type, pool, rewritten_predicates);
+    if (!st.ok()) {
+        return st.clone_and_prepend(fmt::format("slot type {} cannot delegate to leaf type {}",
+                                                _virtual_slot_type.debug_string(), leaf_type->debug_string()));
+    }
+    return true;
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::row_group_zone_map_filter(
+        const std::vector<const ColumnPredicate*>& predicates, CompoundNodeType pred_relation,
+        const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    auto prepare = _prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates);
+    if (!prepare.ok()) {
+        LOG(WARNING) << "skip variant virtual zone-map pushdown: " << prepare.status().to_string();
+        return false;
+    }
+    bool can_delegate = prepare.value();
+    if (!can_delegate) {
+        return false;
+    }
+    return leaf->row_group_zone_map_filter(rewritten_predicates, pred_relation, rg_first_row, rg_num_rows);
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::page_index_zone_map_filter(
+        const std::vector<const ColumnPredicate*>& predicates, SparseRange<uint64_t>* row_ranges,
+        CompoundNodeType pred_relation, const uint64_t rg_first_row, const uint64_t rg_num_rows) {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    auto prepare = _prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates);
+    if (!prepare.ok()) {
+        LOG(WARNING) << "skip variant virtual page-index pushdown: " << prepare.status().to_string();
+        return false;
+    }
+    bool can_delegate = prepare.value();
+    if (!can_delegate) {
+        return false;
+    }
+
+    // page_index_zone_map_filter is non-const in the base class; cast is safe because the
+    // underlying object is non-const (it's a reader owned by VariantColumnReader).
+    return const_cast<ColumnReader*>(leaf)->page_index_zone_map_filter(rewritten_predicates, row_ranges, pred_relation,
+                                                                       rg_first_row, rg_num_rows);
+}
+
+StatusOr<bool> VariantVirtualZoneMapReader::row_group_bloom_filter(
+        const std::vector<const ColumnPredicate*>& predicates, CompoundNodeType pred_relation,
+        const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+    ObjectPool pool;
+    const ColumnReader* leaf = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    auto prepare = _prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates);
+    if (!prepare.ok()) {
+        LOG(WARNING) << "skip variant virtual bloom-filter pushdown: " << prepare.status().to_string();
+        return false;
+    }
+    bool can_delegate = prepare.value();
+    if (!can_delegate) {
+        return false;
+    }
+    return leaf->row_group_bloom_filter(rewritten_predicates, pred_relation, rg_first_row, rg_num_rows);
 }
 
 } // namespace starrocks::parquet

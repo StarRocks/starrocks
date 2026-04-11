@@ -57,6 +57,20 @@ function: assert_explain_verbose_contains("select sum(get_variant_int(data, '$.p
 -- result:
 True
 -- !result
+-- DECIMAL cast is not a supported rewrite target (FE isSupportedCastTarget excludes DECIMAL).
+-- These will become assert_explain_verbose_contains once FE DECIMAL rewrite is implemented.
+function: assert_explain_not_contains("select cast(variant_query(data, '$.profile.price') as decimal(5, 2)) from test_variant_virtual_column", "ExtendedColumnAccessPath")
+-- result:
+True
+-- !result
+function: assert_explain_not_contains("select cast(variant_query(data, '$.profile.amount') as decimal(16, 2)) from test_variant_virtual_column", "ExtendedColumnAccessPath")
+-- result:
+True
+-- !result
+function: assert_explain_not_contains("select cast(variant_query(data, '$.profile.balance') as decimal(22, 4)) from test_variant_virtual_column", "ExtendedColumnAccessPath")
+-- result:
+True
+-- !result
 set cbo_variant_path_rewrite = true;
 -- result:
 -- !result
@@ -92,12 +106,13 @@ order by id;
 1004	dept_4
 -- !result
 select get_variant_int(data, '$.id') as id,
-       data
+       get_variant_string(data, '$.email') as email,
+       get_variant_string(data, '$.profile.department') as dept
 from test_variant_virtual_column
 where get_variant_int(data, '$.id') = 1000
 order by id;
 -- result:
-1000	{"age":20,"city":"city_0","email":"user0@example.com","events":[{"count":1,"detail":"detail_view_0","type":"view"},{"count":2,"detail":"detail_click_0","type":"click"}],"groups":[{"name":"group_0","note":"note_0_0","scores":[10,20,30]},{"name":"group_1","note":"note_0_1","scores":[40,50,60]}],"id":1000,"name":"name_0","numbers":[1,2,3],"profile":{"department":"dept_0","metrics":{"ratio":0.10000000000000001,"views":100},"rank":1,"salary":50000.0},"score":80,"status":"active"}
+1000	user0@example.com	dept_0
 -- !result
 select cast(variant_query(data, '$.profile.rank') as bigint) as rank_val
 from test_variant_virtual_column
@@ -125,6 +140,209 @@ select sum(get_variant_int(data, '$.profile.metrics.views'))
 from test_variant_virtual_column;
 -- result:
 600
+-- !result
+-- predicate pushdown correctness: INT64 (id) zone-map out-of-range → must return 0 rows
+select count(*) from test_variant_virtual_column
+where get_variant_int(data, '$.id') > 9999;
+-- result:
+0
+-- !result
+select count(*) from test_variant_virtual_column
+where get_variant_int(data, '$.id') < 0;
+-- result:
+0
+-- !result
+-- predicate pushdown correctness: INT32 (views) zone-map out-of-range → must return 0 rows
+select count(*) from test_variant_virtual_column
+where get_variant_int(data, '$.profile.metrics.views') > 9999;
+-- result:
+0
+-- !result
+select count(*) from test_variant_virtual_column
+where get_variant_int(data, '$.profile.metrics.views') < 0;
+-- result:
+0
+-- !result
+-- predicate pushdown correctness: DOUBLE (salary) zone-map out-of-range → must return 0 rows
+select count(*) from test_variant_virtual_column
+where get_variant_double(data, '$.profile.salary') > 100000;
+-- result:
+0
+-- !result
+select count(*) from test_variant_virtual_column
+where get_variant_double(data, '$.profile.salary') < 0;
+-- result:
+0
+-- !result
+-- predicate pushdown correctness: in-range INT64 (id) → partial result
+select get_variant_int(data, '$.id') as id
+from test_variant_virtual_column
+where get_variant_int(data, '$.id') >= 1002
+order by id;
+-- result:
+1002
+1003
+1004
+-- !result
+-- predicate pushdown correctness: in-range INT32 (views) → partial result
+select get_variant_int(data, '$.profile.metrics.views') as views
+from test_variant_virtual_column
+where get_variant_int(data, '$.profile.metrics.views') >= 120
+order by views;
+-- result:
+120
+130
+140
+-- !result
+-- predicate pushdown correctness: DOUBLE (salary) partial match → 3 rows
+select count(*) from test_variant_virtual_column
+where get_variant_double(data, '$.profile.salary') >= 52000;
+-- result:
+3
+-- !result
+-- predicate pushdown correctness: all rows match → 5 rows (guard against over-filtering)
+select count(*) from test_variant_virtual_column
+where get_variant_int(data, '$.id') > 0;
+-- result:
+5
+-- !result
+-- predicate pushdown correctness: nested DOUBLE (ratio) zone-map out-of-range → 0 rows
+select count(*) from test_variant_virtual_column
+where get_variant_double(data, '$.profile.metrics.ratio') > 1.0;
+-- result:
+0
+-- !result
+-- predicate pushdown correctness: nested DOUBLE (ratio) partial match → 3 rows
+select count(*) from test_variant_virtual_column
+where get_variant_double(data, '$.profile.metrics.ratio') >= 0.2;
+-- result:
+3
+-- !result
+-- type convert: get_variant_int on DOUBLE-shredded field, out-of-range → 0 rows
+-- (virtual slot type BIGINT != shredded type DOUBLE; falls back to variant decode)
+select count(*) from test_variant_virtual_column
+where get_variant_int(data, '$.profile.salary') > 100000;
+-- result:
+0
+-- !result
+-- type convert: get_variant_int on DOUBLE-shredded field, partial match → rows with salary >= 52000
+select get_variant_int(data, '$.id') as id
+from test_variant_virtual_column
+where get_variant_int(data, '$.profile.salary') >= 52000
+order by id;
+-- result:
+1002
+1003
+1004
+-- !result
+-- DECIMAL read correctness: all three precision tiers (DECIMAL4/8/16), no rewrite, row-level eval
+select cast(variant_query(data, '$.profile.price') as decimal(5, 2)) as price
+from test_variant_virtual_column
+order by price;
+-- result:
+10.50
+11.00
+11.50
+12.00
+12.50
+-- !result
+select cast(variant_query(data, '$.profile.amount') as decimal(16, 2)) as amount
+from test_variant_virtual_column
+order by amount;
+-- result:
+10000000000.10
+20000000000.20
+30000000000.30
+40000000000.40
+50000000000.50
+-- !result
+select cast(variant_query(data, '$.profile.balance') as decimal(22, 4)) as balance
+from test_variant_virtual_column
+order by balance;
+-- result:
+1000000000000000.0001
+2000000000000000.0002
+3000000000000000.0003
+4000000000000000.0004
+5000000000000000.0005
+-- !result
+-- DECIMAL predicate correctness (row-level, no pushdown yet)
+select count(*) from test_variant_virtual_column
+where cast(variant_query(data, '$.profile.price') as decimal(5, 2)) >= 11.50;
+-- result:
+3
+-- !result
+select count(*) from test_variant_virtual_column
+where cast(variant_query(data, '$.profile.amount') as decimal(16, 2)) >= 30000000000.30;
+-- result:
+3
+-- !result
+select count(*) from test_variant_virtual_column
+where cast(variant_query(data, '$.profile.balance') as decimal(22, 4)) >= 3000000000000000.0003;
+-- result:
+3
+-- !result
+set time_zone = "UTC";
+-- result:
+-- !result
+-- DATE read correctness: basic select
+select get_variant_date(data, '$.created_at') as created_at
+from test_variant_virtual_column
+order by created_at;
+-- result:
+2024-01-01
+2024-01-02
+2024-01-03
+2024-01-04
+2024-01-05
+-- !result
+-- DATETIME read correctness: basic select
+select get_variant_datetime(data, '$.updated_at') as updated_at
+from test_variant_virtual_column
+order by updated_at;
+-- result:
+2024-01-01 00:00:00
+2024-01-01 01:00:00
+2024-01-01 02:00:00
+2024-01-01 03:00:00
+2024-01-01 04:00:00
+-- !result
+-- predicate pushdown correctness: DATE out-of-range → 0 rows
+select count(*) from test_variant_virtual_column
+where get_variant_date(data, '$.created_at') > '2025-01-01';
+-- result:
+0
+-- !result
+select count(*) from test_variant_virtual_column
+where get_variant_date(data, '$.created_at') < '2023-01-01';
+-- result:
+0
+-- !result
+-- predicate pushdown correctness: DATE in-range partial → 3 rows
+select get_variant_date(data, '$.created_at') as created_at
+from test_variant_virtual_column
+where get_variant_date(data, '$.created_at') >= '2024-01-03'
+order by created_at;
+-- result:
+2024-01-03
+2024-01-04
+2024-01-05
+-- !result
+-- predicate pushdown correctness: DATETIME out-of-range → 0 rows
+select count(*) from test_variant_virtual_column
+where get_variant_datetime(data, '$.updated_at') > '2025-01-01 00:00:00';
+-- result:
+0
+-- !result
+-- predicate pushdown correctness: DATETIME in-range partial → 3 rows
+select get_variant_datetime(data, '$.updated_at') as updated_at
+from test_variant_virtual_column
+where get_variant_datetime(data, '$.updated_at') >= '2024-01-01 02:00:00'
+order by updated_at;
+-- result:
+2024-01-01 02:00:00
+2024-01-01 03:00:00
+2024-01-01 04:00:00
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_variant_virtual_column_rewrite/${uuid0}/ > /dev/null
 -- result:

@@ -381,6 +381,21 @@ public:
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
 
+    // Returns the typed_value ColumnReader for the given parsed variant path, only if the node
+    // is a SCALAR kind and has a non-binary type (i.e. safe for predicate/zone-map filtering).
+    // Returns nullptr if the path is absent, the node is ARRAY/NONE kind, or the physical type
+    // is BINARY/VARBINARY (whose Parquet min/max reflects byte-order, not semantic value order).
+    // Array segments are not supported (shredded paths are object-key-only).
+    const ColumnReader* filterable_typed_value_reader_for_path(const VariantPath& path) const;
+    // Returns the typed_value read type for the given parsed variant path.
+    // The returned descriptor reflects the shredded leaf's physical typed_value encoding,
+    // not the virtual slot's target type.
+    const TypeDescriptor* typed_value_read_type_for_path(const VariantPath& path) const;
+    // Variant shredding only allows data skipping on typed_value statistics when the paired
+    // fallback value column is null for the entire row group. If null_count is absent,
+    // conservatively return false.
+    bool fallback_values_all_null_in_row_group_for_path(const VariantPath& path, uint64_t rg_num_rows) const;
+
 private:
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
@@ -389,6 +404,58 @@ private:
     // _shredded_fields is fixed after construction, so this only needs to be computed once.
     mutable std::vector<std::string> _cached_auto_paths;
     mutable bool _auto_paths_cached = false;
+};
+
+// A thin, read-only wrapper ColumnReader that exposes zone-map filtering for a specific
+// shredded typed-leaf path within a VariantColumnReader.  It registers no IO ranges and
+// does not support actual data reads.  Registered in GroupReader::_column_readers under
+// the virtual variant slot id so that PredicateFilterEvaluator can invoke zone-map
+// methods on the underlying shredded leaf column's statistics.
+class VariantVirtualZoneMapReader final : public ColumnReader {
+public:
+    VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path);
+    VariantVirtualZoneMapReader(VariantColumnReader* source, VariantPath leaf_path, TypeDescriptor virtual_slot_type);
+    ~VariantVirtualZoneMapReader() override = default;
+
+    Status prepare() override { return Status::OK(); }
+
+    Status read_range(const Range<uint64_t>&, const Filter*, ColumnPtr&) override {
+        return Status::NotSupported("VariantVirtualZoneMapReader does not support read_range");
+    }
+
+    void get_levels(level_t**, level_t**, size_t*) override {}
+
+    void set_need_parse_levels(bool) override {}
+
+    // No IO ranges — this reader has no Parquet pages of its own.
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>*, int64_t*, ColumnIOTypeFlags,
+                                 bool) override {}
+
+    void select_offset_index(const SparseRange<uint64_t>&, const uint64_t) override {}
+
+    StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                             const uint64_t rg_num_rows) const override;
+
+    StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                              SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
+                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
+
+    // Delegates bloom-filter evaluation to the shredded typed_value leaf reader.
+    // Only equality predicates reach this path; range predicates use zone map instead.
+    // Returns false (= don't skip) when the leaf is not shredded or has no bloom filter.
+    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override;
+
+private:
+    StatusOr<bool> _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
+                                                uint64_t rg_num_rows, const ColumnReader** leaf_reader,
+                                                std::vector<const ColumnPredicate*>* rewritten_predicates) const;
+
+    VariantColumnReader* _source;
+    VariantPath _leaf_path;
+    TypeDescriptor _virtual_slot_type;
 };
 
 } // namespace starrocks::parquet

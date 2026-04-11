@@ -43,6 +43,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/variant_path_reader.h"
 #include "formats/parquet/column_reader_factory.h"
+#include "formats/parquet/complex_column_reader.h"
 #include "formats/parquet/iceberg_row_id_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/parquet_pos_reader.h"
@@ -899,6 +900,36 @@ Status GroupReader::_create_column_readers() {
             }
         }
     }
+
+    // Register lightweight zone-map readers for virtual variant columns.
+    // These allow PredicateFilterEvaluator to apply row-group and page-level zone-map
+    // filtering on shredded typed-leaf columns without reading any actual data.
+    // The readers are keyed by virtual slot id so that get_column_reader(virtual_slot_id)
+    // returns them; collect_io_ranges does not touch them (they are not in active/lazy
+    // column index lists).
+    for (const auto& [virtual_slot_id, projection] : _variant_virtual_projections) {
+        SlotId source_slot_id = projection.source_slot_id;
+        ColumnReader* source_reader = nullptr;
+        if (source_slot_id >= 0) {
+            // Physical VARIANT source: look up in _column_readers.
+            auto it = _column_readers.find(source_slot_id);
+            if (it != _column_readers.end()) {
+                source_reader = it->second.get();
+            }
+        } else {
+            // Hidden VARIANT source: look up in _hidden_slot_index.
+            auto it = _hidden_slot_index.find(source_slot_id);
+            if (it != _hidden_slot_index.end()) {
+                source_reader = it->second->reader.get();
+            }
+        }
+        if (source_reader == nullptr) continue;
+        auto* variant_reader = down_cast<VariantColumnReader*>(source_reader);
+        _column_readers.emplace(virtual_slot_id,
+                                std::make_unique<VariantVirtualZoneMapReader>(variant_reader, projection.parsed_path,
+                                                                              projection.target_type));
+    }
+
     return Status::OK();
 }
 
@@ -1289,8 +1320,10 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
     // virtual columns with conjuncts always use active sources, so this is correct.
     ChunkPtr eval_chunk = std::make_shared<Chunk>();
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
-        if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
-            if (_deferred_conjunct_slot_ids.count(slot_id)) {
+        bool source_in_chunk = active_chunk->is_slot_exist(projection.source_slot_id);
+        bool has_conjunct = _deferred_conjunct_slot_ids.count(slot_id) > 0;
+        if (!source_in_chunk) {
+            if (has_conjunct) {
                 return Status::InternalError(
                         fmt::format("variant virtual column {} has deferred conjunct but source slot {} "
                                     "is not in active_chunk",
@@ -1315,6 +1348,10 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
                                                _deferred_variant_virtual_conjunct_ctxs, eval_chunk.get(), &filter));
     if (hit_count == 0) {
         _param.stats->late_materialize_skip_rows += raw_count;
+        // eval_conjuncts_into_filter returns 0 (all rows rejected) without zeroing the filter
+        // when it short-circuits early (e.g. true_count == 0 path). Zero it out explicitly so
+        // the caller's count_nonzero check correctly skips the chunk.
+        filter.assign(filter.size(), 0);
     }
 
     // active_chunk is NOT filtered here; the caller merges this filter with
@@ -1352,7 +1389,7 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
     }
 
     // Pass 2: physical columns — destructive swap from active_chunk into *chunk.
-    // Slots that have a virtual projection have no entry in _column_readers and are skipped.
+    // Virtual projection slots are skipped here; their output was filled in Pass 1.
     for (const auto& column : _param.read_cols) {
         SlotId slot_id = column.slot_id();
         if (_variant_virtual_projections.count(slot_id)) continue;

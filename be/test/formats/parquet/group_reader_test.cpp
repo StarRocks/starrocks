@@ -2363,6 +2363,76 @@ static tparquet::FileMetaData build_t_filemeta_with_iceberg_columns(ObjectPool* 
     return t_file_meta;
 }
 
+static tparquet::FileMetaData build_t_filemeta_with_variant_column(std::string_view column_name) {
+    tparquet::FileMetaData t_file_meta;
+    t_file_meta.__set_version(2);
+    t_file_meta.__set_num_rows(5);
+
+    std::vector<tparquet::SchemaElement> schema_elements;
+
+    tparquet::SchemaElement root;
+    root.__set_name("hive_schema");
+    root.__set_num_children(1);
+    schema_elements.emplace_back(std::move(root));
+
+    tparquet::SchemaElement data;
+    data.__set_name(std::string(column_name));
+    data.__set_num_children(3);
+    schema_elements.emplace_back(std::move(data));
+
+    tparquet::SchemaElement metadata;
+    metadata.__set_name("metadata");
+    metadata.__set_type(tparquet::Type::BYTE_ARRAY);
+    metadata.__set_num_children(0);
+    schema_elements.emplace_back(std::move(metadata));
+
+    tparquet::SchemaElement value;
+    value.__set_name("value");
+    value.__set_type(tparquet::Type::BYTE_ARRAY);
+    value.__set_num_children(0);
+    schema_elements.emplace_back(std::move(value));
+
+    tparquet::SchemaElement typed_value;
+    typed_value.__set_name("typed_value");
+    typed_value.__set_num_children(1);
+    schema_elements.emplace_back(std::move(typed_value));
+
+    tparquet::SchemaElement leaf;
+    leaf.__set_name("a");
+    leaf.__set_num_children(2);
+    schema_elements.emplace_back(std::move(leaf));
+
+    tparquet::SchemaElement leaf_value;
+    leaf_value.__set_name("value");
+    leaf_value.__set_type(tparquet::Type::BYTE_ARRAY);
+    leaf_value.__set_num_children(0);
+    schema_elements.emplace_back(std::move(leaf_value));
+
+    tparquet::SchemaElement leaf_typed_value;
+    leaf_typed_value.__set_name("typed_value");
+    leaf_typed_value.__set_type(tparquet::Type::INT64);
+    leaf_typed_value.__set_num_children(0);
+    schema_elements.emplace_back(std::move(leaf_typed_value));
+
+    std::vector<tparquet::ColumnChunk> cols;
+    for (int i = 0; i < 4; ++i) {
+        tparquet::ColumnChunk col;
+        col.__set_file_path("c" + std::to_string(i));
+        col.file_offset = 0;
+        col.meta_data.data_page_offset = 4;
+        col.meta_data.__set_type((i == 3) ? tparquet::Type::INT64 : tparquet::Type::BYTE_ARRAY);
+        cols.emplace_back(std::move(col));
+    }
+
+    tparquet::RowGroup row_group;
+    row_group.__set_columns(std::move(cols));
+    row_group.__set_num_rows(5);
+
+    t_file_meta.__set_row_groups({std::move(row_group)});
+    t_file_meta.__set_schema(std::move(schema_elements));
+    return t_file_meta;
+}
+
 TEST_F(GroupReaderTest, TestCreateReservedIcebergColumnReaderFound) {
     auto* param = _create_group_reader_param();
 
@@ -2858,6 +2928,45 @@ TEST_F(GroupReaderTest, TestIcebergBothPhysicalColumnsCreation) {
     ASSERT_NE(group_reader->_column_readers[101], nullptr);
 }
 
+TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForPhysicalSource) {
+    auto* param = _create_group_reader_param();
+    param->read_cols.clear();
+
+    auto* source_slot =
+            _pool.add(new SlotDescriptor(180, "data", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT)));
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(181, "data.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column source_col{};
+    source_col.slot_desc = source_slot;
+    source_col.idx_in_parquet = 0;
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    virtual_col.idx_in_parquet = 0;
+    virtual_col.is_extended_variant_virtual = true;
+    virtual_col.source_variant_column_name = "data";
+    virtual_col.variant_virtual_leaf_path = "a";
+
+    param->read_cols.emplace_back(source_col);
+    param->read_cols.emplace_back(virtual_col);
+
+    auto t_file_meta = build_t_filemeta_with_variant_column("data");
+    auto* file_meta = _pool.add(new FileMetaData());
+    ASSERT_OK(file_meta->init(t_file_meta, true));
+
+    param->file_metadata = file_meta;
+    param->file = _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock"));
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSERT_OK(group_reader->init());
+    auto it = group_reader->_column_readers.find(virtual_slot->id());
+    ASSERT_NE(it, group_reader->_column_readers.end());
+    EXPECT_NE(nullptr, down_cast<VariantVirtualZoneMapReader*>(it->second.get()));
+}
+
 // ── Hidden variant source active/lazy classification ─────────────────────────
 
 // Covers: _lazy_hidden_slot_ids.push_back (lazy hidden source path in Step 4)
@@ -2928,6 +3037,39 @@ TEST_F(GroupReaderTest, ProcessColumnsClassifiesHiddenSourcesAsActiveOrLazy) {
                           active_src_id) != group_reader->_active_slot_ids.end());
     // _deferred_conjunct_slot_ids must contain vslot_active
     EXPECT_EQ(1u, group_reader->_deferred_conjunct_slot_ids.count(vslot_active->id()));
+}
+
+TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForHiddenSource) {
+    auto* param = _create_group_reader_param();
+    param->read_cols.clear();
+
+    auto* virtual_slot =
+            _pool.add(new SlotDescriptor(190, "data.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    virtual_col.idx_in_parquet = 0;
+    virtual_col.is_extended_variant_virtual = true;
+    virtual_col.source_variant_column_name = "data";
+    virtual_col.variant_virtual_leaf_path = "a";
+    param->read_cols.emplace_back(virtual_col);
+
+    auto t_file_meta = build_t_filemeta_with_variant_column("data");
+    auto* file_meta = _pool.add(new FileMetaData());
+    ASSERT_OK(file_meta->init(t_file_meta, true));
+
+    param->file_metadata = file_meta;
+    param->file = _pool.add(new RandomAccessFile(std::make_shared<MockInputStream>(), "mock"));
+    param->chunk_size = config::vector_chunk_size;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSERT_OK(group_reader->init());
+    ASSERT_FALSE(group_reader->_hidden_slot_index.empty());
+    auto it = group_reader->_column_readers.find(virtual_slot->id());
+    ASSERT_NE(it, group_reader->_column_readers.end());
+    EXPECT_NE(nullptr, down_cast<VariantVirtualZoneMapReader*>(it->second.get()));
 }
 
 // Covers: _lazy_slot_ids.push_back (physical lazy column path in Step 5)
