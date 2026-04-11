@@ -93,7 +93,7 @@ class LDAPAuthProviderTest {
                 null, null,
                 "cn=admin,dc=starrocks,dc=com", "secret",
                 "ou=People,dc=starrocks,dc=com", "uid",
-                providedDN);
+                providedDN, null);
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
@@ -111,7 +111,7 @@ class LDAPAuthProviderTest {
                 null, null,
                 "cn=admin,dc=starrocks,dc=com", "secret",
                 "ou=People,dc=starrocks,dc=com", "uid",
-                /* ldapUserDN */ null
+                /* ldapUserDN */ null, /* ldapBindDNPattern */ null
         );
 
         AccessControlContext authCtx = new AccessControlContext();
@@ -154,7 +154,7 @@ class LDAPAuthProviderTest {
                 null, null,
                 "cn=admin,dc=starrocks,dc=com", "secret",
                 "ou=People,dc=starrocks,dc=com", "uid",
-                /* ldapUserDN */ null
+                /* ldapUserDN */ null, /* ldapBindDNPattern */ null
         );
 
         // Test that normalizeUsername works correctly for case variations
@@ -165,5 +165,166 @@ class LDAPAuthProviderTest {
             Assertions.assertEquals("allen", normalized,
                     "Username '" + testUser + "' should normalize to 'allen'");
         }
+    }
+
+    @Test
+    void testAuthenticateByPatternSinglePattern() throws Exception {
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=${USER},ou=People,dc=test,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        provider.authenticate(authCtx, user, authResponse);
+        Assertions.assertEquals("uid=alice,ou=People,dc=test,dc=com", authCtx.getDistinguishedName());
+    }
+
+    @Test
+    void testPerUserDNTakesPriorityOverPattern() throws Exception {
+        String perUserDN = "cn=bob,ou=Special,dc=test,dc=com";
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                perUserDN,
+                "uid=${USER},ou=People,dc=test,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("bob", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        provider.authenticate(authCtx, user, authResponse);
+        Assertions.assertEquals(perUserDN, authCtx.getDistinguishedName());
+    }
+
+    @Test
+    void testPatternTakesPriorityOverSearch() throws Exception {
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "cn=${USER},dc=pattern,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("charlie", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        provider.authenticate(authCtx, user, authResponse);
+        Assertions.assertEquals("cn=charlie,dc=pattern,dc=com", authCtx.getDistinguishedName());
+    }
+
+    @Test
+    void testPatternEscapesSpecialCharacters() throws Exception {
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=${USER},dc=test,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice*()|", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        provider.authenticate(authCtx, user, authResponse);
+        Assertions.assertEquals("uid=alice\\2a\\28\\29\\7c,dc=test,dc=com", authCtx.getDistinguishedName());
+    }
+
+    @Test
+    void testEmptyPatternFallsBackToSearch() throws Exception {
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                "cn=admin,dc=starrocks,dc=com", "secret",
+                "ou=People,dc=starrocks,dc=com", "uid",
+                /* ldapUserDN */ null, /* ldapBindDNPattern */ "");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("ldap_user", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        provider.authenticate(authCtx, user, authResponse);
+        Assertions.assertEquals("uid=test,ou=People,dc=starrocks,dc=com", authCtx.getDistinguishedName());
+    }
+
+    @Test
+    void testMultiPatternFirstFailSecondSucceed() throws Exception {
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            protected void checkPassword(String dn, String password) throws Exception {
+                if (dn.contains("ou=A")) {
+                    throw new AuthenticationException("bind failed for ou=A");
+                }
+            }
+        };
+
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=${USER},ou=A,dc=test,dc=com:uid=${USER},ou=B,dc=test,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        provider.authenticate(authCtx, user, authResponse);
+        Assertions.assertEquals("uid=alice,ou=B,dc=test,dc=com", authCtx.getDistinguishedName());
+
+        // Restore global mock
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            protected void checkPassword(String dn, String password) throws Exception {
+            }
+
+            @Mock
+            protected String findUserDNByRoot(String user) throws Exception {
+                return "uid=test,ou=People,dc=starrocks,dc=com";
+            }
+        };
+    }
+
+    @Test
+    void testMultiPatternAllFail() throws Exception {
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            protected void checkPassword(String dn, String password) throws Exception {
+                throw new AuthenticationException("bind failed");
+            }
+        };
+
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=${USER},ou=A,dc=test,dc=com:uid=${USER},ou=B,dc=test,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        Assertions.assertThrows(AuthenticationException.class, () -> {
+            provider.authenticate(authCtx, user, authResponse);
+        });
+
+        // Restore global mock
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            protected void checkPassword(String dn, String password) throws Exception {
+            }
+
+            @Mock
+            protected String findUserDNByRoot(String user) throws Exception {
+                return "uid=test,ou=People,dc=starrocks,dc=com";
+            }
+        };
     }
 }

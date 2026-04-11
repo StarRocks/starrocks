@@ -47,6 +47,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     private final String ldapBindBaseDN;
     private final String ldapSearchFilter;
     private final String ldapUserDN;
+    private final String ldapBindDNPattern;
 
     public LDAPAuthProvider(String ldapServerHost,
                             int ldapServerPort,
@@ -57,7 +58,8 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapBindRootPwd,
                             String ldapBindBaseDN,
                             String ldapSearchFilter,
-                            String ldapUserDN) {
+                            String ldapUserDN,
+                            String ldapBindDNPattern) {
         this.ldapServerHost = ldapServerHost;
         this.ldapServerPort = ldapServerPort;
         this.useSSL = useSSL;
@@ -68,6 +70,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         this.ldapBindBaseDN = ldapBindBaseDN;
         this.ldapSearchFilter = ldapSearchFilter;
         this.ldapUserDN = ldapUserDN;
+        this.ldapBindDNPattern = ldapBindDNPattern;
     }
 
     @Override
@@ -80,14 +83,21 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         }
 
         try {
+            String password = new String(clearPassword, StandardCharsets.UTF_8);
             String distinguishedName;
             if (!Strings.isNullOrEmpty(ldapUserDN)) {
+                // Priority 1: per-user DN (from CREATE USER ... AS 'dn')
                 distinguishedName = ldapUserDN;
+                checkPassword(distinguishedName, password);
+            } else if (!Strings.isNullOrEmpty(ldapBindDNPattern)) {
+                // Priority 2: direct bind via DN pattern
+                distinguishedName = authenticateByPattern(userIdentity.getUser(), password);
             } else {
+                // Priority 3: search-and-bind
                 distinguishedName = findUserDNByRoot(userIdentity.getUser());
+                checkPassword(distinguishedName, password);
             }
             Preconditions.checkNotNull(distinguishedName);
-            checkPassword(distinguishedName, new String(clearPassword, StandardCharsets.UTF_8));
 
             // set distinguished name to auth context
             authContext.setDistinguishedName(distinguishedName);
@@ -114,6 +124,25 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         LdapSslSocketFactory.setSslContextForCurrentThread(sslContext);
         // Refer to https://docs.oracle.com/javase/jndi/tutorial/ldap/security/ssl.html.
         env.put("java.naming.ldap.factory.socket", LdapSslSocketFactory.class.getName());
+    }
+
+    // Try each DN pattern in order, return the first successfully bound DN.
+    // Patterns are separated by colon ':'.
+    protected String authenticateByPattern(String user, String password) throws Exception {
+        String safeUser = escapeLdapValue(user);
+        String[] patterns = ldapBindDNPattern.split(":");
+        Exception lastException = null;
+        for (String pattern : patterns) {
+            String dn = pattern.replace("${USER}", safeUser);
+            try {
+                checkPassword(dn, password);
+                return dn;
+            } catch (Exception e) {
+                lastException = e;
+                LOG.debug("direct bind failed for pattern '{}' with user '{}': {}", pattern, user, e.getMessage());
+            }
+        }
+        throw lastException;
     }
 
     //bind to ldap server to check password
