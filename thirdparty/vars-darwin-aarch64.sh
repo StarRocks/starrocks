@@ -34,7 +34,7 @@ HYPERSCAN_NAME="vectorscan-5.4.12.tar.gz"
 HYPERSCAN_SOURCE="vectorscan-vectorscan-5.4.12"
 HYPERSCAN_MD5SUM="384eab5b23831993df96e5fa55f9951e"
 
-DARWIN_UNSUPPORTED_PACKAGES="starcache tenann pprof clucene"
+DARWIN_UNSUPPORTED_PACKAGES="starcache tenann pprof"
 
 darwin_is_unsupported_package() {
     local package_name
