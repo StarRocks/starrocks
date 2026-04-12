@@ -20,6 +20,12 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.List;
 
 public class CTERelation extends Relation {
+    public enum CTEMaterializationHint {
+        NONE,
+        MATERIALIZED,
+        NOT_MATERIALIZED
+    }
+
     private final int cteMouldId;
     private final String name;
     private final QueryStatement cteQueryStatement;
@@ -27,14 +33,17 @@ public class CTERelation extends Relation {
     private final boolean isAnchor;
     private int refs = 0; // consume refs
     private boolean isRecursive;
+    private final CTEMaterializationHint materializationHint;
 
     public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
                        QueryStatement cteQueryStatement, boolean isRecursive, boolean isAnchor) {
-        this(cteMouldId, name, columnOutputNames, cteQueryStatement, isRecursive, isAnchor, NodePosition.ZERO);
+        this(cteMouldId, name, columnOutputNames, cteQueryStatement, isRecursive, isAnchor, NodePosition.ZERO,
+                CTEMaterializationHint.NONE);
     }
 
     public CTERelation(int cteMouldId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement,
-                       boolean isRecursive, boolean isAnchor, NodePosition pos) {
+                       boolean isRecursive, boolean isAnchor, NodePosition pos,
+                       CTEMaterializationHint materializationHint) {
         super(pos);
         this.cteMouldId = cteMouldId;
         this.name = name;
@@ -43,6 +52,7 @@ public class CTERelation extends Relation {
         this.refs = 0;
         this.isRecursive = isRecursive;
         this.isAnchor = isAnchor;
+        this.materializationHint = materializationHint;
     }
 
     public int getCteMouldId() {
@@ -83,6 +93,10 @@ public class CTERelation extends Relation {
 
     public boolean isAnchor() {
         return isAnchor;
+    }
+
+    public CTEMaterializationHint getMaterializationHint() {
+        return materializationHint;
     }
 
     @Override

@@ -291,9 +291,8 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         }
         
         sqlBuilder.append(" AS (");
-        
+
         if (options.isEnablePrettyFormat()) {
-            // Pretty format: CTE definition with proper indentation
             options.increaseIndent();
             try {
                 sqlBuilder.append(options.indent());
@@ -303,11 +302,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             }
             sqlBuilder.append(options.indent()).append(")");
         } else {
-            // Default format: inline
             sqlBuilder.append(visit(relation.getCteQueryStatement()));
             sqlBuilder.append(") ");
         }
-        
+        if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.MATERIALIZED) {
+            sqlBuilder.append("[materialized] ");
+        } else if (relation.getMaterializationHint() == CTERelation.CTEMaterializationHint.NOT_MATERIALIZED) {
+            sqlBuilder.append("[not_materialized] ");
+        }
+
         return sqlBuilder.toString();
     }
 

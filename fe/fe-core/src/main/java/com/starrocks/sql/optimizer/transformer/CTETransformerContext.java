@@ -16,8 +16,10 @@
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -36,12 +38,16 @@ public class CTETransformerContext {
 
     private final int cteMaxLimit;
 
+    // Stores CTEs specified with MATERIALIZED in the query string
+    private final List<Integer> forceCTEList;
+
     public CTETransformerContext(int cteMaxLimit) {
         this.cteExpressions = new HashMap<>();
         this.cteRefIdMapping = new HashMap<>();
         this.cteIdToNodeCount = new HashMap<>();
         this.uniqueId = new AtomicInteger();
         this.cteMaxLimit = cteMaxLimit;
+        this.forceCTEList = Lists.newArrayList();
     }
 
     public Map<Integer, ExpressionMapping> getCteExpressions() {
@@ -108,5 +114,13 @@ public class CTETransformerContext {
 
     public boolean isForceInline() {
         return cteRefIdMapping.size() > cteMaxLimit;
+    }
+
+    public void addForceCTE(int cteId) {
+        forceCTEList.add(cteId);
+    }
+
+    public boolean isForceCTE(int cteId) {
+        return forceCTEList.contains(cteId);
     }
 }
