@@ -19,6 +19,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
+#include "exec/pipeline/primitives/operator_runtime_access.h"
 #include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exec/spill/operator_mem_resource_manager.h"
@@ -49,7 +50,7 @@ class Operator {
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
-             int32_t driver_sequence);
+             int32_t driver_sequence, OperatorRuntimeAccess* runtime_access = nullptr);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -277,6 +278,7 @@ public:
 
 protected:
     OperatorFactory* _factory;
+    OperatorRuntimeAccess* _runtime_access;
     const int32_t _id;
     const std::string _name;
     // Which plan node this operator belongs to

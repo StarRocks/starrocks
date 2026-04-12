@@ -364,7 +364,69 @@ public:
 private:
     CounterPtr _counter;
 };
+
+class RuntimeAccessProbeOperator final : public Operator {
+public:
+    RuntimeAccessProbeOperator(OperatorFactory* factory, int32_t driver_sequence)
+            : Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), false,
+                       driver_sequence) {}
+
+    bool has_output() const override { return false; }
+    bool need_input() const override { return true; }
+    bool is_finished() const override { return false; }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override { return nullptr; }
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override { return Status::OK(); }
+};
+
+class RuntimeAccessProbeFactory final : public OperatorFactory {
+public:
+    RuntimeAccessProbeFactory(int32_t id, int32_t plan_node_id)
+            : OperatorFactory(id, "runtime_access_probe", plan_node_id) {}
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        return std::make_shared<RuntimeAccessProbeOperator>(this, driver_sequence);
+    }
+
+    void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
+                                 std::vector<ExprContext*>* runtime_in_filters) override {
+        ++bind_calls;
+        last_state = state;
+        last_driver_sequence = driver_sequence;
+        runtime_in_filters->insert(runtime_in_filters->end(), local_filters.begin(), local_filters.end());
+        runtime_in_filters->insert(runtime_in_filters->end(), instance_filters.begin(), instance_filters.end());
+    }
+
+    int bind_calls = 0;
+    RuntimeState* last_state = nullptr;
+    int32_t last_driver_sequence = -1;
+    std::vector<ExprContext*> local_filters;
+    std::vector<ExprContext*> instance_filters;
+};
+
 class TestPipelineControlFlow : public PipelineTestBase {};
+
+TEST(OperatorRuntimeAccessTest, test_operator_precondition_ready_uses_runtime_access) {
+    RuntimeAccessProbeFactory factory(1, 2);
+    int local_filter_sentinel = 0;
+    int instance_filter_a_sentinel = 0;
+    int instance_filter_b_sentinel = 0;
+    factory.local_filters = {reinterpret_cast<ExprContext*>(&local_filter_sentinel)};
+    factory.instance_filters = {reinterpret_cast<ExprContext*>(&instance_filter_a_sentinel),
+                                reinterpret_cast<ExprContext*>(&instance_filter_b_sentinel)};
+
+    RuntimeState state;
+    auto op = factory.create(1, 7);
+
+    op->set_precondition_ready(&state);
+
+    ASSERT_EQ(1, factory.bind_calls);
+    ASSERT_EQ(&state, factory.last_state);
+    ASSERT_EQ(7, factory.last_driver_sequence);
+    ASSERT_EQ(3, op->runtime_in_filters().size());
+    EXPECT_EQ(factory.local_filters[0], op->runtime_in_filters()[0]);
+    EXPECT_EQ(factory.instance_filters[0], op->runtime_in_filters()[1]);
+    EXPECT_EQ(factory.instance_filters[1], op->runtime_in_filters()[2]);
+}
 
 TEST_F(TestPipelineControlFlow, test_two_operatories) {
     std::default_random_engine e;

@@ -56,6 +56,18 @@ void OperatorFactory::close(RuntimeState* state) {
     }
 }
 
+void OperatorFactory::bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
+                                              std::vector<ExprContext*>* runtime_in_filters) {
+    auto colocate_runtime_in_filters = get_colocate_runtime_in_filters(driver_sequence);
+    runtime_in_filters->insert(runtime_in_filters->end(), colocate_runtime_in_filters.begin(),
+                               colocate_runtime_in_filters.end());
+
+    prepare_runtime_in_filters(state);
+    const auto& instance_runtime_filters = get_runtime_in_filters();
+    runtime_in_filters->insert(runtime_in_filters->end(), instance_runtime_filters.begin(),
+                               instance_runtime_filters.end());
+}
+
 void OperatorFactory::_prepare_runtime_in_filters(RuntimeState* state) {
     auto holders = _runtime_filter_hub->gather_holders(_rf_waiting_set, -1, true);
     _prepare_runtime_holders(holders, &_runtime_in_filters);
