@@ -23,6 +23,7 @@
 
 #include "column/chunk.h"
 #include "column/column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
@@ -606,7 +607,9 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
         if (_slots != nullptr && _slots->back()->col_name() == "__op") {
             size_t op_column_id = chunk.num_columns() - 1;
             const auto& op_column = chunk.get_column_by_index(op_column_id);
-            auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+            RawDataVisitor visitor;
+            RETURN_IF_ERROR(op_column->accept(&visitor));
+            const auto* ops = visitor.result();
             ok = !std::any_of(ops, ops + chunk.num_rows(), [](auto op) { return op == TOpType::UPSERT; });
         } else {
             ok = false;
