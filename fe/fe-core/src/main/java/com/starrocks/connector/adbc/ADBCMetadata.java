@@ -101,7 +101,7 @@ public class ADBCMetadata implements ConnectorMetadata {
     }
 
     private ADBCSchemaResolver createSchemaResolver() {
-        return new FlightSQLSchemaResolver();  // driver-agnostic despite the name
+        return new ADBCSchemaResolver();
     }
 
     private boolean isSQLiteDriver() {
@@ -134,7 +134,7 @@ public class ADBCMetadata implements ConnectorMetadata {
         return dbNamesCache.get(catalogName, k -> {
             String sql = isSQLiteDriver() ? SQL_LIST_SCHEMAS_SQLITE : SQL_LIST_SCHEMAS;
             try (AdbcConnection conn = adbcDatabase.connect();
-                 AdbcStatement stmt = conn.createStatement()) {
+                    AdbcStatement stmt = conn.createStatement()) {
                 stmt.setSqlQuery(sql);
                 try (AdbcStatement.QueryResult qr = stmt.executeQuery()) {
                     ArrowReader reader = qr.getReader();
@@ -155,7 +155,7 @@ public class ADBCMetadata implements ConnectorMetadata {
                     ? SQL_LIST_TABLES_SQLITE
                     : String.format(SQL_LIST_TABLES, dbName);
             try (AdbcConnection conn = adbcDatabase.connect();
-                 AdbcStatement stmt = conn.createStatement()) {
+                    AdbcStatement stmt = conn.createStatement()) {
                 stmt.setSqlQuery(sql);
                 try (AdbcStatement.QueryResult qr = stmt.executeQuery()) {
                     ArrowReader reader = qr.getReader();

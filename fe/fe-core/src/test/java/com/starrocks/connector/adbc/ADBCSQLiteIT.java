@@ -76,7 +76,7 @@ public class ADBCSQLiteIT {
 
             // Create and populate test table
             try (AdbcConnection conn = seedDb.connect();
-                 AdbcStatement stmt = conn.createStatement()) {
+                    AdbcStatement stmt = conn.createStatement()) {
                 stmt.setSqlQuery(
                         "CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT, value REAL)");
                 try (AdbcStatement.QueryResult qr = stmt.executeQuery()) {
@@ -84,14 +84,14 @@ public class ADBCSQLiteIT {
                 }
             }
             try (AdbcConnection conn = seedDb.connect();
-                 AdbcStatement stmt = conn.createStatement()) {
+                    AdbcStatement stmt = conn.createStatement()) {
                 stmt.setSqlQuery("INSERT INTO test_table VALUES (1, 'alice', 3.14)");
                 try (AdbcStatement.QueryResult qr = stmt.executeQuery()) {
                     // drain empty result
                 }
             }
             try (AdbcConnection conn = seedDb.connect();
-                 AdbcStatement stmt = conn.createStatement()) {
+                    AdbcStatement stmt = conn.createStatement()) {
                 stmt.setSqlQuery("INSERT INTO test_table VALUES (2, 'bob', 2.71)");
                 try (AdbcStatement.QueryResult qr = stmt.executeQuery()) {
                     // drain empty result

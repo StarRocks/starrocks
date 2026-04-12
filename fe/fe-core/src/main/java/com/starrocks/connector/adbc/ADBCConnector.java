@@ -90,17 +90,15 @@ public class ADBCConnector implements Connector {
         }
     }
 
-    /**
-     * Validate ADBC catalog properties. Order per D-12:
-     * (1) exactly one of driver_url XOR driver_name
-     * (2) no unknown top-level keys
-     * (3) driver_url path exists on filesystem
-     */
+    // Filesystem existence of driver_url is intentionally not checked here --
+    // it would make catalog creation non-deterministic across FE replicas (edit log
+    // replay on a Follower whose filesystem layout differs from the Leader would
+    // fail). The native driver loader surfaces a dlopen error on the FE that
+    // actually executes the catalog, classifyAdbcError wraps it into a user-facing message.
     static void validateProperties(Map<String, String> properties) {
         String driverUrl = properties.get("driver_url");
         String driverName = properties.get("driver_name");
 
-        // (1) Exactly one of driver_url XOR driver_name
         if (driverUrl != null && driverName != null) {
             throw new StarRocksConnectorException(
                     "ADBC catalog: 'driver_url' and 'driver_name' are mutually exclusive -- specify exactly one");
@@ -110,26 +108,11 @@ public class ADBCConnector implements Connector {
                     "ADBC catalog: one of 'driver_url' or 'driver_name' is required");
         }
 
-        // (2) Unknown top-level keys (VAL-04)
         for (String key : properties.keySet()) {
             if (!key.startsWith("adbc.") && !KNOWN_TOP_LEVEL_KEYS.contains(key)) {
                 throw new StarRocksConnectorException(
                         "ADBC catalog: unknown property '" + key
                                 + "'. Use 'adbc.<key>' prefix for driver-specific options.");
-            }
-        }
-
-        // (3) driver_url file existence check (VAL-03)
-        if (driverUrl != null) {
-            File file = new File(driverUrl);
-            String absolutePath = file.getAbsolutePath();
-            if (!file.exists() || !file.isFile()) {
-                throw new StarRocksConnectorException(
-                        "ADBC catalog: driver_url path does not exist or is not a file: " + absolutePath);
-            }
-            if (!file.canRead()) {
-                throw new StarRocksConnectorException(
-                        "ADBC catalog: driver_url path is not readable: " + absolutePath);
             }
         }
     }
@@ -140,13 +123,7 @@ public class ADBCConnector implements Connector {
      */
     private static AdbcDriver loadOrGetDriver(Map<String, String> properties, BufferAllocator allocator) {
         String driverIdentifier = getDriverIdentifier(properties);
-        return DRIVER_REGISTRY.computeIfAbsent(driverIdentifier, path -> {
-            try {
-                return new JniDriverFactory().getDriver(allocator);
-            } catch (AdbcException e) {
-                throw new StarRocksConnectorException(classifyAdbcError(e, path), e);
-            }
-        });
+        return DRIVER_REGISTRY.computeIfAbsent(driverIdentifier, path -> new JniDriverFactory().getDriver(allocator));
     }
 
     /**

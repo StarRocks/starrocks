@@ -42,13 +42,13 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-public class FlightSQLSchemaResolverTest {
+public class ADBCSchemaResolverTest {
 
-    private static FlightSQLSchemaResolver resolver;
+    private static ADBCSchemaResolver resolver;
 
     @BeforeAll
     public static void setUp() {
-        resolver = new FlightSQLSchemaResolver();
+        resolver = new ADBCSchemaResolver();
     }
 
     private static Field makeField(String name, ArrowType type) {

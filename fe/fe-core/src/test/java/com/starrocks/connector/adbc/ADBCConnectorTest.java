@@ -22,13 +22,7 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledOnOs;
-import org.junit.jupiter.api.condition.OS;
-import org.junit.jupiter.api.io.TempDir;
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,56 +81,14 @@ public class ADBCConnectorTest {
     }
 
     @Test
-    public void testAdbcPrefixedKeyDoesNotThrowValidation() {
-        // adbc.* keys should pass validation (they may fail at driver loading, but not at validation)
+    public void testAdbcPrefixedKeyPassesValidation() {
+        // adbc.* keys must pass property validation regardless of driver loading outcome.
         Map<String, String> props = new HashMap<>();
         props.put("type", "adbc");
         props.put("driver_url", "/some/path");
         props.put("adbc.flight.sql.rpc_timeout", "30");
 
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        // Should fail at file-not-found check, NOT at unknown property validation
-        assertFalse(ex.getMessage().contains("unknown property"),
-                "Should not contain 'unknown property' but got: " + ex.getMessage());
-        assertTrue(ex.getMessage().contains("does not exist"),
-                "Expected 'does not exist' in: " + ex.getMessage());
-    }
-
-    @Test
-    public void testDriverUrlFileNotFoundThrows() {
-        Map<String, String> props = new HashMap<>();
-        props.put("type", "adbc");
-        props.put("driver_url", "/nonexistent/path/libdriver.so");
-
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        assertTrue(ex.getMessage().contains("does not exist"),
-                "Expected 'does not exist' in: " + ex.getMessage());
-    }
-
-    @Test
-    @DisabledOnOs(OS.WINDOWS)
-    public void testDriverUrlNotReadableThrows(@TempDir Path tempDir) throws IOException {
-        File driverFile = tempDir.resolve("libdriver.so").toFile();
-        assertTrue(driverFile.createNewFile(), "Failed to create temp file");
-        assertTrue(driverFile.setReadable(false), "Failed to set file unreadable");
-
-        try {
-            Map<String, String> props = new HashMap<>();
-            props.put("type", "adbc");
-            props.put("driver_url", driverFile.getAbsolutePath());
-
-            StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-                new ADBCConnector(createContext(props));
-            });
-            assertTrue(ex.getMessage().contains("not readable"),
-                    "Expected 'not readable' in: " + ex.getMessage());
-        } finally {
-            driverFile.setReadable(true);
-        }
+        ADBCConnector.validateProperties(props);
     }
 
     @Test
@@ -162,7 +114,7 @@ public class ADBCConnectorTest {
 
     @Test
     public void testKnownTopLevelKeysAccepted() {
-        // All known top-level keys should pass validation (fail at file check, not unknown key)
+        // All known top-level keys must pass property validation.
         Map<String, String> props = new HashMap<>();
         props.put("type", "adbc");
         props.put("driver_url", "/some/path");
@@ -172,14 +124,7 @@ public class ADBCConnectorTest {
         props.put("path", "/data");
         props.put("driver_entrypoint", "my_init");
 
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        // Should fail at file-not-found, NOT at unknown key
-        assertTrue(ex.getMessage().contains("does not exist"),
-                "Expected 'does not exist' in: " + ex.getMessage());
-        assertFalse(ex.getMessage().contains("unknown property"),
-                "Should not contain 'unknown property' but got: " + ex.getMessage());
+        ADBCConnector.validateProperties(props);
     }
 
     // --- ADBCTableName tests (unchanged) ---
@@ -205,13 +150,6 @@ public class ADBCConnectorTest {
         assertEquals("cat", name.getCatalogName());
         assertEquals("db", name.getDatabaseName());
         assertEquals("tbl", name.getTableName());
-    }
-
-    // --- ADBCSchemaResolver tests (unchanged) ---
-
-    @Test
-    public void testSchemaResolverIsAbstract() {
-        assertTrue(java.lang.reflect.Modifier.isAbstract(ADBCSchemaResolver.class.getModifiers()));
     }
 
     // --- ADBCTable tests (unchanged) ---
