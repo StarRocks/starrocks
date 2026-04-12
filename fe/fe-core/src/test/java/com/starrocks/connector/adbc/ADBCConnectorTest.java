@@ -19,18 +19,22 @@ import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorContext;
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,58 +44,145 @@ public class ADBCConnectorTest {
         return new ConnectorContext("test_catalog", "adbc", properties);
     }
 
-    @Test
-    public void testMissingDriverThrows() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
+    // --- Property validation tests (new schema) ---
 
-        assertThrows(StarRocksConnectorException.class, () -> {
+    @Test
+    public void testBothDriverUrlAndDriverNameThrows() {
+        Map<String, String> props = new HashMap<>();
+        props.put("type", "adbc");
+        props.put("driver_url", "/some/path");
+        props.put("driver_name", "sqlite");
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
             new ADBCConnector(createContext(props));
         });
+        assertTrue(ex.getMessage().contains("mutually exclusive"),
+                "Expected 'mutually exclusive' in: " + ex.getMessage());
     }
 
     @Test
-    public void testMissingUrlThrows() {
+    public void testNeitherDriverUrlNorDriverNameThrows() {
         Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
+        props.put("type", "adbc");
 
-        assertThrows(StarRocksConnectorException.class, () -> {
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
             new ADBCConnector(createContext(props));
         });
+        assertTrue(ex.getMessage().contains("one of 'driver_url' or 'driver_name' is required"),
+                "Expected 'one of driver_url or driver_name is required' in: " + ex.getMessage());
     }
 
     @Test
-    public void testValidPropsDoNotThrow() {
+    public void testUnknownTopLevelKeyThrows() {
         Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
+        props.put("type", "adbc");
+        props.put("driver_url", "/some/path");
+        props.put("bogus_key", "val");
 
-        ADBCConnector connector = new ADBCConnector(createContext(props));
-        assertNotNull(connector);
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        assertTrue(ex.getMessage().contains("unknown property 'bogus_key'"),
+                "Expected 'unknown property bogus_key' in: " + ex.getMessage());
     }
 
     @Test
-    public void testGetMetadataReturnsNonNull() {
+    public void testAdbcPrefixedKeyDoesNotThrowValidation() {
+        // adbc.* keys should pass validation (they may fail at driver loading, but not at validation)
         Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
+        props.put("type", "adbc");
+        props.put("driver_url", "/some/path");
+        props.put("adbc.flight.sql.rpc_timeout", "30");
 
-        ADBCConnector connector = new ADBCConnector(createContext(props));
-        ConnectorMetadata metadata = connector.getMetadata();
-        assertNotNull(metadata);
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        // Should fail at file-not-found check, NOT at unknown property validation
+        assertFalse(ex.getMessage().contains("unknown property"),
+                "Should not contain 'unknown property' but got: " + ex.getMessage());
+        assertTrue(ex.getMessage().contains("does not exist"),
+                "Expected 'does not exist' in: " + ex.getMessage());
     }
 
     @Test
-    public void testShutdownDoesNotThrow() {
+    public void testDriverUrlFileNotFoundThrows() {
         Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
+        props.put("type", "adbc");
+        props.put("driver_url", "/nonexistent/path/libdriver.so");
 
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        assertTrue(ex.getMessage().contains("does not exist"),
+                "Expected 'does not exist' in: " + ex.getMessage());
+    }
+
+    @Test
+    @DisabledOnOs(OS.WINDOWS)
+    public void testDriverUrlNotReadableThrows(@TempDir Path tempDir) throws IOException {
+        File driverFile = tempDir.resolve("libdriver.so").toFile();
+        assertTrue(driverFile.createNewFile(), "Failed to create temp file");
+        assertTrue(driverFile.setReadable(false), "Failed to set file unreadable");
+
+        try {
+            Map<String, String> props = new HashMap<>();
+            props.put("type", "adbc");
+            props.put("driver_url", driverFile.getAbsolutePath());
+
+            StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+                new ADBCConnector(createContext(props));
+            });
+            assertTrue(ex.getMessage().contains("not readable"),
+                    "Expected 'not readable' in: " + ex.getMessage());
+        } finally {
+            driverFile.setReadable(true);
+        }
+    }
+
+    @Test
+    public void testLegacyCatalogDropSafety() {
+        // Legacy v1 catalog shape: adbc.driver + adbc.url but no driver_url/driver_name
+        Map<String, String> props = new HashMap<>();
+        props.put("adbc.driver", "flight_sql");
+        props.put("adbc.url", "grpc://localhost:8815");
+
+        // Constructor should NOT throw -- legacy fallback returns early with metadata=null
         ADBCConnector connector = new ADBCConnector(createContext(props));
+
+        // shutdown should NOT throw on legacy catalog
         connector.shutdown();
+
+        // getMetadata should throw with legacy property schema message
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            connector.getMetadata();
+        });
+        assertTrue(ex.getMessage().contains("legacy property schema"),
+                "Expected 'legacy property schema' in: " + ex.getMessage());
     }
 
-    // ADBCTableName tests
+    @Test
+    public void testKnownTopLevelKeysAccepted() {
+        // All known top-level keys should pass validation (fail at file check, not unknown key)
+        Map<String, String> props = new HashMap<>();
+        props.put("type", "adbc");
+        props.put("driver_url", "/some/path");
+        props.put("uri", ":memory:");
+        props.put("user", "admin");
+        props.put("password", "secret");
+        props.put("path", "/data");
+        props.put("driver_entrypoint", "my_init");
+
+        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
+            new ADBCConnector(createContext(props));
+        });
+        // Should fail at file-not-found, NOT at unknown key
+        assertTrue(ex.getMessage().contains("does not exist"),
+                "Expected 'does not exist' in: " + ex.getMessage());
+        assertFalse(ex.getMessage().contains("unknown property"),
+                "Should not contain 'unknown property' but got: " + ex.getMessage());
+    }
+
+    // --- ADBCTableName tests (unchanged) ---
 
     @Test
     public void testTableNameEquality() {
@@ -116,15 +207,14 @@ public class ADBCConnectorTest {
         assertEquals("tbl", name.getTableName());
     }
 
-    // ADBCSchemaResolver tests
+    // --- ADBCSchemaResolver tests (unchanged) ---
 
     @Test
     public void testSchemaResolverIsAbstract() {
-        // ADBCSchemaResolver cannot be instantiated directly
         assertTrue(java.lang.reflect.Modifier.isAbstract(ADBCSchemaResolver.class.getModifiers()));
     }
 
-    // ADBCTable tests
+    // --- ADBCTable tests (unchanged) ---
 
     @Test
     public void testADBCTableType() {
@@ -158,122 +248,5 @@ public class ADBCConnectorTest {
         );
         ADBCTable table = new ADBCTable(1L, "t", columns, "db", "cat", new HashMap<>());
         assertTrue(table.isSupported());
-    }
-
-    // Driver and URI validation tests
-
-    @Test
-    public void testUnsupportedDriverThrows() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "asd");
-        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
-
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        assertTrue(ex.getMessage().contains("Unsupported ADBC driver"),
-                "Expected 'Unsupported ADBC driver' in: " + ex.getMessage());
-    }
-
-    @Test
-    public void testInvalidUriSchemeThrows() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "http://localhost:31337");
-
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        assertTrue(ex.getMessage().contains("Invalid ADBC URI scheme"),
-                "Expected 'Invalid ADBC URI scheme' in: " + ex.getMessage());
-    }
-
-    @Test
-    public void testDriverCaseInsensitive() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "Flight_SQL");
-        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
-
-        ADBCConnector connector = new ADBCConnector(createContext(props));
-        assertNotNull(connector);
-    }
-
-    // TLS validation tests
-
-    @Test
-    public void testTlsNonexistentCaCertFileThrows() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "grpc+tls://localhost:443");
-        props.put(ADBCConnector.PROP_TLS_CA_CERT_FILE, "/nonexistent/ca.pem");
-
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        assertTrue(ex.getMessage().contains("does not exist"), "Expected 'does not exist' in: " + ex.getMessage());
-    }
-
-    @Test
-    public void testTlsMtlsMissingKeyThrows() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "grpc+tls://localhost:443");
-        props.put(ADBCConnector.PROP_TLS_CLIENT_CERT_FILE, "/tmp/some.pem");
-
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        assertTrue(ex.getMessage().contains("must both be provided"), "Expected 'must both be provided' in: " + ex.getMessage());
-    }
-
-    @Test
-    public void testTlsMtlsMissingCertThrows() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "grpc+tls://localhost:443");
-        props.put(ADBCConnector.PROP_TLS_CLIENT_KEY_FILE, "/tmp/some.key");
-
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        assertTrue(ex.getMessage().contains("must both be provided"), "Expected 'must both be provided' in: " + ex.getMessage());
-    }
-
-    @Test
-    public void testNonTlsUriWithCertPropsDoesNotThrow() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "grpc://localhost:31337");
-        props.put(ADBCConnector.PROP_TLS_CA_CERT_FILE, "/some/path");
-
-        // Should NOT throw -- certs are just ignored with warning for non-TLS URI
-        ADBCConnector connector = new ADBCConnector(createContext(props));
-        assertNotNull(connector);
-    }
-
-    @Test
-    public void testTlsVerifyFalseDoesNotThrow() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "grpc+tls://localhost:443");
-        props.put(ADBCConnector.PROP_TLS_VERIFY, "false");
-
-        // Should NOT throw -- insecure mode with no cert files
-        ADBCConnector connector = new ADBCConnector(createContext(props));
-        assertNotNull(connector);
-    }
-
-    @Test
-    public void testTlsUriCaseInsensitive() {
-        Map<String, String> props = new HashMap<>();
-        props.put(ADBCConnector.PROP_DRIVER, "flight_sql");
-        props.put(ADBCConnector.PROP_URL, "GRPC+TLS://localhost:443");
-        props.put(ADBCConnector.PROP_TLS_CA_CERT_FILE, "/nonexistent/ca.pem");
-
-        // Should detect TLS and validate the cert file (which doesn't exist)
-        StarRocksConnectorException ex = assertThrows(StarRocksConnectorException.class, () -> {
-            new ADBCConnector(createContext(props));
-        });
-        assertTrue(ex.getMessage().contains("does not exist"), "Expected 'does not exist' in: " + ex.getMessage());
     }
 }
