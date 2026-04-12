@@ -164,18 +164,9 @@ public:
 
     std::string get_raw_name() const { return _name; }
 
-    virtual const LocalRFWaitingSet& rf_waiting_set() const;
-
-    RuntimeFilterHub* runtime_filter_hub();
-
     std::vector<ExprContext*>& runtime_in_filters();
 
-    virtual RuntimeFilterProbeCollector* runtime_bloom_filters();
-    virtual const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
-
     virtual int64_t global_rf_wait_timeout_ns() const;
-
-    const std::vector<SlotId>& filter_null_value_columns() const;
 
     // equal to ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
@@ -204,8 +195,6 @@ public:
         _last_growth_cpu_time_ns = 0;
         return res;
     }
-
-    RuntimeState* runtime_state() const;
 
     void set_prepare_time(int64_t cost_ns);
     void set_local_prepare_time(int64_t cost_ns);

@@ -33,7 +33,7 @@ StreamScanOperator::StreamScanOperator(OperatorFactory* factory, int32_t id, int
           _is_stream_pipeline(is_stream_pipeline) {}
 
 StreamScanOperator::~StreamScanOperator() {
-    auto* state = runtime_state();
+    auto* state = get_factory()->runtime_state();
     if (state == nullptr) {
         return;
     }

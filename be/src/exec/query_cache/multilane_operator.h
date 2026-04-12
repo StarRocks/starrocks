@@ -77,12 +77,6 @@ public:
 
     pipeline::OperatorPtr get_internal_op(size_t i);
 
-    const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
-
-    RuntimeFilterProbeCollector* runtime_bloom_filters() override;
-
-    const RuntimeFilterProbeCollector* runtime_bloom_filters() const override;
-
     void set_precondition_ready(starrocks::RuntimeState* state) override;
     bool ignore_empty_eos() const override { return false; }
 
@@ -106,6 +100,9 @@ public:
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() override;
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override;
     // can_passthrough should be true for the operator that precedes cache_operator immediately.
     // because only this operator is computation-intensive, so its input chunks must be pass through
     // this operator if its computation imposes an unacceptable performance penalty on cache mechanism.

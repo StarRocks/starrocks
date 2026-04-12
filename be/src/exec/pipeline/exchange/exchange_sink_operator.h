@@ -102,7 +102,7 @@ public:
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns
-        return sz > runtime_state()->chunk_size() * 512;
+        return sz > get_factory()->runtime_state()->chunk_size() * 512;
     }
     void _calc_hash_values_and_bucket_ids();
 

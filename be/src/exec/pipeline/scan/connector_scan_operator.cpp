@@ -623,7 +623,7 @@ int64_t ConnectorScanOperator::get_scan_table_id() const {
     }
 
     TupleId tuple_id = tuple_ids[0];
-    const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
+    const TupleDescriptor* tuple_desc = get_factory()->runtime_state()->desc_tbl().get_tuple_descriptor(tuple_id);
     if (tuple_desc != nullptr && tuple_desc->table_desc() != nullptr) {
         return tuple_desc->table_desc()->table_id();
     }
@@ -639,7 +639,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
-          _runtime_bloom_filters(op->runtime_bloom_filters()),
+          _runtime_bloom_filters(op->get_factory()->get_runtime_bloom_filters()),
           _enable_adaptive_io_tasks(enable_adaptive_io_tasks) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());

@@ -36,7 +36,7 @@ public:
     std::string get_raw_name() const { return _name; }
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.
-    const LocalRFWaitingSet& rf_waiting_set() const { return _rf_waiting_set; }
+    virtual const LocalRFWaitingSet& rf_waiting_set() const { return _rf_waiting_set; }
 
     // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
@@ -66,13 +66,13 @@ public:
     std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
     // acquire local colocate runtime filter
     std::vector<ExprContext*> get_colocate_runtime_in_filters(size_t driver_sequence);
-    RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
+    virtual RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
         if (_runtime_filter_collector == nullptr) {
             return nullptr;
         }
         return _runtime_filter_collector->get_rf_probe_collector();
     }
-    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const {
+    virtual const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const {
         if (_runtime_filter_collector == nullptr) {
             return nullptr;
         }

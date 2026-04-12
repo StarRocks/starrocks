@@ -42,7 +42,7 @@ Status WaitSourceOperator::prepare(RuntimeState* state) {
 }
 
 WaitSourceOperator::~WaitSourceOperator() {
-    close(runtime_state());
+    close(get_factory()->runtime_state());
 }
 
 void WaitSourceOperator::close(RuntimeState* state) {

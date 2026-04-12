@@ -126,18 +126,9 @@ void Operator::set_precondition_ready(RuntimeState* state) {
                << " local in runtime filter num:" << _runtime_in_filters.size() << " op:" << this->get_raw_name();
 }
 
-const LocalRFWaitingSet& Operator::rf_waiting_set() const {
-    DCHECK(_factory != nullptr);
-    return _factory->rf_waiting_set();
-}
-
-RuntimeFilterHub* Operator::runtime_filter_hub() {
-    return _factory->runtime_filter_hub();
-}
-
 void Operator::close(RuntimeState* state) {
     _mem_resource_manager.close();
-    if (auto* rf_bloom_filters = runtime_bloom_filters()) {
+    if (auto* rf_bloom_filters = _factory->get_runtime_bloom_filters()) {
         _init_rf_counters(false);
         COUNTER_SET(_runtime_in_filter_num_counter, (int64_t)runtime_in_filters().size());
         COUNTER_SET(_runtime_bloom_filter_num_counter, (int64_t)rf_bloom_filters->size());
@@ -168,24 +159,13 @@ std::vector<ExprContext*>& Operator::runtime_in_filters() {
     return _runtime_in_filters;
 }
 
-RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() {
-    return _factory->get_runtime_bloom_filters();
-}
-const RuntimeFilterProbeCollector* Operator::runtime_bloom_filters() const {
-    return _factory->get_runtime_bloom_filters();
-}
-
 int64_t Operator::global_rf_wait_timeout_ns() const {
-    const auto* global_rf_collector = runtime_bloom_filters();
+    const auto* global_rf_collector = _factory->get_runtime_bloom_filters();
     if (global_rf_collector == nullptr) {
         return 0;
     }
 
     return 1000'000L * global_rf_collector->wait_timeout_ms();
-}
-
-const std::vector<SlotId>& Operator::filter_null_value_columns() const {
-    return _factory->get_filter_null_value_columns();
 }
 
 Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
@@ -267,16 +247,12 @@ void Operator::eval_runtime_bloom_filters(Chunk* chunk) {
         return;
     }
 
-    if (auto* bloom_filters = runtime_bloom_filters()) {
+    if (auto* bloom_filters = _factory->get_runtime_bloom_filters()) {
         _init_rf_counters(true);
         bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
     }
 
-    ChunkPredicateEvaluator::eval_filter_null_values(chunk, filter_null_value_columns());
-}
-
-RuntimeState* Operator::runtime_state() const {
-    return _factory->runtime_state();
+    ChunkPredicateEvaluator::eval_filter_null_values(chunk, _factory->get_filter_null_value_columns());
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {
