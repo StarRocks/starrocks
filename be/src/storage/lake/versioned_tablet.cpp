@@ -146,7 +146,6 @@ TabletBasicInfo VersionedTablet::get_basic_info() const {
                 index_disk_usage += sst.filesize();
             }
             info.index_disk_usage = index_disk_usage;
-            info.data_size += index_disk_usage;
         }
     }
 
