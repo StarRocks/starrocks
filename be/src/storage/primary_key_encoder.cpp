@@ -43,8 +43,8 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
-#include "column/raw_data_visitor.h"
 #include "column/fixed_length_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"
@@ -333,22 +333,20 @@ static void prepare_ops(const Schema& schema, const std::vector<ColumnId>& sort_
     auto& ops = *pops;
     for (int j = 0; j < ncol; j++) {
         switch (schema.field(sort_key_idxes[j])->type()->type()) {
-#define M(LT)                                                                              \
-    case LT: {                                                                             \
-        RawDataVisitor visitor;                                                            \
-        CHECK(chunk.get_column_by_index(sort_key_idxes[j])->accept(&visitor).ok());       \
-        const void* data = visitor.result();                                               \
+#define M(LT)                                                                                        \
+    case LT: {                                                                                       \
+        RawDataVisitor visitor;                                                                      \
+        CHECK(chunk.get_column_by_index(sort_key_idxes[j])->accept(&visitor).ok());                  \
+        const void* data = visitor.result();                                                         \
         ops[j] = [data](int idx, std::string* buff) { encode_pk_fixed_value<LT>(data, idx, buff); }; \
-        break;                                                                             \
+        break;                                                                                       \
     }
             APPLY_FOR_ALL_PK_SUPPORT_FIXED_TYPE(M)
 #undef M
         case TYPE_VARCHAR: {
             auto container = GetContainer<TYPE_VARCHAR>::get_data(chunk.get_column_by_index(sort_key_idxes[j]));
             bool is_last = (j + 1 == ncol);
-            ops[j] = [container, is_last](int idx, std::string* buff) {
-                encode_slice(container[idx], buff, is_last);
-            };
+            ops[j] = [container, is_last](int idx, std::string* buff) { encode_slice(container[idx], buff, is_last); };
             break;
         }
         default:

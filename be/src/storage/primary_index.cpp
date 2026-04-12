@@ -1434,8 +1434,8 @@ Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vect
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
     ASSIGN_OR_RETURN(const Slice* vkeys_replace, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
-    Status st = _persistent_index->try_replace(pks.size(), vkeys_replace,
-                                               reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes);
+    Status st = _persistent_index->try_replace(pks.size(), vkeys_replace, reinterpret_cast<IndexValue*>(values.data()),
+                                               src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
@@ -1449,8 +1449,8 @@ Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_st
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
     ASSIGN_OR_RETURN(const Slice* vkeys_replace, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
-    Status st = _persistent_index->try_replace(pks.size(), vkeys_replace,
-                                               reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, deletes);
+    Status st = _persistent_index->try_replace(pks.size(), vkeys_replace, reinterpret_cast<IndexValue*>(values.data()),
+                                               max_src_rssid, deletes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
@@ -1520,8 +1520,8 @@ Status PrimaryIndex::_replace_persistent_index_by_indexes(uint32_t rssid, uint32
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
     ASSIGN_OR_RETURN(const Slice* vkeys_replace, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
-    Status st = _persistent_index->replace(pks.size(), vkeys_replace,
-                                           reinterpret_cast<IndexValue*>(values.data()), replace_indexes);
+    Status st = _persistent_index->replace(pks.size(), vkeys_replace, reinterpret_cast<IndexValue*>(values.data()),
+                                           replace_indexes);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
