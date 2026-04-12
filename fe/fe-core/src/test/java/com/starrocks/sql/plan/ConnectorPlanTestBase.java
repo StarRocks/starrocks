@@ -381,8 +381,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         Map<String, String> properties = Maps.newHashMap();
 
         properties.put("type", "adbc");
-        properties.put("adbc.driver", "flight_sql");
-        properties.put("adbc.url", "grpc://127.0.0.1:31337");
+        properties.put("driver_url", "/opt/adbc/lib/libadbc_driver_flightsql.so");
+        properties.put("uri", "grpc://127.0.0.1:31337");
         GlobalStateMgr.getCurrentState().getCatalogMgr().
                 createCatalog("adbc", MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME, "", properties);
 

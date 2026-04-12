@@ -75,10 +75,11 @@ public class ADBCScanPlanTest extends ConnectorPlanTestBase {
     }
 
     @Test
-    public void testADBCTlsExplain() throws Exception {
-        // Verify that Thrift serialization works with TLS fields present (but null)
-        String sql = "select a from adbc0.test_db0.tbl0";
+    public void testADBCExplainShowsDriverUrl() throws Exception {
+        String sql = "EXPLAIN select a from adbc0.test_db0.tbl0";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "SCAN ADBC");
+        assertContains(plan, "DRIVER: /opt/adbc/lib/libadbc_driver_flightsql.so");
+        assertContains(plan, "URI: grpc://127.0.0.1:31337");
     }
 }

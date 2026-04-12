@@ -66,8 +66,8 @@ public class ADBCScanImplementationRuleTest {
     private static ADBCTable newADBCTable() {
         List<Column> schema = List.of(new Column("c1", IntegerType.INT));
         Map<String, String> properties = new HashMap<>();
-        properties.put("adbc.driver", "flight_sql");
-        properties.put("adbc.uri", "grpc://localhost:12345");
+        properties.put("driver_url", "/opt/adbc/lib/libadbc_driver_flightsql.so");
+        properties.put("uri", "grpc://localhost:12345");
         return new ADBCTable(1L, "test_table", schema, "test_db", "test_catalog", properties);
     }
 }

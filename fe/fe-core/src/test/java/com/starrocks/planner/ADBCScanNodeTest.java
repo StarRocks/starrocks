@@ -29,13 +29,14 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Wave 0 test scaffold for ADBCScanNode SQL generation and Thrift serialization.
+ * Tests for ADBCScanNode SQL generation, Thrift serialization, and EXPLAIN output.
  */
 public class ADBCScanNodeTest {
 
@@ -46,10 +47,11 @@ public class ADBCScanNodeTest {
     @BeforeEach
     public void setUp() {
         tableProperties = new HashMap<>();
-        tableProperties.put("adbc.driver", "flight_sql");
-        tableProperties.put("adbc.url", "grpc://localhost:8815");
-        tableProperties.put("adbc.username", "testuser");
-        tableProperties.put("adbc.password", "testpass");
+        tableProperties.put("type", "adbc");
+        tableProperties.put("driver_url", "/opt/adbc/lib/libadbc_driver_flightsql.so");
+        tableProperties.put("uri", "grpc://localhost:8815");
+        tableProperties.put("user", "admin");
+        tableProperties.put("adbc.flight.sql.rpc_timeout", "30");
 
         mockTable = mock(ADBCTable.class);
         when(mockTable.getDbName()).thenReturn("test_schema");
@@ -94,53 +96,83 @@ public class ADBCScanNodeTest {
     }
 
     @Test
-    public void testGetADBCDriverName_FlightSql() {
-        PlanNodeId planNodeId = new PlanNodeId(1);
-        when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<SlotDescriptor>());
-        ADBCScanNode node = new ADBCScanNode(planNodeId, mockTupleDesc, mockTable);
-        assertEquals("adbc_driver_flightsql", node.getADBCDriverName());
-    }
+    public void testToThriftPopulatesNewFields() {
+        tableProperties.put("driver_entrypoint", "my_custom_init");
+        tableProperties.put("adbc.option1", "value1");
+        tableProperties.put("password", "secret");
 
-    @Test
-    public void testGetADBCDriverName_UnknownFallsBack() {
-        // At the ScanNode level, unknown drivers fall back to the raw string.
-        // In practice, ADBCConnector rejects unsupported drivers at catalog creation time.
-        tableProperties.put("adbc.driver", "unknown_driver");
-        PlanNodeId planNodeId = new PlanNodeId(1);
-        when(mockTupleDesc.getSlots()).thenReturn(new ArrayList<SlotDescriptor>());
-        ADBCScanNode node = new ADBCScanNode(planNodeId, mockTupleDesc, mockTable);
-        assertEquals("unknown_driver", node.getADBCDriverName());
-    }
-
-    @Test
-    public void testToThrift() {
         ADBCScanNode node = createScanNodeWithColumns("col1", "col2");
         node.setLimit(50);
 
         TPlanNode msg = new TPlanNode();
         node.toThrift(msg);
 
-        TADBCScanNode adbcNode = msg.adbc_scan_node;
-        assertNotNull(adbcNode);
-        assertEquals("\"test_schema\".\"test_table\"", adbcNode.getTable_name());
-        assertEquals(2, adbcNode.getColumns().size());
-        assertEquals("\"col1\"", adbcNode.getColumns().get(0));
-        assertEquals("\"col2\"", adbcNode.getColumns().get(1));
-        assertEquals(50, adbcNode.getLimit());
-        assertEquals("adbc_driver_flightsql", adbcNode.getAdbc_driver());
-        assertEquals("grpc://localhost:8815", adbcNode.getAdbc_uri());
-        assertEquals("testuser", adbcNode.getAdbc_username());
-        assertEquals("testpass", adbcNode.getAdbc_password());
+        TADBCScanNode scanNode = msg.adbc_scan_node;
+        assertNotNull(scanNode);
+        assertEquals("\"test_schema\".\"test_table\"", scanNode.getTable_name());
+        assertEquals(2, scanNode.getColumns().size());
+        assertEquals("\"col1\"", scanNode.getColumns().get(0));
+        assertEquals("\"col2\"", scanNode.getColumns().get(1));
+        assertEquals(50, scanNode.getLimit());
+
+        // New Thrift fields 15-17
+        assertEquals("/opt/adbc/lib/libadbc_driver_flightsql.so", scanNode.getDriver_url());
+        assertEquals("my_custom_init", scanNode.getEntrypoint());
+        assertTrue(scanNode.isSetAdbc_options());
+        Map<String, String> opts = scanNode.getAdbc_options();
+        assertEquals("value1", opts.get("adbc.option1"));
+        assertEquals("grpc://localhost:8815", opts.get("uri"));
+        assertEquals("admin", opts.get("username"));  // user -> username mapping
+        assertEquals("secret", opts.get("password"));
+        assertEquals("30", opts.get("adbc.flight.sql.rpc_timeout"));
+
+        // Legacy wire-compat fields still populated
+        assertEquals("grpc://localhost:8815", scanNode.getAdbc_uri());
+        assertEquals("admin", scanNode.getAdbc_username());
+        assertEquals("secret", scanNode.getAdbc_password());
     }
 
     @Test
-    public void testExplainOutput() {
+    public void testToThriftOmitsDriverUrlWhenNotSet() {
+        tableProperties.remove("driver_url");
+        tableProperties.put("driver_name", "flightsql");
+        tableProperties.put("password", "secret");
+
+        ADBCScanNode node = createScanNodeWithColumns("col1");
+
+        TPlanNode msg = new TPlanNode();
+        node.toThrift(msg);
+
+        TADBCScanNode scanNode = msg.adbc_scan_node;
+        assertNotNull(scanNode);
+        assertFalse(scanNode.isSetDriver_url());
+        assertFalse(scanNode.isSetEntrypoint());
+        assertTrue(scanNode.isSetAdbc_options());
+
+        Map<String, String> opts = scanNode.getAdbc_options();
+        assertEquals("grpc://localhost:8815", opts.get("uri"));
+        assertEquals("admin", opts.get("username"));
+        assertEquals("secret", opts.get("password"));
+    }
+
+    @Test
+    public void testExplainShowsDriverUrl() {
         ADBCScanNode node = createScanNodeWithColumns("col1");
         String explain = node.getNodeExplainString("  ", TExplainLevel.NORMAL);
         assertTrue(explain.contains("TABLE: \"test_schema\".\"test_table\""));
         assertTrue(explain.contains("QUERY: SELECT \"col1\" FROM \"test_schema\".\"test_table\""));
-        assertTrue(explain.contains("DRIVER: flight_sql"));
+        assertTrue(explain.contains("DRIVER: /opt/adbc/lib/libadbc_driver_flightsql.so"));
         assertTrue(explain.contains("URI: grpc://localhost:8815"));
+    }
+
+    @Test
+    public void testExplainShowsDriverNameWhenNoUrl() {
+        tableProperties.remove("driver_url");
+        tableProperties.put("driver_name", "flightsql");
+
+        ADBCScanNode node = createScanNodeWithColumns("col1");
+        String explain = node.getNodeExplainString("  ", TExplainLevel.NORMAL);
+        assertTrue(explain.contains("DRIVER: flightsql"));
     }
 
     @Test
