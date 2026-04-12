@@ -24,28 +24,18 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import org.apache.arrow.adbc.core.AdbcConnection;
 import org.apache.arrow.adbc.core.AdbcDatabase;
-import org.apache.arrow.adbc.core.AdbcDriver;
-import org.apache.arrow.adbc.core.AdbcException;
 import org.apache.arrow.adbc.core.AdbcStatement;
-import org.apache.arrow.adbc.driver.flightsql.FlightSqlConnectionProperties;
-import org.apache.arrow.adbc.driver.flightsql.FlightSqlDriver;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
-import org.apache.arrow.vector.complex.ListVector;
-import org.apache.arrow.vector.complex.StructVector;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -53,9 +43,26 @@ public class ADBCMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(ADBCMetadata.class);
 
+    // SQL constants for metadata discovery via information_schema
+    private static final String SQL_LIST_SCHEMAS =
+            "SELECT schema_name FROM information_schema.schemata";
+    private static final String SQL_LIST_TABLES =
+            "SELECT table_name FROM information_schema.tables WHERE table_schema = '%s'";
+    private static final String SQL_GET_SCHEMA =
+            "SELECT * FROM \"%s\".\"%s\" WHERE 1=0";
+
+    // SQLite fallback (sqlite has no information_schema)
+    private static final String SQL_LIST_SCHEMAS_SQLITE =
+            "SELECT DISTINCT 'main' AS schema_name";
+    private static final String SQL_LIST_TABLES_SQLITE =
+            "SELECT name AS table_name FROM sqlite_master WHERE type IN ('table', 'view')";
+    private static final String SQL_GET_SCHEMA_SQLITE =
+            "SELECT * FROM \"%s\" WHERE 1=0";
+
     private final String catalogName;
     private final Map<String, String> properties;
     private final AdbcDatabase adbcDatabase;
+    private final BufferAllocator allocator;
     private final ADBCSchemaResolver schemaResolver;
 
     // Caches (mirror JDBCMetadata structure)
@@ -64,11 +71,13 @@ public class ADBCMetadata implements ConnectorMetadata {
     private final ADBCMetaCache<String, List<String>> dbNamesCache;
     private final ADBCMetaCache<String, List<String>> tableNamesCache;
 
-    public ADBCMetadata(Map<String, String> properties, String catalogName) {
+    public ADBCMetadata(Map<String, String> properties, String catalogName,
+                        BufferAllocator allocator, AdbcDatabase adbcDatabase) {
         this.catalogName = catalogName;
         this.properties = properties;
-        this.adbcDatabase = initDatabase(properties);
-        this.schemaResolver = createSchemaResolver(properties.get(ADBCConnector.PROP_DRIVER));
+        this.allocator = allocator;
+        this.adbcDatabase = adbcDatabase;
+        this.schemaResolver = createSchemaResolver();
 
         // Initialize caches
         this.tableIdCache = new ADBCMetaCache<>(properties, true);       // permanent
@@ -81,8 +90,9 @@ public class ADBCMetadata implements ConnectorMetadata {
     ADBCMetadata(Map<String, String> properties, String catalogName, AdbcDatabase adbcDatabase) {
         this.catalogName = catalogName;
         this.properties = properties;
+        this.allocator = new RootAllocator();
         this.adbcDatabase = adbcDatabase;
-        this.schemaResolver = createSchemaResolver(properties.get(ADBCConnector.PROP_DRIVER));
+        this.schemaResolver = createSchemaResolver();
 
         this.tableIdCache = new ADBCMetaCache<>(properties, true);
         this.tableInstanceCache = new ADBCMetaCache<>(properties, false);
@@ -90,90 +100,13 @@ public class ADBCMetadata implements ConnectorMetadata {
         this.tableNamesCache = new ADBCMetaCache<>(properties, false);
     }
 
-    private AdbcDatabase initDatabase(Map<String, String> properties) {
-        BufferAllocator allocator = new RootAllocator();
-        FlightSqlDriver driver = new FlightSqlDriver(allocator);
-        Map<String, Object> params = new HashMap<>();
-        AdbcDriver.PARAM_URI.set(params, properties.get(ADBCConnector.PROP_URL));
-        if (properties.containsKey("adbc.username")) {
-            AdbcDriver.PARAM_USERNAME.set(params, properties.get("adbc.username"));
-        }
-        if (properties.containsKey("adbc.password")) {
-            AdbcDriver.PARAM_PASSWORD.set(params, properties.get("adbc.password"));
-        }
-
-        // TLS options
-        String uri = properties.get(ADBCConnector.PROP_URL);
-        if (uri != null && uri.toLowerCase().startsWith("grpc+tls://")) {
-            // Read cert/key files into byte arrays and wrap in resettable streams.
-            // The ADBC driver stores the params map and reads the InputStream on every
-            // adbcDatabase.connect() call. A plain FileInputStream (or ByteArrayInputStream)
-            // is consumed on the first read, causing "does not contain valid certificates"
-            // on subsequent connections. Auto-resetting before each read fixes this.
-            String caCertFile = properties.get(ADBCConnector.PROP_TLS_CA_CERT_FILE);
-            if (caCertFile != null) {
-                try {
-                    FlightSqlConnectionProperties.TLS_ROOT_CERTS.set(params,
-                            rereadableStream(Files.readAllBytes(Paths.get(caCertFile))));
-                } catch (IOException e) {
-                    throw new StarRocksConnectorException(
-                            "Cannot read CA cert file: " + caCertFile + ": " + e.getMessage(), e);
-                }
-            }
-
-            String clientCertFile = properties.get(ADBCConnector.PROP_TLS_CLIENT_CERT_FILE);
-            String clientKeyFile = properties.get(ADBCConnector.PROP_TLS_CLIENT_KEY_FILE);
-            if (clientCertFile != null && clientKeyFile != null) {
-                try {
-                    FlightSqlConnectionProperties.MTLS_CERT_CHAIN.set(params,
-                            rereadableStream(Files.readAllBytes(Paths.get(clientCertFile))));
-                    FlightSqlConnectionProperties.MTLS_PRIVATE_KEY.set(params,
-                            rereadableStream(Files.readAllBytes(Paths.get(clientKeyFile))));
-                } catch (IOException e) {
-                    throw new StarRocksConnectorException(
-                            "Cannot read mTLS cert/key file: " + e.getMessage(), e);
-                }
-            }
-
-            String verify = properties.getOrDefault(ADBCConnector.PROP_TLS_VERIFY, "true");
-            if ("false".equalsIgnoreCase(verify)) {
-                FlightSqlConnectionProperties.TLS_SKIP_VERIFY.set(params, true);
-                LOG.warn("ADBC catalog '{}': TLS certificate verification DISABLED (insecure mode)",
-                        properties.getOrDefault("catalog_name", "unknown"));
-            }
-        }
-
-        try {
-            return driver.open(params);
-        } catch (AdbcException e) {
-            throw new StarRocksConnectorException(
-                    "Failed to connect to ADBC catalog '" + properties.getOrDefault("catalog_name", "unknown")
-                            + "' at " + properties.getOrDefault(ADBCConnector.PROP_URL, "<unknown URL>")
-                            + ". Check that the server is running and the URL is correct. Detail: "
-                            + e.getMessage(), e);
-        }
+    private ADBCSchemaResolver createSchemaResolver() {
+        return new FlightSQLSchemaResolver();  // driver-agnostic despite the name
     }
 
-    // Returns a ByteArrayInputStream that auto-resets before the ADBC driver reads it.
-    // The driver calls available() to size a buffer, then readFully() to fill it.
-    // Each adbcDatabase.connect() re-reads the same stream from the params map,
-    // so we must reset to position 0 before each available() call.
-    private static ByteArrayInputStream rereadableStream(byte[] data) {
-        return new ByteArrayInputStream(data) {
-            @Override
-            public synchronized int available() {
-                reset();
-                return super.available();
-            }
-        };
-    }
-
-    private ADBCSchemaResolver createSchemaResolver(String driver) {
-        if ("flight_sql".equalsIgnoreCase(driver)) {
-            return new FlightSQLSchemaResolver();
-        }
-        throw new StarRocksConnectorException(
-                "Unsupported ADBC driver: '" + driver + "'. Supported drivers: [flight_sql]");
+    private boolean isSQLiteDriver() {
+        String driverUrl = properties.getOrDefault("driver_url", "");
+        return driverUrl.toLowerCase().contains("sqlite");
     }
 
     @Override
@@ -199,18 +132,18 @@ public class ADBCMetadata implements ConnectorMetadata {
     @Override
     public List<String> listDbNames(ConnectContext context) {
         return dbNamesCache.get(catalogName, k -> {
-            try (AdbcConnection conn = adbcDatabase.connect()) {
-                try (ArrowReader reader = conn.getObjects(
-                        AdbcConnection.GetObjectsDepth.DB_SCHEMAS,
-                        null, null, null, null, null)) {
-                    return parseSchemaNames(reader);
+            String sql = isSQLiteDriver() ? SQL_LIST_SCHEMAS_SQLITE : SQL_LIST_SCHEMAS;
+            try (AdbcConnection conn = adbcDatabase.connect();
+                 AdbcStatement stmt = conn.createStatement()) {
+                stmt.setSqlQuery(sql);
+                try (AdbcStatement.QueryResult qr = stmt.executeQuery()) {
+                    ArrowReader reader = qr.getReader();
+                    return extractStringColumn(reader, "schema_name");
                 }
             } catch (Exception e) {
                 throw new StarRocksConnectorException(
                         "Failed to list databases from ADBC catalog '" + catalogName
-                                + "'. Check that the remote server at "
-                                + properties.getOrDefault(ADBCConnector.PROP_URL, "<unknown URL>")
-                                + " is reachable. Detail: " + e.getMessage(), e);
+                                + "'. Detail: " + e.getMessage(), e);
             }
         });
     }
@@ -218,32 +151,20 @@ public class ADBCMetadata implements ConnectorMetadata {
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
         return tableNamesCache.get(dbName, k -> {
-            try (AdbcConnection conn = adbcDatabase.connect()) {
-                // First try with table type filter
-                try (ArrowReader reader = conn.getObjects(
-                        AdbcConnection.GetObjectsDepth.TABLES,
-                        null, dbName, null,
-                        new String[] {"TABLE", "VIEW"},
-                        null)) {
-                    List<String> result = parseTableNames(reader);
-                    if (!result.isEmpty()) {
-                        return result;
-                    }
-                }
-                // Retry without table type filter (some servers use non-standard type strings)
-                try (ArrowReader reader = conn.getObjects(
-                        AdbcConnection.GetObjectsDepth.TABLES,
-                        null, dbName, null,
-                        null,
-                        null)) {
-                    return parseTableNames(reader);
+            String sql = isSQLiteDriver()
+                    ? SQL_LIST_TABLES_SQLITE
+                    : String.format(SQL_LIST_TABLES, dbName);
+            try (AdbcConnection conn = adbcDatabase.connect();
+                 AdbcStatement stmt = conn.createStatement()) {
+                stmt.setSqlQuery(sql);
+                try (AdbcStatement.QueryResult qr = stmt.executeQuery()) {
+                    ArrowReader reader = qr.getReader();
+                    return extractStringColumn(reader, "table_name");
                 }
             } catch (Exception e) {
                 throw new StarRocksConnectorException(
                         "Failed to list tables from ADBC catalog '" + catalogName
-                                + "', database '" + dbName + "'. Check that the remote server at "
-                                + properties.getOrDefault(ADBCConnector.PROP_URL, "<unknown URL>")
-                                + " is reachable. Detail: " + e.getMessage(), e);
+                                + "', database '" + dbName + "'. Detail: " + e.getMessage(), e);
             }
         });
     }
@@ -284,30 +205,52 @@ public class ADBCMetadata implements ConnectorMetadata {
     }
 
     /**
-     * Get table schema, trying getTableSchema() first, then falling back to a query.
+     * Get table schema by executing a WHERE 1=0 query to retrieve column metadata.
      */
     private Schema getTableSchema(AdbcConnection conn, String dbName, String tblName) throws Exception {
-        // Try the standard ADBC getTableSchema API first
-        try {
-            Schema schema = conn.getTableSchema(null, dbName, tblName);
-            if (schema != null) {
-                return schema;
-            }
-        } catch (Exception e) {
-            LOG.debug("getTableSchema not supported, falling back to query for {}.{}: {}",
-                    dbName, tblName, e.getMessage());
+        String sql;
+        if (isSQLiteDriver()) {
+            sql = String.format(SQL_GET_SCHEMA_SQLITE, tblName);
+        } else {
+            sql = String.format(SQL_GET_SCHEMA, dbName, tblName);
         }
-
-        // Fallback: infer schema from an empty query result
-        String sql = "SELECT * FROM \"" + dbName + "\".\"" + tblName + "\" WHERE 1=0";
         try (AdbcStatement stmt = conn.createStatement()) {
             stmt.setSqlQuery(sql);
-            AdbcStatement.QueryResult result = stmt.executeQuery();
-            try (ArrowReader reader = result.getReader()) {
+            try (AdbcStatement.QueryResult qr = stmt.executeQuery()) {
+                ArrowReader reader = qr.getReader();
                 reader.loadNextBatch();
                 return reader.getVectorSchemaRoot().getSchema();
             }
         }
+    }
+
+    /**
+     * Extract a string column from an ArrowReader result set.
+     * Tries the named column first, falls back to the first column.
+     */
+    private List<String> extractStringColumn(ArrowReader reader, String columnName) throws IOException {
+        List<String> results = new ArrayList<>();
+        while (reader.loadNextBatch()) {
+            VectorSchemaRoot root = reader.getVectorSchemaRoot();
+            // Try by column name first, fall back to first column
+            VarCharVector vec = null;
+            try {
+                vec = (VarCharVector) root.getVector(columnName);
+            } catch (Exception e) {
+                vec = (VarCharVector) root.getVector(0);
+            }
+            if (vec == null && root.getFieldVectors().size() > 0) {
+                vec = (VarCharVector) root.getFieldVectors().get(0);
+            }
+            if (vec != null) {
+                for (int i = 0; i < root.getRowCount(); i++) {
+                    if (!vec.isNull(i)) {
+                        results.add(new String(vec.get(i)));
+                    }
+                }
+            }
+        }
+        return results;
     }
 
     @Override
@@ -335,96 +278,5 @@ public class ADBCMetadata implements ConnectorMetadata {
         } catch (Exception e) {
             LOG.warn("Error closing ADBC database in catalog {}: {}", catalogName, e.getMessage());
         }
-    }
-
-    /**
-     * Parse schema names from getObjects(DB_SCHEMAS) result.
-     * The result contains a nested structure: catalog -> db_schema list.
-     * We extract db_schema_name from the nested catalog_db_schemas list.
-     */
-    private List<String> parseSchemaNames(ArrowReader reader) throws IOException {
-        List<String> results = new ArrayList<>();
-        while (reader.loadNextBatch()) {
-            VectorSchemaRoot root = reader.getVectorSchemaRoot();
-            // getObjects result has: catalog_name (Utf8), catalog_db_schemas (List<Struct>)
-            // Each struct has: db_schema_name (Utf8), db_schema_tables (List)
-            ListVector dbSchemasListVec = (ListVector) root.getVector("catalog_db_schemas");
-            if (dbSchemasListVec == null) {
-                // Fallback: try flat structure
-                VarCharVector nameVec = (VarCharVector) root.getVector("db_schema_name");
-                if (nameVec != null) {
-                    for (int i = 0; i < root.getRowCount(); i++) {
-                        if (!nameVec.isNull(i)) {
-                            results.add(new String(nameVec.get(i)));
-                        }
-                    }
-                }
-                continue;
-            }
-
-            for (int i = 0; i < root.getRowCount(); i++) {
-                if (dbSchemasListVec.isNull(i)) {
-                    continue;
-                }
-                List<?> schemas = (List<?>) dbSchemasListVec.getObject(i);
-                if (schemas == null) {
-                    continue;
-                }
-                StructVector dataVec = (StructVector) dbSchemasListVec.getDataVector();
-                int start = dbSchemasListVec.getElementStartIndex(i);
-                int end = dbSchemasListVec.getElementEndIndex(i);
-                VarCharVector nameVec = (VarCharVector) dataVec.getChild("db_schema_name");
-                for (int j = start; j < end; j++) {
-                    if (!nameVec.isNull(j)) {
-                        results.add(new String(nameVec.get(j)));
-                    }
-                }
-            }
-        }
-        return results;
-    }
-
-    /**
-     * Parse table names from getObjects(TABLES) result.
-     * The result contains a nested structure: catalog -> db_schema -> tables list.
-     */
-    private List<String> parseTableNames(ArrowReader reader) throws IOException {
-        List<String> results = new ArrayList<>();
-        while (reader.loadNextBatch()) {
-            VectorSchemaRoot root = reader.getVectorSchemaRoot();
-            // Navigate nested structure: catalog_db_schemas -> db_schema_tables -> table_name
-            ListVector dbSchemasListVec = (ListVector) root.getVector("catalog_db_schemas");
-            if (dbSchemasListVec == null) {
-                continue;
-            }
-
-            for (int catalogRow = 0; catalogRow < root.getRowCount(); catalogRow++) {
-                if (dbSchemasListVec.isNull(catalogRow)) {
-                    continue;
-                }
-                StructVector schemaStructVec = (StructVector) dbSchemasListVec.getDataVector();
-                int schemaStart = dbSchemasListVec.getElementStartIndex(catalogRow);
-                int schemaEnd = dbSchemasListVec.getElementEndIndex(catalogRow);
-
-                for (int schemaIdx = schemaStart; schemaIdx < schemaEnd; schemaIdx++) {
-                    ListVector tablesListVec =
-                            (ListVector) schemaStructVec.getChild("db_schema_tables");
-                    if (tablesListVec == null || tablesListVec.isNull(schemaIdx)) {
-                        continue;
-                    }
-                    StructVector tableStructVec = (StructVector) tablesListVec.getDataVector();
-                    int tableStart = tablesListVec.getElementStartIndex(schemaIdx);
-                    int tableEnd = tablesListVec.getElementEndIndex(schemaIdx);
-                    VarCharVector tableNameVec =
-                            (VarCharVector) tableStructVec.getChild("table_name");
-                    for (int tableIdx = tableStart; tableIdx < tableEnd; tableIdx++) {
-                        if (!tableNameVec.isNull(tableIdx)) {
-                            results.add(new String(tableNameVec.get(tableIdx)));
-                        }
-                    }
-                }
-            }
-        }
-        return results;
     }
 }
