@@ -300,18 +300,6 @@ pipeline::OperatorPtr MultilaneOperator::get_internal_op(size_t i) {
     return _lanes[i].processor;
 }
 
-const pipeline::LocalRFWaitingSet& MultilaneOperator::rf_waiting_set() const {
-    return _lanes[0].processor->rf_waiting_set();
-}
-
-RuntimeFilterProbeCollector* MultilaneOperator::runtime_bloom_filters() {
-    return _lanes[0].processor->runtime_bloom_filters();
-}
-
-const RuntimeFilterProbeCollector* MultilaneOperator::runtime_bloom_filters() const {
-    return _lanes[0].processor->runtime_bloom_filters();
-}
-
 void MultilaneOperator::set_precondition_ready(RuntimeState* state) {
     for (auto& lane : _lanes) {
         lane.processor->set_precondition_ready(state);
@@ -332,6 +320,18 @@ Status MultilaneOperatorFactory::prepare(RuntimeState* state) {
 void MultilaneOperatorFactory::close(RuntimeState* state) {
     _factory->close(state);
     pipeline::OperatorFactory::close(state);
+}
+
+const pipeline::LocalRFWaitingSet& MultilaneOperatorFactory::rf_waiting_set() const {
+    return _factory->rf_waiting_set();
+}
+
+RuntimeFilterProbeCollector* MultilaneOperatorFactory::get_runtime_bloom_filters() {
+    return _factory->get_runtime_bloom_filters();
+}
+
+const RuntimeFilterProbeCollector* MultilaneOperatorFactory::get_runtime_bloom_filters() const {
+    return _factory->get_runtime_bloom_filters();
 }
 
 pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

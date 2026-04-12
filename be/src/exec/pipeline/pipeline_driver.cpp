@@ -158,10 +158,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             _dependencies.push_back(op_with_dep);
         }
 
-        const auto& rf_set = op->rf_waiting_set();
+        const auto& rf_set = op->get_factory()->rf_waiting_set();
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
 
-        const auto* global_rf_collector = op->runtime_bloom_filters();
+        const auto* global_rf_collector = op->get_factory()->get_runtime_bloom_filters();
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 if (!desc->skip_wait()) {

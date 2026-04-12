@@ -147,7 +147,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     }
 
     // push colocate partial runtime filter
-    bool is_colocate_runtime_filter = runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
+    bool is_colocate_runtime_filter = get_factory()->runtime_filter_hub()->is_colocate_runtime_filters(_plan_node_id);
     if (is_colocate_runtime_filter) {
         // init local colocate in/bloom filters
         RuntimeInFilterList in_filter_lists(partial_in_filters.begin(), partial_in_filters.end());
@@ -161,8 +161,8 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
         }
         RuntimeMembershipFilterList bloom_filters(partial_bloom_filters.begin(), partial_bloom_filters.end());
         RETURN_IF_ERROR(RuntimeFilterCollector::prepare_runtime_in_filters(state, in_filter_lists));
-        runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
-                                            std::make_unique<RuntimeFilterCollector>(in_filter_lists));
+        get_factory()->runtime_filter_hub()->set_collector(_plan_node_id, _driver_sequence,
+                                                           std::make_unique<RuntimeFilterCollector>(in_filter_lists));
         state->runtime_filter_port()->publish_local_colocate_filters(bloom_filters);
 
     } else {
@@ -210,8 +210,8 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
 
             RETURN_IF_ERROR(RuntimeFilterCollector::prepare_runtime_in_filters(state, in_filters));
             // move runtime filters into RuntimeFilterHub.
-            runtime_filter_hub()->set_collector(_plan_node_id,
-                                                std::make_unique<RuntimeFilterCollector>(std::move(in_filters)));
+            get_factory()->runtime_filter_hub()->set_collector(
+                    _plan_node_id, std::make_unique<RuntimeFilterCollector>(std::move(in_filters)));
         }
     }
 
