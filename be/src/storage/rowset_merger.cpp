@@ -137,7 +137,7 @@ struct MergeEntry {
                 pk_start = _slice_buf.data();
             } else {
                 RawDataVisitor visitor;
-                CHECK(chunk_pk_column->accept(&visitor).ok());
+                RETURN_IF_ERROR(chunk_pk_column->accept(&visitor));
                 pk_start = reinterpret_cast<const T*>(visitor.result());
             }
             pk_cur = pk_start;
