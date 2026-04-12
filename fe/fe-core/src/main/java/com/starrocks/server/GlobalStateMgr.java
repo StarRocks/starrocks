@@ -384,6 +384,12 @@ public class GlobalStateMgr {
 
     // True indicates that the node is transferring to the leader, using this state avoids forwarding stmt to its own node.
     private volatile boolean isInTransferringToLeader = false;
+    private final AtomicLong leaderGeneration = new AtomicLong(0L);
+    private final AtomicBoolean leaderWorkAdmissionOpen = new AtomicBoolean(false);
+    private volatile LeaderLease activeLeaderLease = LeaderLease.INVALID;
+    private volatile LeaderRoleState leaderRoleState = LeaderRoleState.INACTIVE;
+    private volatile FrontendNodeType pendingDemotionTargetType;
+    private volatile long leaderRoleStateSinceMs = System.currentTimeMillis();
 
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
@@ -596,6 +602,20 @@ public class GlobalStateMgr {
     private final TabletReshardJobMgr tabletReshardJobMgr;
 
     private final LicenseMgr licenseMgr;
+
+    enum LeaderRoleState {
+        // This FE is not serving leader-only work. It may be a follower/observer,
+        // or a previous leader activation attempt may have been rolled back.
+        INACTIVE,
+        // Leader activation is in progress. Journal/open/fencing related steps are
+        // still being initialized, so leader-only work must not be admitted yet.
+        ACTIVATING,
+        // Leader activation has completed and this FE can admit new leader-only work.
+        ACTIVE,
+        // Leader demotion has started. New leader-only work must be rejected and
+        // in-flight work should treat the current lease as expired.
+        DEMOTING
+    }
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -1464,6 +1484,8 @@ public class GlobalStateMgr {
             initDefaultWarehouse();
         }
 
+        beginLeaderActivation();
+
         // set this after replay thread stopped. to avoid replay thread modify them.
         isReady.set(false);
 
@@ -1491,6 +1513,8 @@ public class GlobalStateMgr {
         dominationStartTimeMs = System.currentTimeMillis();
 
         try {
+            publishLeaderLease(getEpoch());
+
             if (Config.bdbje_reset_election_group) {
                 licenseMgr.resetSystemInfoIfMachineChanged();
             }
@@ -1544,8 +1568,14 @@ public class GlobalStateMgr {
             checkCaseInsensitive();
         } catch (StarRocksException e) {
             LOG.warn("Failed to set ENABLE_ADAPTIVE_SINK_DOP", e);
+            if (!isReady.get()) {
+                rollbackLeaderActivation();
+                feType = oldType;
+                throw new RuntimeException("transfer to leader failed", e);
+            }
         } catch (Throwable t) {
             LOG.warn("transfer to leader failed with error", t);
+            rollbackLeaderActivation();
             feType = oldType;
             throw t;
         }
@@ -1570,6 +1600,95 @@ public class GlobalStateMgr {
     public void setFrontendNodeType(FrontendNodeType newType) {
         // just for test, don't call it directly
         feType = newType;
+    }
+
+    @VisibleForTesting
+    void beginLeaderActivation() {
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVATING);
+    }
+
+    @VisibleForTesting
+    void publishLeaderLease(long haEpoch) {
+        Preconditions.checkState(haEpoch >= 0, "leader epoch must be non-negative, actual: %s", haEpoch);
+        Preconditions.checkState(feType == FrontendNodeType.LEADER,
+                "can only publish leader lease when FE type is LEADER, actual: %s", feType);
+        Preconditions.checkState(leaderRoleState == LeaderRoleState.ACTIVATING,
+                "can only publish leader lease during activation, actual state: %s", leaderRoleState);
+        long generation = leaderGeneration.incrementAndGet();
+        activeLeaderLease = new LeaderLease(haEpoch, generation);
+        leaderWorkAdmissionOpen.set(true);
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.ACTIVE);
+    }
+
+    @VisibleForTesting
+    void rollbackLeaderActivation() {
+        leaderWorkAdmissionOpen.set(false);
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = null;
+        updateLeaderRoleState(LeaderRoleState.INACTIVE);
+    }
+
+    @VisibleForTesting
+    void beginLeaderDemotion(FrontendNodeType targetType) {
+        leaderWorkAdmissionOpen.set(false);
+        leaderGeneration.incrementAndGet();
+        activeLeaderLease = LeaderLease.INVALID;
+        pendingDemotionTargetType = targetType;
+        updateLeaderRoleState(LeaderRoleState.DEMOTING);
+    }
+
+    public LeaderLease captureLeaderLease() {
+        return activeLeaderLease;
+    }
+
+    public LeaderLease captureLeaderLeaseOrThrow() {
+        LeaderLease lease = activeLeaderLease;
+        Preconditions.checkState(isLeaderLeaseValid(lease),
+                "leader lease is not available. feType=%s, state=%s, admissionOpen=%s, lease=%s",
+                feType, leaderRoleState, leaderWorkAdmissionOpen.get(), lease);
+        return lease;
+    }
+
+    public boolean isLeaderLeaseValid(LeaderLease lease) {
+        return lease != null
+                && lease.isValid()
+                && lease.equals(activeLeaderLease)
+                && leaderWorkAdmissionOpen.get()
+                && feType == FrontendNodeType.LEADER
+                && leaderRoleState == LeaderRoleState.ACTIVE;
+    }
+
+    public void checkLeaderLease(LeaderLease lease) {
+        Preconditions.checkState(isLeaderLeaseValid(lease),
+                "leader lease is stale. expected=%s, actual=%s, state=%s, admissionOpen=%s",
+                lease, activeLeaderLease, leaderRoleState, leaderWorkAdmissionOpen.get());
+    }
+
+    public boolean isLeaderWorkAdmissionOpen() {
+        return leaderWorkAdmissionOpen.get();
+    }
+
+    public boolean isLeaderDemoting() {
+        return leaderRoleState == LeaderRoleState.DEMOTING;
+    }
+
+    @VisibleForTesting
+    LeaderRoleState getLeaderRoleState() {
+        return leaderRoleState;
+    }
+
+    @VisibleForTesting
+    FrontendNodeType getPendingDemotionTargetType() {
+        return pendingDemotionTargetType;
+    }
+
+    private void updateLeaderRoleState(LeaderRoleState newState) {
+        leaderRoleState = newState;
+        leaderRoleStateSinceMs = System.currentTimeMillis();
     }
 
     // start all daemon threads only running on Master
@@ -2603,6 +2722,11 @@ public class GlobalStateMgr {
 
     public boolean isLeader() {
         return feType == FrontendNodeType.LEADER;
+    }
+
+    @VisibleForTesting
+    long getLeaderRoleStateSinceMs() {
+        return leaderRoleStateSinceMs;
     }
 
     public void setSynchronizedTime(long time) {
