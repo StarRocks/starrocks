@@ -20,7 +20,7 @@
 
 namespace starrocks::pipeline {
 
-class OperatorFactory {
+class OperatorFactory : public OperatorRuntimeAccess {
 public:
     OperatorFactory(int32_t id, std::string name, int32_t plan_node_id);
     virtual ~OperatorFactory() = default;
@@ -37,6 +37,8 @@ public:
     // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
     // util the corresponding local rf generated.
     virtual const LocalRFWaitingSet& rf_waiting_set() const { return _rf_waiting_set; }
+    void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
+                                 std::vector<ExprContext*>* runtime_in_filters) override;
 
     // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
@@ -52,34 +54,22 @@ public:
         _filter_null_value_columns = filter_null_value_columns;
         _tuple_slot_mappings = tuple_slot_mappings;
     }
-    // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
-    // to bound its runtime in-filters.
-    void prepare_runtime_in_filters(RuntimeState* state) {
-        // TODO(satanson): at present, prepare_runtime_in_filters is called in the PipelineDriverPoller thread sequentially,
-        //  std::call_once's cost can be ignored, in the future, if mulitple PipelineDriverPollers are employed to dectect
-        //  and wake blocked driver, std::call_once is sound but may be blocked.
-        std::call_once(_prepare_runtime_in_filters_once, [this, state]() { this->_prepare_runtime_in_filters(state); });
-    }
-
     RuntimeFilterHub* runtime_filter_hub() { return _runtime_filter_hub; }
 
-    std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
-    // acquire local colocate runtime filter
-    std::vector<ExprContext*> get_colocate_runtime_in_filters(size_t driver_sequence);
-    virtual RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
+    RuntimeFilterProbeCollector* get_runtime_bloom_filters() override {
         if (_runtime_filter_collector == nullptr) {
             return nullptr;
         }
         return _runtime_filter_collector->get_rf_probe_collector();
     }
-    virtual const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const {
+    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override {
         if (_runtime_filter_collector == nullptr) {
             return nullptr;
         }
         return _runtime_filter_collector->get_rf_probe_collector();
     }
 
-    const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
+    const std::vector<SlotId>& get_filter_null_value_columns() const override { return _filter_null_value_columns; }
 
     void set_runtime_state(RuntimeState* state) { this->_state = state; }
 
@@ -100,6 +90,18 @@ public:
     virtual bool support_event_scheduler() const { return false; }
 
 protected:
+    // when an operator waiting for local runtime filters is woken, the factory prepares
+    // the shared instance-level filters exactly once before binding them to operators.
+    void prepare_runtime_in_filters(RuntimeState* state) {
+        // TODO(satanson): at present, prepare_runtime_in_filters is called in the PipelineDriverPoller thread sequentially,
+        //  std::call_once's cost can be ignored, in the future, if mulitple PipelineDriverPollers are employed to dectect
+        //  and wake blocked driver, std::call_once is sound but may be blocked.
+        std::call_once(_prepare_runtime_in_filters_once, [this, state]() { this->_prepare_runtime_in_filters(state); });
+    }
+
+    std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
+    // acquire local colocate runtime filter
+    std::vector<ExprContext*> get_colocate_runtime_in_filters(size_t driver_sequence);
     void _prepare_runtime_in_filters(RuntimeState* state);
     void _prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,
                                   std::vector<ExprContext*>* runtime_in_filters);

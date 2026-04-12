@@ -34,8 +34,9 @@ namespace starrocks::pipeline {
 const int32_t Operator::s_pseudo_plan_node_id_for_final_sink = -1;
 
 Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
-                   int32_t driver_sequence)
+                   int32_t driver_sequence, OperatorRuntimeAccess* runtime_access)
         : _factory(factory),
+          _runtime_access(runtime_access != nullptr ? runtime_access : factory),
           _id(id),
           _name(std::move(name)),
           _plan_node_id(plan_node_id),
@@ -117,18 +118,15 @@ void Operator::set_local_prepare_time(int64_t cost_ns) {
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {
-    _runtime_in_filters = _factory->get_colocate_runtime_in_filters(_driver_sequence);
-    _factory->prepare_runtime_in_filters(state);
-    const auto& instance_runtime_filters = _factory->get_runtime_in_filters();
-    _runtime_in_filters.insert(_runtime_in_filters.end(), instance_runtime_filters.begin(),
-                               instance_runtime_filters.end());
+    _runtime_in_filters.clear();
+    _runtime_access->bind_runtime_in_filters(state, _driver_sequence, &_runtime_in_filters);
     VLOG_QUERY << "plan_node_id:" << _plan_node_id << " sequence:" << _driver_sequence
                << " local in runtime filter num:" << _runtime_in_filters.size() << " op:" << this->get_raw_name();
 }
 
 void Operator::close(RuntimeState* state) {
     _mem_resource_manager.close();
-    if (auto* rf_bloom_filters = _factory->get_runtime_bloom_filters()) {
+    if (auto* rf_bloom_filters = _runtime_access->get_runtime_bloom_filters()) {
         _init_rf_counters(false);
         COUNTER_SET(_runtime_in_filter_num_counter, (int64_t)runtime_in_filters().size());
         COUNTER_SET(_runtime_bloom_filter_num_counter, (int64_t)rf_bloom_filters->size());
@@ -160,7 +158,7 @@ std::vector<ExprContext*>& Operator::runtime_in_filters() {
 }
 
 int64_t Operator::global_rf_wait_timeout_ns() const {
-    const auto* global_rf_collector = _factory->get_runtime_bloom_filters();
+    const auto* global_rf_collector = _runtime_access->get_runtime_bloom_filters();
     if (global_rf_collector == nullptr) {
         return 0;
     }
@@ -247,12 +245,12 @@ void Operator::eval_runtime_bloom_filters(Chunk* chunk) {
         return;
     }
 
-    if (auto* bloom_filters = _factory->get_runtime_bloom_filters()) {
+    if (auto* bloom_filters = _runtime_access->get_runtime_bloom_filters()) {
         _init_rf_counters(true);
         bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
     }
 
-    ChunkPredicateEvaluator::eval_filter_null_values(chunk, _factory->get_filter_null_value_columns());
+    ChunkPredicateEvaluator::eval_filter_null_values(chunk, _runtime_access->get_filter_null_value_columns());
 }
 
 void Operator::_init_rf_counters(bool init_bloom) {
