@@ -18,7 +18,6 @@ import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ADBCTable;
-import com.starrocks.connector.adbc.ADBCConnector;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
@@ -31,6 +30,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -134,18 +134,6 @@ public class ADBCScanNode extends ScanNode {
         return sql.toString();
     }
 
-    /**
-     * Maps the FE property adbc.driver value to the C library driver name.
-     */
-    public String getADBCDriverName() {
-        Map<String, String> props = adbcTable.getProperties();
-        String driver = props != null ? props.get("adbc.driver") : null;
-        if ("flight_sql".equals(driver)) {
-            return "adbc_driver_flightsql";
-        }
-        return driver != null ? driver : "";
-    }
-
     private String getPropertyValue(String... keys) {
         Map<String, String> props = adbcTable.getProperties();
         if (props == null) {
@@ -172,12 +160,15 @@ public class ADBCScanNode extends ScanNode {
         output.append(prefix).append("TABLE: ").append(tableName).append("\n");
         output.append(prefix).append("QUERY: ").append(getADBCQueryStr()).append("\n");
 
-        String driver = getPropertyValue("adbc.driver");
-        if (driver != null) {
-            output.append(prefix).append("DRIVER: ").append(driver).append("\n");
+        String driverUrl = getPropertyValue("driver_url");
+        String driverName = getPropertyValue("driver_name");
+        if (driverUrl != null) {
+            output.append(prefix).append("DRIVER: ").append(driverUrl).append("\n");
+        } else if (driverName != null) {
+            output.append(prefix).append("DRIVER: ").append(driverName).append("\n");
         }
 
-        String uri = getPropertyValue("adbc.url", "uri");
+        String uri = getPropertyValue("uri");
         if (uri != null) {
             output.append(prefix).append("URI: ").append(uri).append("\n");
         }
@@ -206,43 +197,55 @@ public class ADBCScanNode extends ScanNode {
         adbcScanNode.setColumns(columns);
         adbcScanNode.setFilters(filters);
         adbcScanNode.setLimit(limit);
-        adbcScanNode.setAdbc_driver(getADBCDriverName());
 
-        String uri = getPropertyValue("adbc.url", "uri");
+        Map<String, String> props = adbcTable.getProperties();
+
+        // NEW fields (Thrift 15-17)
+        String driverUrl = props != null ? props.get("driver_url") : null;
+        if (driverUrl != null) {
+            adbcScanNode.setDriver_url(driverUrl);
+        }
+
+        String entrypoint = props != null ? props.get("driver_entrypoint") : null;
+        if (entrypoint != null) {
+            adbcScanNode.setEntrypoint(entrypoint);
+        }
+
+        // Build adbc_options map: all adbc.* properties + uri + user->username + password
+        if (props != null) {
+            Map<String, String> adbcOpts = new HashMap<>();
+            for (Map.Entry<String, String> e : props.entrySet()) {
+                if (e.getKey().startsWith("adbc.") || e.getKey().equals("uri")) {
+                    adbcOpts.put(e.getKey(), e.getValue());
+                }
+            }
+            // user -> username mapping (ADBC standard key)
+            String user = props.get("user");
+            if (user != null) {
+                adbcOpts.put("username", user);
+            }
+            String password = props.get("password");
+            if (password != null) {
+                adbcOpts.put("password", password);
+            }
+            if (!adbcOpts.isEmpty()) {
+                adbcScanNode.setAdbc_options(adbcOpts);
+            }
+        }
+
+        // Legacy fields 7-9 populated for wire compat until Phase 3 BE drops them
+        String uri = props != null ? props.get("uri") : null;
         if (uri != null) {
             adbcScanNode.setAdbc_uri(uri);
         }
-
-        String username = getPropertyValue("adbc.username", "username");
+        String username = props != null ? props.get("user") : null;
         if (username != null) {
             adbcScanNode.setAdbc_username(username);
         }
-
-        String password = getPropertyValue("adbc.password", "password");
+        String password = props != null ? props.get("password") : null;
         if (password != null) {
             adbcScanNode.setAdbc_password(password);
         }
-
-        String token = getPropertyValue("adbc.token", "token");
-        if (token != null) {
-            adbcScanNode.setAdbc_token(token);
-        }
-
-        // TLS fields
-        String caCertFile = getPropertyValue(ADBCConnector.PROP_TLS_CA_CERT_FILE);
-        if (caCertFile != null) {
-            adbcScanNode.setAdbc_tls_ca_cert_file(caCertFile);
-        }
-        String clientCertFile = getPropertyValue(ADBCConnector.PROP_TLS_CLIENT_CERT_FILE);
-        if (clientCertFile != null) {
-            adbcScanNode.setAdbc_tls_client_cert_file(clientCertFile);
-        }
-        String clientKeyFile = getPropertyValue(ADBCConnector.PROP_TLS_CLIENT_KEY_FILE);
-        if (clientKeyFile != null) {
-            adbcScanNode.setAdbc_tls_client_key_file(clientKeyFile);
-        }
-        String tlsVerify = getPropertyValue(ADBCConnector.PROP_TLS_VERIFY);
-        adbcScanNode.setAdbc_tls_verify(!"false".equalsIgnoreCase(tlsVerify));
 
         msg.adbc_scan_node = adbcScanNode;
     }
