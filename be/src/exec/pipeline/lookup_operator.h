@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "common/status.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group_fwd.h"

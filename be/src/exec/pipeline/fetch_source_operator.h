@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/pipeline/fetch_processor.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
