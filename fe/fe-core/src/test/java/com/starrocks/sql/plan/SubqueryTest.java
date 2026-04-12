@@ -17,11 +17,13 @@ package com.starrocks.sql.plan;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -106,6 +108,14 @@ public class SubqueryTest extends PlanTestBase {
                 + "\n"
                 + "  14:AGGREGATE (update finalize)\n"
                 + "  |  output: avg(5: v8)\n");
+    }
+
+    @Test
+    public void testBetweenScalarSubqueryAttachApplyOnlyOnce() throws Exception {
+        String sql = "with table_dt as (select if(v4 > 10, 10, v4) as v_date from t1) " +
+                "select v1 from t0 where (select v_date from table_dt) between 1 and 2";
+        String plan = getFragmentPlan(sql);
+        assertEquals(1, StringUtils.countMatches(plan, "ASSERT NUMBER OF ROWS"));
     }
 
     @Test
