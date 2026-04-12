@@ -1454,6 +1454,42 @@ DEFINE_INT_CAST_TO_STRING(TYPE_SMALLINT, TYPE_VARCHAR);
 DEFINE_INT_CAST_TO_STRING(TYPE_INT, TYPE_VARCHAR);
 DEFINE_INT_CAST_TO_STRING(TYPE_BIGINT, TYPE_VARCHAR);
 
+// Specialized temporal-to-string: writes directly into the bytes buffer via to_string(char*, n),
+// avoiding per-row std::string allocation + copy that the generic StringUnaryFunction path does.
+#define DEFINE_TEMPORAL_CAST_TO_STRING(FROM_TYPE, TO_TYPE, MAX_LEN)                                         \
+    template <>                                                                                             \
+    template <>                                                                                             \
+    inline ColumnPtr StringUnaryFunction<CastToString>::evaluate<FROM_TYPE, TO_TYPE>(const ColumnPtr& v1) { \
+        const auto& r1 = ColumnHelper::cast_to_raw<FROM_TYPE>(v1)->get_data();                              \
+        auto result = RunTimeColumnType<TO_TYPE>::create();                                                 \
+        int size = v1->size();                                                                              \
+        auto& offset = result->get_offset();                                                                \
+        offset.resize(size + 1);                                                                            \
+        auto& bytes = result->get_bytes();                                                                  \
+        bytes.resize(static_cast<size_t>(MAX_LEN) * size);                                                  \
+        char* dst = reinterpret_cast<char*>(bytes.data());                                                  \
+        size_t off = 0;                                                                                     \
+        if constexpr (FROM_TYPE == TYPE_DATE) {                                                             \
+            /* DateValue::to_string always writes MAX_LEN when n >= MAX_LEN */                              \
+            for (int i = 0; i < size; ++i) {                                                                \
+                r1[i].to_string(dst + off, MAX_LEN);                                                        \
+                off += MAX_LEN;                                                                             \
+                offset[i + 1] = static_cast<uint32_t>(off);                                                 \
+            }                                                                                               \
+        } else {                                                                                            \
+            for (int i = 0; i < size; ++i) {                                                                \
+                int len = r1[i].to_string(dst + off, MAX_LEN);                                              \
+                if (LIKELY(len > 0)) off += len;                                                            \
+                offset[i + 1] = static_cast<uint32_t>(off);                                                 \
+            }                                                                                               \
+        }                                                                                                   \
+        bytes.resize(off);                                                                                  \
+        return result;                                                                                      \
+    }
+
+DEFINE_TEMPORAL_CAST_TO_STRING(TYPE_DATETIME, TYPE_VARCHAR, 26);
+DEFINE_TEMPORAL_CAST_TO_STRING(TYPE_DATE, TYPE_VARCHAR, 10);
+
 // Cast SQL type to JSON
 CUSTOMIZE_FN_CAST(TYPE_NULL, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_INT, TYPE_JSON, cast_to_json_fn);
