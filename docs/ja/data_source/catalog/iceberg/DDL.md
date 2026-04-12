@@ -1,20 +1,17 @@
 ---
 displayed_sidebar: docs
-toc_max_heading_level: 5
 keywords: ['iceberg', 'ddl', 'create table', 'alter table', 'create database', 'drop table', 'create view', 'alter view']
 ---
 
 # Iceberg DDL 操作
 
-このドキュメントでは、StarRocksにおけるIcebergカタログのデータ定義言語（DDL）操作について説明します。これには、データベース、テーブル、およびビューの作成と管理が含まれます。
+StarRocks Iceberg Catalog は、データベース、テーブル、ビューの作成と管理を含む、さまざまなデータ定義言語 (DDL) 操作をサポートしています。
 
-DDL操作を実行するには、適切な権限が必要です。権限の詳細については、[権限](../../../administration/user_privs/authorization/privilege_item.md)を参照してください。
+DDL 操作を実行するには、適切な権限が必要です。権限の詳細については、以下を参照してください。[権限](../../../administration/user_privs/authorization/privilege_item.md)。
 
----
+## CREATE DATABASE
 
-## データベースの作成
-
-Icebergカタログにデータベースを作成します。この機能はv3.1以降でサポートされています。
+Iceberg カタログにデータベースを作成します。この機能は v3.1 以降でサポートされています。
 
 ### 構文
 
@@ -25,9 +22,10 @@ CREATE DATABASE [IF NOT EXISTS] <database_name>
 
 ### パラメータ
 
-- `location`: データベースが作成されるファイルパスを指定します。HDFSとクラウドストレージの両方がサポートされています。指定しない場合、データベースはIcebergカタログのデフォルトファイルパスに作成されます。
+`location`: データベースが作成されるファイルパスを指定します。HDFS とクラウドストレージの両方がサポートされています。指定しない場合、データベースは Iceberg カタログのデフォルトのファイルパスに作成されます。
 
-`prefix`は使用するストレージシステムに基づいて異なります：
+`prefix` はストレージシステムによって異なります。
+
 - HDFS: `hdfs`
 - Google GCS: `gs`
 - Azure Blob Storage (HTTP): `wasb`
@@ -35,7 +33,7 @@ CREATE DATABASE [IF NOT EXISTS] <database_name>
 - Azure Data Lake Storage Gen1: `adl`
 - Azure Data Lake Storage Gen2 (HTTP): `abfs`
 - Azure Data Lake Storage Gen2 (HTTPS): `abfss`
-- AWS S3またはS3互換ストレージ: `s3`
+- AWS S3 または S3 互換ストレージ: `s3`
 
 ### 例
 
@@ -44,14 +42,12 @@ CREATE DATABASE iceberg_db
 PROPERTIES ("location" = "s3://my_bucket/iceberg_db/");
 ```
 
----
+## DROP DATABASE
 
-## データベースの削除
-
-Icebergカタログから空のデータベースを削除します。この機能はv3.1以降でサポートされています。
+Iceberg カタログから空のデータベースを削除します。この機能は v3.1 以降でサポートされています。
 
 :::note
-空のデータベースのみを削除できます。データベースを削除しても、ストレージ上のファイルパスは削除されません。
+空のデータベースのみを削除できます。データベースを削除しても、リモートストレージ内のファイルパスは削除されません。
 :::
 
 ### 構文
@@ -66,11 +62,9 @@ DROP DATABASE [IF EXISTS] <database_name>
 DROP DATABASE iceberg_db;
 ```
 
----
+## CREATE TABLE
 
-## テーブルの作成
-
-Icebergデータベースにテーブルを作成します。この機能はv3.1以降でサポートされています。
+Iceberg データベースにテーブルを作成します。この機能は v3.1 以降でサポートされています。
 
 ### 構文
 
@@ -88,24 +82,24 @@ CREATE TABLE [IF NOT EXISTS] [database.]table_name
 
 ### パラメータ
 
-#### column_definition
+#### `column_definition`
 
 ```SQL
 col_name col_type [COMMENT 'comment'] [DEFAULT default_value]
 ```
 
 :::note
-非パーティション列にはすべて `NULL` をデフォルト値として使用する必要があります。パーティション列は非パーティション列の後に定義する必要があり、`NULL` をデフォルト値として使用することはできません。
+すべての非パーティション列は、デフォルト値として `NULL` を使用する必要があります。パーティション列は非パーティション列の後に定義する必要があり、デフォルト値として `NULL` を使用することはできません。
 :::
 
 ##### デフォルト値
 
-v4.1以降、StarRocksはIcebergテーブルの列にデフォルト値を設定することをサポートしています。この機能には、Icebergフォーマットバージョン3（`"format-version" = "3"`）が必要です。
+v4.1 以降、StarRocks は Iceberg テーブルの列にデフォルト値を設定することをサポートしています。この機能には Iceberg フォーマットバージョン 3 (`"format-version" = "3"`) が必要です。
 
-**用途：**
+**使用法:**
 
-- **書き込み時の補完**: INSERT文を実行する際、列に値が指定されていない場合、システムは自動的にその列のデフォルト値を使用します。
-- **スキーマ進化時の補完**: 既存のテーブルに新しい列を追加した後、古いデータファイル（新しい列を含まない）を読み取る際、システムは新しい列のデフォルト値を使用します。
+- **書き込み時の埋め込み**: INSERT ステートメントを実行する際、列に値が指定されていない場合、システムは自動的にその列のデフォルト値を使用します。
+- **スキーマ進化時の埋め込み**: 既存のテーブルに新しい列が追加された場合、古いデータファイル（新しい列を含まない）を読み取ると、新しい列のデフォルト値が使用されます。
 
 **構文:**
 
@@ -115,9 +109,8 @@ col_name col_type DEFAULT default_value
 
 **要件:**
 
-- テーブルはIcebergフォーマットバージョン3（`"format-version" = "3"`）を使用する必要があります。
-- 数値型（INT、BIGINT、FLOAT、DOUBLE）、BOOLEAN、DATE/TIMESTAMP型のデフォルト値は二重引用符で囲む必要があります。例：`DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
-- 数値型（INT、BIGINT、FLOAT、DOUBLE）、BOOLEAN、STRING、DATE/TIMESTAMP型のデフォルト値は引用符で囲む必要があります。例：`DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
+- テーブルは Iceberg フォーマットバージョン 3 (`"format-version" = "3"`) を使用する必要があります。
+- 数値型 (INT, BIGINT, FLOAT, DOUBLE)、BOOLEAN、STRING、および DATE/TIMESTAMP 型のデフォルト値は引用符で囲む必要があります。例: `DEFAULT "18"`、`DEFAULT "100.0"`、`DEFAULT "true"`。
 
 **例:**
 
@@ -146,42 +139,43 @@ ALTER TABLE user_info ADD COLUMN bonus DOUBLE DEFAULT "50.5";
 ALTER TABLE user_info MODIFY COLUMN status STRING DEFAULT "inactive";
 ```
 
-#### partition_desc
+#### `partition_desc`
 
 ```SQL
 PARTITION BY (partition_expr[, partition_expr...])
 ```
 
-各 `partition_expr` は以下のいずれかです：
-- `column_name`（識別変換）
+各 `partition_expr` は次のいずれかです:
+
+- `column_name` (同一性変換)
 - `transform_expr(column_name)`
 - `transform_expr(column_name, parameter)`
 
-StarRocksは、Apache Iceberg仕様で定義されたパーティション変換式をサポートしています。
+StarRocks は、Apache Iceberg 仕様で定義されているパーティション変換式をサポートしています。
 
 :::note
-パーティション列は、FLOAT、DOUBLE、DECIMAL、およびDATETIMEを除くすべてのデータ型をサポートしています。
+パーティション列は、FLOAT、DOUBLE、DECIMAL、DATETIME を除くすべてのデータ型をサポートしています。
 :::
 
-#### ORDER BY (v4.0+)
+#### `ORDER BY`
 
-Icebergテーブルのソートキーを指定します：
+Iceberg テーブルのソートキーを指定します。この機能は v4.0 以降でサポートされています。
 
 ```SQL
 ORDER BY (column_name [ASC | DESC] [NULLS FIRST | NULLS LAST], ...)
 ```
 
-#### PROPERTIES
+#### `PROPERTIES`
 
-主要なテーブルプロパティ：
+主要なテーブルプロパティ:
 
-- `location`: テーブルのファイルパス。データベースレベルの場所を指定せずにAWS Glueを使用する場合に必要です。
-- `file_format`: ファイル形式。`parquet` のみがサポートされています（デフォルト）。
-- `compression_codec`: 圧縮アルゴリズム。オプション：SNAPPY、GZIP、ZSTD、LZ4（デフォルト：`zstd`）。
+- `location`: テーブルのファイルパス。データベースレベルのロケーションなしで AWS Glue を使用する場合に必須です。
+- `file_format`: ファイル形式。`parquet` (デフォルト) のみがサポートされています。
+- `compression_codec`: 圧縮アルゴリズム。オプション: SNAPPY, GZIP, ZSTD, LZ4 (デフォルト: `zstd`)。
 
 ### 例
 
-**非パーティションテーブルを作成する：**
+- **非パーティションテーブルを作成する:**
 
 ```SQL
 CREATE TABLE unpartition_tbl
@@ -191,7 +185,7 @@ CREATE TABLE unpartition_tbl
 );
 ```
 
-**パーティションテーブルを作成する：**
+- **パーティションテーブルを作成する:**
 
 ```SQL
 CREATE TABLE partition_tbl
@@ -203,7 +197,7 @@ CREATE TABLE partition_tbl
 PARTITION BY (id, dt);
 ```
 
-**隠しパーティションを持つテーブルを作成する：**
+- **隠しパーティションを持つテーブルを作成する:**
 
 ```SQL
 CREATE TABLE hidden_partition_tbl
@@ -215,7 +209,7 @@ CREATE TABLE hidden_partition_tbl
 PARTITION BY bucket(id, 10), year(dt);
 ```
 
-**SELECTを使用してテーブルを作成する：**
+- **CREATE TABLE AS SELECT:**
 
 ```SQL
 CREATE TABLE new_tbl
@@ -223,11 +217,9 @@ PARTITION BY (id, dt)
 AS SELECT * FROM existing_tbl;
 ```
 
----
+## パーティション仕様を進化させるための ALTER TABLE
 
-## テーブルの変更（パーティション仕様の変更）
-
-パーティション列を追加または削除して、Icebergテーブルのパーティション仕様を変更します。
+パーティション列を追加または削除して、Iceberg テーブルのパーティション仕様を変更します。
 
 ### 構文
 
@@ -237,35 +229,44 @@ ADD PARTITION COLUMN partition_expr [, partition_expr ...];
 
 ALTER TABLE [catalog.][database.]table_name
 DROP PARTITION COLUMN partition_expr [, partition_expr ...];
+
+ALTER TABLE [catalog.][database.]table_name
+REPLACE PARTITION COLUMN old_partition_expr WITH new_partition_expr;
 ```
 
-サポートされている `partition_expr` 形式：
-- 列名（識別変換）
-- 変換式：`year()`、`month()`、`day()`、`hour()`、`truncate()`、`bucket()`
+サポートされている `partition_expr` 形式:
+
+- 列名 (同一性変換)
+- 変換式: `year()`、`month()`、`day()`、`hour()`、`truncate()`、`bucket()`
 
 ### 例
 
-**パーティション列を追加する：**
+- **パーティション列を追加する:**
 
 ```SQL
 ALTER TABLE sales_data
 ADD PARTITION COLUMN month(sale_date), bucket(customer_id, 10);
 ```
 
-**パーティション列を削除する：**
+- **パーティション列を削除する:**
 
 ```SQL
 ALTER TABLE sales_data
 DROP PARTITION COLUMN day(sale_date);
 ```
 
----
+- **パーティション列を置き換える:**
 
-## テーブルの削除
+```SQL
+ALTER TABLE sales_data
+REPLACE PARTITION COLUMN day(sale_date) WITH month(sale_date);
+```
 
-Icebergテーブルを削除します。この機能はv3.1以降でサポートされています。
+## DROP TABLE
 
-テーブルを削除しても、デフォルトではストレージ上のファイルパスとデータは削除されません。
+Iceberg テーブルを削除します。この機能は v3.1 以降でサポートされています。
+
+テーブルを削除しても、リモートストレージ内のファイルパスとデータはデフォルトでは削除されません。
 
 ### 構文
 
@@ -275,22 +276,20 @@ DROP TABLE [IF EXISTS] <table_name> [FORCE]
 
 ### パラメータ
 
-- `FORCE`: 指定すると、ファイルパスを保持したまま、ストレージ上のテーブルのデータを削除します。
+- `FORCE`: 指定すると、リモートストレージ内のテーブルデータは削除されますが、ファイルパスは保持されます。
 
 ### 例
 
 ```SQL
 DROP TABLE iceberg_db.sales_data;
 
--- データ削除を伴う強制削除
+-- テーブルとそのデータを強制的に削除
 DROP TABLE iceberg_db.temp_data FORCE;
 ```
 
----
+## CREATE VIEW
 
-## ビューの作成
-
-Icebergビューを作成します。この機能はv3.5以降でサポートされています。
+Iceberg ビューを作成します。この機能は v3.5 以降でサポートされています。PROPERTIES を使用した Iceberg ビューの作成は v4.0.3 以降でサポートされています。
 
 ### 構文
 
@@ -308,6 +307,8 @@ AS <query_statement>
 
 ### 例
 
+- **通常のIcebergビューを作成します:**
+
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg_db.sales_summary AS
 SELECT region, SUM(amount) as total_sales
@@ -315,7 +316,7 @@ FROM iceberg_db.sales
 GROUP BY region;
 ```
 
-**プロパティを使用する場合（v4.0.3以降）：**
+- **プロパティを持つIcebergビューを作成します:**
 
 ```SQL
 CREATE VIEW IF NOT EXISTS iceberg_db.sales_summary
@@ -328,14 +329,12 @@ FROM iceberg_db.sales
 GROUP BY region;
 ```
 
----
-
-## ビューの変更
+## ALTER VIEWでStarRocks方言を更新
 
 既存のIcebergビューにStarRocks方言を追加または変更します。この機能はv3.5以降でサポートされています。
 
 :::note
-各Icebergビューに対して1つのStarRocks方言のみを定義できます。
+各Icebergビューに対して定義できるStarRocks方言は1つだけです。
 :::
 
 ### 構文
@@ -351,14 +350,14 @@ ALTER VIEW [<catalog>.<database>.]<view_name>
 
 ### 例
 
-**StarRocks方言を追加する：**
+- **StarRocks方言を追加:**
 
 ```SQL
 ALTER VIEW iceberg_db.spark_view ADD DIALECT
 SELECT k1, k2 FROM iceberg_db.source_table;
 ```
 
-**StarRocks方言を変更する：**
+- **StarRocks方言を変更:**
 
 ```SQL
 ALTER VIEW iceberg_db.spark_view MODIFY DIALECT

@@ -1190,6 +1190,7 @@ alterClause
     | dropColumnClause
     | addPartitionColumnClause
     | dropPartitionColumnClause
+    | replacePartitionColumnClause
     | modifyColumnCommentClause
     | modifyColumnClause
     | columnRenameClause
@@ -1351,6 +1352,10 @@ dropColumnClause
 
 dropPartitionColumnClause
     : DROP PARTITION COLUMN expressionList
+    ;
+
+replacePartitionColumnClause
+    : REPLACE PARTITION COLUMN oldPartitionExpr=expression WITH newPartitionExpr=expression
     ;
 
 modifyColumnClause
