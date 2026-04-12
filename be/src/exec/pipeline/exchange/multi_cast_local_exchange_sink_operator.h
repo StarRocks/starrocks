@@ -16,7 +16,7 @@
 
 #include "common/runtime_profile.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 

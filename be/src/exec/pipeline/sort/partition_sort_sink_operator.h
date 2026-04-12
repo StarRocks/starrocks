@@ -20,7 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/chunks_sorter.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/spill_process_channel.h"

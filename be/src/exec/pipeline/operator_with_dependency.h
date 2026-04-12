@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/pipeline_fwd.h"
 
 namespace starrocks::pipeline {

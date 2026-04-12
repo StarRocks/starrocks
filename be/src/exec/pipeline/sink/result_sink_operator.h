@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mysql_result_writer.h"
 

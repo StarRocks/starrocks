@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/file_result_writer.h"

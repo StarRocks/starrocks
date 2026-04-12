@@ -17,7 +17,7 @@
 #include <utility>
 
 #include "exec/pipeline/exchange/local_exchange.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 class LocalExchangeSinkOperator final : public Operator {

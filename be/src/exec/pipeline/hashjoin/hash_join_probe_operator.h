@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/pipeline/hashjoin/hash_joiner_fwd.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/operator_with_dependency.h"
 #include "exec/pipeline/pipeline_fwd.h"
 

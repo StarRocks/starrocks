@@ -15,7 +15,7 @@
 #pragma once
 #include <memory>
 
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::query_cache {
 class ConjugateOperator;

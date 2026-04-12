@@ -25,7 +25,7 @@
 #include "common/statusor.h"
 #include "exec/except_hash_set.h"
 #include "exec/olap_common.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline_node.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"

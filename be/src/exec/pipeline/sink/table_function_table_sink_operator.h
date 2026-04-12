@@ -22,7 +22,7 @@
 #include "common/logging.h"
 #include "exec/parquet_writer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "fs/fs.h"
 
 namespace starrocks::pipeline {

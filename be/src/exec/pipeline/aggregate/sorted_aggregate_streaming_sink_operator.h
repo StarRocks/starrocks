@@ -17,7 +17,7 @@
 #include <memory>
 
 #include "exec/aggregator.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {

@@ -16,7 +16,7 @@
 
 #include "common/statusor.h"
 #include "exec/aggregate/aggregate_base_node.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 // Aggregate means this node handle query with aggregate functions.
 // Blocking means this node will consume all input and build hash map in open phase.

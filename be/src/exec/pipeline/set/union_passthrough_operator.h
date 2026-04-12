@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/exec_node.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 // UNION ALL operator has three kinds of sub-node as follows:

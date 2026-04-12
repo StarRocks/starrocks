@@ -36,7 +36,6 @@ target_link_libraries(ExecCore PUBLIC ExprCore RuntimeCore)
 
 set(PIPELINE_PRIMITIVES_SRCS
     pipeline/operator.cpp
-    pipeline/source_operator.cpp
 )
 
 set(PIPELINE_GRAPH_SRCS
@@ -56,6 +55,8 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/driver_limiter.cpp
     pipeline/fragment_context.cpp
     pipeline/query_context.cpp
+    pipeline/operator_factory.cpp
+    pipeline/source_operator.cpp
     pipeline/schedule/timeout_tasks.cpp
     pipeline/schedule/event_scheduler.cpp
     pipeline/schedule/observer.cpp

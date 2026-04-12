@@ -17,7 +17,7 @@
 #include <memory>
 #include <unordered_map>
 
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_param.h"
 #include "exec/query_cache/lane_arbiter.h"
