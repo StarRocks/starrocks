@@ -692,6 +692,9 @@ struct TADBCScanNode {
   12: optional string adbc_tls_client_cert_file
   13: optional string adbc_tls_client_key_file
   14: optional bool adbc_tls_verify
+  15: optional string driver_url
+  16: optional string entrypoint
+  17: optional map<string,string> adbc_options
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode
