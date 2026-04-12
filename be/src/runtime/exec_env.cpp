@@ -58,7 +58,7 @@
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/spill/dir_manager.h"
-#include "exec/spill/query_spill_manager.h"
+#include "exec/spill/global_spill_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"

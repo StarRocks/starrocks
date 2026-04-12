@@ -264,7 +264,6 @@ set(EXEC_FILES
         ./io/fd_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
-        ./io/spill_block_manager_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
@@ -374,6 +373,7 @@ add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
 add_subdirectory(http)
+add_subdirectory(spill)
 
 if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/src/service/macos_link_stubs.cpp)

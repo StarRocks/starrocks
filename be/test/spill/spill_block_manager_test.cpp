@@ -14,55 +14,22 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
-#include <chrono>
-#include <filesystem>
-#include <iterator>
+#include <cstdint>
 #include <memory>
-#include <thread>
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/testutil/assert.h"
 #include "base/uid_util.h"
-#include "base/utility/defer_op.h"
-#include "column/array_column.h"
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "column/column_visitor_adapter.h"
-#include "column/map_column.h"
-#include "column/nullable_column.h"
-#include "column/struct_column.h"
-#include "column/vectorized_fwd.h"
 #include "common/config_storage_fwd.h"
-#include "common/object_pool.h"
-#include "common/runtime_profile.h"
-#include "common/status.h"
-#include "common/statusor.h"
-#include "exec/sorting/merge.h"
-#include "exec/sorting/sorting.h"
-#include "exec/spill/block_manager.h"
 #include "exec/spill/dir_manager.h"
-#include "exec/spill/executor.h"
 #include "exec/spill/file_block_manager.h"
 #include "exec/spill/hybird_block_manager.h"
 #include "exec/spill/log_block_manager.h"
-#include "exec/spill/mem_table.h"
-#include "exec/spill/spill_components.h"
-#include "exec/spill/spiller.h"
-#include "exec/spill/spiller.hpp"
-#include "exec/spill/spiller_factory.h"
-#include "exec/workgroup/scan_task_queue.h"
-#include "exprs/column_ref.h"
-#include "exprs/expr_context.h"
 #include "fmt/format.h"
-#include "fs/fs.h"
-#include "fs/fs_factory.h"
-#include "gen_cpp/Exprs_types.h"
+#include "fs/fs_memory.h"
 #include "gen_cpp/Types_types.h"
-#include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
-#include "types/logical_type.h"
 
 namespace starrocks::vectorized {
 
@@ -70,9 +37,8 @@ std::string generate_spill_path(const TUniqueId& query_id, const std::string& pa
     return fmt::format("{}/{}/{}", config::storage_root_path, path, print_id(query_id));
 }
 
-spill::DirPtr create_spill_dir(const std::string& path, int64_t capacity_limit) {
-    auto fs = FileSystemFactory::CreateSharedFromString(path);
-    return std::make_shared<spill::Dir>(path, fs.value(), capacity_limit);
+spill::DirPtr create_spill_dir(const std::string& path, int64_t capacity_limit, const std::shared_ptr<FileSystem>& fs) {
+    return std::make_shared<spill::Dir>(path, fs, capacity_limit);
 }
 
 std::unique_ptr<spill::DirManager> create_spill_dir_manager(const std::vector<spill::DirPtr>& dirs) {
@@ -86,11 +52,11 @@ public:
         dummy_query_id = generate_uuid();
         local_path = fmt::format("{}/{}", config::storage_root_path, "local_data");
         remote_path = fmt::format("{}/{}", config::storage_root_path, "remote_data");
-        auto fs = FileSystem::Default();
-        ASSERT_OK(fs->create_dir_recursive(local_path));
-        ASSERT_OK(fs->create_dir_recursive(remote_path));
-        local_dir = create_spill_dir(local_path, 100);
-        remote_dir = create_spill_dir(remote_path, INT64_MAX);
+        fs_handle = std::shared_ptr<FileSystem>(&fs, [](FileSystem*) {});
+        ASSERT_OK(fs.create_dir_recursive(local_path));
+        ASSERT_OK(fs.create_dir_recursive(remote_path));
+        local_dir = create_spill_dir(local_path, 100, fs_handle);
+        remote_dir = create_spill_dir(remote_path, INT64_MAX, fs_handle);
         local_dir_mgr = create_spill_dir_manager({local_dir});
         remote_dir_mgr = create_spill_dir_manager({remote_dir});
     }
@@ -98,6 +64,8 @@ public:
     void TearDown() override {}
 
 protected:
+    MemoryFileSystem fs;
+    std::shared_ptr<FileSystem> fs_handle;
     TUniqueId dummy_query_id;
     std::string local_path;
     std::string remote_path;
@@ -105,8 +73,6 @@ protected:
     spill::DirPtr remote_dir;
     std::unique_ptr<spill::DirManager> local_dir_mgr;
     std::unique_ptr<spill::DirManager> remote_dir_mgr;
-    RuntimeState dummy_state;
-    RuntimeProfile dummy_profile{"dummy"};
 };
 
 TEST_F(SpillBlockManagerTest, dir_choose_strategy) {
@@ -116,7 +82,7 @@ TEST_F(SpillBlockManagerTest, dir_choose_strategy) {
     std::vector<spill::DirPtr> dir_list;
     for (auto& dir_info : dir_info_list) {
         auto path = generate_spill_path(dummy_query_id, dir_info.first);
-        auto dir = create_spill_dir(path, dir_info.second);
+        auto dir = create_spill_dir(path, dir_info.second, fs_handle);
         dir_list.emplace_back(std::move(dir));
     }
     auto dir_mgr = create_spill_dir_manager(dir_list);

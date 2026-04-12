@@ -126,6 +126,14 @@ Minimal filesystem core on top of IOCore.
 - Core tests: `fs_core_test`
 - Remediation: Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem.
 
+### SpillCore (`spillcore`)
+Core spill block and directory primitives without pipeline/query/runtime-service coupling.
+- Targets: `SpillCore`
+- Allowed internal include prefixes: `exec/spill/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FSCore`, `IOCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `spill_core_test`
+- Remediation: Keep SpillCore limited to reusable spill block and directory infrastructure; move query bootstrap, pipeline ownership, and runtime-service integration upward.
+
 ### TypesCore (`typecore`)
 Core type system without runtime/storage/exec coupling.
 - Targets: `TypesCore`
