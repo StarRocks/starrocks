@@ -380,9 +380,11 @@ public class ConnectorPlanTestBase extends PlanTestBase {
     private static void mockADBCCatalogImpl(MockedMetadataMgr metadataMgr) throws DdlException {
         Map<String, String> properties = Maps.newHashMap();
 
+        String sqliteDriverPath = System.getProperty("adbc.sqlite.driver.path",
+                "/home/mete/miniconda3/etc/adbc/drivers/sqlite_linux_amd64_v1.10.0/libadbc_driver_sqlite.so");
         properties.put("type", "adbc");
-        properties.put("driver_url", "/opt/adbc/lib/libadbc_driver_flightsql.so");
-        properties.put("uri", "grpc://127.0.0.1:31337");
+        properties.put("driver_url", sqliteDriverPath);
+        properties.put("uri", "file::memory:");
         GlobalStateMgr.getCurrentState().getCatalogMgr().
                 createCatalog("adbc", MockedADBCMetadata.MOCKED_ADBC_CATALOG_NAME, "", properties);
 

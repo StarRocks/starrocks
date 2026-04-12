@@ -30,7 +30,6 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -197,56 +196,6 @@ public class ADBCScanNode extends ScanNode {
         adbcScanNode.setColumns(columns);
         adbcScanNode.setFilters(filters);
         adbcScanNode.setLimit(limit);
-
-        Map<String, String> props = adbcTable.getProperties();
-
-        // NEW fields (Thrift 15-17)
-        String driverUrl = props != null ? props.get("driver_url") : null;
-        if (driverUrl != null) {
-            adbcScanNode.setDriver_url(driverUrl);
-        }
-
-        String entrypoint = props != null ? props.get("driver_entrypoint") : null;
-        if (entrypoint != null) {
-            adbcScanNode.setEntrypoint(entrypoint);
-        }
-
-        // Build adbc_options map: all adbc.* properties + uri + user->username + password
-        if (props != null) {
-            Map<String, String> adbcOpts = new HashMap<>();
-            for (Map.Entry<String, String> e : props.entrySet()) {
-                if (e.getKey().startsWith("adbc.") || e.getKey().equals("uri")) {
-                    adbcOpts.put(e.getKey(), e.getValue());
-                }
-            }
-            // user -> username mapping (ADBC standard key)
-            String user = props.get("user");
-            if (user != null) {
-                adbcOpts.put("username", user);
-            }
-            String password = props.get("password");
-            if (password != null) {
-                adbcOpts.put("password", password);
-            }
-            if (!adbcOpts.isEmpty()) {
-                adbcScanNode.setAdbc_options(adbcOpts);
-            }
-        }
-
-        // Legacy fields 7-9 populated for wire compat until Phase 3 BE drops them
-        String uri = props != null ? props.get("uri") : null;
-        if (uri != null) {
-            adbcScanNode.setAdbc_uri(uri);
-        }
-        String username = props != null ? props.get("user") : null;
-        if (username != null) {
-            adbcScanNode.setAdbc_username(username);
-        }
-        String password = props != null ? props.get("password") : null;
-        if (password != null) {
-            adbcScanNode.setAdbc_password(password);
-        }
-
         msg.adbc_scan_node = adbcScanNode;
     }
 

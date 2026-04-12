@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -96,11 +95,7 @@ public class ADBCScanNodeTest {
     }
 
     @Test
-    public void testToThriftPopulatesNewFields() {
-        tableProperties.put("driver_entrypoint", "my_custom_init");
-        tableProperties.put("adbc.option1", "value1");
-        tableProperties.put("password", "secret");
-
+    public void testToThriftPopulatesScanFields() {
         ADBCScanNode node = createScanNodeWithColumns("col1", "col2");
         node.setLimit(50);
 
@@ -109,50 +104,12 @@ public class ADBCScanNodeTest {
 
         TADBCScanNode scanNode = msg.adbc_scan_node;
         assertNotNull(scanNode);
+        assertEquals(0, scanNode.getTuple_id());
         assertEquals("\"test_schema\".\"test_table\"", scanNode.getTable_name());
         assertEquals(2, scanNode.getColumns().size());
         assertEquals("\"col1\"", scanNode.getColumns().get(0));
         assertEquals("\"col2\"", scanNode.getColumns().get(1));
         assertEquals(50, scanNode.getLimit());
-
-        // New Thrift fields 15-17
-        assertEquals("/opt/adbc/lib/libadbc_driver_flightsql.so", scanNode.getDriver_url());
-        assertEquals("my_custom_init", scanNode.getEntrypoint());
-        assertTrue(scanNode.isSetAdbc_options());
-        Map<String, String> opts = scanNode.getAdbc_options();
-        assertEquals("value1", opts.get("adbc.option1"));
-        assertEquals("grpc://localhost:8815", opts.get("uri"));
-        assertEquals("admin", opts.get("username"));  // user -> username mapping
-        assertEquals("secret", opts.get("password"));
-        assertEquals("30", opts.get("adbc.flight.sql.rpc_timeout"));
-
-        // Legacy wire-compat fields still populated
-        assertEquals("grpc://localhost:8815", scanNode.getAdbc_uri());
-        assertEquals("admin", scanNode.getAdbc_username());
-        assertEquals("secret", scanNode.getAdbc_password());
-    }
-
-    @Test
-    public void testToThriftOmitsDriverUrlWhenNotSet() {
-        tableProperties.remove("driver_url");
-        tableProperties.put("driver_name", "flightsql");
-        tableProperties.put("password", "secret");
-
-        ADBCScanNode node = createScanNodeWithColumns("col1");
-
-        TPlanNode msg = new TPlanNode();
-        node.toThrift(msg);
-
-        TADBCScanNode scanNode = msg.adbc_scan_node;
-        assertNotNull(scanNode);
-        assertFalse(scanNode.isSetDriver_url());
-        assertFalse(scanNode.isSetEntrypoint());
-        assertTrue(scanNode.isSetAdbc_options());
-
-        Map<String, String> opts = scanNode.getAdbc_options();
-        assertEquals("grpc://localhost:8815", opts.get("uri"));
-        assertEquals("admin", opts.get("username"));
-        assertEquals("secret", opts.get("password"));
     }
 
     @Test

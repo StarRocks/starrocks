@@ -21,6 +21,7 @@ import com.starrocks.thrift.TADBCTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,26 +80,35 @@ public class ADBCTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TADBCTable tADBCTable = new TADBCTable();
+        tADBCTable.setCatalog_name(catalogName);
+
         if (properties != null) {
-            tADBCTable.setAdbc_driver(properties.get("adbc.driver"));
-            String uri = properties.getOrDefault("adbc.url", properties.get("uri"));
-            if (uri != null) {
-                tADBCTable.setAdbc_uri(uri);
+            String driverUrl = properties.get("driver_url");
+            if (driverUrl != null) {
+                tADBCTable.setDriver_url(driverUrl);
             }
-            String username = properties.getOrDefault("adbc.username", properties.get("username"));
-            if (username != null) {
-                tADBCTable.setAdbc_username(username);
+            String entrypoint = properties.get("driver_entrypoint");
+            if (entrypoint != null) {
+                tADBCTable.setEntrypoint(entrypoint);
             }
-            String password = properties.getOrDefault("adbc.password", properties.get("password"));
+            Map<String, String> adbcOpts = new HashMap<>();
+            for (Map.Entry<String, String> e : properties.entrySet()) {
+                if (e.getKey().startsWith("adbc.") || e.getKey().equals("uri")) {
+                    adbcOpts.put(e.getKey(), e.getValue());
+                }
+            }
+            String user = properties.get("user");
+            if (user != null) {
+                adbcOpts.put("username", user);
+            }
+            String password = properties.get("password");
             if (password != null) {
-                tADBCTable.setAdbc_password(password);
+                adbcOpts.put("password", password);
             }
-            String token = properties.getOrDefault("adbc.token", properties.get("token"));
-            if (token != null) {
-                tADBCTable.setAdbc_token(token);
+            if (!adbcOpts.isEmpty()) {
+                tADBCTable.setAdbc_options(adbcOpts);
             }
         }
-        tADBCTable.setCatalog_name(catalogName);
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.ADBC_TABLE,
                 fullSchema.size(), 0, getName(), "");

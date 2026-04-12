@@ -683,18 +683,8 @@ struct TADBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
-  6: optional string adbc_driver
-  7: optional string adbc_uri
-  8: optional string adbc_username
-  9: optional string adbc_password
-  10: optional string adbc_token
-  11: optional string adbc_tls_ca_cert_file
-  12: optional string adbc_tls_client_cert_file
-  13: optional string adbc_tls_client_key_file
-  14: optional bool adbc_tls_verify
-  15: optional string driver_url
-  16: optional string entrypoint
-  17: optional map<string,string> adbc_options
+  // Connection contract (driver_url / entrypoint / adbc_options) lives on TADBCTable,
+  // reached by BE via the tuple descriptor. Mirrors the JDBC pattern.
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode

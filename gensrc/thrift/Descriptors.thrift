@@ -692,12 +692,12 @@ struct TJDBCTable {
 }
 
 struct TADBCTable {
-    1: optional string adbc_driver
-    2: optional string adbc_uri
-    3: optional string adbc_username
-    4: optional string adbc_password
-    5: optional string adbc_token
+    // ordinals 1-5 reserved: legacy Flight-SQL-shaped connection fields, removed with the
+    // runtime driver-loader rework. Never recycle these ordinals.
     6: optional string catalog_name
+    7: optional string driver_url
+    8: optional string entrypoint
+    9: optional map<string, string> adbc_options
 }
 
 // "Union" of all table types.
