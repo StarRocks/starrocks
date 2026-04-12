@@ -23,6 +23,7 @@
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
 #include "common/util/stack_trace_mutex.h"
+#include "runtime/current_thread.h"
 #include "runtime/starrocks_metrics.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/load_spill_block_manager.h"
@@ -177,6 +178,13 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
         delta_writer->close();
         return 0;
     }
+    // Track all memory allocated in this ExecutionQueue callback under the DeltaWriter's
+    // mem_tracker. Without this, allocations between write/flush/finish calls (e.g., task
+    // management, shared_ptr operations) escape tracking entirely because the ExecutionQueue
+    // thread has no default mem_tracker set. Individual operations like DeltaWriter::write()
+    // set SCOPED_THREAD_LOCAL_MEM_SETTER internally, but this outer scope ensures complete
+    // coverage and consistent tracking for the entire callback duration.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(delta_writer->mem_tracker(), false);
     int num_tasks = 0;
     auto st = Status{};
     int64_t pending_time_ns = 0;

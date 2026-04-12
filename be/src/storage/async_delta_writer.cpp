@@ -33,6 +33,10 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         return 0;
     }
     auto writer = static_cast<DeltaWriter*>(meta);
+    // Track all memory allocated in this ExecutionQueue callback under the DeltaWriter's
+    // mem_tracker. Without this, allocations between write/flush/commit calls escape tracking
+    // because the ExecutionQueue thread has no default mem_tracker set.
+    SCOPED_THREAD_LOCAL_MEM_SETTER(writer->mem_tracker(), false);
     bool flush_after_write = false;
     int num_tasks = 0;
     int64_t pending_time_ns = 0;
