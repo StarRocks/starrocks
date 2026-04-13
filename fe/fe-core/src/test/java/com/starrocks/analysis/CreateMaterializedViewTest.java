@@ -2972,6 +2972,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
             MaterializedView mv =
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(),
                             "async_mv_1");
+            Assertions.assertFalse(mv.getRefreshScheme().isIncremental());
+            Assertions.assertNull(mv.getMaintenancePlan());
             Assertions.assertTrue(mv.getFullSchema().get(0).isKey());
             Assertions.assertFalse(mv.getFullSchema().get(1).isKey());
         } catch (Exception e) {

@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.ImageWriter;
@@ -64,12 +63,6 @@ public class MaterializedViewMgr {
     private final MVTimelinessMgr mvTimelinessMgr = new MVTimelinessMgr();
     // MV's maintenance job
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
-
-    public MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
-                                            long mvId, long dbId)
-            throws DdlException {
-        return IMTCreator.createSinkTable(stmt, partitionInfo, mvId, dbId);
-    }
 
     /**
      * Reload jobs from meta store

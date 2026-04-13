@@ -19,12 +19,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.DistributionInfo;
-import com.starrocks.catalog.DistributionInfoBuilder;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedViewRefreshType;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
@@ -53,7 +49,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -61,59 +56,6 @@ import java.util.stream.Collectors;
  */
 class IMTCreator {
     private static final Logger LOG = LogManager.getLogger(IMTCreator.class);
-
-    /*
-     * TODO(murphy) partial duplicated with LocalMetaStore::createMaterializedView
-     * Create sink table with
-     * 1. Columns
-     * 2. Distribute by key buckets
-     * 3. Duplicate Key/Primary Key
-     */
-    public static MaterializedView createSinkTable(CreateMaterializedViewStatement stmt, PartitionInfo partitionInfo,
-                                                   long mvId, long dbId)
-            throws DdlException {
-        ExecPlan plan = Preconditions.checkNotNull(stmt.getMaintenancePlan());
-        OptExpression physicalPlan = plan.getPhysicalPlan();
-        MVOperatorProperty property =
-                Preconditions.checkNotNull(physicalPlan.getMvOperatorProperty(), "incremental mv must have property");
-        KeyInference.KeyPropertySet keys = property.getKeySet();
-        if (keys.empty()) {
-            throw UnsupportedException.unsupportedException("mv could not infer keys");
-        }
-        keys.sortKeys();
-        KeyInference.KeyProperty key = keys.getKeys().get(0);
-
-        // Columns
-        List<Column> columns = stmt.getMvColumnItems();
-
-        // Duplicate/Primary Key
-        Map<Integer, String> columnNames = plan.getOutputColumns().stream().collect(
-                Collectors.toMap(ColumnRefOperator::getId, ColumnRefOperator::getName));
-        Set<String> keyColumns = key.columns.getStream().map(columnNames::get).collect(Collectors.toSet());
-        for (Column col : columns) {
-            col.setIsKey(keyColumns.contains(col.getName()));
-        }
-        if (!property.getModify().isInsertOnly()) {
-            stmt.setKeysType(KeysType.PRIMARY_KEYS);
-        }
-
-        // Distribute Key, already set in MVAnalyzer
-        DistributionDesc distributionDesc = stmt.getDistributionDesc();
-        Preconditions.checkNotNull(distributionDesc);
-        DistributionInfo distributionInfo = DistributionInfoBuilder.build(distributionDesc, columns);
-        if (distributionInfo.getBucketNum() == 0) {
-            int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
-            distributionInfo.setBucketNum(numBucket);
-        }
-
-        // Refresh
-        MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-        mvRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
-
-        String mvName = stmt.getTblName();
-        return new MaterializedView(mvId, dbId, mvName, columns, stmt.getKeysType(), partitionInfo,
-                distributionInfo, mvRefreshScheme);
-    }
 
     public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) throws DdlException {
         ExecPlan maintenancePlan = stmt.getMaintenancePlan();

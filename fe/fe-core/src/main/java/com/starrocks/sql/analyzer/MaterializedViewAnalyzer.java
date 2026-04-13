@@ -47,7 +47,6 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -73,13 +72,11 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QualifiedName;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangeDistributionDesc;
@@ -100,28 +97,17 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.TimestampArithmeticExpr;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.common.PListCell;
-import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
-import com.starrocks.sql.optimizer.transformer.LogicalPlan;
-import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
-import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -473,8 +459,6 @@ public class MaterializedViewAnalyzer {
             }
             // check and analyze distribution
             checkDistribution(context, statement, aliasTableMap);
-
-            planMVQuery(statement, queryStatement, context);
             return null;
         }
 
@@ -517,56 +501,6 @@ public class MaterializedViewAnalyzer {
                 aliasTableMap.putAll(viewTableMap);
             }
             return aliasTableMap;
-        }
-
-        // TODO(murphy) implement
-        // Plan the query statement and store in memory
-        private void planMVQuery(CreateMaterializedViewStatement createStmt, QueryStatement query, ConnectContext ctx) {
-            if (!ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
-                return;
-            }
-
-            if (!(createStmt.getRefreshSchemeDesc() instanceof IncrementalRefreshSchemeDesc)) {
-                return;
-            }
-
-            try {
-                ctx.getSessionVariable().setMVPlanner(true);
-
-                QueryRelation queryRelation = query.getQueryRelation();
-                ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-                LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
-                Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
-                List<ColumnRefOperator> outputColumns = new ArrayList<>();
-                for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
-                    ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
-                    outputColumns.add(ref);
-                    columnRefMap.put(ref, ref);
-                }
-
-                // Build logical plan for view query
-                OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
-                logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
-                OptimizerContext optimizerContext = OptimizerFactory.initContext(ctx, columnRefFactory);
-                Optimizer optimizer = OptimizerFactory.create(optimizerContext);
-                PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
-                OptExpression optimizedPlan = optimizer.optimize(
-                        logicalPlan.getRoot(),
-                        requiredPropertySet,
-                        new ColumnRefSet(logicalPlan.getOutputColumn()));
-                optimizedPlan.deriveMVProperty();
-
-                // TODO: refine rules for mv plan
-                // TODO: infer state
-                // TODO: store the plan in create-mv statement and persist it at executor
-                ExecPlan execPlan =
-                        PlanFragmentBuilder.createPhysicalPlanForMV(ctx, createStmt, optimizedPlan, logicalPlan,
-                                queryRelation, columnRefFactory);
-            } catch (DdlException ex) {
-                throw new RuntimeException(ex);
-            } finally {
-                ctx.getSessionVariable().setMVPlanner(false);
-            }
         }
 
         /**
