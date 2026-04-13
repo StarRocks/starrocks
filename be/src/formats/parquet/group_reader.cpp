@@ -274,9 +274,9 @@ StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn*
             continue;
         }
         RunTimeCppType<ResultType> decimal_value{};
-        ASSIGN_OR_RETURN(bool overflow, cast_variant_to_decimal<RunTimeCppType<ResultType>>(
-                                                &decimal_value, variant_value, target_type.precision,
-                                                target_type.scale));
+        ASSIGN_OR_RETURN(bool overflow,
+                         cast_variant_to_decimal<RunTimeCppType<ResultType>>(&decimal_value, variant_value,
+                                                                             target_type.precision, target_type.scale));
         if (overflow) {
             builder.append_null();
         } else {
