@@ -700,7 +700,7 @@ public class LakePublishBatchTest {
 
     private List<TabletCommitInfo> getPartitionTabletCommitInfos(Partition partition) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
-        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
         for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
             for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                 commitInfos.add(new TabletCommitInfo(tabletId, backendId));
