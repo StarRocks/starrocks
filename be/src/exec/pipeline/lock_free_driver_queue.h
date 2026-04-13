@@ -18,8 +18,8 @@
 #include <array>
 #include <atomic>
 
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/multi_level_concurrent_queue.h"
+#include "exec/pipeline/pipeline_driver.h"
 
 namespace starrocks::pipeline {
 
