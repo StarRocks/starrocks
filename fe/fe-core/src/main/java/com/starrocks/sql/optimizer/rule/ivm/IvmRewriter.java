@@ -1,0 +1,181 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.sql.optimizer.rule.ivm;
+
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.load.Load;
+import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.SortPhase;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
+import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.task.TaskScheduler;
+import com.starrocks.type.IntegerType;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Entry point for the unified IVM (Incremental View Maintenance) plan rewriting.
+ *
+ * <p>Wraps the MV query plan with a {@link LogicalDeltaOperator} marker, then iteratively
+ * applies delta and version rewrite rules to push the marker down through the plan tree.
+ * If any unresolved markers remain after rewriting, falls back to the original plan
+ * (allowing TVR rules to handle it instead).</p>
+ *
+ * <p>This rewriter is table-type agnostic. Concrete delta/version resolution for specific
+ * table types (Iceberg, OLAP, etc.) is handled by the individual scan rules registered
+ * in {@link RuleSet#IVM_DELTA_REWRITE_RULES}.</p>
+ *
+ * <p>Version info for Iceberg tables is already set on scan operators by
+ * {@code MVIVMBasedRefreshProcessor.buildInsertPlan()} via {@code RelationTransformer},
+ * so no additional version binding is needed here.</p>
+ */
+public class IvmRewriter {
+    private IvmRewriter() {
+    }
+
+    /**
+     * Main entry point for IVM rewriting.
+     *
+     * <p>Flow:
+     * <ol>
+     *   <li>Wrap the plan root with {@link LogicalDeltaOperator} and apply delta/version rules</li>
+     *   <li>Convergence check: if unresolved markers remain, fall back to original plan</li>
+     *   <li>For PK target MVs, append __op column for UPSERT/DELETE semantics</li>
+     * </ol>
+     */
+    public static void rewrite(OptExpression tree, TaskContext rootTaskContext, TaskScheduler scheduler,
+                               ColumnRefSet requiredColumns) {
+        OptimizerContext optimizerContext = rootTaskContext.getOptimizerContext();
+
+        // Gate: only run when IVM refresh is enabled
+        if (!optimizerContext.getSessionVariable().isEnableIVMRefresh()) {
+            return;
+        }
+
+        OptExpression originalPlan = tree.getInputs().get(0);
+
+        // Phase 1: Wrap with LogicalDeltaOperator and apply delta/version rules iteratively
+        ColumnRefOperator actionColumn = optimizerContext.getColumnRefFactory()
+                .create(IvmRuleUtils.ACTION_COLUMN_NAME, IvmRuleUtils.ACTION_COLUMN_TYPE, false);
+        tree.setChild(0, OptExpression.create(
+                new LogicalDeltaOperator(true, actionColumn), originalPlan));
+        deriveLogicalProperty(tree);
+        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.IVM_DELTA_REWRITE_RULES);
+
+        // Phase 2: Convergence check — if any markers remain, fall back to original plan
+        if (IvmRuleUtils.containsLogicalDelta(tree.getInputs().get(0))
+                || IvmRuleUtils.containsLogicalVersion(tree.getInputs().get(0))) {
+            tree.setChild(0, originalPlan);
+            deriveLogicalProperty(tree);
+            return;
+        }
+
+        // Phase 3: For PK target MVs, append __op column for UPSERT/DELETE semantics
+        OptExpression rewrittenRoot = tree.getInputs().get(0);
+        deriveLogicalProperty(rewrittenRoot);
+        if (isPrimaryKeyTargetMv(optimizerContext)) {
+            rewrittenRoot = appendPkLoadOpColumn(rewrittenRoot, rootTaskContext, requiredColumns, actionColumn);
+        }
+        tree.setChild(0, rewrittenRoot);
+        deriveLogicalProperty(tree);
+    }
+
+    private static boolean isPrimaryKeyTargetMv(OptimizerContext optimizerContext) {
+        StatementBase statement = optimizerContext.getStatement();
+        if (!(statement instanceof InsertStmt insertStmt)) {
+            return false;
+        }
+        if (!(insertStmt.getTargetTable() instanceof MaterializedView targetMv)) {
+            return false;
+        }
+        return targetMv.getKeysType() == KeysType.PRIMARY_KEYS;
+    }
+
+    private static OptExpression appendPkLoadOpColumn(OptExpression root, TaskContext rootTaskContext,
+                                                      ColumnRefSet requiredColumns,
+                                                      ColumnRefOperator actionColumn) {
+        List<ColumnRefOperator> rootOutputColumns = root.getOutputColumns()
+                .getColumnRefOperators(rootTaskContext.getOptimizerContext().getColumnRefFactory());
+        boolean hasLoadOpColumn = rootOutputColumns.stream()
+                .anyMatch(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        if (hasLoadOpColumn) {
+            return root;
+        }
+
+        ColumnRefOperator loadOpColumn = rootTaskContext.getOptimizerContext().getColumnRefFactory()
+                .create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false);
+        ScalarOperator isDeleteAction = new BinaryPredicateOperator(BinaryType.LT, actionColumn,
+                ConstantOperator.createTinyInt((byte) 0));
+        ScalarOperator loadOpExpr = new CaseWhenOperator(IntegerType.TINYINT, null,
+                ConstantOperator.createTinyInt((byte) 0),
+                Lists.newArrayList(isDeleteAction, ConstantOperator.createTinyInt((byte) 1)));
+
+        Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
+        for (ColumnRefOperator outputColumn : rootOutputColumns) {
+            if (!outputColumn.equals(actionColumn)) {
+                projectMap.put(outputColumn, outputColumn);
+            }
+        }
+        projectMap.put(loadOpColumn, loadOpExpr);
+
+        requiredColumns.union(loadOpColumn);
+        rootTaskContext.getRequiredColumns().union(loadOpColumn);
+
+        OptExpression projectExpr = OptExpression.create(new LogicalProjectOperator(projectMap), root);
+        // DELETE must come first: __op=1 for DELETE, __op=0 for INSERT.
+        List<Ordering> orderings = List.of(new Ordering(loadOpColumn, false, false));
+        LogicalTopNOperator.Builder topNBuilder = LogicalTopNOperator.builder()
+                .withOperator(
+                        new LogicalTopNOperator(orderings, Operator.DEFAULT_LIMIT, Operator.DEFAULT_OFFSET,
+                                SortPhase.PARTIAL))
+                .setOrderByElements(orderings)
+                .setPerPipeline(true);
+        LogicalTopNOperator topN = topNBuilder.build();
+        return OptExpression.create(topN, projectExpr);
+    }
+
+    static void deriveLogicalProperty(OptExpression root) {
+        for (OptExpression child : root.getInputs()) {
+            deriveLogicalProperty(child);
+        }
+        if (root.getLogicalProperty() == null) {
+            ExpressionContext context = new ExpressionContext(root);
+            context.deriveLogicalProperty();
+            root.setLogicalProperty(context.getRootProperty());
+        }
+    }
+
+}
