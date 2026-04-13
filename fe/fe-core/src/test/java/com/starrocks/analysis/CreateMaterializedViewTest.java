@@ -42,6 +42,7 @@ import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -69,6 +70,7 @@ import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DmlStmt;
+import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
@@ -85,6 +87,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -2921,6 +2924,31 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
         Assertions.assertTrue(exception.getMessage().contains(
                 "Legacy REFRESH INCREMENTAL materialized views are no longer supported"));
+    }
+
+    @Test
+    public void testInjectedLegacyIncrementalCreateRejectedBeforePersistence() throws Exception {
+        String mvName = "legacy_incremental_create_guard_mv";
+        String sql = "create materialized view test." + mvName + "\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "as select k2, sum(v1) as total from test.tbl1 group by k2;";
+        try {
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            stmt.setRefreshSchemeDesc(new IncrementalRefreshSchemeDesc(
+                    stmt.getRefreshSchemeDesc().getMoment(), NodePosition.ZERO));
+
+            DdlException exception = Assertions.assertThrows(DdlException.class,
+                    () -> currentState.getLocalMetastore().createMaterializedView(stmt));
+            Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                    exception.getMessage());
+            Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName));
+        } finally {
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName) != null) {
+                starRocksAssert.dropMaterializedView("test." + mvName);
+            }
+        }
     }
 
     @Test
