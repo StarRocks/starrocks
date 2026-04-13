@@ -932,7 +932,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // TODO: Refactor the code to remove tmp slice array.
         Buffer<Slice> keys;
         keys.reserve(pkc->size());
-        if (pkc->is_binary()) {
+        if (pkc->is_binary() || pkc->is_large_binary()) {
             // When PK table have multi pk columns or one pk column with varchar type,
             // we treat it as binary column.
             ColumnHelper::build_slices(pkc, keys);
@@ -1166,7 +1166,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                     // TODO: Refactor the code to remove tmp slice array.
                     Buffer<Slice> keys;
                     keys.reserve(pkc->size());
-                    if (pkc->is_binary()) {
+                    if (pkc->is_binary() || pkc->is_large_binary()) {
                         ColumnHelper::build_slices(pkc, keys);
                         RETURN_IF_ERROR(insert(pkc->size(), keys.data(), values.data(), rowset_version));
                     } else {

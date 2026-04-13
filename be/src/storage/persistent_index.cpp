@@ -3530,7 +3530,7 @@ Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey
                     // TODO: Refactor the code to remove tmp slice array.
                     Buffer<Slice> keys;
                     TRY_CATCH_BAD_ALLOC(keys.reserve(pkc->size()));
-                    if (pkc->is_binary()) {
+                    if (pkc->is_binary() || pkc->is_large_binary()) {
                         ColumnHelper::build_slices(pkc, keys);
                         st = insert(pkc->size(), keys.data(), values.data(), false);
                     } else {
