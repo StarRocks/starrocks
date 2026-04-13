@@ -20,7 +20,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
@@ -29,7 +28,6 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -42,7 +40,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 public class AnalyzerUtilsTest {
@@ -151,16 +148,13 @@ public class AnalyzerUtilsTest {
                         "join relation_src src on rv.k1 = src.k1 " +
                         "join relation_view rv2 on rv2.k1 = src.k1",
                 starRocksAssert.getCtx());
-        List<String> relationNames = AnalyzerUtils.collectAllTableAndViewRelationNames(insertStmt);
+        List<String> relationNames = AnalyzerUtils.collectAllTableAndViewRelationNames(insertStmt, true);
         Assertions.assertEquals(Arrays.asList(
                 qualifiedRelationName("test", "relation_view"),
                 qualifiedRelationName("test", "relation_src")), relationNames);
 
-        Map<TableName, Relation> relations = AnalyzerUtils.collectAllTableAndViewRelations(insertStmt);
-        Assertions.assertEquals(
-                "[" + qualifiedRelationName("test", "relation_view") + ", " +
-                        qualifiedRelationName("test", "relation_src") + "]",
-                relations.keySet().toString());
+        Assertions.assertEquals(Arrays.asList("test.relation_view", "test.relation_src"),
+                AnalyzerUtils.collectAllTableAndViewRelationNames(insertStmt));
 
         StatementBase cteStmt = UtFrameUtils.parseStmtWithNewParser(
                 "with cte as (select k1 from relation_src) " +
@@ -169,7 +163,7 @@ public class AnalyzerUtilsTest {
         Assertions.assertEquals(Arrays.asList(
                 qualifiedRelationName("test", "relation_src"),
                 qualifiedRelationName("test", "relation_view")),
-                AnalyzerUtils.collectAllTableAndViewRelationNames(cteStmt));
+                AnalyzerUtils.collectAllTableAndViewRelationNames(cteStmt, true));
     }
 
     private String qualifiedRelationName(String dbName, String tableName) {
