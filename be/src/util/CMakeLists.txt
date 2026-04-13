@@ -32,6 +32,7 @@ set(UTIL_FILES
   json_flattener.cpp
   global_metrics_registry.cpp
   metrics/file_scan_metrics.cpp
+  metrics/catalog_scan_metrics.cpp
 # TODO: not supported on RHEL 5
 # perf-counters.cpp
   static_asserts.cpp

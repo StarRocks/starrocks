@@ -417,6 +417,8 @@ public class IcebergScanNode extends ScanNode {
             tHdfsScanNode.setColumn_access_paths(columnAccessPathToThrift());
         }
         bucketProperties.ifPresent(properties -> HdfsScanNode.setBucketProperties(tHdfsScanNode, properties));
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

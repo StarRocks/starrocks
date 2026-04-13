@@ -24,6 +24,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"
 #include "runtime/runtime_state.h"
+#include "util/global_metrics_registry.h"
 
 namespace starrocks::pipeline {
 
@@ -698,6 +699,8 @@ Status ConnectorChunkSource::_report_split_source_morsel_finished_once() {
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 
+    _update_catalog_metrics();
+
     // Ensure split-source completion is reported even when this chunk source
     // exits through non-EOF paths (cancel/close/error/limit reach).
     Status report_status = _report_split_source_morsel_finished_once();
@@ -928,6 +931,27 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {
     if (_chunk_rows_read == 0) return 0;
     return _chunk_mem_bytes / _chunk_rows_read;
+}
+
+void ConnectorChunkSource::_update_catalog_metrics() {
+    auto* catalog_metrics = GlobalMetricsRegistry::instance()->catalog_scan_metrics();
+    if (catalog_metrics == nullptr || _scan_node == nullptr) {
+        return;
+    }
+
+    const std::string& catalog_type = _scan_node->catalog_type();
+    if (catalog_type.empty()) {
+        return;
+    }
+
+    catalog_metrics->update_scan_bytes(catalog_type, _scan_bytes);
+    catalog_metrics->update_scan_rows(catalog_type, _scan_rows_num);
+
+    // files_scan metrics from data source
+    if (_data_source != nullptr) {
+        catalog_metrics->update_files_scan_bytes_read(catalog_type, _data_source->num_bytes_read());
+        catalog_metrics->update_files_scan_rows_return(catalog_type, _data_source->num_rows_read());
+    }
 }
 
 } // namespace starrocks::pipeline

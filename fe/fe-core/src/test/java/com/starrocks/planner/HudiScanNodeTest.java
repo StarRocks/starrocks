@@ -15,17 +15,22 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.hudi.HudiConnectorScanRangeSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
 import java.util.HashMap;
 
 public class HudiScanNodeTest {
@@ -77,5 +82,39 @@ public class HudiScanNodeTest {
             mockSource.reset();
             times = 1;
         }};
+    }
+
+    @Test
+    public void testToThriftSetsConnectorCatalogType(@Mocked GlobalStateMgr globalStateMgr,
+                                                     @Mocked CatalogConnector connector,
+                                                     @Mocked HudiTable table) {
+        String catalog = "hudi0";
+        CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+                result = connector;
+                connector.getMetadata().getCloudConfiguration();
+                result = cc;
+                table.getCatalogName();
+                result = catalog;
+                table.getDataColumnNames();
+                result = Arrays.asList("c1");
+                table.getName();
+                result = "hudi_tbl";
+                table.getType();
+                result = Table.TableType.HUDI;
+            }
+        };
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        HudiScanNode scanNode = new HudiScanNode(new PlanNodeId(0), desc, "hudi scan");
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
+        TPlanNode node = new TPlanNode();
+        scanNode.toThrift(node);
+
+        Assertions.assertNotNull(node.getConnector_scan_node());
+        Assertions.assertEquals("hudi", node.getConnector_scan_node().getCatalog_type());
     }
 }

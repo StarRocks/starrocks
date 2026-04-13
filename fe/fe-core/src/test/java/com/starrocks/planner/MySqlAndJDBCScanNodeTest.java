@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.common.DdlException;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CompoundPredicate;
@@ -28,6 +29,7 @@ import com.starrocks.sql.ast.expression.LargeStringLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.type.VarcharType;
 import org.assertj.core.util.Lists;
 import org.junit.jupiter.api.Assertions;
@@ -70,6 +72,12 @@ public class MySqlAndJDBCScanNodeTest {
                 "AND (col = 'ABC') AND " +
                 "((col NOT IN ('ABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDEABCDE')) OR " +
                 "(col = 'ABC'))"), nodeString);
+
+        TPlanNode thriftNode = new TPlanNode();
+        scanNode.toThrift(thriftNode);
+        Assertions.assertNotNull(thriftNode.getConnector_scan_node());
+        Assertions.assertEquals(StmtExecutor.toCatalogType(mysqlTable.getType()),
+                thriftNode.getConnector_scan_node().getCatalog_type());
     }
 
     @Test

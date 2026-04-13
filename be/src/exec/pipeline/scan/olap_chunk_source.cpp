@@ -835,6 +835,13 @@ void OlapChunkSource::_update_counter() {
     _table_metrics->scan_read_bytes.increment(_scan_bytes);
     _table_metrics->scan_read_rows.increment(_scan_rows_num);
 
+    // Update catalog scan metrics for internal table
+    auto* catalog_metrics = GlobalMetricsRegistry::instance()->catalog_scan_metrics();
+    if (catalog_metrics != nullptr) {
+        catalog_metrics->update_scan_bytes("default", _scan_bytes);
+        catalog_metrics->update_scan_rows("default", _scan_rows_num);
+    }
+
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", IO_TASK_EXEC_TIMER_NAME);
         COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);
