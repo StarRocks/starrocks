@@ -165,6 +165,10 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     const auto& fragment_instance_id = request.fragment_instance_id();
     const auto& is_stream_pipeline = request.is_stream_pipeline();
 
+    if (is_stream_pipeline) {
+        return Status::NotSupported("legacy stream MV maintenance fragments are not supported");
+    }
+
     _fragment_ctx = std::make_shared<FragmentContext>();
 
     _fragment_ctx->set_query_id(query_id);

@@ -22,8 +22,10 @@
 #include "base/testutil/assert.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "common/util/thrift_util.h"
 #include "common/utils.h"
 #include "exec/tablet_sink_index_channel.h"
+#include "gen_cpp/MVMaintenance_types.h"
 #include "runtime/exec_env.h"
 #include "service/brpc_service_test_util.h"
 
@@ -161,6 +163,36 @@ TEST_F(InternalServiceTest, test_load_diagnose) {
     st = Status(response.stack_trace_status());
     ASSERT_FALSE(st.ok());
     ASSERT_TRUE(st.message().find("can't find the load channel") != std::string::npos);
+}
+
+TEST_F(InternalServiceTest, test_submit_mv_maintenance_task_not_supported) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+
+    TMVMaintenanceTasks task;
+    task.__set_query_id(generate_uuid());
+    task.__set_task_type(MVTaskType::START_MAINTENANCE);
+    task.__set_db_name("db");
+    task.__set_mv_name("mv");
+    task.__set_job_id(1);
+    task.__set_task_id(2);
+    task.__set_signature(3);
+
+    ThriftSerializer serializer(false, 256);
+    uint8_t* serialized = nullptr;
+    uint32_t len = 0;
+    ASSERT_OK(serializer.serialize(&task, &len, &serialized));
+
+    brpc::Controller cntl;
+    cntl.request_attachment().append(reinterpret_cast<const void*>(serialized), len);
+
+    PMVMaintenanceTaskRequest request;
+    PMVMaintenanceTaskResult response;
+    MockClosure closure;
+    service.submit_mv_maintenance_task(&cntl, &request, &response, &closure);
+
+    auto st = Status(response.status());
+    ASSERT_TRUE(st.is_not_supported());
+    ASSERT_NE(st.message().find("legacy stream MV maintenance has been removed"), std::string::npos);
 }
 
 #ifdef WITH_STARCACHE

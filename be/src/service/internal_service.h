@@ -247,10 +247,6 @@ private:
 
     // MV Maintenance task
     Status _submit_mv_maintenance_task(brpc::Controller* cntl);
-    Status _mv_start_maintenance(const TMVMaintenanceTasks& task);
-    Status _mv_start_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
-    Status _mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
-    Status _mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx, const TMVMaintenanceTasks& task);
 
     // short circuit
     Status _exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest* request,

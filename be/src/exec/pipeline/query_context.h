@@ -28,7 +28,6 @@
 #include "base/time/time.h"
 #include "base/uid_util.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
@@ -44,7 +43,6 @@
 
 namespace starrocks {
 
-class StreamEpochManager;
 class GlobalLateMaterilizationContextMgr;
 
 namespace pipeline {
@@ -305,9 +303,6 @@ public:
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
-    // STREAM MV
-    StreamEpochManager* stream_epoch_manager() const { return _stream_epoch_manager.get(); }
-
     spill::QuerySpillManager* spill_manager() { return _spill_manager.get(); }
 
     void mark_prepared() { _is_prepared = true; }
@@ -408,9 +403,6 @@ private:
     std::atomic<workgroup::RunningQueryToken*> _wg_running_query_token_atomic_ptr = nullptr;
     std::shared_ptr<MemTracker> _mem_tracker;
     std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
-
-    // STREAM MV
-    std::shared_ptr<StreamEpochManager> _stream_epoch_manager;
 
     int64_t _static_query_mem_limit = 0;
     ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;

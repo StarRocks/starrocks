@@ -66,9 +66,15 @@ public:
     size_t estimated_scan_row_bytes() const { return _estimated_scan_row_bytes; }
 
     int io_tasks_per_scan_operator() const override;
-    bool output_chunk_by_bucket() const override { return _data_source_provider->output_chunk_by_bucket(); }
-    bool is_asc_hint() const override { return _data_source_provider->is_asc_hint(); }
-    std::optional<bool> partition_order_hint() const override { return _data_source_provider->partition_order_hint(); }
+    bool output_chunk_by_bucket() const override {
+        return _data_source_provider != nullptr && _data_source_provider->output_chunk_by_bucket();
+    }
+    bool is_asc_hint() const override {
+        return _data_source_provider == nullptr || _data_source_provider->is_asc_hint();
+    }
+    std::optional<bool> partition_order_hint() const override {
+        return _data_source_provider == nullptr ? std::nullopt : _data_source_provider->partition_order_hint();
+    }
 
 private:
     // non-pipeline methods.
@@ -140,7 +146,8 @@ private:
 private:
     // pipeline fields and methods.
     connector::DataSourceProviderPtr _data_source_provider = nullptr;
-    connector::ConnectorType _connector_type;
+    connector::ConnectorType _connector_type = connector::ConnectorType::HIVE;
+    std::string _connector_name;
     std::string _catalog_type;
     void _estimate_scan_row_bytes();
     void _estimate_data_source_mem_bytes();

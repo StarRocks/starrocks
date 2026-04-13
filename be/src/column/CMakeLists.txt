@@ -63,7 +63,6 @@ ADD_BE_LIB(Column
         column_helper_time.cpp
         append_with_mask.cpp
         datum_tuple.cpp
-        stream_chunk.cpp
 )
 
 target_link_libraries(ChunkCore PUBLIC ColumnCore)

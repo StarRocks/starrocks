@@ -24,7 +24,6 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
-#include "exec/stream/scan/stream_scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/parser.h"
@@ -38,7 +37,11 @@ static constexpr double kChunkBufferMemRatio = pipeline::ConnectorScanOperatorMe
 ConnectorScanNode::ConnectorScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs) {
     _name = "connector_scan";
+    _connector_name = tnode.connector_scan_node.connector_name;
     auto c = connector::ConnectorManager::default_instance()->get(tnode.connector_scan_node.connector_name);
+    if (c == nullptr) {
+        return;
+    }
     _connector_type = c->connector_type();
     if (tnode.connector_scan_node.__isset.catalog_type) {
         _catalog_type = tnode.connector_scan_node.catalog_type;
@@ -56,6 +59,9 @@ ConnectorScanNode::~ConnectorScanNode() {
 
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
+    if (_data_source_provider == nullptr) {
+        return Status::NotSupported("connector '" + _connector_name + "' is not supported");
+    }
     RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
 
     const TQueryOptions& query_options = state->query_options();
@@ -134,8 +140,6 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
 
     size_t dop = context->dop_of_source_operator(id());
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
-    bool stream_data_source = _data_source_provider->stream_data_source();
-    bool is_stream_pipeline = context->is_stream_pipeline();
 
     // we do estimated here is because we have peeked all scang ranges and gather more infomration
     // so only here we can make more accurate decision.
@@ -148,12 +152,8 @@ StatusOr<pipeline::OpFactories> ConnectorScanNode::decompose_to_pipeline(pipelin
             max_buffer_capacity, default_buffer_capacity, int64_t(_scan_mem_limit * kChunkBufferMemRatio),
             runtime_state()->chunk_size());
 
-    scan_op = !stream_data_source
-                      ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
-                      : std::make_shared<pipeline::StreamScanOperatorFactory>(
-                                context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
-                                is_stream_pipeline);
+    scan_op = std::make_shared<pipeline::ConnectorScanOperatorFactory>(context->next_operator_id(), this,
+                                                                       runtime_state(), dop, std::move(buffer_limiter));
 
     // order matters. we will use scan mem limit to limit chunk source mem bytes.
     scan_op->set_mem_share_arb(_mem_share_arb);
@@ -693,6 +693,9 @@ Status ConnectorScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& s
 // ========================== End of Non Pipeline Code =====================
 
 bool ConnectorScanNode::accept_empty_scan_ranges() const {
+    if (_data_source_provider == nullptr) {
+        return false;
+    }
     return _data_source_provider->accept_empty_scan_ranges();
 }
 
@@ -702,6 +705,9 @@ void ConnectorScanNode::_init_counter() {
 }
 
 int ConnectorScanNode::io_tasks_per_scan_operator() const {
+    if (_data_source_provider == nullptr) {
+        return starrocks::ScanNode::io_tasks_per_scan_operator();
+    }
     if (_data_source_provider->sorted_by_keys_per_tablet()) {
         return 1;
     }
@@ -709,6 +715,9 @@ int ConnectorScanNode::io_tasks_per_scan_operator() const {
 }
 
 bool ConnectorScanNode::always_shared_scan() const {
+    if (_data_source_provider == nullptr) {
+        return true;
+    }
     return _data_source_provider->always_shared_scan();
 }
 
@@ -716,6 +725,9 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
+    if (_data_source_provider == nullptr) {
+        return Status::NotSupported("connector '" + _connector_name + "' is not supported");
+    }
     return _data_source_provider->convert_scan_range_to_morsel_queue(
             scan_ranges, node_id, pipeline_dop, enable_tablet_internal_parallel, tablet_internal_parallel_mode,
             num_total_scan_ranges);

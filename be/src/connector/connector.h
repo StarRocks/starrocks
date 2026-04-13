@@ -109,18 +109,6 @@ protected:
     pipeline::ScanMorsel* _morsel = nullptr;
 };
 
-class StreamDataSource : public DataSource {
-public:
-    virtual Status set_offset(int64_t table_version, int64_t changelog_id) = 0;
-    virtual Status reset_status() = 0;
-
-    // how many rows returned in the current epoch.
-    virtual int64_t num_rows_read_in_epoch() const = 0;
-
-    // CPU time of this data source in the current epoch.
-    virtual int64_t cpu_time_spent_in_epoch() const = 0;
-};
-
 using DataSourcePtr = std::unique_ptr<DataSource>;
 
 class DataSourceProvider {
@@ -151,8 +139,6 @@ public:
     // such as MySQL/JDBC, so `accept_empty_scan_ranges` is false, and most in most cases, these data source(MySQL/JDBC)
     // the method `insert_local_exchange_operator` is true also.
     virtual bool accept_empty_scan_ranges() const { return true; }
-
-    virtual bool stream_data_source() const { return false; }
 
     virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
 
@@ -197,7 +183,7 @@ enum ConnectorType {
     MYSQL = 3,
     FILE = 4,
     LAKE = 5,
-    BINLOG = 6,
+    BINLOG = 6, // Reserved for the removed legacy stream MV connector.
     ICEBERG = 7,
     BENCHMARK = 8,
     CACHE_STATS = 9,
@@ -212,7 +198,6 @@ public:
     static const std::string MYSQL;
     static const std::string FILE;
     static const std::string LAKE;
-    static const std::string BINLOG;
     static const std::string ICEBERG;
     static const std::string BENCHMARK;
     static const std::string CACHE_STATS;

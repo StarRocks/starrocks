@@ -478,8 +478,7 @@ void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val)
     if (!all_groups_finished) {
         return;
     }
-
-    state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
+    (void)state;
 }
 
 void FragmentContext::init_jit_profile() {
