@@ -1,0 +1,31 @@
+name: AI SR SKILLS
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      - "branch*"
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+
+concurrency:
+  group: AI-SR-SKILLS-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+
+jobs:
+  assign-reviewer:
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    if: >
+      (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'edited') &&
+      !startsWith(github.head_ref, 'mergify/')
+    steps:
+      - name: Assign PR Reviewer
+        run: |
+          /usr/local/bin/claude -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}"
