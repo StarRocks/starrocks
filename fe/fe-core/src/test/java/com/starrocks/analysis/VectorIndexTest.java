@@ -245,6 +245,71 @@ public class VectorIndexTest extends PlanTestBase {
     }
 
     @Test
+    public void testQuantizerCrossFieldValidation() {
+        // Covers C2 cross-field rules in IndexAnalyzer. Single-field wiring is
+        // already covered by testQuantizerPropertyRegistration.
+        Column vecCol = new Column("f2", ArrayType.ARRAY_FLOAT, false);
+
+        // PQ happy path: m_pq divides dim, nbits_pq in range.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                    put(IndexParamsKey.M_PQ.name(), "16");
+                    put(IndexParamsKey.NBITS_PQ.name(), "8");
+                }}, KeysType.DUP_KEYS));
+
+        // V1 rejects quantizer != flat combined with non-L2 metric. Users who
+        // want SQ/PQ on cosine should upgrade once we validate recall.
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.COSINE_SIMILARITY.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.SQ8.name());
+                }}, KeysType.DUP_KEYS),
+                "Quantized HNSW index only supports metric_type = l2_distance in V1");
+
+        // PQ requires m_pq — tenann/faiss cannot infer it.
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                }}, KeysType.DUP_KEYS),
+                "`M_PQ` is required when QUANTIZER = pq");
+
+        // dim must be divisible by m_pq — otherwise faiss index_factory throws at BE.
+        Assertions.assertThrows(
+                SemanticException.class,
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "10");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.L2_DISTANCE.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                    put(IndexParamsKey.M_PQ.name(), "3");
+                }}, KeysType.DUP_KEYS),
+                "`DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index");
+    }
+
+    @Test
     public void testIndexToThrift() {
         int indexId = 0;
         String indexName = "vector_index";

@@ -351,6 +351,26 @@ public class IndexAnalyzer {
             }
         }
 
+        if (vectorIndexType == VectorIndexType.HNSW) {
+            // User-typed property keys have not been normalized yet (lower-casing
+            // happens at the end of this method), so look up case-insensitively.
+            String quantizer = getPropertyIgnoreCase(properties, IndexParamsKey.QUANTIZER.name());
+            if (quantizer != null && quantizer.equalsIgnoreCase(VectorIndexParams.QuantizerType.PQ.name())) {
+                String mPq = getPropertyIgnoreCase(properties, IndexParamsKey.M_PQ.name());
+                if (mPq == null) {
+                    throw new SemanticException("`M_PQ` is required when QUANTIZER = pq");
+                }
+                int mPqValue = Integer.parseInt(mPq);
+
+                String dim = getPropertyIgnoreCase(properties, CommonIndexParamKey.DIM.name());
+                int dimValue = Integer.parseInt(dim);
+                if (dimValue % mPqValue != 0) {
+                    throw new SemanticException(
+                            "`DIM` should be a multiple of `M_PQ` for PQ-quantized HNSW index");
+                }
+            }
+        }
+
         // add default properties
         Set<String> indexParams = indexParamsGroupByType.get(vectorIndexType);
         paramsNeedDefault.keySet().removeIf(key -> !indexParams.contains(key));
@@ -363,6 +383,21 @@ public class IndexAnalyzer {
                 .collect(Collectors.toMap(entry -> entry.getKey().toLowerCase(), entry -> entry.getValue().toLowerCase()));
         properties.clear();
         properties.putAll(lowerProperties);
+    }
+
+    /**
+     * Look up a property by name in a case-insensitive fashion.
+     * Needed because vector-index properties are not normalized until after
+     * {@link #checkVectorIndexValid} returns, but cross-field validation runs
+     * before that normalization.
+     */
+    private static String getPropertyIgnoreCase(Map<String, String> properties, String key) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(key)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private static void addDefaultVectorProperties(Map<String, String> properties,
