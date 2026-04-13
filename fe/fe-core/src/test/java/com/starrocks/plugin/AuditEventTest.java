@@ -39,7 +39,8 @@ public class AuditEventTest {
                 .setErrorCode("errorCode")
                 .setIsQuery(true)
                 .setWarehouse("wh")
-                .setRelations(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"));
+                .setQueriedRelations(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"))
+                ;
         AuditEvent event = builder.build();
 
         Assertions.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
@@ -57,7 +58,8 @@ public class AuditEventTest {
         Assertions.assertEquals("errorCode", event.errorCode);
         Assertions.assertEquals(true, event.isQuery);
         Assertions.assertEquals("wh", event.warehouse);
-        Assertions.assertEquals(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"), event.relations);
+        Assertions.assertEquals(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"),
+                event.queriedRelations);
         Assertions.assertEquals(100, event.writeClientTimeMs);
     }
 }

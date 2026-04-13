@@ -799,16 +799,27 @@ public class AnalyzerUtils {
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
+        return collectAllTableAndViewRelations(parseNode, false);
+    }
+
+    public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode,
+                                                                           boolean showInternalCatalog) {
         if (parseNode == null) {
             return Collections.emptyMap();
         }
         Map<TableName, Relation> allTableAndViewRelations = new LinkedHashMap<>();
-        new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
+        new TableAndViewRelationsCollector(allTableAndViewRelations, showInternalCatalog).visit(parseNode);
         return allTableAndViewRelations;
     }
 
     public static List<String> collectAllTableAndViewRelationNames(ParseNode parseNode) {
-        Map<TableName, Relation> allTableAndViewRelations = collectAllTableAndViewRelations(parseNode);
+        return collectAllTableAndViewRelationNames(parseNode, false);
+    }
+
+    public static List<String> collectAllTableAndViewRelationNames(ParseNode parseNode,
+                                                                   boolean showInternalCatalog) {
+        Map<TableName, Relation> allTableAndViewRelations =
+                collectAllTableAndViewRelations(parseNode, showInternalCatalog);
         List<String> relationNames = new ArrayList<>(allTableAndViewRelations.size());
         for (TableName tableName : allTableAndViewRelations.keySet()) {
             relationNames.add(tableName.toString());
@@ -1136,9 +1147,11 @@ public class AnalyzerUtils {
     private static class TableAndViewRelationsCollector extends AstTraverser<Void, Void> {
 
         private final Map<TableName, Relation> allTableAndViewRelations;
+        private final boolean showInternalCatalog;
 
-        public TableAndViewRelationsCollector(Map<TableName, Relation> tableRelations) {
+        public TableAndViewRelationsCollector(Map<TableName, Relation> tableRelations, boolean showInternalCatalog) {
             this.allTableAndViewRelations = tableRelations;
+            this.showInternalCatalog = showInternalCatalog;
         }
 
         @Override
@@ -1146,7 +1159,7 @@ public class AnalyzerUtils {
             if (node.isCreateByPolicyRewritten()) {
                 return null;
             }
-            allTableAndViewRelations.put(copyCollectedTableName(node.getName()), node);
+            allTableAndViewRelations.put(getCollectedTableName(node.getName()), node);
             return null;
         }
 
@@ -1155,8 +1168,15 @@ public class AnalyzerUtils {
             if (node.isCreateByPolicyRewritten()) {
                 return null;
             }
-            allTableAndViewRelations.put(copyCollectedTableName(node.getName()), node);
+            allTableAndViewRelations.put(getCollectedTableName(node.getName()), node);
             return null;
+        }
+
+        private TableName getCollectedTableName(TableName tableName) {
+            if (!showInternalCatalog) {
+                return tableName;
+            }
+            return copyCollectedTableName(tableName);
         }
 
         private TableName copyCollectedTableName(TableName tableName) {
