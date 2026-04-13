@@ -631,6 +631,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                         asyncDeleteForPartitions.remove(partitionInfo);
                     }
                     idToRecycleTime.remove(partitionId);
+                    enableEraseLater.remove(partitionId);
                 }
             }
         }
@@ -724,12 +725,12 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     private void cleanupLakeTableAfterPartitionsDeletion(RecycleTableInfo info) {
         long tableId = info.getTable().getId();
         lakeTableToPartitions.remove(tableId);
-        // Clean up table-level resources
-        // Note: removeTableBinds() was already called in addLakeTablePartitionsToRecycleBin()
+        // Clean up table-level resources.
+        // Note: removeTableBinds() was already called in addLakeTablePartitionsToRecycleBin().
         OlapTable table = (OlapTable) info.getTable();
         table.removeTabletsFromInvertedIndex();
         GlobalStateMgr.getCurrentState().getWarehouseMgr().removeTableWarehouseInfo(tableId);
-        LOG.info("All partitions of Lake table '{}' (tableId: {}) have been deleted, cleaned up table resources",
+        LOG.debug("All partitions of Lake table '{}' (tableId: {}) have been deleted, cleaned up table resources",
                 table.getName(), tableId);
     }
 

@@ -231,6 +231,22 @@ public class CatalogRecycleBinLakeTableTest {
         }
     }
 
+    /**
+     * Wait until no partition of the given table has an active async deletion task.
+     * Unlike waitTableToBeDone, this does NOT call eraseTable() — use this when the test
+     * needs to inspect the state between partition completion and table finalization.
+     */
+    protected static void waitUntilNoAsyncDeletion(CatalogRecycleBin recycleBin, long tableId, long time) {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (recycleBin.isAnyLakeTablePartitionDeleting(tableId) && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(10);
+            } catch (Exception ignore) {
+            }
+            recycleBin.erasePartition(time);
+        }
+    }
+
     protected static boolean containsAsyncDeletePartition(Object recycleBin, long id) {
         Map<?, CompletableFuture<Boolean>> asyncDeleteForPartitions =
                 Deencapsulation.getField(recycleBin, "asyncDeleteForPartitions");
@@ -781,12 +797,8 @@ public class CatalogRecycleBinLakeTableTest {
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p2.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p3.getId()));
 
-        // erasePartition processes the partitions
-        recycleBin.erasePartition(futureTime);
-        // Wait for async deletion to complete
-        Thread.sleep(500);
-        // Second erasePartition call to process completed async tasks
-        recycleBin.erasePartition(futureTime);
+        // Process partitions, waiting for async deletion to complete
+        waitTableToBeDone(recycleBin, table.getId(), futureTime);
 
         // Verify partitions are deleted
         Assertions.assertEquals(0, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
@@ -872,23 +884,16 @@ public class CatalogRecycleBinLakeTableTest {
         Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
         Assertions.assertEquals(2, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
 
-        // First erasePartition call: submits async delete tasks
-        recycleBin.erasePartition(futureTime);
-        // Wait for async tasks to complete
-        Thread.sleep(500);
-
-        // Second erasePartition call: p1 succeeds, p2 fails
-        recycleBin.erasePartition(futureTime);
+        // Submit async delete tasks and wait for first round: p1 succeeds, p2 fails
+        waitTableToBeDone(recycleBin, table.getId(), futureTime);
 
         // One partition should still be pending
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table.getId()));
         Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
         Assertions.assertEquals(1, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
 
-        // Retry the failed partition
-        recycleBin.erasePartition(futureTime);
-        Thread.sleep(500);
-        recycleBin.erasePartition(futureTime);
+        // Retry the failed partition and wait for success
+        waitTableToBeDone(recycleBin, table.getId(), futureTime);
 
         // All partitions should be deleted now
         Assertions.assertEquals(0, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
