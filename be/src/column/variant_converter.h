@@ -19,6 +19,7 @@
 #include "base/statusor.h"
 #include "column/column_builder.h"
 #include "column/runtime_type_traits.h"
+#include "exprs/decimal_cast_expr.h"
 #include "types/date_value.h"
 #include "types/logical_type.h"
 #include "types/time_types.h"
@@ -58,6 +59,28 @@ public:
 
     static Status cast_to_datetime(const VariantRowRef& row, const cctz::time_zone& zone,
                                    ColumnBuilder<TYPE_DATETIME>& result);
+
+    template <LogicalType ResultType>
+    static Status cast_to_decimal(const VariantRowRef& row, int precision, int scale,
+                                  ColumnBuilder<ResultType>& result) {
+        static_assert(lt_is_decimal<ResultType>, "ResultType must be decimal");
+
+        const VariantValue& variant = row.get_value();
+        if (variant.type() == VariantType::NULL_TYPE) {
+            result.append_null();
+            return Status::OK();
+        }
+
+        RunTimeCppType<ResultType> decimal_value{};
+        ASSIGN_OR_RETURN(bool overflow, cast_variant_to_decimal<RunTimeCppType<ResultType>>(
+                                                &decimal_value, variant, precision, scale));
+        if (overflow) {
+            result.append_null();
+        } else {
+            result.append(decimal_value);
+        }
+        return Status::OK();
+    }
 
     template <LogicalType ResultType>
     static Status cast_to_arithmetic(const VariantRowRef& row, ColumnBuilder<ResultType>& result) {

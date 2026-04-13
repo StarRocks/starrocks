@@ -339,6 +339,18 @@ static ColumnPtr make_typed_only_variant_column_for_virtual_column_test() {
     return variant;
 }
 
+static ColumnPtr make_typed_decimal32_variant_column_for_virtual_column_test() {
+    auto variant = VariantColumn::create();
+    MutableColumns typed_columns;
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    auto typed_col = ColumnHelper::create_column(decimal_type, true);
+    typed_col->append_datum(Datum(int32_t(1050)));
+    typed_col->append_datum(Datum(int32_t(1250)));
+    typed_columns.emplace_back(typed_col->as_mutable_ptr());
+    variant->set_shredded_columns({"a.b.c"}, {decimal_type}, std::move(typed_columns), nullptr, nullptr);
+    return variant;
+}
+
 static ColumnPtr make_nullable_typed_variant_column_for_virtual_column_test() {
     auto data = make_typed_only_variant_column_for_virtual_column_test();
     auto nulls = NullColumn::create();
@@ -2680,6 +2692,72 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedVirtualColumnRespectsSourc
     EXPECT_EQ(22, result->get(1).get_int64());
 }
 
+TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedDecimalVirtualColumn) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(106, "data.id", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(303)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_decimal32_variant_column_for_virtual_column_test(), SlotId(303));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(1050, result->get(0).get_int32());
+    EXPECT_EQ(1250, result->get(1).get_int32());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnWithWidening) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 10, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(107, "data.id", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(304)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_decimal32_variant_column_for_virtual_column_test(), SlotId(304));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(1050, result->get(0).get_int64());
+    EXPECT_EQ(1250, result->get(1).get_int64());
+}
+
 TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualVarcharColumnFromPhysicalSourceSlot) {
     auto* param = _create_group_reader_param();
 
@@ -2965,6 +3043,33 @@ TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForPhysi
     auto it = group_reader->_column_readers.find(virtual_slot->id());
     ASSERT_NE(it, group_reader->_column_readers.end());
     EXPECT_NE(nullptr, down_cast<VariantVirtualZoneMapReader*>(it->second.get()));
+}
+
+TEST(GroupReaderBloomFilterTest, DecimalBloomFilterApplicabilityRequiresExactLayoutMatch) {
+    MockColumnReader reader(tparquet::Type::INT32);
+
+    ParquetField decimal32_field;
+    decimal32_field.physical_type = tparquet::Type::INT32;
+    decimal32_field.precision = 5;
+    decimal32_field.scale = 2;
+    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(
+            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2), decimal32_field));
+    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(
+            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 6, 2), decimal32_field));
+
+    ParquetField decimal64_field;
+    decimal64_field.physical_type = tparquet::Type::INT64;
+    decimal64_field.precision = 16;
+    decimal64_field.scale = 2;
+    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(
+            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 16, 2), decimal64_field));
+
+    ParquetField decimal128_field;
+    decimal128_field.physical_type = tparquet::Type::FIXED_LEN_BYTE_ARRAY;
+    decimal128_field.precision = 22;
+    decimal128_field.scale = 4;
+    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(
+            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 22, 4), decimal128_field));
 }
 
 // ── Hidden variant source active/lazy classification ─────────────────────────
