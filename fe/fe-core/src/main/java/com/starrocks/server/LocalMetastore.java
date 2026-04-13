@@ -640,6 +640,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         List<MaterializedView> materializedViews = db.getMaterializedViews();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         for (MaterializedView materializedView : materializedViews) {
+            markRecoveredLegacyIncrementalMvInactive(materializedView);
             if (TaskBuilder.isTaskSupported(materializedView)) {
                 Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
                 TaskBuilder.updateTaskInfo(task, materializedView);
@@ -670,6 +671,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             Table recoverTable = getTable(db.getFullName(), tableName);
+            markRecoveredLegacyIncrementalMvInactive(recoverTable);
             if (recoverTable instanceof OlapTable) {
                 DynamicPartitionUtil.registerOrRemovePartitionScheduleInfo(db.getId(), (OlapTable) recoverTable);
             }
@@ -726,6 +728,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         // add db to globalStateMgr
         replayCreateDb(db);
+        Locker locker = new Locker();
+        locker.lockDatabase(dbId, LockType.WRITE);
+        try {
+            markRecoveredLegacyIncrementalMvsInactive(db);
+        } finally {
+            locker.unLockDatabase(dbId, LockType.WRITE);
+        }
 
         LOG.info("replay recover db[{}], name: {}", dbId, db.getOriginName());
     }
@@ -2556,8 +2565,22 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
             recycleBin.replayRecoverTable(db, info.getTableId());
+            markRecoveredLegacyIncrementalMvInactive(db.getTable(info.getTableId()));
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
+    }
+
+    private void markRecoveredLegacyIncrementalMvsInactive(Database db) {
+        for (MaterializedView materializedView : db.getMaterializedViews()) {
+            markRecoveredLegacyIncrementalMvInactive(materializedView);
+        }
+    }
+
+    private void markRecoveredLegacyIncrementalMvInactive(Table table) {
+        if (table instanceof MaterializedView materializedView && materializedView.getRefreshScheme().isIncremental()) {
+            materializedView.setInactiveAndReason(
+                    MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance());
         }
     }
 

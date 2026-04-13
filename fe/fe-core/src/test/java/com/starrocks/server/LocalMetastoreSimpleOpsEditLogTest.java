@@ -40,6 +40,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.MetaRecoveryDaemon;
@@ -87,6 +88,7 @@ import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.RecoverDbStmt;
+import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.ReplicaStatus;
 import com.starrocks.sql.ast.RollupRenameClause;
@@ -115,6 +117,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME;
@@ -586,6 +589,7 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView mv = createMaterializedView(mvId, db.getId(), "legacy_mv",
                 MaterializedViewRefreshType.INCREMENTAL);
+        mv.setActive();
         db.registerTableUnlocked(mv);
 
         metastore.dropDb(UtFrameUtils.createDefaultCtx(), dbName, false);
@@ -594,9 +598,87 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         metastore.recoverDatabase(new RecoverDbStmt(dbName));
         Database recoveredDb = metastore.getDb(dbName);
         Assertions.assertNotNull(recoveredDb);
+        MaterializedView recoveredMv = (MaterializedView) recoveredDb.getTable(mvId);
+        Assertions.assertNotNull(recoveredMv);
+        Assertions.assertFalse(recoveredMv.isActive());
+        Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                recoveredMv.getInactiveReason());
 
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Assertions.assertNull(taskManager.getTask(TaskBuilder.getMvTaskName(mvId)));
+
+        RecoverInfo replayInfo = (RecoverInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_RECOVER_DB_V2);
+        Assertions.assertNotNull(replayInfo);
+
+        CatalogRecycleBin followerRecycleBin = new CatalogRecycleBin();
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), followerRecycleBin, null);
+        Database followerDb = new Database(db.getId(), dbName);
+        MaterializedView followerMv = createMaterializedView(mvId, followerDb.getId(), "legacy_mv",
+                MaterializedViewRefreshType.INCREMENTAL);
+        followerMv.setActive();
+        followerRecycleBin.recycleTable(followerDb.getId(), followerMv, true);
+        followerRecycleBin.recycleDatabase(followerDb, Set.of("legacy_mv"), true);
+        followerMetastore.replayRecoverDatabase(replayInfo);
+
+        Database followerRecoveredDb = followerMetastore.getDb(dbName);
+        Assertions.assertNotNull(followerRecoveredDb);
+        MaterializedView followerRecoveredMv = (MaterializedView) followerRecoveredDb.getTable(mvId);
+        Assertions.assertNotNull(followerRecoveredMv);
+        Assertions.assertFalse(followerRecoveredMv.isActive());
+        Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                followerRecoveredMv.getInactiveReason());
+    }
+
+    @Test
+    public void testRecoverTableMarksLegacyIncrementalMvInactive() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        String dbName = "test_recover_table_legacy_incremental_mv";
+        String mvName = "legacy_mv";
+        Database db = new Database(GlobalStateMgr.getCurrentState().getNextId(), dbName);
+        metastore.unprotectCreateDb(db);
+
+        long mvId = GlobalStateMgr.getCurrentState().getNextId();
+        MaterializedView mv = createMaterializedView(
+                mvId, db.getId(), mvName, MaterializedViewRefreshType.INCREMENTAL);
+        mv.setActive();
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
+        recycleBin.recycleTable(db.getId(), mv, true);
+
+        QualifiedName qualifiedName = QualifiedName.of(List.of(
+                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, mvName));
+        RecoverTableStmt recoverTableStmt = new RecoverTableStmt(
+                new TableRef(qualifiedName, null, NodePosition.ZERO));
+        metastore.recoverTable(recoverTableStmt);
+
+        MaterializedView recoveredMv = (MaterializedView) metastore.getTable(dbName, mvName);
+        Assertions.assertNotNull(recoveredMv);
+        Assertions.assertFalse(recoveredMv.isActive());
+        Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                recoveredMv.getInactiveReason());
+
+        RecoverInfo replayInfo = (RecoverInfo) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_RECOVER_TABLE_V2);
+        Assertions.assertNotNull(replayInfo);
+
+        CatalogRecycleBin followerRecycleBin = new CatalogRecycleBin();
+        LocalMetastore followerMetastore = new LocalMetastore(
+                GlobalStateMgr.getCurrentState(), followerRecycleBin, null);
+        Database followerDb = new Database(db.getId(), dbName);
+        followerMetastore.unprotectCreateDb(followerDb);
+        MaterializedView followerMv = createMaterializedView(mvId, followerDb.getId(), mvName,
+                MaterializedViewRefreshType.INCREMENTAL);
+        followerMv.setActive();
+        followerRecycleBin.recycleTable(followerDb.getId(), followerMv, true);
+
+        followerMetastore.replayRecoverTable(replayInfo);
+
+        MaterializedView followerRecoveredMv = (MaterializedView) followerMetastore.getTable(dbName, mvName);
+        Assertions.assertNotNull(followerRecoveredMv);
+        Assertions.assertFalse(followerRecoveredMv.isActive());
+        Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                followerRecoveredMv.getInactiveReason());
     }
 
     @Test
