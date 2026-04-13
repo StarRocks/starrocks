@@ -16,13 +16,13 @@
 
 #include <atomic>
 
-#include "exec/pipeline/work_stealing_queue.h"
+#include "exec/pipeline/multi_level_concurrent_queue.h"
 #include "exec/workgroup/scan_task_queue.h"
 
 namespace starrocks::workgroup {
 
 // LockFreeScanTaskQueue is a lock-free per-workgroup priority queue for scan
-// tasks. It replaces PriorityScanTaskQueue by using WorkStealingQueue internally.
+// tasks. It replaces PriorityScanTaskQueue by using MultiLevelConcurrentQueue internally.
 //
 // Priority values 0-20 map 1:1 to 21 queue levels. Dequeue scans from level 20
 // (highest priority) down to level 0 (lowest priority), returning the first
@@ -72,7 +72,7 @@ private:
     template <typename DequeueFunc>
     bool _fallback_try_take(ScanTask& task, DequeueFunc&& dequeue);
 
-    pipeline::WorkStealingQueue<ScanTask, NUM_PRIORITY_LEVELS> _queue;
+    pipeline::MultiLevelConcurrentQueue<ScanTask, NUM_PRIORITY_LEVELS> _queue;
 
     // Bitmap of levels that are known to be non-empty.
     // bit i = 1 means level i MAY have items (no false negatives).

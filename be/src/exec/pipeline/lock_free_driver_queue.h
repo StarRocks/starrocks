@@ -19,13 +19,13 @@
 #include <atomic>
 
 #include "exec/pipeline/pipeline_driver.h"
-#include "exec/pipeline/work_stealing_queue.h"
+#include "exec/pipeline/multi_level_concurrent_queue.h"
 
 namespace starrocks::pipeline {
 
 // LockFreeDriverQueue is a lock-free per-workgroup MLFQ (Multi-Level Feedback Queue)
 // for scheduling pipeline drivers. It replaces QuerySharedDriverQueue by using
-// WorkStealingQueue internally and managing level selection via atomic accu_time
+// MultiLevelConcurrentQueue internally and managing level selection via atomic accu_time
 // counters and pre-computed weight factors.
 //
 // Drivers are assigned to one of QUEUE_SIZE priority levels based on their
@@ -87,7 +87,7 @@ private:
     template <typename DequeueFunc>
     bool _fallback_try_take(DriverRawPtr& driver, DequeueFunc&& dequeue);
 
-    WorkStealingQueue<DriverRawPtr, QUEUE_SIZE> _queue;
+    MultiLevelConcurrentQueue<DriverRawPtr, QUEUE_SIZE> _queue;
 
     // Bitmap of levels that are known to be non-empty.
     // bit i = 1 means level i MAY have items (no false negatives).

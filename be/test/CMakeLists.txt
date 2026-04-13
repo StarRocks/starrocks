@@ -61,7 +61,7 @@ set(EXEC_FILES
         ./exec/pipeline/schedule/observer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
-        ./exec/pipeline/work_stealing_queue_test.cpp
+        ./exec/pipeline/multi_level_concurrent_queue_test.cpp
         ./exec/pipeline/lock_free_driver_queue_test.cpp
         ./exec/pipeline/lock_free_work_group_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp

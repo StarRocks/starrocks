@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/pipeline/work_stealing_queue.h"
+#include "exec/pipeline/multi_level_concurrent_queue.h"
 
 #include <gtest/gtest.h>
 
@@ -27,8 +27,8 @@ namespace starrocks::pipeline {
 
 // test_single_level_basic:
 // Enqueue 2 items on level 0 with different workers, dequeue both, verify empty.
-PARALLEL_TEST(WorkStealingQueueTest, test_single_level_basic) {
-    WorkStealingQueue<int, 1> queue(2);
+PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_single_level_basic) {
+    MultiLevelConcurrentQueue<int, 1> queue(2);
 
     queue.enqueue(10, 0, 0);
     queue.enqueue(20, 0, 1);
@@ -54,8 +54,8 @@ PARALLEL_TEST(WorkStealingQueueTest, test_single_level_basic) {
 // test_level_isolation:
 // Enqueue to levels 0, 1, 2. Verify level 3 is empty. Dequeue from each level
 // gets the correct items.
-PARALLEL_TEST(WorkStealingQueueTest, test_level_isolation) {
-    WorkStealingQueue<int, 4> queue(1);
+PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_level_isolation) {
+    MultiLevelConcurrentQueue<int, 4> queue(1);
 
     queue.enqueue(100, 0, 0);
     queue.enqueue(200, 1, 0);
@@ -84,8 +84,8 @@ PARALLEL_TEST(WorkStealingQueueTest, test_level_isolation) {
 
 // test_implicit_producer:
 // Enqueue without worker_id (implicit producer path), dequeue successfully.
-PARALLEL_TEST(WorkStealingQueueTest, test_implicit_producer) {
-    WorkStealingQueue<int, 2> queue(1);
+PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_implicit_producer) {
+    MultiLevelConcurrentQueue<int, 2> queue(1);
 
     // Use the implicit producer overload (no worker_id).
     queue.enqueue(42, 0);
@@ -101,8 +101,8 @@ PARALLEL_TEST(WorkStealingQueueTest, test_implicit_producer) {
 
 // test_size_and_empty:
 // Verify empty(), size_approx() after enqueue/dequeue.
-PARALLEL_TEST(WorkStealingQueueTest, test_size_and_empty) {
-    WorkStealingQueue<int, 2> queue(2);
+PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_size_and_empty) {
+    MultiLevelConcurrentQueue<int, 2> queue(2);
 
     // Initially empty.
     ASSERT_TRUE(queue.empty(0));
@@ -138,12 +138,12 @@ PARALLEL_TEST(WorkStealingQueueTest, test_size_and_empty) {
 
 // test_multithread_correctness:
 // 8 workers x 10000 items, verify all items are accounted for (count + sum check).
-PARALLEL_TEST(WorkStealingQueueTest, test_multithread_correctness) {
+PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_multithread_correctness) {
     constexpr int kNumWorkers = 8;
     constexpr int kItemsPerWorker = 10000;
     constexpr int kNumLevels = 4;
 
-    WorkStealingQueue<int, kNumLevels> queue(kNumWorkers);
+    MultiLevelConcurrentQueue<int, kNumLevels> queue(kNumWorkers);
 
     // Expected sum: each worker enqueues values [0, kItemsPerWorker).
     // Total sum = kNumWorkers * kItemsPerWorker * (kItemsPerWorker - 1) / 2
@@ -204,8 +204,8 @@ PARALLEL_TEST(WorkStealingQueueTest, test_multithread_correctness) {
 
 // test_move_only_type:
 // Enqueue/dequeue std::unique_ptr<int>.
-PARALLEL_TEST(WorkStealingQueueTest, test_move_only_type) {
-    WorkStealingQueue<std::unique_ptr<int>, 2> queue(1);
+PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_move_only_type) {
+    MultiLevelConcurrentQueue<std::unique_ptr<int>, 2> queue(1);
 
     queue.enqueue(std::make_unique<int>(42), 0, 0);
     queue.enqueue(std::make_unique<int>(99), 1);

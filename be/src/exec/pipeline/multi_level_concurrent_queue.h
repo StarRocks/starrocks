@@ -21,7 +21,7 @@
 
 namespace starrocks::pipeline {
 
-// WorkStealingQueue is a multi-level lock-free queue built on top of
+// MultiLevelConcurrentQueue is a multi-level concurrent queue built on top of
 // moodycamel::ConcurrentQueue. Each level is an independent ConcurrentQueue.
 // Worker threads get pre-allocated ConsumerTokens for reduced dequeue
 // contention; all producers use the implicit producer path.
@@ -31,12 +31,12 @@ namespace starrocks::pipeline {
 // With ConsumerToken, each consumer round-robins across producers,
 // distributing dequeue load evenly.
 template <typename T, int NUM_LEVELS>
-class WorkStealingQueue {
+class MultiLevelConcurrentQueue {
 public:
     using QueueType = moodycamel::ConcurrentQueue<T>;
     using ConsumerToken = typename QueueType::consumer_token_t;
 
-    explicit WorkStealingQueue(int num_workers) : _num_workers(num_workers) {
+    explicit MultiLevelConcurrentQueue(int num_workers) : _num_workers(num_workers) {
         DCHECK(num_workers > 0) << "num_workers must be positive";
 
         // Pre-allocate consumer tokens: _consumer_tokens[worker_id * NUM_LEVELS + level]
@@ -48,13 +48,13 @@ public:
         }
     }
 
-    ~WorkStealingQueue() = default;
+    ~MultiLevelConcurrentQueue() = default;
 
     // Non-copyable, non-movable (tokens hold references to internal queues).
-    WorkStealingQueue(const WorkStealingQueue&) = delete;
-    WorkStealingQueue& operator=(const WorkStealingQueue&) = delete;
-    WorkStealingQueue(WorkStealingQueue&&) = delete;
-    WorkStealingQueue& operator=(WorkStealingQueue&&) = delete;
+    MultiLevelConcurrentQueue(const MultiLevelConcurrentQueue&) = delete;
+    MultiLevelConcurrentQueue& operator=(const MultiLevelConcurrentQueue&) = delete;
+    MultiLevelConcurrentQueue(MultiLevelConcurrentQueue&&) = delete;
+    MultiLevelConcurrentQueue& operator=(MultiLevelConcurrentQueue&&) = delete;
 
     // Enqueue from worker threads. Uses implicit producer path.
     void enqueue(T item, int level, int worker_id) {
