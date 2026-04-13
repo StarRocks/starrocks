@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# StarRocks 4.1 版本
+# StarRocks version 4.1 版本
 
 :::warning
 
@@ -10,7 +10,7 @@ displayed_sidebar: docs
 
 - 将 StarRocks 升级到 v4.1 后，请勿降级到 v4.0.6 以下的任何 v4.0 版本。
 
-  由于 v4.1 中引入的数据布局内部更改（与 Tablet 拆分和分发机制相关），升级到 v4.1 的集群可能会生成与早期版本不完全兼容的元数据和存储结构。因此，v4.1 仅支持降级到 v4.0.6 或更高版本。不支持降级到 v4.0.6 之前的版本。此限制是由于早期版本解释 Tablet 布局和分发元数据的向后兼容性限制所致。
+  由于 v4.1 引入了数据布局的内部变更（与 Tablet 分割和数据分布机制相关），升级至 v4.1 的集群生成的元数据和存储结构可能与早期版本不完全兼容。因此，从 v4.1 降级仅支持降至 v4.0.6 或更高版本。不支持降级至 v4.0.6 之前的版本。此限制源于早期版本在解析 Tablet 布局和分布元数据时的向后兼容性约束。
 
 :::
 
@@ -28,7 +28,7 @@ displayed_sidebar: docs
 
   支持存算分离集群中更大的单 Tablet 数据容量，长期目标是每个 Tablet 100 GB。第一阶段侧重于在单个 Lake Tablet 中实现并行 Compaction 和并行 MemTable 最终化，从而随着 Tablet 大小增长而减少导入和 Compaction 开销。[#66586](https://github.com/StarRocks/starrocks/pull/66586) [#68677](https://github.com/StarRocks/starrocks/pull/68677)
 
-- **快速 Schema 变更 V2**
+- **Fast Schema Evolution V2**
 
   存算分离集群现在支持快速 Schema 变更 V2，可实现秒级 DDL 执行 Schema 操作，并进一步将支持扩展到物化视图。[#65726](https://github.com/StarRocks/starrocks/pull/65726) [#66774](https://github.com/StarRocks/starrocks/pull/66774) [#67915](https://github.com/StarRocks/starrocks/pull/67915)
 
@@ -41,17 +41,11 @@ displayed_sidebar: docs
   缓存命中率指标在审计日志和监控系统中公开，以提高缓存透明度和延迟可预测性。详细的数据缓存指标包括内存和磁盘配额、页面缓存统计信息以及每表命中率。[#63964](https://github.com/StarRocks/starrocks/pull/63964)
 
 - 为 Lake 表添加了段元数据过滤器，可在扫描期间根据排序键范围跳过不相关的段，从而减少范围谓词查询的 I/O。[#68124](https://github.com/StarRocks/starrocks/pull/68124)
-
 - 支持 Lake DeltaWriter 的快速取消，减少共享数据集群中已取消的摄取作业的延迟。[#68877](https://github.com/StarRocks/starrocks/pull/68877)
-
 - 新增支持基于时间间隔的调度，用于自动化集群快照。[#67525](https://github.com/StarRocks/starrocks/pull/67525)
-
 - 支持 MemTable 刷写和合并的管道执行，提高共享数据集群中云原生表的摄取吞吐量。[#67878](https://github.com/StarRocks/starrocks/pull/67878)
-
 - 支持 `dry_run` 模式修复云原生表，允许用户在执行前预览修复操作。[#68494](https://github.com/StarRocks/starrocks/pull/68494)
-
 - 在无共享集群中为发布事务添加了线程池，提高了发布吞吐量。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
-
 - 支持动态修改云原生表的 `datacache.enable` 属性。[#69011](https://github.com/StarRocks/starrocks/pull/69011)
 
 ### 数据湖分析
@@ -85,53 +79,29 @@ displayed_sidebar: docs
   通过 `$properties` 元数据表添加了对查询 Iceberg 表属性的支持。[#68504](https://github.com/StarRocks/starrocks/pull/68504)
 
 - 支持从 Iceberg 表读取文件路径和行位置元数据列。[#67003](https://github.com/StarRocks/starrocks/pull/67003)
-
 - 支持从 Iceberg v3 表读取 `_row_id`，并支持 Iceberg v3 的全局延迟物化。[#62318](https://github.com/StarRocks/starrocks/pull/62318) [#64133](https://github.com/StarRocks/starrocks/pull/64133)
-
 - 支持创建具有自定义属性的 Iceberg 视图，并在 SHOW CREATE VIEW 输出中显示属性。[#65938](https://github.com/StarRocks/starrocks/pull/65938)
-
 - 支持使用特定分支、标签、版本或时间戳查询 Paimon 表。[#63316](https://github.com/StarRocks/starrocks/pull/63316)
-
 - 支持 Paimon 表的复杂类型（ARRAY、MAP、STRUCT）。[#66784](https://github.com/StarRocks/starrocks/pull/66784)
-
 - 支持 Paimon 视图。[#56058](https://github.com/StarRocks/starrocks/pull/56058)
-
 - 支持 Paimon 表的 TRUNCATE 操作。[#67559](https://github.com/StarRocks/starrocks/pull/67559)
-
 - 在创建 Iceberg 表时，支持带括号语法的 Partition Transforms。[#68945](https://github.com/StarRocks/starrocks/pull/68945)
-
 - 支持 Iceberg 表的 ALTER TABLE REPLACE PARTITION COLUMN。[#70508](https://github.com/StarRocks/starrocks/pull/70508)
-
 - 支持基于 Transform Partition 的 Iceberg 全局 shuffle，以改进数据组织。[#70009](https://github.com/StarRocks/starrocks/pull/70009)
-
 - 支持为 Iceberg 表 sink 动态启用全局 shuffle。[#67442](https://github.com/StarRocks/starrocks/pull/67442)
-
 - 为 Iceberg 表 sink 引入了 Commit 队列，以避免并发 Commit 冲突。[#68084](https://github.com/StarRocks/starrocks/pull/68084)
-
 - 为 Iceberg 表 sink 添加了主机级排序，以改进数据组织和读取性能。[#68121](https://github.com/StarRocks/starrocks/pull/68121)
-
 - 默认启用 ETL 执行模式下的额外优化，无需显式配置即可提高 INSERT INTO SELECT、CREATE TABLE AS SELECT 和类似批处理操作的性能。[#66841](https://github.com/StarRocks/starrocks/pull/66841)
-
 - 为 Iceberg 表上的 INSERT 和 DELETE 操作添加了提交审计信息。[#69198](https://github.com/StarRocks/starrocks/pull/69198)
-
 - 支持在 Iceberg REST Catalog 中启用或禁用视图端点操作。[#66083](https://github.com/StarRocks/starrocks/pull/66083)
-
 - 优化了 CachingIcebergCatalog 中的缓存查找效率。[#66388](https://github.com/StarRocks/starrocks/pull/66388)
-
 - 支持对各种 Iceberg catalog 类型执行 EXPLAIN。[#66563](https://github.com/StarRocks/starrocks/pull/66563)
-
 - 支持 AWS Glue Catalog 表中的分区投影。[#67601](https://github.com/StarRocks/starrocks/pull/67601)
-
 - 为 AWS Glue `GetDatabases` API 添加了资源共享类型支持。[#69056](https://github.com/StarRocks/starrocks/pull/69056)
-
 - 支持 Azure ABFS/WASB 路径映射，并带有端点注入（`azblob`/`adls2`）。[#67847](https://github.com/StarRocks/starrocks/pull/67847)
-
 - 为 JDBC 目录添加了数据库元数据缓存，以减少远程 RPC 开销和外部系统故障的影响。[#68256](https://github.com/StarRocks/starrocks/pull/68256)
-
 - 为 JDBC 目录添加了 `schema_resolver` 属性，以支持自定义模式解析。[#68682](https://github.com/StarRocks/starrocks/pull/68682)
-
 - 支持 `information_schema` 中 PostgreSQL 表的列注释。[#70520](https://github.com/StarRocks/starrocks/pull/70520)
-
 - 改进了 Oracle 和 PostgreSQL JDBC 类型映射。[#70315](https://github.com/StarRocks/starrocks/pull/70315) [#70566](https://github.com/StarRocks/starrocks/pull/70566)
 
 ### 查询引擎
@@ -141,17 +111,11 @@ displayed_sidebar: docs
   支持递归公共表表达式 (CTE)，用于分层遍历、图查询和迭代 SQL 计算。[#65932](https://github.com/StarRocks/starrocks/pull/65932)
 
 - 改进了 Skew Join v2 重写，支持基于统计信息的倾斜检测、直方图支持和 NULL 倾斜感知。[#68680](https://github.com/StarRocks/starrocks/pull/68680) [#68886](https://github.com/StarRocks/starrocks/pull/68886)
-
 - 改进了窗口上的 COUNT DISTINCT，并增加了对融合多 DISTINCT 聚合的支持。[#67453](https://github.com/StarRocks/starrocks/pull/67453)
-
-- 支持窗口函数的显式倾斜提示，通过拆分为 UNION 自动优化具有倾斜分区键的窗口函数。[#68739](https://github.com/StarRocks/starrocks/pull/68739) [#67944](https://github.com/StarRocks/starrocks/pull/67944)
-
-- 支持 CTE 的物化提示。[#70802](https://github.com/StarRocks/starrocks/pull/70802)
-
+- 支持窗口函数的显式 Skew hint，通过拆分为 UNION 自动优化具有倾斜分区键的窗口函数。[#68739](https://github.com/StarRocks/starrocks/pull/68739) [#67944](https://github.com/StarRocks/starrocks/pull/67944)
+- 支持 CTE 的物化 Hint。[#70802](https://github.com/StarRocks/starrocks/pull/70802)
 - 默认启用全局延迟物化，通过将列读取推迟到需要时进行，从而提高查询性能。[#70412](https://github.com/StarRocks/starrocks/pull/70412)
-
 - 在 Trino 解析器中支持 INSERT 语句的 EXPLAIN 和 EXPLAIN ANALYZE。[#70174](https://github.com/StarRocks/starrocks/pull/70174)
-
 - 支持 EXPLAIN 以提高查询队列可见性。[#69933](https://github.com/StarRocks/starrocks/pull/69933)
 
 ### 函数和 SQL 语法
@@ -223,9 +187,9 @@ displayed_sidebar: docs
 
 ### 错误修复
 
-已修复以下问题：
+修复了以下问题：
 
-- 通过跳过范围分布 tablet 的数据文件删除，修复了 tablet 分裂后的数据丢失问题。[#71135](https://github.com/StarRocks/starrocks/pull/71135)
+- 通过跳过范围分布 Tablet 的数据文件删除，修复了 Tablet 分裂后的数据丢失问题。[#71135](https://github.com/StarRocks/starrocks/pull/71135)
 - 修复了 `DefaultValueColumnIterator` 中复杂类型的内存泄漏问题。[#71142](https://github.com/StarRocks/starrocks/pull/71142)
 - 修复了由 `shared_ptr` 在 `BatchUnit` 和 `FetchTaskContext` 之间循环导致的内存泄漏。[#71126](https://github.com/StarRocks/starrocks/pull/71126)
 - 修复了错误路径上并行段/行集加载中的 use-after-free 问题。[#71083](https://github.com/StarRocks/starrocks/pull/71083)
