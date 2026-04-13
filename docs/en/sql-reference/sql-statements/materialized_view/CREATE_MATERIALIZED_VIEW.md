@@ -357,7 +357,6 @@ Properties of the asynchronous materialized view. You can modify the properties 
 - `unique_constraints` and `foreign_key_constraints`: The Unique Key constraints and Foreign Key constraints when you create an asynchronous materialized view for query rewrite in the View Delta Join scenario. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md) for further information. This property is supported from v3.0.
 - `excluded_refresh_tables`：The base tables listed in this property will not trigger data refresh to the materialized view when their data changes. This property is usually used together with the `excluded_trigger_tables` property. Format: `[db_name.]table_name`. The default value is an empty string. When the value is an empty string, any data change in all base tables will trigger the corresponding materialized view refresh.
 
-
   > **CAUTION**
   >
   > The Unique Key constraints and Foreign Key constraints are only used for query rewrite. The Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
@@ -404,10 +403,9 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
   See [Example 6](#examples) for detailed instructions on the `force_mv` semantic and `partition_retention_condition`.
 
-- `refresh_mode`: Controls how a materialized view is refreshed. Introduced in StarRocks v4.1. Valid values:
+- `refresh_mode`: Controls how a materialized view is refreshed. Introduced in StarRocks v4.1, and only supported for Iceberg append-only tables. Valid values:
 
   - `PCT`: (Default) For partitioned materialized views, only the affected partition is refreshed when there is a data change, ensuring result consistency for that partition. For non-partitioned materialized views, any data change in the base table triggers a full refresh of the materialized view.
-  - `AUTO`: Attempts to use incremental refresh whenever possible. If the materialized view's query definition does not support incremental refresh, it will automatically fall back to `PCT` mode for that operation. After a PCT refresh, future refreshes may switch back to incremental refresh if conditions allow.
   - `INCREMENTAL`: Ensures that only incremental refreshes are performed. If the materialized view does not support incremental refresh based on its definition or encounters non-incremental data, creation or refresh will fail.
   - `FULL`: Forces a full refresh of all data every time, regardless of whether the materialized view supports incremental or partition-level refresh.
 
@@ -464,22 +462,18 @@ See [Asynchronous materialized view -  Rewrite queries with the asynchronous mat
     - **String**: STRING, UUID, FIXED(L), BINARY
     - **Semi-structured**: LIST
 
-## Incremental Materialized View
+### Incremental Materialized View
 
 StarRocks v4.1 introduced the `refresh_mode` parameter to control the refresh behavior of materialized views. You can specify `refresh_mode` when creating each materialized view. If `refresh_mode` is not set during materialized view creation, the system uses the default value `PCT`, governed by the `default_mv_refresh_mode` parameter (Default: `pct`). Please note the following usage guidance:
 
 - There are restrictions when adjusting `refresh_mode`:
-  - You cannot change legacy materialized views (for example, those of type `PCT`) to use `AUTO` or `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.
-  - When modifying a materialized view from `AUTO` or `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
-- Materialized views with `refresh_mode` set to `INCREMENTAL` or `AUTO` do not support specifying partition refresh:
-  - For `INCREMENTAL` materialized views, an exception is thrown if you attempt a partition refresh.
-  - For `AUTO` materialized views, an exception is thrown if you attempt a partition refresh. Refresh the whole materialized view instead.
+  - You cannot change legacy materialized views (for example, those of type `PCT`) to use `INCREMENTAL` refresh modes. To do so, you must rebuild the materialized view.
+  - When modifying a materialized view from `INCREMENTAL` types, the system will check if incremental refresh is possible. If not, the operation fails.
+- Materialized views with `refresh_mode` set to `INCREMENTAL` do not support specifying partition refresh. An exception is thrown if you attempt a partition refresh.
 
-### Supported Incremental Operators
+#### Supported Incremental Operators
 
-Incremental refresh supports only append-only operations on base tables. If unsupported operations such as `UPDATE`, `MERGE`, or `OVERWRITE` are performed:
-- With `refresh_mode` set to `INCREMENTAL`, the materialized view refresh will fail.
-- With `refresh_mode` set to `AUTO`, the system will automatically fall back to `PCT` mode for the refresh.
+Incremental refresh supports only append-only operations on base tables. If unsupported operations such as `UPDATE`, `MERGE`, or `OVERWRITE` are performed, the refresh of materialized views whose `refresh_mode` is set to `INCREMENTAL` will fail.
 
 The following operators are currently supported for incremental refresh:
 
@@ -498,55 +492,6 @@ While operators listed above generally support incremental refresh, certain oper
 - Incremental computation is supported for aggregation after Join and aggregation after UNION.
 - However, incremental computation is **not** supported when performing Join after aggregation or UNION ALL after aggregation.
 :::
-
-### Examples
-
-```SQL
-CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
-REFRESH DEFERRED MANUAL 
-properties
-(
-    "refresh_mode" = "INCREMENTAL"
-)
-AS SELECT 
-  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
-  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
-  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
-  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
-  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
-  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
-  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
-FROM 
-  iceberg_catalog.iceberg_test_dbt1 
-  JOIN iceberg_catalog.iceberg_test_dbt2 ON t1.dt = t2.dt
-  JOIN iceberg_catalog.iceberg_test_dbt3 ON t1.dt = t3.dt
-  JOIN iceberg_catalog.iceberg_test_dbt4 ON t1.dt = t4.dt
-  JOIN iceberg_catalog.iceberg_test_dbt5 ON t1.dt = t5.dt
- GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
- 
-REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-```
-
-The `refreshMode` field has been added to the `EXTRA_MESSAGE` column in `information_schema.task_runs` to indicate the refresh mode of the `TaskRun`. For more details, see [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md).
-
-```SQL
-mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
-     QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
-    TASK_NAME: mv-78190
-  CREATE_TIME: 2025-10-17 10:44:41
-  FINISH_TIME: 2025-10-17 10:44:44
-        STATE: SUCCESS
-      CATALOG: NULL
-     DATABASE: test_mv_async_db_621c29ff_ab02_11f0_9e41_00163e09349d
-   DEFINITION: insert overwrite `test_mv_case_iceberg_transform_day_44` SELECT `t1`.`id`, `t1`.`v1`, `t1`.`v2`, `t1`.`dt` FROM `iceberg_catalog_621c2b62_ab02_11f0_a703_00163e09349d`.`iceberg_db_621c2bc9_ab02_11f0_885d_00163e09349d`.`t1` WHERE (`t1`.`id` > 1) AND (`t1`.`dt` >= '2025-06-01')
-  EXPIRE_TIME: 2025-10-24 10:44:41
-   ERROR_CODE: 0
-ERROR_MESSAGE: NULL
-     PROGRESS: 100%
-EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
-   PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
-       JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
-```
 
 ## Usage notes
 
@@ -1135,4 +1080,53 @@ select
     count(lo_shipmode) as shipmode_count
 from lineorder 
 group by lo_orderkey, lo_orderdate, lo_custkey;
+```
+
+Example 8: Create an incremental materialized view.
+
+```SQL
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties
+(
+    "refresh_mode" = "INCREMENTAL"
+)
+AS SELECT 
+  t1.dt, t1.col1 as col11, t2.col1 as col21, t3.col1 as col31, t4.col1 as col41, t5.col1 as col51,
+  sum(t1.col2) as col12, sum(t2.col2) as col22, sum(t3.col2) as col32, sum(t4.col2) as col42, sum(t5.col2) as col52,
+  avg(t1.col2) as col13, avg(t2.col2) as col23, avg(t3.col2) as col33, avg(t4.col2) as col43, avg(t5.col2) as col53,
+  min(t1.col2) as col14, min(t2.col2) as col24, min(t3.col2) as col34, min(t4.col2) as col44, min(t5.col2) as col54,
+  max(t1.col2) as col15, max(t2.col2) as col25, max(t3.col2) as col35, max(t4.col2) as col45, max(t5.col2) as col55,
+  count(t1.col2) as col16, count(t2.col2) as col26, count(t3.col2) as col36, count(t4.col2) as col46, count(t5.col2) as col56,
+  approx_count_distinct(t1.col2) as col17, approx_count_distinct(t2.col2) as col27, approx_count_distinct(t3.col2) as col37, approx_count_distinct(t4.col2) as col47, approx_count_distinct(t5.col2) as col57
+FROM 
+  iceberg_catalog.iceberg_test_dbt1 
+  JOIN iceberg_catalog.iceberg_test_dbt2 ON t1.dt = t2.dt
+  JOIN iceberg_catalog.iceberg_test_dbt3 ON t1.dt = t3.dt
+  JOIN iceberg_catalog.iceberg_test_dbt4 ON t1.dt = t4.dt
+  JOIN iceberg_catalog.iceberg_test_dbt5 ON t1.dt = t5.dt
+ GROUP BY t1.dt, t1.col1, t2.col1, t3.col1, t4.col1, t5.col1;
+ 
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+```
+
+The `refreshMode` field has been added to the `EXTRA_MESSAGE` column in `information_schema.task_runs` to indicate the refresh mode of the `TaskRun`. For more details, see [materialized_view_task_run_details](../../../using_starrocks/async_mv/materialized_view_task_run_details.md).
+
+```SQL
+mysql> select * from information_schema.task_runs order by CREATE_TIME desc limit 1\G;
+     QUERY_ID: 0199f00e-2152-70a8-83da-26d6a8321ac6
+    TASK_NAME: mv-78190
+  CREATE_TIME: 2025-10-17 10:44:41
+  FINISH_TIME: 2025-10-17 10:44:44
+        STATE: SUCCESS
+      CATALOG: NULL
+     DATABASE: test_mv_async_db_621c29ff_ab02_11f0_9e41_00163e09349d
+   DEFINITION: insert overwrite `test_mv_case_iceberg_transform_day_44` SELECT `t1`.`id`, `t1`.`v1`, `t1`.`v2`, `t1`.`dt` FROM `iceberg_catalog_621c2b62_ab02_11f0_a703_00163e09349d`.`iceberg_db_621c2bc9_ab02_11f0_885d_00163e09349d`.`t1` WHERE (`t1`.`id` > 1) AND (`t1`.`dt` >= '2025-06-01')
+  EXPIRE_TIME: 2025-10-24 10:44:41
+   ERROR_CODE: 0
+ERROR_MESSAGE: NULL
+     PROGRESS: 100%
+EXTRA_MESSAGE: {"forceRefresh":false,"mvPartitionsToRefresh":["p20250718000000","p20250715000000","p20250721000000","p20250615000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000"],"refBasePartitionsToRefreshMap":{"t1":["p20250718000000","p20250721000000","p20250618000000","p20250524000000","p20250621000000","p20250518000000","p20250715000000","p20250615000000","pNULL","p20250521000000","p20250624000000","p20250724000000","p20250515000000"]},"basePartitionsToRefreshMap":{},"processStartTime":1760669082430,"executeOption":{"priority":80,"taskRunProperties":{"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"},"isMergeRedundant":false,"isManual":true,"isSync":true,"isReplay":false},"planBuilderMessage":{},"refreshMode":"INCREMENTAL"}
+   PROPERTIES: {"FORCE":"false","mvId":"78190","warehouse":"default_warehouse"}
+       JOB_ID: 0199f00e-2152-76b0-987c-76a9a19e77f9
 ```
