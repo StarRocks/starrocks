@@ -926,7 +926,12 @@ unload_data_param ::=
     "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
     "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } ,
-    "target_max_file_size" = "<int>"
+    "target_max_file_size" = "<int>",
+    "csv.column_separator" = "<column_separator>",
+    "csv.row_delimiter" = "<row_delimiter>",
+    "csv.include_header" = { "true" | "false" },
+    "csv.enclose" = "<enclose_character>",
+    "csv.escape" = "<escape_character>"
 ```
 
 | **キー**          | **必須** | **説明**                                              |
@@ -935,6 +940,11 @@ unload_data_param ::=
 | `partition_by`     | いいえ           | データファイルを異なるストレージパスにパーティション分割するために使用される列のリスト。複数の列はカンマ (,) で区切られます。`FILES()` は指定された列のキー/値情報を抽出し、抽出されたキー/値ペアを特徴とするストレージパスの下にデータファイルを保存します。詳細な指示については、例 7 を参照してください。 |
 | `single`           | いいえ           | データを単一のファイルにアンロードするかどうか。 有効な値:<ul><li>`true`: データは単一のデータファイルに保存されます。</li><li>`false` (デフォルト): アンロードされたデータ量が 512 MB を超える場合、データは複数のファイルに保存されます。</li></ul>                  |
 | `target_max_file_size` | いいえ           | バッチでアンロードされる各ファイルの最大サイズのベストエフォート。単位: バイト。デフォルト値: 1073741824 (1 GB)。アンロードするデータのサイズがこの値を超える場合、データは複数のファイルに分割され、各ファイルのサイズはこの値を大幅に超えません。v3.2.7 で導入されました。 |
+| `csv.column_separator` | いいえ       | CSV 形式の出力ファイルで使用される列区切り文字。デフォルト値: `\t`。`format` が `csv` の場合にのみ適用されます。                         |
+| `csv.row_delimiter` | いいえ          | CSV 形式の出力ファイルで使用される行区切り文字。デフォルト値: `\n`。`format` が `csv` の場合にのみ適用されます。                          |
+| `csv.include_header` | いいえ         | CSV 形式の出力ファイルの最初の行に列名を含めるかどうか。有効な値: `true`, `false` (デフォルト)。`format` が `csv` の場合にのみ適用されます。 |
+| `csv.enclose`      | いいえ           | CSV 形式の出力ファイルで各フィールド値を囲む文字。指定されると、すべての非 NULL フィールドがこの文字で囲まれ、フィールド値内に現れる enclose/escape 文字は `csv.escape` 文字でエスケープされます。NULL 値は囲まずに `\N` として出力されます。型: 単一バイト ASCII 文字。複数文字またはマルチバイト (非 ASCII) の値はセマンティックエラーで拒否されます。デフォルト: `NONE` (無効)。`format` が `csv` の場合にのみ適用されます。 |
+| `csv.escape`       | いいえ           | フィールド値内の enclose 文字および escape 文字自身をエスケープするために使用される文字。型: 単一バイト ASCII 文字。複数文字またはマルチバイト (非 ASCII) の値はセマンティックエラーで拒否されます。デフォルト: `NONE`。一般的な組み合わせ:<ul><li>`"csv.enclose"="\""`, `"csv.escape"="\""`: RFC 4180 スタイル (二重引用符)。</li><li>`"csv.enclose"="\""`, `"csv.escape"="\\"`: バックスラッシュエスケープスタイル。</li></ul>**注意**<br />RFC 4180 の二重引用符形式の出力 (`escape` と `enclose` が同じ) を StarRocks に再インポートする場合、読み取り側では `csv.enclose` のみを設定し、`csv.escape` は設定しないでください。StarRocks の CSV reader は ENCLOSE 状態を通じて二重引用符をネイティブに処理します。 |
 
 ## 例
 
