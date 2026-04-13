@@ -27,11 +27,11 @@
 
 namespace starrocks {
 const int RowDescriptor::INVALID_IDX = -1;
-SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
+SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type, std::pmr::memory_resource* mr)
         : _id(id),
           _type(std::move(type)),
           _parent(0),
-          _col_name(std::move(name)),
+          _col_name(name, mr),
           _col_unique_id(-1),
           _slot_idx(0),
           _slot_size(_type.get_slot_size()),
@@ -40,13 +40,13 @@ SlotDescriptor::SlotDescriptor(SlotId id, std::string name, TypeDescriptor type)
           _is_nullable(true),
           _is_virtual(false) {}
 
-SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
+SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc, std::pmr::memory_resource* mr)
         : _id(tdesc.id),
           _type(TypeDescriptor::from_thrift(tdesc.slotType)),
           _parent(tdesc.parent),
-          _col_name(tdesc.colName),
+          _col_name(tdesc.colName, mr),
           _col_unique_id(tdesc.col_unique_id),
-          _col_physical_name(tdesc.col_physical_name),
+          _col_physical_name(tdesc.col_physical_name, mr),
           _slot_idx(tdesc.slotIdx),
           _slot_size(_type.get_slot_size()),
           _is_materialized(tdesc.isMaterialized),
@@ -56,11 +56,11 @@ SlotDescriptor::SlotDescriptor(const TSlotDescriptor& tdesc)
                                : (tdesc.__isset.nullIndicatorBit ? tdesc.nullIndicatorBit != -1 : true)),
           _is_virtual(tdesc.__isset.is_virtual_column ? tdesc.is_virtual_column : false) {}
 
-SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc)
+SlotDescriptor::SlotDescriptor(const PSlotDescriptor& pdesc, std::pmr::memory_resource* mr)
         : _id(pdesc.id()),
           _type(TypeDescriptor::from_protobuf(pdesc.slot_type())),
           _parent(pdesc.parent()),
-          _col_name(pdesc.col_name()),
+          _col_name(pdesc.col_name(), mr),
           _col_unique_id(-1),
           _slot_idx(pdesc.slot_idx()),
           _slot_size(_type.get_slot_size()),
@@ -79,7 +79,7 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
     pslot->set_byte_offset(0);
     pslot->set_null_indicator_byte(0);
     pslot->set_null_indicator_bit(_is_nullable ? 0 : -1);
-    pslot->set_col_name(_col_name);
+    pslot->set_col_name(_col_name.data(), _col_name.size());
     pslot->set_slot_idx(_slot_idx);
     pslot->set_is_materialized(_is_materialized);
     pslot->set_is_nullable(_is_nullable);
@@ -93,8 +93,8 @@ std::string SlotDescriptor::debug_string() const {
     return out.str();
 }
 
-TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc)
-        : _name(tdesc.tableName), _database(tdesc.dbName), _id(tdesc.id) {}
+TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : _name(tdesc.tableName, mr), _database(tdesc.dbName, mr), _id(tdesc.id) {}
 
 std::string TableDescriptor::debug_string() const {
     std::stringstream out;

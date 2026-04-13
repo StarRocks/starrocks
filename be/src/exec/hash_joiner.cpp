@@ -53,6 +53,7 @@ void HashJoinProbeMetrics::prepare(RuntimeProfile* runtime_profile) {
 }
 
 void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
+    this->runtime_profile = runtime_profile;
     copy_right_table_chunk_timer = ADD_TIMER(runtime_profile, "CopyRightTableChunkTime");
     build_ht_timer = ADD_TIMER(runtime_profile, "BuildHashTableTime");
     build_runtime_filter_timer = ADD_TIMER(runtime_profile, "RuntimeFilterBuildTime");
@@ -64,8 +65,6 @@ void HashJoinBuildMetrics::prepare(RuntimeProfile* runtime_profile) {
     partial_runtime_bloom_filter_bytes =
             ADD_COUNTER(runtime_profile, "PartialRuntimeMembershipFilterBytes", TUnit::BYTES);
     partition_nums = ADD_COUNTER(runtime_profile, "PartitionNums", TUnit::UNIT);
-    runtime_profile->add_info_string("HashMapType", "NONE");
-    hash_map_type_info = runtime_profile->get_info_string("HashMapType");
 }
 
 HashJoiner::HashJoiner(const HashJoinerParam& param)
@@ -263,7 +262,7 @@ Status HashJoiner::build_ht(RuntimeState* state) {
         _hash_join_builder->get_build_info(&bucket_size, &avg_keys_per_bucket, &hash_map_type);
         COUNTER_SET(build_metrics().build_buckets_counter, static_cast<int64_t>(bucket_size));
         COUNTER_SET(build_metrics().build_keys_per_bucket, static_cast<int64_t>(100 * avg_keys_per_bucket));
-        *(build_metrics().hash_map_type_info) = std::move(hash_map_type);
+        build_metrics().runtime_profile->add_info_string_if_not_exists("HashMapType", hash_map_type);
     }
 
     return Status::OK();

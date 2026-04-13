@@ -173,6 +173,7 @@ struct HashJoinProbeMetrics {
 };
 
 struct HashJoinBuildMetrics {
+    RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* build_ht_timer = nullptr;
     RuntimeProfile::Counter* copy_right_table_chunk_timer = nullptr;
     RuntimeProfile::Counter* build_runtime_filter_timer = nullptr;
@@ -183,7 +184,6 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
     RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
     RuntimeProfile::Counter* partition_nums = nullptr;
-    std::string* hash_map_type_info = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
