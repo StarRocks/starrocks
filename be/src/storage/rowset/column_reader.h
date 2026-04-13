@@ -260,6 +260,16 @@ private:
     std::unique_ptr<BitmapIndexPB> _bitmap_index_meta;
     std::unique_ptr<BloomFilterIndexPB> _bloom_filter_index_meta;
 
+    // Cached SpaceUsedLong() values recorded at init time.
+    // Used in the destructor to release memory tracking without calling the virtual
+    // SpaceUsedLong() method, which can crash if the protobuf object's heap memory
+    // has been corrupted by an external bug (see POST-1334 / #71283).
+    size_t _cached_segment_zone_map_size = 0;
+    size_t _cached_ordinal_index_meta_size = 0;
+    size_t _cached_zonemap_index_meta_size = 0;
+    size_t _cached_bitmap_index_meta_size = 0;
+    size_t _cached_bloom_filter_index_meta_size = 0;
+
     std::unique_ptr<ZoneMapIndexReader> _zonemap_index;
     std::unique_ptr<OrdinalIndexReader> _ordinal_index;
     std::unique_ptr<BitmapIndexReader> _bitmap_index;
