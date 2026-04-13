@@ -112,12 +112,7 @@ public class MultiJoinNode {
 
         if (joinOperator.getProjection() != null) {
             Projection projection = joinOperator.getProjection();
-            boolean fromTwoChildren = projection.getColumnRefMap().values().stream().anyMatch(v -> {
-                ColumnRefSet useRefs = v.getUsedColumns();
-                return !v.isColumnRef() && useRefs.isIntersect(node.inputAt(0).getOutputColumns())
-                        && useRefs.isIntersect(node.inputAt(1).getOutputColumns());
-            });
-            if (fromTwoChildren) {
+            if (hasUnsafeProjectionForJoinReorder(projection)) {
                 atoms.add(node);
                 return;
             }
@@ -133,5 +128,12 @@ public class MultiJoinNode {
         predicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
         Preconditions.checkState(!Utils.isEqualBinaryPredicate(joinPredicate));
         predicates.addAll(Utils.extractConjuncts(joinPredicate));
+    }
+
+    private static boolean hasUnsafeProjectionForJoinReorder(Projection projection) {
+        if (!projection.getCommonSubOperatorMap().isEmpty() || projection.needReuseLambdaDependentExpr()) {
+            return true;
+        }
+        return projection.getColumnRefMap().values().stream().anyMatch(Utils::hasNonDeterministicFunc);
     }
 }
