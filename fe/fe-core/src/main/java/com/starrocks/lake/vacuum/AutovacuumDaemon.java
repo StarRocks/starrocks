@@ -209,6 +209,21 @@ public class AutovacuumDaemon extends FrontendDaemon {
         boolean enableSharedFileCleanup = fileBundling || rangeDistribution;
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
+
+        // When shared-file cleanup is on, all tablets of the partition are sent to a single
+        // aggregator node. Prefer a node that already owns at least one of these tablets so
+        // that on BE side the batch anchor tablet can be resolved locally via the staros
+        // worker cache (no extra get-shard-info RPC).
+        Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
+        if (enableSharedFileCleanup) {
+            for (Tablet tablet : tablets) {
+                ComputeNode owner = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
+                if (owner != null) {
+                    candidateAggregatorNodes.add(owner);
+                }
+            }
+        }
+
         ComputeNode pickNode = null;
         for (Tablet tablet : tablets) {
             LakeTablet lakeTablet = (LakeTablet) tablet;
@@ -216,7 +231,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             if (enableSharedFileCleanup) {
                 // shared cleanup runs on a single node.
                 if (pickNode == null) {
-                    pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
+                    pickNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
                 }
             } else {
                 pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet.getId());
