@@ -41,17 +41,11 @@ displayed_sidebar: docs
   キャッシュの透明性とレイテンシーの予測可能性を向上させるため、キャッシュヒット率メトリクスが監査ログと監視システムで公開されます。詳細なデータキャッシュメトリクスには、メモリとディスクのクォータ、ページキャッシュ統計、テーブルごとのヒット率が含まれます。[#63964](https://github.com/StarRocks/starrocks/pull/63964)
 
 - Lakeテーブルにセグメントメタデータフィルターを追加し、スキャン中にソートキー範囲に基づいて関連性のないセグメントをスキップすることで、範囲述語クエリのI/Oを削減します。[#68124](https://github.com/StarRocks/starrocks/pull/68124)
-
 - Lake DeltaWriterの高速キャンセルをサポートし、共有データクラスターにおけるキャンセルされた取り込みジョブのレイテンシーを削減します。[#68877](https://github.com/StarRocks/starrocks/pull/68877)
-
 - 自動クラスター・スナップショットの間隔ベースのスケジューリングをサポートしました。[#67525](https://github.com/StarRocks/starrocks/pull/67525)
-
 - MemTableのフラッシュとマージのパイプライン実行をサポートし、共有データクラスターにおけるクラウドネイティブテーブルの取り込みスループットを向上させます。[#67878](https://github.com/StarRocks/starrocks/pull/67878)
-
 - クラウドネイティブテーブルの修復のための`dry_run`モードをサポートし、ユーザーが実行前に修復アクションをプレビューできるようにします。[#68494](https://github.com/StarRocks/starrocks/pull/68494)
-
 - 共有なしクラスターにおけるパブリッシュトランザクション用のスレッドプールを追加し、パブリッシュスループットを向上させました。[#67797](https://github.com/StarRocks/starrocks/pull/67797)
-
 - クラウドネイティブテーブルの`datacache.enable`プロパティの動的な変更をサポートします。[#69011](https://github.com/StarRocks/starrocks/pull/69011)
 
 ### データレイク分析
@@ -85,53 +79,29 @@ displayed_sidebar: docs
   `$properties` メタデータテーブルを介した Iceberg テーブルプロパティのクエリのサポートを追加しました。[#68504](https://github.com/StarRocks/starrocks/pull/68504)
 
 - Iceberg テーブルからのファイルパスと行位置メタデータ列の読み取りをサポートします。[#67003](https://github.com/StarRocks/starrocks/pull/67003)
-
 - Iceberg v3 テーブルからの `_row_id` の読み取りをサポートし、Iceberg v3 のグローバル遅延具現化をサポートします。[#62318](https://github.com/StarRocks/starrocks/pull/62318) [#64133](https://github.com/StarRocks/starrocks/pull/64133)
-
 - カスタムプロパティを持つ Iceberg ビューの作成をサポートし、SHOW CREATE VIEW 出力にプロパティを表示します。[#65938](https://github.com/StarRocks/starrocks/pull/65938)
-
 - 特定のブランチ、タグ、バージョン、またはタイムスタンプを持つ Paimon テーブルのクエリをサポートします。[#63316](https://github.com/StarRocks/starrocks/pull/63316)
-
 - Paimon テーブルの複合型 (ARRAY, MAP, STRUCT) をサポートします。[#66784](https://github.com/StarRocks/starrocks/pull/66784)
-
 - Paimon ビューをサポートします。[#56058](https://github.com/StarRocks/starrocks/pull/56058)
-
 - Paimon テーブルの TRUNCATE をサポートします。[#67559](https://github.com/StarRocks/starrocks/pull/67559)
-
 - Iceberg テーブル作成時の括弧構文によるパーティション変換をサポートします。[#68945](https://github.com/StarRocks/starrocks/pull/68945)
-
 - Iceberg テーブルの ALTER TABLE REPLACE PARTITION COLUMN をサポートします。[#70508](https://github.com/StarRocks/starrocks/pull/70508)
-
 - データ編成を改善するために、Transform Partition に基づく Iceberg グローバルシャッフルをサポートします。[#70009](https://github.com/StarRocks/starrocks/pull/70009)
-
 - Iceberg テーブルシンクのグローバルシャッフルを動的に有効にすることをサポートします。[#67442](https://github.com/StarRocks/starrocks/pull/67442)
-
 - 同時コミットの競合を避けるために、Iceberg テーブルシンクにコミットキューを導入しました。[#68084](https://github.com/StarRocks/starrocks/pull/68084)
-
 - データ編成と読み取りパフォーマンスを向上させるために、Iceberg テーブルシンクにホストレベルのソートを追加しました。[#68121](https://github.com/StarRocks/starrocks/pull/68121)
-
 - ETL 実行モードで追加の最適化をデフォルトで有効にし、明示的な設定なしで INSERT INTO SELECT、CREATE TABLE AS SELECT、および同様のバッチ操作のパフォーマンスを向上させました。[#66841](https://github.com/StarRocks/starrocks/pull/66841)
-
 - Iceberg テーブルでの INSERT および DELETE 操作のコミット監査情報を追加しました。[#69198](https://github.com/StarRocks/starrocks/pull/69198)
-
 - Iceberg REST Catalog でのビューエンドポイント操作の有効化または無効化をサポートします。[#66083](https://github.com/StarRocks/starrocks/pull/66083)
-
 - CachingIcebergCatalog でのキャッシュルックアップ効率を最適化しました。[#66388](https://github.com/StarRocks/starrocks/pull/66388)
-
 - さまざまな Iceberg カタログタイプでの EXPLAIN をサポートします。[#66563](https://github.com/StarRocks/starrocks/pull/66563)
-
 - AWS Glue Catalog テーブル内のテーブルのパーティションプロジェクションをサポートします。[#67601](https://github.com/StarRocks/starrocks/pull/67601)
-
 - AWS Glue `GetDatabases` API のリソース共有タイプサポートを追加しました。[#69056](https://github.com/StarRocks/starrocks/pull/69056)
-
 - エンドポイントインジェクション (`azblob`/`adls2`) を使用した Azure ABFS/WASB パスマッピングをサポートします。[#67847](https://github.com/StarRocks/starrocks/pull/67847)
-
 - リモートRPCのオーバーヘッドと外部システム障害の影響を軽減するため、JDBCカタログにデータベースメタデータキャッシュを追加しました。[#68256](https://github.com/StarRocks/starrocks/pull/68256)
-
 - カスタムスキーマ解決をサポートするため、JDBCカタログに `schema_resolver` プロパティを追加しました。[#68682](https://github.com/StarRocks/starrocks/pull/68682)
-
 - `information_schema` のPostgreSQLテーブルの列コメントをサポートします。[#70520](https://github.com/StarRocks/starrocks/pull/70520)
-
 - OracleおよびPostgreSQLのJDBC型マッピングを改善しました。[#70315](https://github.com/StarRocks/starrocks/pull/70315) [#70566](https://github.com/StarRocks/starrocks/pull/70566)
 
 ### クエリエンジン
@@ -141,17 +111,11 @@ displayed_sidebar: docs
   階層トラバーサル、グラフクエリ、反復SQL計算のための再帰的共通テーブル式 (CTE) をサポートします。[#65932](https://github.com/StarRocks/starrocks/pull/65932)
 
 - 統計ベースのスキュー検出、ヒストグラムサポート、NULLスキュー認識により、Skew Join v2のリライトを改善しました。[#68680](https://github.com/StarRocks/starrocks/pull/68680) [#68886](https://github.com/StarRocks/starrocks/pull/68886)
-
 - ウィンドウに対するCOUNT DISTINCTを改善し、結合された複数DISTINCT集計のサポートを追加しました。[#67453](https://github.com/StarRocks/starrocks/pull/67453)
-
 - ウィンドウ関数に対する明示的なスキューヒントをサポートし、スキューしたパーティションキーを持つウィンドウ関数をUNIONに分割することで自動最適化します。[#68739](https://github.com/StarRocks/starrocks/pull/68739) [#67944](https://github.com/StarRocks/starrocks/pull/67944)
-
 - CTEの具現化ヒントをサポートします。[#70802](https://github.com/StarRocks/starrocks/pull/70802)
-
 - グローバル遅延具現化をデフォルトで有効にし、必要な時まで列の読み取りを延期することでクエリパフォーマンスを向上させました。[#70412](https://github.com/StarRocks/starrocks/pull/70412)
-
 - TrinoパーサーにおけるINSERTステートメントのEXPLAINおよびEXPLAIN ANALYZEをサポートします。[#70174](https://github.com/StarRocks/starrocks/pull/70174)
-
 - クエリキューの可視性のためのEXPLAINをサポートします。[#69933](https://github.com/StarRocks/starrocks/pull/69933)
 
 ### 関数とSQL構文
