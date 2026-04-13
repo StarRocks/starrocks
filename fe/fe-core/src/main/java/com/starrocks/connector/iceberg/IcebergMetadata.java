@@ -786,12 +786,20 @@ public class IcebergMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         // fromSnapshotExclusive can be empty, but toSnapshotInclusive must have a valid snapshot ID
-        final long fromSnapshotIdExclusive = fromSnapshotExclusive.getSnapshotId();
+        final Long fromSnapshotIdExclusive = fromSnapshotExclusive.isEmpty() ? null : fromSnapshotExclusive.getSnapshotId();
         final long toSnapshotIdInclusive =
                 toSnapshotInclusive.end().orElseThrow(() -> new StarRocksConnectorException(
                         "toSnapshotInclusive must have a valid snapshot ID"));
         final IcebergTable icebergTable = (IcebergTable) table;
         final org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+
+        if (fromSnapshotIdExclusive != null &&
+                !SnapshotUtil.isParentAncestorOf(nativeTable, toSnapshotIdInclusive, fromSnapshotIdExclusive)) {
+            throw new StarRocksConnectorException(
+                    "Starting snapshot (exclusive) %s is not a parent ancestor of end snapshot %s",
+                    fromSnapshotIdExclusive, toSnapshotIdInclusive);
+        }
+
         long lastSnapshotId = toSnapshotIdInclusive;
 
         final List<TvrTableDeltaTrait> tvrDeltaTraits = Lists.newArrayList();

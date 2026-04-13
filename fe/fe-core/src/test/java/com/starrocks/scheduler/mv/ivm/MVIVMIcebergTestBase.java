@@ -21,6 +21,7 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersion;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import mockit.Mock;
 import mockit.MockUp;
@@ -68,5 +69,16 @@ public class MVIVMIcebergTestBase extends MVIVMTestBase {
                         TvrDeltaStats.EMPTY)
         );
         mockListTableDeltaTraits(deltas);
+    }
+
+    public void mockListTableDeltaTraitsThrows(String message) {
+        new MockUp<MockIcebergMetadata>() {
+            @Mock
+            public List<TvrTableDeltaTrait> listTableDeltaTraits(String dbName, com.starrocks.catalog.Table table,
+                                                                 TvrTableSnapshot fromSnapshotExclusive,
+                                                                 TvrTableSnapshot toSnapshotInclusive) {
+                throw new SemanticException(message);
+            }
+        };
     }
 }
