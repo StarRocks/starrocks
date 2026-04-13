@@ -266,3 +266,13 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/check-pr-changelist.sh
+
+  assign-reviewer:
+    runs-on: [self-hosted, normal]
+    if: >
+      github.event.action == 'opened' &&
+      !startsWith(github.head_ref, 'mergify/')
+    steps:
+      - name: Assign PR Reviewer
+        run: |
+          claude -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}"
