@@ -3465,8 +3465,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         MaterializedView.RefreshMoment refreshMoment = materializedView.getRefreshScheme().getMoment();
 
         if (refreshType.equals(MaterializedViewRefreshType.INCREMENTAL)) {
-            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().startMaintainMV(materializedView);
-            return;
+            throwLegacyIncrementalMaintenanceUnsupported();
         }
 
         if (refreshType != MaterializedViewRefreshType.SYNC) {
@@ -3536,10 +3535,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         MaterializedViewRefreshType refreshType = materializedView.getRefreshScheme().getType();
         LOG.info("Start to execute refresh materialized view task, mv: {}, refreshType: {}, executionOption:{}",
                 materializedView.getName(), refreshType, executeOption);
+        throwLegacyIncrementalMaintenanceUnsupported(materializedView);
 
-        if (refreshType.equals(MaterializedViewRefreshType.INCREMENTAL)) {
-            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().onTxnPublish(materializedView);
-        } else if (refreshType != MaterializedViewRefreshType.SYNC) {
+        if (refreshType != MaterializedViewRefreshType.SYNC) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             final String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
             if (!taskManager.containTask(mvTaskName)) {
@@ -3582,6 +3580,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                           int priority, boolean mergeRedundant, boolean isManual, boolean isSync,
                                           StatementBase statement) throws DdlException, MetaNotFoundException {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
+        throwLegacyIncrementalMaintenanceUnsupported(materializedView);
         String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task task = taskManager.getTask(mvTaskName);
@@ -3623,6 +3622,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return refreshMaterializedView(dbName, mvName, force, partitionDesc, priority,
                 Config.enable_mv_refresh_sync_refresh_mergeable, true, refreshMaterializedViewStatement.isSync(),
                 refreshMaterializedViewStatement);
+    }
+
+    private void throwLegacyIncrementalMaintenanceUnsupported(MaterializedView materializedView) throws DdlException {
+        if (materializedView.getRefreshScheme().getType() == MaterializedViewRefreshType.INCREMENTAL) {
+            throwLegacyIncrementalMaintenanceUnsupported();
+        }
+    }
+
+    private void throwLegacyIncrementalMaintenanceUnsupported() throws DdlException {
+        throw new DdlException(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance());
     }
 
     @Override

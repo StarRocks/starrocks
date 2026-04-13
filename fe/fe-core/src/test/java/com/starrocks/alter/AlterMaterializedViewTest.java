@@ -17,7 +17,9 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.scheduler.mv.ivm.MVIVMTestBase;
@@ -285,6 +287,30 @@ public class AlterMaterializedViewTest extends MVTestBase {
             String alterStmt = "alter materialized view test_mv1 active";
             alterMaterializedView(alterStmt, false);
             Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
+        }
+    }
+
+    @Test
+    public void testLegacyIncrementalAlterRejected() throws Exception {
+        String mvName = "legacy_incremental_alter_mv";
+        starRocksAssert.withMaterializedView("create materialized view test." + mvName + "\n" +
+                "distributed by hash(deptno) buckets 3\n" +
+                "refresh manual\n" +
+                "as select deptno, sum(salary) as total_salary from emps group by deptno;");
+        try {
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getLocalMetastore().getTable("test", mvName);
+            mv.getRefreshScheme().setType(MaterializedViewRefreshType.INCREMENTAL);
+
+            AlterMaterializedViewStmt statement =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(
+                            "alter materialized view " + mvName + " inactive", connectContext);
+            AlterJobException exception = Assertions.assertThrows(AlterJobException.class,
+                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(statement));
+            Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                    exception.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("test." + mvName);
         }
     }
 
