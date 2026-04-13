@@ -64,6 +64,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/lookup_request.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"

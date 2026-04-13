@@ -26,6 +26,7 @@
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
 #include "exec/runtime_filter/runtime_filter_helper.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 
