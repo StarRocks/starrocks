@@ -45,6 +45,7 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TBatchGetTableSchemaRequest;
 import com.starrocks.thrift.TBatchGetTableSchemaResponse;
@@ -80,6 +81,8 @@ import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TLoadTxnRollbackRequest;
 import com.starrocks.thrift.TLoadTxnRollbackResult;
 import com.starrocks.thrift.TLoadType;
+import com.starrocks.thrift.TMVMaintenanceTasks;
+import com.starrocks.thrift.TMVReportEpochResponse;
 import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
@@ -178,6 +181,16 @@ public class FrontendServiceImplTest {
         TImmutablePartitionRequest request = new TImmutablePartitionRequest();
         TImmutablePartitionResult partition = impl.updateImmutablePartition(request);
         Assertions.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+    }
+
+    @Test
+    public void testMvReportIsCompatibilityNoOp() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TMVMaintenanceTasks request = new TMVMaintenanceTasks();
+        request.setTask_type(MVTaskType.START_MAINTENANCE);
+
+        TMVReportEpochResponse response = impl.mvReport(request);
+        Assertions.assertNotNull(response);
     }
 
     private static ConnectContext connectContext;

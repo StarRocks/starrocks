@@ -238,7 +238,6 @@ import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.MVLifecycleAutoKeeper;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.history.TableKeeper;
-import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -463,7 +462,6 @@ public class GlobalStateMgr {
     private final RoutineLoadScheduler routineLoadScheduler;
     private final RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
-    private final MVJobExecutor mvMVJobExecutor;
 
     private final SmallFileMgr smallFileMgr;
 
@@ -827,8 +825,6 @@ public class GlobalStateMgr {
         this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadMgr);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadMgr);
-        this.mvMVJobExecutor = new MVJobExecutor();
-
         this.smallFileMgr = new SmallFileMgr();
 
         this.dynamicPartitionScheduler = new DynamicPartitionScheduler("DynamicPartitionScheduler",
@@ -1758,7 +1754,6 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
-        mvMVJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();

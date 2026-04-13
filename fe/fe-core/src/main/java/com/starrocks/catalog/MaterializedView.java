@@ -1658,9 +1658,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return
      */
     public boolean isLoadTriggeredRefresh() {
-        if (this.refreshScheme.getType() == MaterializedViewRefreshType.INCREMENTAL) {
-            return true;
-        }
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedViewRefreshType.ASYNC &&
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
