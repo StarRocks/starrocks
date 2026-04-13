@@ -39,6 +39,7 @@
 #include "common/system/master_info.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/decimal_cast_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/variant_path_reader.h"
@@ -267,8 +268,20 @@ StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn*
             builder.append_null();
             continue;
         }
-        RETURN_IF_ERROR(VariantRowConverter::cast_to_decimal<ResultType>(read.value.as_ref(), target_type.precision,
-                                                                         target_type.scale, builder));
+        const VariantValue& variant_value = read.value.as_ref().get_value();
+        if (variant_value.type() == VariantType::NULL_TYPE) {
+            builder.append_null();
+            continue;
+        }
+        RunTimeCppType<ResultType> decimal_value{};
+        ASSIGN_OR_RETURN(bool overflow, cast_variant_to_decimal<RunTimeCppType<ResultType>>(
+                                                &decimal_value, variant_value, target_type.precision,
+                                                target_type.scale));
+        if (overflow) {
+            builder.append_null();
+        } else {
+            builder.append(decimal_value);
+        }
     }
 
     return builder.build(false);
