@@ -486,7 +486,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals(Arrays.asList(
                 qualifiedRelationName("testDb1", "relation_view_cp"),
                 qualifiedRelationName("testDb1", "testTable1")),
-                auditEvent.relations);
+                auditEvent.queriedRelations);
     }
 
     @Test

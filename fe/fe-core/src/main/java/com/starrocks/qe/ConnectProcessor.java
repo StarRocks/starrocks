@@ -297,7 +297,8 @@ public class ConnectProcessor {
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
-        ctx.getAuditEventBuilder().setRelations(AnalyzerUtils.collectAllTableAndViewRelationNames(parsedStmt));
+        ctx.getAuditEventBuilder().setQueriedRelations(
+                AnalyzerUtils.collectAllTableAndViewRelationNames(parsedStmt, true));
 
         ctx.getAuditEventBuilder().setStmt(formatStmt(origStmt, parsedStmt));
 
