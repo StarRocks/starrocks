@@ -18,6 +18,8 @@
 
 #include "base/string/string_parser.hpp"
 #include "column/column.h" // Column
+#include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/object_pool.h"
 #include "olap_type_infra.h"
 #include "storage/column_predicate.h"
@@ -217,6 +219,7 @@ static ColumnPredicate* new_column_predicate(const TypeInfoPtr& type_info, Colum
 template <LogicalType field_type, class Eval>
 class ColumnPredicateCmpBase : public ColumnPredicate {
     using ValueType = StorageCppType<field_type>;
+    static_assert(!lt_is_string_or_binary<field_type>, "ColumnPredicateCmpBase does not support string/binary types");
 
 public:
     ColumnPredicateCmpBase(PredicateType predicate, const TypeInfoPtr& type_info, ColumnId id, ValueType value)
@@ -225,8 +228,10 @@ public:
     ~ColumnPredicateCmpBase() override = default;
 
     template <typename Op>
-    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
+    Status t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(column->accept(&visitor));
+        const auto* v = reinterpret_cast<const ValueType*>(visitor.result());
         auto* sel = selection;
         auto eval = Eval();
         if (!column->has_null()) {
@@ -240,21 +245,19 @@ public:
                 sel[i] = Op::apply(sel[i], (uint8_t)((!is_null[i]) & eval(v[i], _value)));
             }
         }
+        return Status::OK();
     }
 
     Status evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateAssignOp>(column, selection, from, to);
     }
 
     Status evaluate_and(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateAndOp>(column, selection, from, to);
     }
 
     Status evaluate_or(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const override {
-        t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
-        return Status::OK();
+        return t_evaluate<ColumnPredicateOrOp>(column, selection, from, to);
     }
 
     PredicateType type() const override { return _predicate; }
@@ -589,6 +592,7 @@ public:
 // Base class for binary column predicate
 template <LogicalType field_type, class Eval>
 class BinaryColumnPredicateCmpBase : public ColumnPredicate {
+    static_assert(lt_is_string_or_binary<field_type>, "BinaryColumnPredicateCmpBase only supports string/binary types");
     using ValueType = Slice;
 
 public:
@@ -602,8 +606,8 @@ public:
     ~BinaryColumnPredicateCmpBase() override = default;
 
     template <typename Op>
-    inline void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
-        auto* v = reinterpret_cast<const ValueType*>(column->raw_data());
+    void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+        const auto& v = GetStorageContainer<field_type>::get_data(column);
         auto* sel = selection;
         auto eval = Eval();
         if (!column->has_null()) {

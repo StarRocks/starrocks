@@ -38,7 +38,9 @@
 
 #include <memory>
 
+#include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "column/raw_data_visitor.h"
 #include "storage/chunk_helper.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_decoder.h"
@@ -61,7 +63,7 @@ public:
         size_t n = 1;
         ASSERT_TRUE(decoder->next_batch(&n, column.get()).ok());
         ASSERT_EQ(1, n);
-        *ret = *reinterpret_cast<const StorageCppType<type>*>(column->raw_data());
+        *ret = GetStorageContainer<type>::get_data(column, 0);
     }
 
     template <LogicalType Type, class PageBuilderType, class PageDecoderType, int ReserveHead = 0>
@@ -111,11 +113,10 @@ public:
         status = page_decoder.next_batch(&size, column.get());
         ASSERT_TRUE(status.ok());
 
-        auto* values = reinterpret_cast<const CppType*>(column->raw_data());
-        auto* decoded = (CppType*)values;
+        const auto values = GetStorageContainer<Type>::get_data(column);
         for (uint i = 0; i < size; i++) {
-            if (src[i] != decoded[i]) {
-                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << decoded[i];
+            if (src[i] != values[i]) {
+                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];
             }
         }
 
@@ -126,7 +127,7 @@ public:
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;
             copy_one<Type, PageDecoderType>(&page_decoder, &ret);
-            EXPECT_EQ(decoded[seek_off], ret);
+            EXPECT_EQ(values[seek_off], ret);
         }
     }
 
@@ -145,7 +146,9 @@ public:
         PageBuilderOptions options;
         options.data_page_size = 64 * 1024;
         PageBuilderType page_builder(options);
-        size_t added = page_builder.add(reinterpret_cast<const uint8_t*>(src->raw_data()), count);
+        RawDataVisitor visitor;
+        ASSERT_TRUE(src->accept(&visitor).ok());
+        size_t added = page_builder.add(visitor.result(), count);
         ASSERT_EQ(count, added);
         OwnedSlice s = page_builder.finish()->build();
 

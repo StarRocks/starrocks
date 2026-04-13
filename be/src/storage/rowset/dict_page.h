@@ -125,6 +125,7 @@ private:
 template <LogicalType Type>
 class DictPageDecoder final : public PageDecoder {
     using ValueType = StorageCppType<Type>;
+    static_assert(!lt_is_string_or_binary<Type>, "DictPageDecoder does not support string or binary types");
 
 public:
     DictPageDecoder(Slice data);

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
@@ -271,7 +272,9 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
                         .ok());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
-    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
+    RawDataVisitor visitor;
+    ASSERT_TRUE(writer.all_pks->accept(&visitor).ok());
+    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(visitor.result());
 
     for (int64_t i = 0; i < pks.size(); i++) {
         ASSERT_EQ(pks[i], raw_pk_array[i]);
@@ -326,9 +329,13 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     ASSERT_EQ(2, writer.non_key_columns.size());
     ASSERT_EQ(pks.size(), writer.non_key_columns[0]->size());
     ASSERT_EQ(pks.size(), writer.non_key_columns[1]->size());
-    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
-    const auto* raw_k2_array = reinterpret_cast<const int16_t*>(writer.non_key_columns[0]->raw_data());
-    const auto* raw_k3_array = reinterpret_cast<const int32_t*>(writer.non_key_columns[1]->raw_data());
+    RawDataVisitor pk_visitor, k2_visitor, k3_visitor;
+    ASSERT_TRUE(writer.all_pks->accept(&pk_visitor).ok());
+    ASSERT_TRUE(writer.non_key_columns[0]->accept(&k2_visitor).ok());
+    ASSERT_TRUE(writer.non_key_columns[1]->accept(&k3_visitor).ok());
+    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(pk_visitor.result());
+    const auto* raw_k2_array = reinterpret_cast<const int16_t*>(k2_visitor.result());
+    const auto* raw_k3_array = reinterpret_cast<const int32_t*>(k3_visitor.result());
     for (int64_t i = 0; i < pks.size(); i++) {
         ASSERT_EQ(pks[i], raw_pk_array[i]);
         ASSERT_EQ(pks[i] % 100 + 1, raw_k2_array[i]);
@@ -382,7 +389,9 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
                         .ok());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
     ASSERT_EQ(pks.size(), writer.all_pks->size());
-    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
+    RawDataVisitor visitor;
+    ASSERT_TRUE(writer.all_pks->accept(&visitor).ok());
+    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(visitor.result());
     for (int64_t i = 0; i < pks.size(); i++) {
         ASSERT_EQ(pks[i], raw_pk_array[i]);
     }
@@ -436,9 +445,13 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     ASSERT_EQ(2, writer.non_key_columns.size());
     ASSERT_EQ(pks.size(), writer.non_key_columns[0]->size());
     ASSERT_EQ(pks.size(), writer.non_key_columns[1]->size());
-    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(writer.all_pks->raw_data());
-    const auto* raw_k2_array = reinterpret_cast<const int16_t*>(writer.non_key_columns[0]->raw_data());
-    const auto* raw_k3_array = reinterpret_cast<const int32_t*>(writer.non_key_columns[1]->raw_data());
+    RawDataVisitor pk_visitor2, k2_visitor2, k3_visitor2;
+    ASSERT_TRUE(writer.all_pks->accept(&pk_visitor2).ok());
+    ASSERT_TRUE(writer.non_key_columns[0]->accept(&k2_visitor2).ok());
+    ASSERT_TRUE(writer.non_key_columns[1]->accept(&k3_visitor2).ok());
+    const auto* raw_pk_array = reinterpret_cast<const int64_t*>(pk_visitor2.result());
+    const auto* raw_k2_array = reinterpret_cast<const int16_t*>(k2_visitor2.result());
+    const auto* raw_k3_array = reinterpret_cast<const int32_t*>(k3_visitor2.result());
     for (int64_t i = 0; i < pks.size(); i++) {
         ASSERT_EQ(pks[i], raw_pk_array[i]);
         ASSERT_EQ(pks[i] % 100 + 1, raw_k2_array[i]);

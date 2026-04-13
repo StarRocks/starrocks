@@ -20,6 +20,7 @@
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "gen_cpp/AgentService_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
@@ -735,7 +736,9 @@ TEST(TabletRangeHelperTest, test_sst_seek_range_null_as_min_on_non_nullable_pk) 
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            EXPECT_OK(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 

@@ -42,6 +42,7 @@
 #include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "column/datum_convert.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -286,22 +287,22 @@ void ColumnReaderWriterTest::test_read_default_value(string value, void* result)
             ASSERT_OK(iter.next_batch(&rows_read, column.get()));
             Buffer<uint8_t> buffer;
             Buffer<Slice> slices;
-            const uint8_t* raw_data = nullptr;
             if constexpr (is_object_type(type)) {
                 const auto* data_column = ColumnHelper::get_data_column_by_type<type>(column.get());
                 data_column->build_slices(buffer, slices);
-            } else {
-                raw_data = column->raw_data();
-            }
-            for (int j = 0; j < rows_read; ++j) {
-                if (type == TYPE_CHAR) {
-                    ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(raw_data)[j].to_string()) << "j:" << j;
-                } else if (type == TYPE_VARCHAR) {
-                    ASSERT_EQ(value, reinterpret_cast<const Slice*>(raw_data)[j].to_string()) << "j:" << j;
-                } else if (type == TYPE_OBJECT || type == TYPE_HLL) {
+                for (int j = 0; j < rows_read; ++j) {
                     ASSERT_EQ(value, slices[j].to_string());
-                } else {
-                    ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(raw_data)[j]);
+                }
+            } else {
+                const auto values = GetStorageContainer<type>::get_data(column);
+                for (int j = 0; j < rows_read; ++j) {
+                    if constexpr (type == TYPE_CHAR) {
+                        ASSERT_EQ(*(string*)result, values[j].to_string()) << "j:" << j;
+                    } else if constexpr (type == TYPE_VARCHAR) {
+                        ASSERT_EQ(value, values[j].to_string()) << "j:" << j;
+                    } else {
+                        ASSERT_EQ(*(Type*)result, values[j]);
+                    }
                 }
             }
         }
@@ -317,24 +318,22 @@ void ColumnReaderWriterTest::test_read_default_value(string value, void* result)
 
                 Buffer<uint8_t> buffer;
                 Buffer<Slice> slices;
-                const uint8_t* raw_data = nullptr;
                 if constexpr (is_object_type(type)) {
                     const auto* data_column = ColumnHelper::get_data_column_by_type<type>(column.get());
                     data_column->build_slices(buffer, slices);
-                } else {
-                    raw_data = column->raw_data();
-                }
-
-                for (int j = 0; j < rows_read; ++j) {
-                    if (type == TYPE_CHAR) {
-                        ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(raw_data)[j].to_string())
-                                << "j:" << j;
-                    } else if (type == TYPE_VARCHAR) {
-                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(raw_data)[j].to_string());
-                    } else if (type == TYPE_HLL || type == TYPE_OBJECT) {
+                    for (int j = 0; j < rows_read; ++j) {
                         ASSERT_EQ(value, slices[j].to_string());
-                    } else {
-                        ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(raw_data)[j]);
+                    }
+                } else {
+                    const auto values = GetStorageContainer<type>::get_data(column);
+                    for (int j = 0; j < rows_read; ++j) {
+                        if constexpr (type == TYPE_CHAR) {
+                            ASSERT_EQ(*(string*)result, values[j].to_string()) << "j:" << j;
+                        } else if constexpr (type == TYPE_VARCHAR) {
+                            ASSERT_EQ(value, values[j].to_string());
+                        } else {
+                            ASSERT_EQ(*(Type*)result, values[j]);
+                        }
                     }
                 }
             }
@@ -429,7 +428,6 @@ MutableColumnPtr ColumnReaderWriterTest::numeric_data(int null_ratio) {
         value = value + 1;
     }
     for (size_t i = 0; i < count; i += null_ratio) {
-        ((CppType*)col->raw_data())[i] = 0;
         (void)col->set_null(i);
     }
     return col;
@@ -448,7 +446,6 @@ MutableColumnPtr ColumnReaderWriterTest::low_cardinality_strings(int null_ratio)
     }
     CHECK_EQ(count, col->size());
     for (size_t i = 0; i < count; i += null_ratio) {
-        ((Slice*)col->raw_data())[i] = Slice();
         CHECK(col->set_null(i));
     }
     return col;
@@ -482,7 +479,6 @@ MutableColumnPtr ColumnReaderWriterTest::high_cardinality_strings(int null_ratio
     }
     CHECK_EQ(count, col->size());
     for (size_t i = 0; i < count; i += null_ratio) {
-        ((Slice*)col->raw_data())[i] = Slice();
         CHECK(col->set_null(i));
     }
     return col;
@@ -497,7 +493,6 @@ MutableColumnPtr ColumnReaderWriterTest::date_values(int null_ratio) {
         value = value.add<TimeUnit::DAY>(1);
     }
     for (size_t i = 0; i < count; i += null_ratio) {
-        ((DateValue*)col->raw_data())[i] = DateValue{0};
         CHECK(col->set_null(i));
     }
     return col;
@@ -512,7 +507,6 @@ MutableColumnPtr ColumnReaderWriterTest::datetime_values(int null_ratio) {
         value = value.add<TimeUnit::MICROSECOND>(1);
     }
     for (size_t i = 0; i < count; i += null_ratio) {
-        ((TimestampValue*)col->raw_data())[i] = TimestampValue{0};
         CHECK(col->set_null(i));
     }
     return col;
@@ -656,7 +650,6 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         (void)col->append_numbers(&i, sizeof(int32_t));
     }
     for (size_t i = 0; i < count; i += 2) {
-        ((int32_t*)col->raw_data())[i] = 0;
         (void)col->set_null(i);
     }
 
@@ -673,16 +666,9 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_INT);
         ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
         ASSERT_OK(writer->init());
-
-        ASSERT_TRUE(writer->append(*col).ok());
-
-        ASSERT_TRUE(writer->finish().ok());
-        ASSERT_TRUE(writer->write_data().ok());
-        ASSERT_TRUE(writer->write_ordinal_index().ok());
-        ASSERT_TRUE(writer->write_zone_map().ok());
-
-        // close the file
-        ASSERT_TRUE(wfile->close().ok());
+        ASSERT_OK(writer->append(*col));
+        flush_column_writer(writer.get());
+        ASSERT_OK(wfile->close());
     }
 
     // read and check
@@ -728,26 +714,13 @@ TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
             col->append_strings(col_slices);
             ASSERT_TRUE(writer->append(*col).ok());
 
-            ASSERT_TRUE(writer->finish().ok());
-            ASSERT_TRUE(writer->write_data().ok());
-            ASSERT_TRUE(writer->write_ordinal_index().ok());
-            ASSERT_TRUE(writer->write_zone_map().ok());
+            flush_column_writer(writer.get());
 
             // close the file
             ASSERT_TRUE(wfile->close().ok());
             // read and check result
             auto segment = create_dummy_segment(fname);
-            auto res = ColumnReader::create(&meta, segment.get(), nullptr);
-            ASSERT_TRUE(res.ok());
-            auto reader = std::move(res).value();
-            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
-            ASSIGN_OR_ABORT(_read_file, _fs->new_random_access_file(fname));
-            ColumnIteratorOptions iter_opts;
-            iter_opts.stats = &_stats;
-            iter_opts.read_file = _read_file.get();
-            iter_opts.use_page_cache = true;
-            auto st = iter->init(iter_opts);
-            ASSERT_TRUE(st.ok());
+            auto iter = create_and_init_iterator(meta, segment.get(), fname);
             ASSERT_TRUE(iter->seek_to_first().ok());
             MutableColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
             dst->reserve(TEST_N);

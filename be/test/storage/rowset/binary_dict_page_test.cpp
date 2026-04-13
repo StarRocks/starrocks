@@ -40,6 +40,7 @@
 #include <iostream>
 
 #include "column/column.h"
+#include "column/column_helper.h"
 #include "common/logging.h"
 #include "common/util/debug_util.h"
 #include "gen_cpp/segment.pb.h"
@@ -111,7 +112,7 @@ public:
         auto column = ChunkHelper::column_from_field_type(TYPE_VARCHAR, false);
         size_t size = slices.size();
         status = page_decoder.next_batch(&size, column.get());
-        auto* values = reinterpret_cast<const Slice*>(column->raw_data());
+        auto values = GetStorageContainer<TYPE_VARCHAR>::get_data(column);
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(slices.size(), size);
         ASSERT_EQ("Individual", values[0].to_string());
@@ -130,7 +131,7 @@ public:
         ASSERT_TRUE(status.ok()) << status.to_string();
         // read 3 items
         ASSERT_EQ(3, size);
-        values = reinterpret_cast<const Slice*>(column->raw_data());
+        values = GetStorageContainer<TYPE_VARCHAR>::get_data(column);
         ASSERT_EQ("Nature", values[0].to_string());
         ASSERT_EQ("Captain", values[1].to_string());
         ASSERT_EQ("Xmas", values[2].to_string());
@@ -226,7 +227,7 @@ public:
             ASSERT_TRUE(status.ok());
             status = page_decoder.next_batch(&num, column.get());
             ASSERT_TRUE(status.ok());
-            auto* values = reinterpret_cast<const Slice*>(column->raw_data());
+            const auto values = GetStorageContainer<TYPE_VARCHAR>::get_data(column);
             std::string expect = contents[page_start_ids[slice_index] + pos].to_string();
             std::string actual = values[0].to_string();
             ASSERT_EQ(expect, actual) << "slice index:" << slice_index << ", pos:" << pos

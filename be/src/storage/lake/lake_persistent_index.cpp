@@ -16,6 +16,7 @@
 
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
+#include "column/column_helper.h"
 #include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -928,19 +929,19 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         // so we use max segment id as `op_offset`.
         // TODO : support real order of mix upsert and delete in one transaction.
         const uint32_t del_rebuild_rssid = rowset->id() + get_max_segment_idx(rowset->metadata());
-        if (pkc->is_binary()) {
+        // TODO: Refactor the code to remove tmp slice array.
+        Buffer<Slice> keys;
+        keys.reserve(pkc->size());
+        if (pkc->is_binary() || pkc->is_large_binary()) {
             // When PK table have multi pk columns or one pk column with varchar type,
             // we treat it as binary column.
+            ColumnHelper::build_slices(pkc, keys);
             // 1. Get from pk index, to find out if this delete operation is too old.
-            RETURN_IF_ERROR(get(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), found_values.data()));
+            RETURN_IF_ERROR(get(pkc->size(), keys.data(), found_values.data()));
             generate_filter_fn();
             // 2. insert delete operations to pk index.
-            RETURN_IF_ERROR(replay_erase(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()), filter,
-                                         rowset_version, del_rebuild_rssid));
+            RETURN_IF_ERROR(replay_erase(pkc->size(), keys.data(), filter, rowset_version, del_rebuild_rssid));
         } else {
-            // TODO: Refactor the code to remove tmp slice array.
-            std::vector<Slice> keys;
-            keys.reserve(pkc->size());
             RawBytesVisitor visitor;
             RETURN_IF_ERROR(pkc->accept(&visitor));
             const auto* fkeys = visitor.result();
@@ -1162,13 +1163,13 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                         continue;
                     }
                     TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    if (pkc->is_binary()) {
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(pkc->raw_data()),
-                                               values.data(), rowset_version));
+                    // TODO: Refactor the code to remove tmp slice array.
+                    Buffer<Slice> keys;
+                    keys.reserve(pkc->size());
+                    if (pkc->is_binary() || pkc->is_large_binary()) {
+                        ColumnHelper::build_slices(pkc, keys);
+                        RETURN_IF_ERROR(insert(pkc->size(), keys.data(), values.data(), rowset_version));
                     } else {
-                        // TODO: Refactor the code to remove tmp slice array.
-                        std::vector<Slice> keys;
-                        keys.reserve(pkc->size());
                         RawBytesVisitor visitor;
                         RETURN_IF_ERROR(pkc->accept(&visitor));
                         const auto* fkeys = visitor.result();

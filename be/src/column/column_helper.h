@@ -22,6 +22,7 @@
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "column/runtime_type_traits.h"
+#include "column/storage_column_traits.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/logical_type.h"
@@ -729,6 +730,37 @@ struct GetContainer {
         const auto* data_column = ColumnHelper::get_data_column(column);
         if constexpr (lt_is_string_or_binary<ltype>) {
             using LargeColumnType = RunTimeLargeColumnType<ltype>;
+            if (data_column->is_large_binary()) {
+                return down_cast<const LargeColumnType*>(data_column)->immutable_data();
+            }
+            return down_cast<const ColumnType*>(data_column)->immutable_data();
+        } else {
+            return ColumnHelper::as_raw_column<ColumnType>(data_column)->immutable_data();
+        }
+    }
+    static const auto get_data(const ColumnPtr& column) { return get_data(column.get()); }
+    static const auto get_data(const MutableColumnPtr& column) { return get_data(column.get()); }
+
+    static const auto get_data(const Column* column, size_t row) {
+        const Column* data_column = ColumnHelper::get_data_column(column);
+        size_t index = column->is_constant() ? 0 : row;
+        return get_data(data_column)[index];
+    }
+};
+
+// Like GetContainer but uses StorageColumnType (on-disk storage column types).
+// Differences from GetContainer:
+//   - TYPE_BOOLEAN       -> UInt8Column  (same as GetContainer, BooleanColumn = UInt8Column)
+//   - TYPE_DATE_V1       -> FixedLengthColumn<uint24_t>  (no RunTime equivalent)
+//   - TYPE_DATETIME_V1   -> Int64Column  (no RunTime equivalent)
+//   - string/binary types use StorageLargeColumnType for large binary columns.
+template <LogicalType ltype>
+struct GetStorageContainer {
+    using ColumnType = StorageColumnType<ltype>;
+    static const auto get_data(const Column* column) {
+        const auto* data_column = ColumnHelper::get_data_column(column);
+        if constexpr (lt_is_string_or_binary<ltype>) {
+            using LargeColumnType = StorageLargeColumnType<ltype>;
             if (data_column->is_large_binary()) {
                 return down_cast<const LargeColumnType*>(data_column)->immutable_data();
             }
