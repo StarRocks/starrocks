@@ -27,12 +27,14 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.TabletInfoPB;
@@ -212,13 +214,32 @@ public class AutovacuumDaemon extends FrontendDaemon {
         // aggregator node. Prefer a node that already owns at least one of these tablets so
         // that on BE side the batch anchor tablet can be resolved locally via the staros
         // worker cache (no extra get-shard-info RPC).
+        //
+        // Use the batched getAllNodeIdsByShards API to resolve all tablet owners in a
+        // single FE→StarMgr RPC. Doing a per-tablet lookup here would amplify control-plane
+        // traffic proportional to the partition size and defeat the optimization.
         Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
-        if (enableSharedFileCleanup) {
-            for (Tablet tablet : tablets) {
-                ComputeNode owner = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId());
-                if (owner != null) {
-                    candidateAggregatorNodes.add(owner);
+        if (enableSharedFileCleanup && !tablets.isEmpty()) {
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            List<Long> tabletIds = tablets.stream().map(Tablet::getId).collect(Collectors.toList());
+            try {
+                Map<Long, List<Long>> shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
+                        tabletIds, computeResource.getWorkerGroupId());
+                for (List<Long> nodeIds : shardToNodeIds.values()) {
+                    if (nodeIds == null || nodeIds.isEmpty()) {
+                        continue;
+                    }
+                    // Treat the first replica as the shard owner, matching the semantics
+                    // of getComputeNodeAssignedToTablet / getPrimaryComputeNodeIdByShard.
+                    ComputeNode owner = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getBackendOrComputeNode(nodeIds.get(0));
+                    if (owner != null) {
+                        candidateAggregatorNodes.add(owner);
+                    }
                 }
+            } catch (StarRocksException ignored) {
+                // a missing/unresolvable batch must not block vacuum; we will fall back
+                // to picking from any alive node in the warehouse below.
             }
         }
 
