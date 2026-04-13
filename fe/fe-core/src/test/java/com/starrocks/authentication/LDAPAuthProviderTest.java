@@ -345,4 +345,42 @@ class LDAPAuthProviderTest {
             }
         };
     }
+
+    @Test
+    void testPatternWithoutUserPlaceholderIsRejected() {
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=shared_account,dc=test,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        AuthenticationException ex = Assertions.assertThrows(AuthenticationException.class, () -> {
+            provider.authenticate(authCtx, user, authResponse);
+        });
+        Assertions.assertTrue(ex.getMessage().contains("does not contain ${USER} placeholder"));
+    }
+
+    @Test
+    void testMultiPatternWithOneSegmentMissingPlaceholder() {
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=${USER},ou=A,dc=test,dc=com:uid=shared,dc=test,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        AuthenticationException ex = Assertions.assertThrows(AuthenticationException.class, () -> {
+            provider.authenticate(authCtx, user, authResponse);
+        });
+        Assertions.assertTrue(ex.getMessage().contains("does not contain ${USER} placeholder"));
+    }
 }

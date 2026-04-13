@@ -130,7 +130,17 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     // Patterns are separated by colon ':'.
     protected String authenticateByPattern(String user, String password) throws Exception {
         String safeUser = escapeLdapValue(user);
-        String[] patterns = ldapBindDNPattern.split(":");
+        String[] rawPatterns = ldapBindDNPattern.split(":");
+        // Pre-validate all patterns before attempting any bind
+        String[] patterns = new String[rawPatterns.length];
+        for (int i = 0; i < rawPatterns.length; i++) {
+            patterns[i] = trim(trim(rawPatterns[i].trim(), "\""), "'");
+            if (!patterns[i].contains("${USER}")) {
+                throw new AuthenticationException(
+                        "Invalid bind DN pattern: '" + patterns[i] + "' does not contain ${USER} placeholder. " +
+                        "Each pattern segment must include ${USER} to prevent shared-DN authentication bypass.");
+            }
+        }
         Exception lastException = null;
         for (String pattern : patterns) {
             String dn = pattern.replace("${USER}", safeUser);
