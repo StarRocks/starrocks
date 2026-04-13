@@ -116,9 +116,7 @@ Status BinaryFunctions::from_binary_close(FunctionContext* context, FunctionCont
 }
 
 StatusOr<ColumnPtr> BinaryFunctions::iceberg_truncate_binary(FunctionContext* context, const Columns& columns) {
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const int size = columns[0]->size();
     ColumnViewer<TYPE_VARBINARY> viewer(columns[0]);
