@@ -208,11 +208,6 @@ public class CompactionSchedulerTest {
         final ComputeNode theAggregatorNode = aggregatorNode;
         new MockUp<LakeAggregator>() {
             @Mock
-            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
-                return theAggregatorNode;
-            }
-
-            @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
                                                     java.util.Collection<ComputeNode> candidateNodes) {
                 return theAggregatorNode;
@@ -425,11 +420,6 @@ public class CompactionSchedulerTest {
         final ComputeNode theAggregatorNode = aggregatorNode;
         new MockUp<LakeAggregator>() {
             @Mock
-            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
-                return theAggregatorNode;
-            }
-
-            @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
                                                     java.util.Collection<ComputeNode> candidateNodes) {
                 return theAggregatorNode;
@@ -602,11 +592,6 @@ public class CompactionSchedulerTest {
 
         new MockUp<LakeAggregator>() {
             @Mock
-            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
-                return null;
-            }
-
-            @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
                                                     java.util.Collection<ComputeNode> candidateNodes) {
                 return null;
@@ -728,11 +713,6 @@ public class CompactionSchedulerTest {
 
         final ComputeNode theAggregatorNode = aggregatorNode;
         new MockUp<LakeAggregator>() {
-            @Mock
-            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
-                return theAggregatorNode;
-            }
-
             @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
                                                     java.util.Collection<ComputeNode> candidateNodes) {
