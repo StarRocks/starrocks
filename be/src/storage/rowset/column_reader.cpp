@@ -110,8 +110,7 @@ ColumnReader::~ColumnReader() {
         _zonemap_index_meta.reset(nullptr);
     }
     if (_bitmap_index_meta != nullptr) {
-        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(),
-                                 _cached_bitmap_index_meta_size);
+        MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->bitmap_index_mem_tracker(), _cached_bitmap_index_meta_size);
         _bitmap_index_meta.reset(nullptr);
     }
     if (_bloom_filter_index_meta != nullptr) {
