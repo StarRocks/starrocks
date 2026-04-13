@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
+import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,6 +26,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class StatisticsEstimateUtilsTest {
+    @BeforeAll
+    public static void beforeAll() {
+        UtFrameUtils.createDefaultCtx();
+    }
 
     @Test
     void itShouldMergeMcvsFromBothChildrenForUnion() {
@@ -187,6 +193,114 @@ public class StatisticsEstimateUtilsTest {
         // WHEN
         final var result = StatisticsEstimateUtils.unionColumnStatistic(
                 leftColStats, 10_000, rightColStats, 20_000);
+
+        // THEN
+        assertNull(result.getHistogram());
+    }
+
+    @Test
+    void itShouldPropagateHistogramWhenNoBucketsEvenIfMcvsBelowThreshold() {
+        // GIVEN
+        final var leftHistogram = new Histogram(List.of(), Map.of("1", 1000L));
+        final var leftColStats = ColumnStatistic.builder()
+                .setMinValue(1)
+                .setMaxValue(100)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(50)
+                .setHistogram(leftHistogram)
+                .build();
+
+        final var rightHistogram = new Histogram(List.of(), Map.of("2", 1000L));
+        final var rightColStats = ColumnStatistic.builder()
+                .setMinValue(1)
+                .setMaxValue(200)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(80)
+                .setHistogram(rightHistogram)
+                .build();
+
+        // WHEN
+        final var result = StatisticsEstimateUtils.unionColumnStatistic(
+                leftColStats, 5_000, rightColStats, 5_000);
+
+        // THEN
+        assertNotNull(result.getHistogram());
+        final var mcv = result.getHistogram().getMCV();
+        assertEquals(2, mcv.size());
+        assertEquals(1000L, mcv.get("1"));
+        assertEquals(1000L, mcv.get("2"));
+    }
+
+    @Test
+    void itShouldPropagateHistogramWhenBucketsExistButMcvsAboveThreshold() {
+        // GIVEN
+        final var leftHistogram = new Histogram(
+                List.of(new Bucket(0, 10, 100L, 10L)),
+                Map.of("1", 4000L, "2", 3000L));
+        final var leftColStats = ColumnStatistic.builder()
+                .setMinValue(0)
+                .setMaxValue(100)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(50)
+                .setHistogram(leftHistogram)
+                .build();
+
+        final var rightHistogram = new Histogram(
+                List.of(new Bucket(0, 20, 200L, 20L)),
+                Map.of("1", 6000L, "3", 2000L));
+        final var rightColStats = ColumnStatistic.builder()
+                .setMinValue(0)
+                .setMaxValue(200)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(80)
+                .setHistogram(rightHistogram)
+                .build();
+
+        // WHEN
+        final var result = StatisticsEstimateUtils.unionColumnStatistic(
+                leftColStats, 10_000, rightColStats, 10_000);
+
+        // THEN
+        assertNotNull(result.getHistogram());
+        final var mcv = result.getHistogram().getMCV();
+        assertEquals(3, mcv.size());
+        assertEquals(10000L, mcv.get("1")); // 4000 + 6000
+        assertEquals(3000L, mcv.get("2"));
+        assertEquals(2000L, mcv.get("3"));
+    }
+
+    @Test
+    void itShouldNotPropagateHistogramWhenBucketsExistAndMcvsBelowThreshold() {
+        // GIVEN
+        final var leftHistogram = new Histogram(
+                List.of(new Bucket(0, 10, 100L, 10L)),
+                Map.of("1", 500L));
+        final var leftColStats = ColumnStatistic.builder()
+                .setMinValue(0).setMaxValue(100)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(50)
+                .setHistogram(leftHistogram)
+                .build();
+
+        final var rightHistogram = new Histogram(
+                List.of(new Bucket(0, 20, 200L, 20L)),
+                Map.of("2", 500L));
+        final var rightColStats = ColumnStatistic.builder()
+                .setMinValue(0).setMaxValue(200)
+                .setNullsFraction(0.0)
+                .setAverageRowSize(4)
+                .setDistinctValuesCount(80)
+                .setHistogram(rightHistogram)
+                .build();
+
+        // WHEN
+        final var result = StatisticsEstimateUtils.unionColumnStatistic(
+                leftColStats, 5_000, rightColStats, 5_000);
 
         // THEN
         assertNull(result.getHistogram());
