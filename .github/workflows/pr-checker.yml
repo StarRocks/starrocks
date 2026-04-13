@@ -269,6 +269,7 @@ jobs:
 
   assign-reviewer:
     runs-on: [self-hosted, normal]
+    continue-on-error: true
     if: >
       (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'edited') &&
       !startsWith(github.head_ref, 'mergify/')
