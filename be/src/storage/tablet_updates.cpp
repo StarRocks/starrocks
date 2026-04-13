@@ -1297,6 +1297,9 @@ Status TabletUpdates::primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMulti
 }
 
 Status TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
+    if (config::sleep_in_apply > 0) {
+        sleep(config::sleep_in_apply);
+    }
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet.tablet_id());
     Status st;
     uint32_t rowset_id = version_info.deltas[0];

@@ -1742,4 +1742,6 @@ CONF_mBool(enable_cow_optimization, "true");
 // The diagnose level for cow optimization, 0 means no diagnose, 1 means diagnose when use_count > 1, 2 means diagnose when use_count > 2.
 CONF_Int32(cow_optimization_diagnose_level, "0");
 
+CONF_Int32(sleep_in_apply, "0");
+
 } // namespace starrocks::config
