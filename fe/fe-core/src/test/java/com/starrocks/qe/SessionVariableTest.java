@@ -123,12 +123,23 @@ public class SessionVariableTest {
         // Test default value
         Assertions.assertFalse(sessionVariable.isMVPlanner());
 
-        // Test setter and getter
+        // Deprecated compatibility flag should remain inert.
         sessionVariable.setMVPlanner(true);
-        Assertions.assertTrue(sessionVariable.isMVPlanner());
+        Assertions.assertFalse(sessionVariable.isMVPlanner());
 
         sessionVariable.setMVPlanner(false);
         Assertions.assertFalse(sessionVariable.isMVPlanner());
+    }
+
+    @Test
+    public void testEnableIncrementalRefreshMvIsNoOp() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+        sessionVariable.setEnableIncrementalRefreshMv(true);
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
+        sessionVariable.setEnableIncrementalRefreshMv(false);
+        Assertions.assertFalse(sessionVariable.isEnableIncrementalRefreshMV());
     }
 
     @Test
