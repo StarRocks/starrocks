@@ -34,10 +34,6 @@ public class LakeAggregator {
 
     public LakeAggregator() {}
 
-    public static ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
-        return chooseAggregatorNode(computeResource, null);
-    }
-
     // When file bundling is enabled, the aggregator is responsible for writing the bundled
     // tablet metadata / combined txn log on behalf of the whole batch. On the BE side the
     // file path is derived from "the first tablet id" of the batch, and that path lookup

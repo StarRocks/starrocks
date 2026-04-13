@@ -150,7 +150,7 @@ public class LakeAggregatePublishTest {
 
             when(mockManager.getAliveComputeNodes(any())).thenReturn(null);
             LakeAggregator lakeAggregator = new LakeAggregator();
-            Assertions.assertNotNull(lakeAggregator.chooseAggregatorNode(WarehouseComputeResource.of(10)));
+            Assertions.assertNotNull(lakeAggregator.chooseAggregatorNode(WarehouseComputeResource.of(10), null));
         } finally {
             Field warehouseMgrField = GlobalStateMgr.class.getDeclaredField("warehouseMgr");
             warehouseMgrField.setAccessible(true);

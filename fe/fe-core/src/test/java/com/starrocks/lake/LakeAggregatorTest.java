@@ -132,16 +132,6 @@ public class LakeAggregatorTest {
         Assertions.assertEquals(nodeA.getId(), pickedNull.getId());
     }
 
-    // The old single-argument entry point must keep working (it delegates to the
-    // new overload with a null candidate list).
-    @Test
-    public void testSingleArgDelegates() {
-        when(mockManager.getAliveComputeNodes(any())).thenReturn(Lists.newArrayList(nodeA, nodeB));
-        ComputeNode picked = LakeAggregator.chooseAggregatorNode(WarehouseComputeResource.of(0L));
-        Assertions.assertNotNull(picked);
-        Assertions.assertTrue(picked.getId() == nodeA.getId() || picked.getId() == nodeB.getId());
-    }
-
     // A candidate entry whose id does not match any alive node (e.g. the node has
     // been dropped in the meantime) must not be picked.
     @Test

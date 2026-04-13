@@ -202,14 +202,11 @@ public class CompactionSchedulerTest {
             {
                 systemInfoService.getBackendOrComputeNode(1L);
                 result = node;
-
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseManager;
-
-                LakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
-                result = aggregatorNode;
             }
+        };
 
+        final ComputeNode theAggregatorNode = aggregatorNode;
+        new MockUp<LakeAggregator>() {
             @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
                                                     java.util.Collection<ComputeNode> candidateNodes) {
@@ -415,11 +412,6 @@ public class CompactionSchedulerTest {
         final ComputeNode theAggregatorNode = aggregatorNode;
         new MockUp<LakeAggregator>() {
             @Mock
-            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
-                return theAggregatorNode;
-            }
-
-            @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
                                                     java.util.Collection<ComputeNode> candidateNodes) {
                 return theAggregatorNode;
@@ -582,14 +574,10 @@ public class CompactionSchedulerTest {
                 result = node1;
                 systemInfoService.getBackendOrComputeNode(1002L);
                 result = node2;
-
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseManager;
-
-                lakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
-                result = null;
             }
+        };
 
+        new MockUp<LakeAggregator>() {
             @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
                                                     java.util.Collection<ComputeNode> candidateNodes) {
@@ -707,11 +695,6 @@ public class CompactionSchedulerTest {
 
         final ComputeNode theAggregatorNode = aggregatorNode;
         new MockUp<LakeAggregator>() {
-            @Mock
-            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
-                return theAggregatorNode;
-            }
-
             @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
                                                     java.util.Collection<ComputeNode> candidateNodes) {

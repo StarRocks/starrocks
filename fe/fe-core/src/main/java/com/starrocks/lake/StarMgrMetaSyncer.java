@@ -135,12 +135,37 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
         long pickBackendId = -1;
+
+        // When file bundling is on, all shards are dropped by a single aggregator node.
+        // Pre-collect the per-shard owners as candidates so the picker prefers a node
+        // that already owns at least one of these shards — that way the BE's staros
+        // worker can resolve the root location of the bundle locally without an extra
+        // get-shard-info RPC.
+        Set<ComputeNode> candidateAggregatorNodes = null;
+        if (isFileBundling) {
+            candidateAggregatorNodes = Sets.newHashSet();
+            for (long shardId : shardIds) {
+                try {
+                    long ownerId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId,
+                            computeResource.getWorkerGroupId());
+                    ComputeNode owner = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getBackendOrComputeNode(ownerId);
+                    if (owner != null) {
+                        candidateAggregatorNodes.add(owner);
+                    }
+                } catch (StarRocksException ignored) {
+                    // a missing/unresolvable shard must not block aggregator selection
+                }
+            }
+        }
+
         // group shards by be
         for (long shardId : shardIds) {
             try {
                 if (isFileBundling) {
                     if (pickBackendId == -1) {
-                        ComputeNode cn = LakeAggregator.chooseAggregatorNode(computeResource);
+                        ComputeNode cn = LakeAggregator.chooseAggregatorNode(computeResource,
+                                candidateAggregatorNodes);
                         if (cn == null) {
                             throw new NoAliveBackendException("No available compute node found for the operation");
                         }
