@@ -52,6 +52,8 @@ set(EXEC_FILES
         ./exec/es/es_scroll_parser_test.cpp
         ./exec/paimon/paimon_delete_file_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
+        ./exec/workgroup/lock_free_scan_task_queue_test.cpp
+        ./exec/workgroup/lock_free_work_group_scan_task_queue_test.cpp
         ./exec/workgroup/pipeline_executor_set_test.cpp
         ./exec/workgroup/pipeline_executor_set_manager_test.cpp
         ./exec/workgroup/work_group_manager_test.cpp
@@ -59,6 +61,9 @@ set(EXEC_FILES
         ./exec/pipeline/schedule/observer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/pipeline/multi_level_concurrent_queue_test.cpp
+        ./exec/pipeline/lock_free_driver_queue_test.cpp
+        ./exec/pipeline/lock_free_work_group_driver_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
