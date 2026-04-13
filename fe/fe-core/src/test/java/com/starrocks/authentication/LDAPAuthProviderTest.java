@@ -185,6 +185,24 @@ class LDAPAuthProviderTest {
     }
 
     @Test
+    void testAuthenticateByPatternWithAtSign() throws Exception {
+        // AD-style pattern: ${USER}@domain or uid=${USER}@domain
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "${USER}@abc.com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        provider.authenticate(authCtx, user, authResponse);
+        Assertions.assertEquals("alice@abc.com", authCtx.getDistinguishedName());
+    }
+
+    @Test
     void testPerUserDNTakesPriorityOverPattern() throws Exception {
         String perUserDN = "cn=bob,ou=Special,dc=test,dc=com";
         LDAPAuthProvider provider = new LDAPAuthProvider(
