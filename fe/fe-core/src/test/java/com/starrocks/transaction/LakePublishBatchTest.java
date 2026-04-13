@@ -655,97 +655,10 @@ public class LakePublishBatchTest {
             publishVersionDaemon.runAfterCatalogReady();
         }
     }
-<<<<<<< HEAD
-=======
-
-    @Test
-    public void testBatchPublishShadowIndex() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(db.getFullName(), TABLE_SCHEMA_CHANGE);
-        assertEquals(1, table.getPartitions().size());
-        PhysicalPartition physicalPartition = table.getPartitions().iterator().next().getDefaultPhysicalPartition();
-        List<MaterializedIndex> normalIndices =
-                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
-        assertEquals(1, normalIndices.size());
-        MaterializedIndex normalIndex = normalIndices.get(0);
-        assertEquals(1, normalIndex.getTablets().size());
-        LakeTablet normalTablet = (LakeTablet) normalIndex.getTablets().get(0);
-
-        GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-
-        // txn1 only includes tablets of base index
-        long txn1 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        "txn1" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
-                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        TransactionState txnState1 = globalTransactionMgr.getTransactionState(db.getId(), txn1);
-        txnState1.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(), Lists.newArrayList(normalIndex.getId()));
-        List<TabletCommitInfo> commitInfo1 = commitAllTablets(List.of(normalTablet));
-
-        // do a schema change, which will create a shadow index
-        String alterSql = String.format("alter table %s add index idx (v0) using bitmap", TABLE_SCHEMA_CHANGE);
-        AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
-        List<AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
-        assertEquals(1, alterJobs.size());
-        assertInstanceOf(LakeTableSchemaChangeJob.class, alterJobs.get(0));
-        LakeTableSchemaChangeJob schemaChangeJob = (LakeTableSchemaChangeJob) alterJobs.get(0);
-        Awaitility.await().atMost(60, TimeUnit.SECONDS).until(
-                () -> schemaChangeJob.getJobState() == AlterJobV2.JobState.WAITING_TXN);
-
-        List<MaterializedIndex> shadowIndices =
-                physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.SHADOW);
-        assertEquals(1, shadowIndices.size());
-        MaterializedIndex shadowIndex = shadowIndices.get(0);
-        assertEquals(1, shadowIndex.getTablets().size());
-        LakeTablet shadowTablet = (LakeTablet) shadowIndex.getTablets().get(0);
-
-        // txn2 includes tablets of both base index and shadow index
-        long txn2 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                        "txn2" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
-                        TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        TransactionState txnState2 = globalTransactionMgr.getTransactionState(db.getId(), txn2);
-        txnState2.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
-                Lists.newArrayList(normalIndex.getId(), shadowIndex.getId()));
-        List<TabletCommitInfo> commitInfo2 = commitAllTablets(List.of(normalTablet, shadowTablet));
-
-        // txn3 includes tablets of both base index and shadow index
-        long txn3 = globalTransactionMgr.beginTransaction(db.getId(), Lists.newArrayList(table.getId()),
-                "txn3" + "_" + UUIDUtil.genUUID().toString(), transactionSource,
-                TransactionState.LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
-        TransactionState txnState3 = globalTransactionMgr.getTransactionState(db.getId(), txn3);
-        txnState3.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(),
-                Lists.newArrayList(normalIndex.getId(), shadowIndex.getId()));
-        List<TabletCommitInfo> commitInfo3 = commitAllTablets(List.of(normalTablet, shadowTablet));
-
-        // commit in the order of txn2, tnx1, and txn3
-        VisibleStateWaiter waiter2 = globalTransactionMgr.commitTransaction(db.getId(), txn2, commitInfo2,
-                Lists.newArrayList(), null);
-        VisibleStateWaiter waiter1 = globalTransactionMgr.commitTransaction(db.getId(), txn1, commitInfo1,
-                Lists.newArrayList(), null);
-        VisibleStateWaiter waiter3 = globalTransactionMgr.commitTransaction(db.getId(), txn3, commitInfo3,
-                Lists.newArrayList(), null);
-
-        PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        awaitPublish(publishVersionDaemon, waiter1, waiter2, waiter3);
-
-        ComputeNode shadowTabletNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                .getComputeNodeAssignedToTablet(WarehouseManager.DEFAULT_RESOURCE, shadowTablet.getId());
-        LakeService lakeService = BrpcProxy.getLakeService(shadowTabletNode.getHost(), shadowTabletNode.getBrpcPort());
-        assertInstanceOf(MockedBackend.MockLakeService.class, lakeService);
-        MockedBackend.MockLakeService mockLakeService = (MockedBackend.MockLakeService) lakeService;
-        PublishLogVersionBatchRequest request = mockLakeService.pollPublishLogVersionBatchRequests();
-        assertNotNull(request);
-        assertEquals(List.of(shadowTablet.getId()), request.getTabletIds());
-        assertEquals(2, request.getTxnInfos().size());
-        assertEquals(txn2, request.getTxnInfos().get(0).getTxnId());
-        assertEquals(txn3, request.getTxnInfos().get(1).getTxnId());
-    }
 
     private List<TabletCommitInfo> getPartitionTabletCommitInfos(Partition partition) {
         List<TabletCommitInfo> commitInfos = Lists.newArrayList();
-        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getLatestBaseIndex();
+        MaterializedIndex baseIndex = partition.getDefaultPhysicalPartition().getBaseIndex();
         for (Long tabletId : baseIndex.getTabletIdsInOrder()) {
             for (Long backendId : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds()) {
                 commitInfos.add(new TabletCommitInfo(tabletId, backendId));
@@ -754,10 +667,22 @@ public class LakePublishBatchTest {
         return commitInfos;
     }
 
+    private void awaitPublish(PublishVersionDaemon daemon, VisibleStateWaiter... waiters) {
+        Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
+            daemon.runAfterCatalogReady();
+            for (VisibleStateWaiter waiter : waiters) {
+                if (!waiter.await(500, TimeUnit.MILLISECONDS)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+    }
+
     @Test
     public void testTrimBatchAtVersionGapMidBatch() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
 
         // Pick two partitions: one without gap, one that will have a gap
         List<Partition> allPartitions = Lists.newArrayList(table.getPartitions());
@@ -820,7 +745,7 @@ public class LakePublishBatchTest {
     @Test
     public void testTrimBatchAtVersionGapHeadTxn() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB);
-        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE_AGG_OFF);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), TABLE);
 
         // Pick two partitions
         List<Partition> allPartitions = Lists.newArrayList(table.getPartitions());
@@ -866,15 +791,4 @@ public class LakePublishBatchTest {
         physWithGap.updateVisibleVersion(physWithGap.getVisibleVersion() + 1);
         awaitPublish(daemon, waiter1, waiter2);
     }
-
-    private List<TabletCommitInfo> commitAllTablets(List<LakeTablet> tablets) {
-        List<TabletCommitInfo> commitInfos = Lists.newArrayList();
-        List<Long> backends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
-        for (LakeTablet tablet : tablets) {
-            TabletCommitInfo tabletCommitInfo = new TabletCommitInfo(tablet.getId(), backends.get(0));
-            commitInfos.add(tabletCommitInfo);
-        }
-        return commitInfos;
-    }
->>>>>>> a97925ea2a ([BugFix] Fix batch publish deadlock caused by partition version gap (#71483))
 }
