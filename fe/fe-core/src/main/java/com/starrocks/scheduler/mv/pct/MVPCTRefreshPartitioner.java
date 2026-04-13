@@ -31,6 +31,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.MvTaskRunContext;
@@ -466,7 +467,7 @@ public abstract class MVPCTRefreshPartitioner {
         MVRefreshPartitionSelector mvRefreshPartitionSelector =
                 new MVRefreshPartitionSelector(Config.mv_max_rows_per_refresh, Config.mv_max_bytes_per_refresh,
                         Config.mv_max_partitions_num_per_refresh,
-                        partitionTopology.getExternalRefBaseTableMVPartitionMap());
+                        partitionTopology.getRefBaseTableToCellMap());
         int adaptiveRefreshNumber = 0;
         for (PCellWithName pCellWithName : toRefreshPartitions.getPartitions()) {
             String mvRefreshPartition = pCellWithName.name();
@@ -748,7 +749,7 @@ public abstract class MVPCTRefreshPartitioner {
     protected Map<Table, PCellSortedSet> toBaseTableWithSortedSet(Map<Table, PCellSortedSet> baseToPartitionNames) {
         Map<Table, PCellSortedSet> result = new HashMap<>();
         PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
-        Map<Table, PCellSortedSet> refBaseTableRangePartitionMap =
+        Map<Table, BaseToMVPartitionMapping> refBaseTableRangePartitionMap =
                 partitionTopology == null ? Map.of() : partitionTopology.getRefBaseTableToCellMap();
         for (Map.Entry<Table, PCellSortedSet> entry : baseToPartitionNames.entrySet()) {
             Table baseTable = entry.getKey();

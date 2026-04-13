@@ -26,16 +26,17 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.iceberg.IcebergPartitionKeyResolver;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.PRangeCell;
-import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.type.PrimitiveType;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -63,49 +64,54 @@ public class MVPartitionCellBuilder {
 
     /**
      * Build range cells [lower, upper) for non-JDBC external tables, or (lower, upper] for JDBC tables.
-     * Automatically selects the correct range boundary strategy based on table type.
+     * Resolves partition names to PartitionKeys, collects source name mapping, sorts, and builds cells.
      */
-    public static PCellSortedSet buildRangeCells(Table baseTable, Column baseTablePartitionColumn,
+    public static BaseToMVPartitionMapping buildRangeCells(Table baseTable, Column baseTablePartitionColumn,
                                                  Collection<String> basePartitionNames,
                                                  Expr mvPartitionExpr) throws AnalysisException {
-        PartitionUtil.DateTimeInterval basePartitionInterval =
-                PartitionUtil.getDateTimeInterval(baseTable, baseTablePartitionColumn);
-        return buildRangeCells(
-                baseTable, baseTablePartitionColumn, basePartitionNames, mvPartitionExpr, basePartitionInterval);
-    }
-
-    /**
-     * Overload with explicit interval — used by per-spec interval logic for Iceberg partition evolution.
-     */
-    public static PCellSortedSet buildRangeCells(Table baseTable, Column baseTablePartitionColumn,
-                                                 Collection<String> basePartitionNames,
-                                                 Expr mvPartitionExpr,
-                                                 PartitionUtil.DateTimeInterval basePartitionInterval)
-            throws AnalysisException {
         ExternalPartitionMappingContext mappingContext =
                 ExternalPartitionMappingContext.create(baseTable, baseTablePartitionColumn, mvPartitionExpr);
         ExternalPartitionKeyResolver partitionKeyResolver = getResolver(baseTable);
+        PartitionUtil.DateTimeInterval basePartitionInterval =
+                PartitionUtil.getDateTimeInterval(baseTable, baseTablePartitionColumn);
 
-        LinkedHashMap<String, PartitionKey> mvPartitionKeysByName =
-                resolveAndSort(mappingContext, partitionKeyResolver, basePartitionNames);
-        if (baseTable.isJDBCTable()) {
-            return buildOpenClosedRangeCells(
-                    mvPartitionKeysByName, baseTablePartitionColumn, mvPartitionExpr);
+        // Resolve partition names to PartitionKeys, collect source name mapping, then sort by key value
+        Map<String, PartitionKey> mvPartitionKeysByName = Maps.newHashMap();
+        Map<String, Set<String>> sourceMapping = new HashMap<>();
+        for (String basePartitionName : basePartitionNames) {
+            PartitionKeyResolutionResult resolutionResult =
+                    partitionKeyResolver.resolve(mappingContext, basePartitionName);
+            PartitionKey mvPartitionKey = resolutionResult.getSingleKey();
+            String mvPartitionName = generateMVPartitionName(mvPartitionKey);
+            mvPartitionKeysByName.put(mvPartitionName, mvPartitionKey);
+            sourceMapping.computeIfAbsent(mvPartitionName, k -> new java.util.HashSet<>()).add(basePartitionName);
         }
-        return buildClosedOpenRangeCells(
-                mvPartitionKeysByName, baseTablePartitionColumn, mvPartitionExpr, basePartitionInterval);
+        LinkedHashMap<String, PartitionKey> sortedKeys = mvPartitionKeysByName.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (e1, e2) -> e1, LinkedHashMap::new));
+
+        PCellSortedSet cells;
+        if (baseTable.isJDBCTable()) {
+            cells = buildOpenClosedRangeCells(sortedKeys, baseTablePartitionColumn, mvPartitionExpr);
+        } else {
+            cells = buildClosedOpenRangeCells(sortedKeys, baseTablePartitionColumn,
+                    mvPartitionExpr, basePartitionInterval);
+        }
+        return BaseToMVPartitionMapping.of(cells, sourceMapping);
     }
 
     /**
      * Build list partition cells from external base table partition names.
      */
-    public static PCellSortedSet buildListCells(Table baseTable, List<Column> mvRefBasePartitionColumns,
-                                                Collection<String> basePartitionNames) throws AnalysisException {
+    public static BaseToMVPartitionMapping buildListCells(Table baseTable, List<Column> mvRefBasePartitionColumns,
+                                                          Collection<String> basePartitionNames) throws AnalysisException {
         ExternalPartitionMappingContext mappingContext =
                 ExternalPartitionMappingContext.create(baseTable, mvRefBasePartitionColumns);
         ExternalPartitionKeyResolver partitionKeyResolver = getResolver(baseTable);
 
         PCellSortedSet mvPartitionListMap = PCellSortedSet.of();
+        Map<String, Set<String>> sourceMapping = new HashMap<>();
         for (String basePartitionName : basePartitionNames) {
             PartitionKeyResolutionResult resolutionResult =
                     partitionKeyResolver.resolve(mappingContext, basePartitionName);
@@ -113,34 +119,10 @@ public class MVPartitionCellBuilder {
                 String mvPartitionName = generateMVPartitionName(mvPartitionKey);
                 List<List<String>> mvPartitionItems = generateMVPartitionList(mvPartitionKey);
                 mvPartitionListMap.add(PCellWithName.of(mvPartitionName, new PListCell(mvPartitionItems)));
+                sourceMapping.computeIfAbsent(mvPartitionName, k -> new java.util.HashSet<>()).add(basePartitionName);
             }
         }
-        return mvPartitionListMap;
-    }
-
-    /**
-     * Map external base table partitions to MV partition names.
-     * Multiple external partitions may map to the same MV partition name
-     * (e.g., par_col=0/par_date=2020-01-01 and par_col=1/par_date=2020-01-01 both → p20200101).
-     */
-    public static PartitionNameSetMap buildMVPartitionNameMap(Table baseTable,
-                                                              List<Column> mvRefBasePartitionColumns,
-                                                              List<String> basePartitionNames)
-            throws AnalysisException {
-        ExternalPartitionMappingContext mappingContext =
-                ExternalPartitionMappingContext.create(baseTable, mvRefBasePartitionColumns);
-        ExternalPartitionKeyResolver partitionKeyResolver = getResolver(baseTable);
-
-        PartitionNameSetMap mvPartitionKeySetMap = PartitionNameSetMap.of();
-        for (String basePartitionName : basePartitionNames) {
-            PartitionKeyResolutionResult resolutionResult =
-                    partitionKeyResolver.resolve(mappingContext, basePartitionName);
-            for (PartitionKey mvPartitionKey : resolutionResult.getKeys()) {
-                String mvPartitionName = generateMVPartitionName(mvPartitionKey);
-                mvPartitionKeySetMap.put(mvPartitionName, basePartitionName);
-            }
-        }
-        return mvPartitionKeySetMap;
+        return BaseToMVPartitionMapping.of(mvPartitionListMap, sourceMapping);
     }
 
     /**
@@ -153,11 +135,11 @@ public class MVPartitionCellBuilder {
                                                   Expr mvPartitionExpr) throws AnalysisException {
         if (mvUsesListPartitioning) {
             PCellSortedSet mvPartitionNamesWithList = buildListCells(
-                    baseTable, ImmutableList.of(baseTablePartitionColumn), basePartitionNames);
+                    baseTable, ImmutableList.of(baseTablePartitionColumn), basePartitionNames).cells();
             return mvPartitionNamesWithList.getPartitionNames();
         } else {
             PCellSortedSet mvPartitionNamesWithRange = buildRangeCells(
-                    baseTable, baseTablePartitionColumn, basePartitionNames, mvPartitionExpr);
+                    baseTable, baseTablePartitionColumn, basePartitionNames, mvPartitionExpr).cells();
             return mvPartitionNamesWithRange.getPartitionNames();
         }
     }
@@ -169,10 +151,10 @@ public class MVPartitionCellBuilder {
      * For OLAP tables, reads directly from OlapTable's range partition map.
      * For external tables, resolves partition names via the resolver pipeline.
      */
-    public static PCellSortedSet getPartitionKeyRange(Table table, Column partitionColumn,
+    public static BaseToMVPartitionMapping getPartitionKeyRange(Table table, Column partitionColumn,
                                                        Expr partitionExpr) throws AnalysisException {
         if (table.isNativeTableOrMaterializedView()) {
-            return getOlapRangePartitionMap((OlapTable) table);
+            return BaseToMVPartitionMapping.of(getOlapRangePartitionMap((OlapTable) table));
         }
         return buildRangeCells(table, partitionColumn, getPartitionNames(table), partitionExpr);
     }
@@ -182,10 +164,10 @@ public class MVPartitionCellBuilder {
      * For OLAP tables, reads directly from OlapTable's partition cells.
      * For external tables, resolves partition names via the resolver pipeline.
      */
-    public static PCellSortedSet getPartitionCells(Table table, List<Column> partitionColumns)
+    public static BaseToMVPartitionMapping getPartitionCells(Table table, List<Column> partitionColumns)
             throws AnalysisException {
         if (table.isNativeTableOrMaterializedView()) {
-            return ((OlapTable) table).getPartitionCells(Optional.of(partitionColumns));
+            return BaseToMVPartitionMapping.of(((OlapTable) table).getPartitionCells(Optional.of(partitionColumns)));
         }
         return buildListCells(table, partitionColumns, getPartitionNames(table));
     }
@@ -294,30 +276,6 @@ public class MVPartitionCellBuilder {
         }
 
         return mvPartitionRangeMap;
-    }
-
-    // ========== Internal: resolve + sort ==========
-
-    /**
-     * Resolve all partition names to PartitionKeys via the resolver, then sort by key value.
-     */
-    private static LinkedHashMap<String, PartitionKey> resolveAndSort(
-            ExternalPartitionMappingContext mappingContext,
-            ExternalPartitionKeyResolver partitionKeyResolver,
-            Collection<String> basePartitionNames)
-            throws AnalysisException {
-        Map<String, PartitionKey> mvPartitionKeysByName = Maps.newHashMap();
-        for (String basePartitionName : basePartitionNames) {
-            PartitionKeyResolutionResult resolutionResult =
-                    partitionKeyResolver.resolve(mappingContext, basePartitionName);
-            PartitionKey mvPartitionKey = resolutionResult.getSingleKey();
-            String mvPartitionName = generateMVPartitionName(mvPartitionKey);
-            mvPartitionKeysByName.put(mvPartitionName, mvPartitionKey);
-        }
-        return mvPartitionKeysByName.entrySet().stream()
-                .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
-                        (e1, e2) -> e1, LinkedHashMap::new));
     }
 
     // ========== Internal: helpers ==========

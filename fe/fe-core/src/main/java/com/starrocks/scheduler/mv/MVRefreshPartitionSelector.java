@@ -18,15 +18,14 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.sql.common.PCellSortedSet;
-import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
 
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -40,7 +39,7 @@ public class MVRefreshPartitionSelector {
     private final long maxBytesThreshold;
     private final int maxSelectedPartitions;
 
-    private final Map<Table, PartitionNameSetMap> externalPartitionMap;
+    private final Map<Table, BaseToMVPartitionMapping> externalPartitionMap;
     /**
      * Minimum required ratio of collected partition statistics.
      * If the collected stats are less than this ratio compared to the expected partitions,
@@ -59,7 +58,7 @@ public class MVRefreshPartitionSelector {
     public MVRefreshPartitionSelector(long maxRowsThreshold,
                                       long maxBytesThreshold,
                                       int maxPartitionNum,
-                                      Map<Table, PartitionNameSetMap> externalPartitionMap) {
+                                      Map<Table, BaseToMVPartitionMapping> externalPartitionMap) {
         this.maxRowsThreshold = maxRowsThreshold;
         this.maxBytesThreshold = maxBytesThreshold;
         this.maxSelectedPartitions = maxPartitionNum;
@@ -153,10 +152,11 @@ public class MVRefreshPartitionSelector {
         if (table.isNativeTableOrMaterializedView()) {
             return Collections.singleton(logicalPartitionNames);
         }
-        PartitionNameSetMap mapping = externalPartitionMap.get(table);
-        return Optional.ofNullable(mapping)
-                .map(m -> m.get(logicalPartitionNames))
-                .orElse(Collections.emptySet());
+        BaseToMVPartitionMapping mapping = externalPartitionMap.get(table);
+        if (mapping == null) {
+            return Collections.emptySet();
+        }
+        return mapping.getSourceNames(logicalPartitionNames);
     }
 
     /**

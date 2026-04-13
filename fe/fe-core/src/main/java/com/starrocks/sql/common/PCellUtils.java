@@ -67,7 +67,7 @@ public class PCellUtils {
                 }
                 List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(baseTable);
                 if (partitionInfo.isListPartition()) {
-                    return buildListCells(baseTable, refPartitionColumns, partitionNames);
+                    return buildListCells(baseTable, refPartitionColumns, partitionNames).cells();
                 } else if (partitionInfo.isRangePartition()) {
                     Preconditions.checkArgument(refPartitionColumns.size() == 1,
                             "Range partition column size must be 1");
@@ -76,7 +76,7 @@ public class PCellUtils {
                     Preconditions.checkArgument(partitionExprOpt.isPresent(),
                             "Range partition expr must be present");
                     return buildRangeCells(baseTable, partitionColumn,
-                            partitionNames, partitionExprOpt.get());
+                            partitionNames, partitionExprOpt.get()).cells();
                 } else if (partitionInfo.isUnPartitioned()) {
                     // For non-partitioned MV, any updated partition in the base table triggers a full refresh.
                     // Wrap each updated base-table partition name as a PCellNone so the caller can detect

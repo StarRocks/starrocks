@@ -27,6 +27,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunContext;
@@ -146,13 +147,14 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                 mv.getName(), adds);
 
         // used to get partitions to refresh
+        Map<Table, PCellSortedSet> refBaseTableCells = BaseToMVPartitionMapping.extractCells(result.refBaseTablePartitionMap);
         Map<Table, PCellSetMapping> baseToMvNameRef =
-                differ.generateBaseRefMap(result.refBaseTablePartitionMap, mvPartitionToCells);
+                differ.generateBaseRefMap(refBaseTableCells, mvPartitionToCells);
         Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef =
-                differ.generateMvRefMap(mvPartitionToCells, result.refBaseTablePartitionMap);
+                differ.generateMvRefMap(mvPartitionToCells, refBaseTableCells);
 
         publishTopology(new PCTPartitionTopology(mvPartitionToCells, result.refBaseTablePartitionMap,
-                baseToMvNameRef, mvToBaseNameRef, result.getRefBaseTableMVPartitionMap()));
+                baseToMvNameRef, mvToBaseNameRef));
         return true;
     }
 

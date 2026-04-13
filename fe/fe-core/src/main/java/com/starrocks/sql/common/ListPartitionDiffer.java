@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.MVPartitionCellBuilder;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -317,17 +318,17 @@ public final class ListPartitionDiffer extends PartitionDiffer {
      * Collect base table's partition infos.
      */
     @Override
-    public Map<Table, PCellSortedSet> syncBaseTablePartitionInfos() {
-        Map<Table, PCellSortedSet> refBaseTablePartitionMap = Maps.newHashMap();
+    public Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos() {
+        Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap = Maps.newHashMap();
         Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
         try {
             for (Map.Entry<Table, List<Column>> e : refBaseTablePartitionColumns.entrySet()) {
                 Table refBaseTable = e.getKey();
                 List<Column> refPartitionColumns = e.getValue();
                 // collect base table's partition cells by aligning with mv's partition column order
-                PCellSortedSet basePartitionCells = MVPartitionCellBuilder.getPartitionCells(refBaseTable,
+                BaseToMVPartitionMapping mapping = MVPartitionCellBuilder.getPartitionCells(refBaseTable,
                         refPartitionColumns);
-                refBaseTablePartitionMap.put(refBaseTable, basePartitionCells);
+                refBaseTablePartitionMap.put(refBaseTable, mapping);
             }
         } catch (Exception e) {
             LOG.warn("Materialized view compute partition difference with base table failed.",
@@ -361,7 +362,7 @@ public final class ListPartitionDiffer extends PartitionDiffer {
     @Override
     public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude) {
         // table -> map<partition name -> partition cell>
-        Map<Table, PCellSortedSet> refBaseTablePartitionMap = syncBaseTablePartitionInfos();
+        Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap = syncBaseTablePartitionInfos();
         // merge all base table partition cells
         if (refBaseTablePartitionMap == null) {
             logMVPrepare(mv, "Partitioned mv collect base table infos failed");
@@ -372,27 +373,18 @@ public final class ListPartitionDiffer extends PartitionDiffer {
 
     @Override
     public PartitionDiffResult computePartitionDiff(Range<PartitionKey> rangeToInclude,
-                                                    Map<Table, PCellSortedSet> refBaseTablePartitionMap) {
+                                                    Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap) {
         // generate the reference map between the base table and the mv
         // TODO: prune the partitions based on ttl
         PCellSortedSet mvPartitionNameToListMap = mv.getPartitionCells(Optional.empty());
 
         // collect all base table partition cells
-        PCellSortedSet allBasePartitionItems = collectBasePartitionCells(refBaseTablePartitionMap);
+        Map<Table, PCellSortedSet> refBaseTableCells = BaseToMVPartitionMapping.extractCells(refBaseTablePartitionMap);
+        PCellSortedSet allBasePartitionItems = collectBasePartitionCells(refBaseTableCells);
 
         PartitionDiff diff = ListPartitionDiffer.getListPartitionDiff(allBasePartitionItems, mvPartitionNameToListMap);
 
-        // collect external partition column mapping
-        Map<Table, PartitionNameSetMap> externalPartitionMaps = Maps.newHashMap();
-        if (!queryRewriteParams.isQueryRewrite()) {
-            try {
-                collectExternalPartitionNameMapping(mv.getRefBaseTablePartitionColumns(), externalPartitionMaps);
-            } catch (Exception e) {
-                LOG.warn("Get external partition column mapping failed.", DebugUtil.getStackTrace(e));
-                return null;
-            }
-        }
-        return new PartitionDiffResult(externalPartitionMaps, refBaseTablePartitionMap, mvPartitionNameToListMap, diff);
+        return new PartitionDiffResult(refBaseTablePartitionMap, mvPartitionNameToListMap, diff);
     }
 
     /**
