@@ -211,6 +211,12 @@ public class CompactionSchedulerTest {
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
                 return theAggregatorNode;
             }
+
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return theAggregatorNode;
+            }
         };
 
         new Expectations() {
@@ -422,6 +428,12 @@ public class CompactionSchedulerTest {
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
                 return theAggregatorNode;
             }
+
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return theAggregatorNode;
+            }
         };
 
         new Expectations() {
@@ -593,6 +605,12 @@ public class CompactionSchedulerTest {
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
                 return null;
             }
+
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return null;
+            }
         };
 
         CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
@@ -712,6 +730,12 @@ public class CompactionSchedulerTest {
         new MockUp<LakeAggregator>() {
             @Mock
             public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+                return theAggregatorNode;
+            }
+
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
                 return theAggregatorNode;
             }
         };
