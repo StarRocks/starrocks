@@ -47,7 +47,7 @@ public class AuditEventTest {
                 .setCustomQueryId("customQueryId")
                 .setCustomSessionName("customSessionName")
                 .setCNGroup("test_cngroup")
-                .setRelations(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"))
+                .setQueriedRelations(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"))
                 .addReadLocalCnt(100)
                 .addReadRemoteCnt(100);
 
@@ -79,7 +79,8 @@ public class AuditEventTest {
         Assertions.assertEquals("customQueryId", event.customQueryId);
         Assertions.assertEquals("customSessionName", event.customSessionName);
         Assertions.assertEquals("test_cngroup", event.cnGroup);
-        Assertions.assertEquals(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"), event.relations);
+        Assertions.assertEquals(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"),
+                event.queriedRelations);
         Assertions.assertEquals("50.0%", event.cacheHitRatio);
         Assertions.assertEquals(100, event.writeClientTimeMs);
         Assertions.assertEquals((float) 50, event.getCacheMissRatio());

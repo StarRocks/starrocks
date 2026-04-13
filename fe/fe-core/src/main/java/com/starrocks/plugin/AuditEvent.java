@@ -183,7 +183,7 @@ public class AuditEvent {
     public String preparedStmtId = null;
 
     @AuditField(value = "QueriedRelations", ignore_empty = true)
-    public List<String> relations = Collections.emptyList();
+    public List<String> queriedRelations = Collections.emptyList();
 
     public long readLocalCnt = 0;
     public long readRemoteCnt = 0;
@@ -524,11 +524,11 @@ public class AuditEvent {
             return this;
         }
 
-        public AuditEventBuilder setRelations(List<String> relations) {
-            if (relations == null || relations.isEmpty()) {
-                auditEvent.relations = Collections.emptyList();
+        public AuditEventBuilder setQueriedRelations(List<String> queriedRelations) {
+            if (queriedRelations == null || queriedRelations.isEmpty()) {
+                auditEvent.queriedRelations = Collections.emptyList();
             } else {
-                auditEvent.relations = Collections.unmodifiableList(new ArrayList<>(relations));
+                auditEvent.queriedRelations = Collections.unmodifiableList(new ArrayList<>(queriedRelations));
             }
             return this;
         }
