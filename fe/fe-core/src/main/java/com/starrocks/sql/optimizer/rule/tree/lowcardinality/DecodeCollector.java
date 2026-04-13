@@ -94,7 +94,6 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
@@ -1473,9 +1472,6 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
         @Override
         public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-            if (predicate.getBinaryType() == EQ_FOR_NULL) {
-                return forbidden(visitChildren(predicate, context), predicate);
-            }
             return merge(visitChildren(predicate, context), predicate);
         }
 
