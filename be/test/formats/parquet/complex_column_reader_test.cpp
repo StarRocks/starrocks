@@ -558,9 +558,11 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(tpar
     return ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
 }
 
-static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_reader(
-        tparquet::RowGroup& rg, ColumnReaderOptions& opts, bool stats_on_leaf_chunk = false,
-        bool leaf_value_all_null = false, bool include_leaf_value = true) {
+static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_reader(tparquet::RowGroup& rg,
+                                                                                    ColumnReaderOptions& opts,
+                                                                                    bool stats_on_leaf_chunk = false,
+                                                                                    bool leaf_value_all_null = false,
+                                                                                    bool include_leaf_value = true) {
     ParquetField meta_f;
     meta_f.name = "metadata";
     meta_f.type = ColumnType::SCALAR;

@@ -192,14 +192,14 @@ StatusOr<ColumnPtr> cast_decimal_projection_column(const ColumnPtr& source_colum
 
     auto result = ColumnHelper::create_column(target_type, true);
     MemPool mem_pool;
-    RETURN_IF_ERROR(
-            converter->convert_column(source_type_info.get(), *source_column, target_type_info.get(), result.get(),
-                                      &mem_pool));
+    RETURN_IF_ERROR(converter->convert_column(source_type_info.get(), *source_column, target_type_info.get(),
+                                              result.get(), &mem_pool));
     return result;
 }
 
-StatusOr<ColumnPtr> build_decimal_typed_variant_projection(const VariantColumn* variant_column, const ColumnPtr& variant_src,
-                                                           const VariantPath& path, const TypeDescriptor& target_type) {
+StatusOr<ColumnPtr> build_decimal_typed_variant_projection(const VariantColumn* variant_column,
+                                                           const ColumnPtr& variant_src, const VariantPath& path,
+                                                           const TypeDescriptor& target_type) {
     VariantPathReader reader;
     reader.prepare(variant_column, &path);
     if (!reader.is_typed_exact()) {
@@ -246,8 +246,9 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
 }
 
 template <LogicalType ResultType>
-StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn* variant_column, const ColumnPtr& variant_src,
-                                                            const VariantPath& path, const TypeDescriptor& target_type) {
+StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn* variant_column,
+                                                            const ColumnPtr& variant_src, const VariantPath& path,
+                                                            const TypeDescriptor& target_type) {
     const size_t num_rows = variant_src->size();
 
     ColumnBuilder<ResultType> builder(num_rows, target_type.precision, target_type.scale);
@@ -266,9 +267,8 @@ StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn*
             builder.append_null();
             continue;
         }
-        RETURN_IF_ERROR(
-                VariantRowConverter::cast_to_decimal<ResultType>(read.value.as_ref(), target_type.precision,
-                                                                 target_type.scale, builder));
+        RETURN_IF_ERROR(VariantRowConverter::cast_to_decimal<ResultType>(read.value.as_ref(), target_type.precision,
+                                                                         target_type.scale, builder));
     }
 
     return builder.build(false);
@@ -286,7 +286,8 @@ StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, co
         return exact_typed_result;
     }
     if (target_type.is_decimalv3_type()) {
-        auto decimal_typed_result = build_decimal_typed_variant_projection(variant_column, variant_src, path, target_type);
+        auto decimal_typed_result =
+                build_decimal_typed_variant_projection(variant_column, variant_src, path, target_type);
         if (decimal_typed_result.ok()) {
             return decimal_typed_result;
         }

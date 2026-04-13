@@ -72,8 +72,8 @@ public:
         }
 
         RunTimeCppType<ResultType> decimal_value{};
-        ASSIGN_OR_RETURN(bool overflow, cast_variant_to_decimal<RunTimeCppType<ResultType>>(
-                                                &decimal_value, variant, precision, scale));
+        ASSIGN_OR_RETURN(bool overflow, cast_variant_to_decimal<RunTimeCppType<ResultType>>(&decimal_value, variant,
+                                                                                            precision, scale));
         if (overflow) {
             result.append_null();
         } else {

@@ -3052,24 +3052,24 @@ TEST(GroupReaderBloomFilterTest, DecimalBloomFilterApplicabilityRequiresExactLay
     decimal32_field.physical_type = tparquet::Type::INT32;
     decimal32_field.precision = 5;
     decimal32_field.scale = 2;
-    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(
-            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2), decimal32_field));
-    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(
-            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 6, 2), decimal32_field));
+    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+                                                         decimal32_field));
+    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 6, 2),
+                                                          decimal32_field));
 
     ParquetField decimal64_field;
     decimal64_field.physical_type = tparquet::Type::INT64;
     decimal64_field.precision = 16;
     decimal64_field.scale = 2;
-    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(
-            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 16, 2), decimal64_field));
+    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 16, 2),
+                                                         decimal64_field));
 
     ParquetField decimal128_field;
     decimal128_field.physical_type = tparquet::Type::FIXED_LEN_BYTE_ARRAY;
     decimal128_field.precision = 22;
     decimal128_field.scale = 4;
-    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(
-            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 22, 4), decimal128_field));
+    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 22, 4),
+                                                          decimal128_field));
 }
 
 // ── Hidden variant source active/lazy classification ─────────────────────────
