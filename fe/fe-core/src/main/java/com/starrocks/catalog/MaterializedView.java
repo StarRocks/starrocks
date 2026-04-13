@@ -1366,6 +1366,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (isReloadAsync && hasReloaded()) {
             return;
         }
+        boolean isLegacyIncrementalRefresh = isLegacyIncrementalRefreshType();
         try {
             // set inactive first to avoid inconsistent state during reloading
             this.active = false;
@@ -1373,6 +1374,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.changeReloadState(RELOAD_STATE_ING);
             // reload mv required metadata synchronously
             onReloadImpl();
+            if (isLegacyIncrementalRefresh) {
+                setInactiveAndReason(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance());
+                return;
+            }
             // if desired to be active, check whether you can be active
             checkAndSetActive(isReloadAsync, desiredActive);
         } catch (Throwable e) {
@@ -1385,11 +1390,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 throw e;
             }
         } finally {
-            if (!isReloadAsync || !desiredActive) {
+            if (isLegacyIncrementalRefresh || !isReloadAsync || !desiredActive) {
                 LOG.info("finish reloading mv {}. current active state: {}", getName(), isActive());
                 changeReloadState(RELOAD_STATE_DONE);
             }
         }
+    }
+
+    private boolean isLegacyIncrementalRefreshType() {
+        return refreshScheme != null && refreshScheme.isIncremental();
     }
 
     private void checkAndSetActive(boolean isReloadAsync, boolean desiredActive) {

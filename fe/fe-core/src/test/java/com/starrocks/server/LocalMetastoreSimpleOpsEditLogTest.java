@@ -26,6 +26,8 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -63,6 +65,8 @@ import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.analyzer.AlterDatabaseAnalyzer;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
@@ -205,6 +209,43 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         olapTable.addPartition(partition);
         olapTable.setTableProperty(new com.starrocks.catalog.TableProperty(new HashMap<>()));
         return olapTable;
+    }
+
+    private static MaterializedView createMaterializedView(long tableId, long dbId, String tableName,
+                                                           MaterializedViewRefreshType refreshType) {
+        List<Column> columns = new ArrayList<>();
+        Column col1 = new Column("v1", IntegerType.BIGINT);
+        col1.setIsKey(true);
+        columns.add(col1);
+        columns.add(new Column("v2", IntegerType.BIGINT));
+
+        long partitionId = tableId + 1;
+        long physicalPartitionId = tableId + 2;
+        long indexId = tableId + 3;
+        long tabletId = tableId + 4;
+
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, com.starrocks.catalog.DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+
+        DistributionInfo distributionInfo = new HashDistributionInfo(3, List.of(col1));
+        MaterializedIndex baseIndex = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        LocalTablet tablet = new LocalTablet(tabletId);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, TStorageMedium.HDD);
+        baseIndex.addTablet(tablet, tabletMeta);
+
+        Partition partition = new Partition(partitionId, physicalPartitionId, tableName, baseIndex, distributionInfo);
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setType(refreshType);
+
+        MaterializedView mv = new MaterializedView(tableId, dbId, tableName, columns, KeysType.DUP_KEYS,
+                partitionInfo, distributionInfo, refreshScheme);
+        mv.setIndexMeta(indexId, tableName, columns, 0, 0, (short) 1, TStorageType.COLUMN, KeysType.DUP_KEYS);
+        mv.setBaseIndexMetaId(indexId);
+        mv.addPartition(partition);
+        mv.setViewDefineSql("select v1 from base_table");
+        mv.setTableProperty(new com.starrocks.catalog.TableProperty(new HashMap<>()));
+        return mv;
     }
 
     // Helper method to create range partitioned OlapTable
@@ -533,6 +574,29 @@ public class LocalMetastoreSimpleOpsEditLogTest {
         Database followerRecoveredDb = followerMetastore.getDb(dbName);
         Assertions.assertNotNull(followerRecoveredDb);
         Assertions.assertEquals(db.getId(), followerRecoveredDb.getId());
+    }
+
+    @Test
+    public void testRecoverDbSkipsLegacyIncrementalMvTasks() throws Exception {
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        String dbName = "test_recover_db_legacy_incremental_mv";
+        Database db = new Database(GlobalStateMgr.getCurrentState().getNextId(), dbName);
+        metastore.unprotectCreateDb(db);
+
+        long mvId = GlobalStateMgr.getCurrentState().getNextId();
+        MaterializedView mv = createMaterializedView(mvId, db.getId(), "legacy_mv",
+                MaterializedViewRefreshType.INCREMENTAL);
+        db.registerTableUnlocked(mv);
+
+        metastore.dropDb(UtFrameUtils.createDefaultCtx(), dbName, false);
+        Assertions.assertNull(metastore.getDb(dbName));
+
+        metastore.recoverDatabase(new RecoverDbStmt(dbName));
+        Database recoveredDb = metastore.getDb(dbName);
+        Assertions.assertNotNull(recoveredDb);
+
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Assertions.assertNull(taskManager.getTask(TaskBuilder.getMvTaskName(mvId)));
     }
 
     @Test

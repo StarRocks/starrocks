@@ -30,6 +30,8 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.metablock.SRMetaBlockID;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -270,17 +272,8 @@ public class MaterializedViewMgrEditLogTest {
 
         // 7. Verify follower state
         MVMaintenanceJob followerJob = followerMvMgr.getJob(mvId);
-        Assertions.assertNotNull(followerJob, "Job should be created on follower after replay");
-        Assertions.assertEquals(MV_ID, followerJob.getJobId());
-        Assertions.assertEquals(DB_ID, followerJob.getDbId());
-        Assertions.assertEquals(MV_ID, followerJob.getViewId());
-        Assertions.assertEquals(MVMaintenanceJob.JobState.INIT, followerJob.getState());
-
-        // Verify job properties match original
-        Assertions.assertEquals(masterJob.getJobId(), followerJob.getJobId());
-        Assertions.assertEquals(masterJob.getDbId(), followerJob.getDbId());
-        Assertions.assertEquals(masterJob.getViewId(), followerJob.getViewId());
-        Assertions.assertEquals(masterJob.getState(), followerJob.getState());
+        Assertions.assertNull(followerJob, "Legacy jobs should not be restored on follower replay");
+        Assertions.assertTrue(followerMvMgr.getRunnableJobs().isEmpty());
     }
 
     @Test
@@ -320,5 +313,65 @@ public class MaterializedViewMgrEditLogTest {
         mvMgr.prepareMaintenanceWork(stmt, mv);
 
         Assertions.assertNull(mvMgr.getJob(mvId));
+    }
+
+    @Test
+    public void testReplayEpochDiscarded() throws Exception {
+        MaterializedViewMgr followerMvMgr = new MaterializedViewMgr();
+        MVEpoch epoch = new MVEpoch(new MvId(DB_ID, MV_ID));
+        GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
+
+        MVEpoch replayEpoch = (MVEpoch) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_MV_EPOCH_UPDATE);
+
+        followerMvMgr.replayEpoch(replayEpoch);
+        Assertions.assertNull(followerMvMgr.getJob(new MvId(DB_ID, MV_ID)));
+        Assertions.assertTrue(followerMvMgr.getRunnableJobs().isEmpty());
+    }
+
+    @Test
+    public void testLoadLegacyImageDiscardsJobs() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
+        db.registerTableUnlocked(mv);
+        MVMaintenanceJob job = new MVMaintenanceJob(mv);
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        SRMetaBlockWriter writer = image.getImageWriter().getBlockWriter(SRMetaBlockID.MATERIALIZED_VIEW_MGR, 2);
+        writer.writeInt(1);
+        writer.writeJson(job);
+        writer.close();
+
+        MaterializedViewMgr loadedMgr = new MaterializedViewMgr();
+        loadedMgr.load(image.getMetaBlockReader());
+        Assertions.assertNull(loadedMgr.getJob(new MvId(DB_ID, MV_ID)));
+        Assertions.assertTrue(loadedMgr.getRunnableJobs().isEmpty());
+    }
+
+    @Test
+    public void testSaveDropsLegacyJobsFromImage() throws Exception {
+        new MockUp<IMTCreator>() {
+            @Mock
+            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) {
+                // Do nothing - skip IMT creation for testing
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
+        db.registerTableUnlocked(mv);
+
+        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
+        MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
+        mvMgr.prepareMaintenanceWork(stmt, mv);
+        Assertions.assertNotNull(mvMgr.getJob(new MvId(DB_ID, MV_ID)));
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        mvMgr.save(image.getImageWriter());
+
+        MaterializedViewMgr loadedMgr = new MaterializedViewMgr();
+        loadedMgr.load(image.getMetaBlockReader());
+        Assertions.assertNull(loadedMgr.getJob(new MvId(DB_ID, MV_ID)));
+        Assertions.assertTrue(loadedMgr.getRunnableJobs().isEmpty());
     }
 }

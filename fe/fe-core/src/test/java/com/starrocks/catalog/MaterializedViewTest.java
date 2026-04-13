@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.Config;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -597,6 +598,43 @@ public class MaterializedViewTest extends StarRocksTestBase {
         mv.setTableProperty(new TableProperty(Maps.newConcurrentMap()));
         shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
         Assertions.assertTrue(shouldRefresh);
+    }
+
+    @Test
+    public void testLegacyIncrementalMvReloadStaysInactive() {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), "base_t1");
+
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        HashDistributionInfo distributionInfo = new HashDistributionInfo(3, Lists.newArrayList(columns.get(0)));
+        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
+        refreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
+        MaterializedView mv = new MaterializedView(1000, testDb.getId(), "legacy_incremental_reload_mv", columns,
+                KeysType.AGG_KEYS, partitionInfo, distributionInfo, refreshScheme);
+        mv.setBaseTableInfos(Lists.newArrayList(
+                new BaseTableInfo(testDb.getId(), testDb.getFullName(), baseTable.getName(), baseTable.getId())));
+
+        mv.onReload(false);
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertTrue(mv.hasReloaded());
+        Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                mv.getInactiveReason());
+        Assertions.assertFalse(baseTable.getRelatedMaterializedViews().contains(mv.getMvId()));
+
+        MaterializedView.MvRefreshScheme asyncRefreshScheme = new MaterializedView.MvRefreshScheme();
+        asyncRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
+        MaterializedView asyncReloadMv = new MaterializedView(1001, testDb.getId(),
+                "legacy_incremental_async_reload_mv", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo,
+                asyncRefreshScheme);
+        asyncReloadMv.setBaseTableInfos(Lists.newArrayList(
+                new BaseTableInfo(testDb.getId(), testDb.getFullName(), baseTable.getName(), baseTable.getId())));
+
+        asyncReloadMv.onReload(true);
+        Assertions.assertFalse(asyncReloadMv.isActive());
+        Assertions.assertTrue(asyncReloadMv.hasReloaded());
+        Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                asyncReloadMv.getInactiveReason());
+        Assertions.assertFalse(baseTable.getRelatedMaterializedViews().contains(asyncReloadMv.getMvId()));
     }
 
     @Test

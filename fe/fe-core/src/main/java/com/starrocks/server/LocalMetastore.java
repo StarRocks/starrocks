@@ -640,8 +640,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         List<MaterializedView> materializedViews = db.getMaterializedViews();
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         for (MaterializedView materializedView : materializedViews) {
-            MaterializedViewRefreshType refreshType = materializedView.getRefreshScheme().getType();
-            if (refreshType != MaterializedViewRefreshType.SYNC) {
+            if (TaskBuilder.isTaskSupported(materializedView)) {
                 Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
                 TaskBuilder.updateTaskInfo(task, materializedView);
                 taskManager.createTask(task);

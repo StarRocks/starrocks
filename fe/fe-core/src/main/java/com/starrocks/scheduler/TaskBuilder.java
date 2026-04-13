@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -179,9 +180,20 @@ public class TaskBuilder {
         return task;
     }
 
+    public static boolean isTaskSupported(MaterializedView materializedView) {
+        return isTaskSupported(materializedView.getRefreshScheme().getType());
+    }
+
+    public static boolean isTaskSupported(MaterializedViewRefreshType refreshType) {
+        return refreshType == MaterializedViewRefreshType.MANUAL || refreshType == MaterializedViewRefreshType.ASYNC;
+    }
+
     public static void updateTaskInfo(Task task, RefreshSchemeClause refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
         MaterializedViewRefreshType refreshType = MaterializedViewRefreshType.getType(refreshSchemeDesc);
+        if (refreshType == MaterializedViewRefreshType.INCREMENTAL) {
+            throw new DdlException(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance());
+        }
 
         if (refreshType == MaterializedViewRefreshType.MANUAL) {
             task.setType(Constants.TaskType.MANUAL);
@@ -215,10 +227,12 @@ public class TaskBuilder {
 
     public static void updateTaskInfo(Task task, MaterializedView materializedView)
             throws DdlException {
-
         MaterializedView.AsyncRefreshContext asyncRefreshContext =
                 materializedView.getRefreshScheme().getAsyncRefreshContext();
         MaterializedViewRefreshType refreshType = materializedView.getRefreshScheme().getType();
+        if (!isTaskSupported(refreshType)) {
+            throw new DdlException(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance());
+        }
         // mapping refresh type to task type
         if (refreshType == MaterializedViewRefreshType.MANUAL) {
             task.setType(Constants.TaskType.MANUAL);
@@ -238,6 +252,9 @@ public class TaskBuilder {
 
     public static void rebuildMVTask(String dbName,
                                      MaterializedView materializedView) throws DdlException {
+        if (!isTaskSupported(materializedView)) {
+            return;
+        }
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         Task task;

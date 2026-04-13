@@ -38,7 +38,6 @@ import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVReportEpochTask;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -80,17 +79,12 @@ public class MaterializedViewMgr {
         try {
             String str = Text.readString(input);
             SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
-            if (CollectionUtils.isNotEmpty(data.jobList)) {
-                for (MVMaintenanceJob job : data.jobList) {
-                    // NOTE: job's view is not serialized, cannot use it directly!
-                    MvId mvId = new MvId(job.getDbId(), job.getViewId());
-                    job.restore();
-                    jobMap.put(mvId, job);
-                }
-                LOG.info("reload MV maintenance jobs: {}", data.jobList);
+            int jobCount = data == null || data.jobList == null ? 0 : data.jobList.size();
+            if (jobCount > 0) {
+                LOG.info("Ignore {} legacy MV maintenance jobs while reloading compatibility metadata", jobCount);
                 LOG.debug("reload MV maintenance job details: {}", str);
             }
-            checksum ^= data.jobList.size();
+            checksum ^= jobCount;
         } catch (EOFException ignored) {
         }
         return checksum;
@@ -100,33 +94,14 @@ public class MaterializedViewMgr {
      * Replay from journal
      */
     public void replay(MVMaintenanceJob job) throws IOException {
-        try {
-            job.restore();
-            // NOTE: job's view is not serialized, cannot use it directly!
-            MvId mvId = new MvId(job.getDbId(), job.getViewId());
-            jobMap.put(mvId, job);
-            LOG.info("Replay MV maintenance jobs: {}", job);
-        } catch (Exception e) {
-            LOG.warn("Replay MV maintenance job failed: {}", job);
-            LOG.warn("Failed to replay MV maintenance job", e);
-        }
+        LOG.info("Ignore legacy MV maintenance job during journal replay: {}", job);
     }
 
     /**
      * Replay epoch from journal
      */
     public void replayEpoch(MVEpoch epoch) throws IOException {
-        // TODO: Make it works.
-        try {
-            MvId mvId = new MvId(epoch.getDbId(), epoch.getMvId());
-            Preconditions.checkState(jobMap.containsKey(mvId));
-            MVMaintenanceJob job = jobMap.get(mvId);
-            job.setEpoch(epoch);
-            LOG.info("Replay MV epoch: {}", job);
-        } catch (Exception e) {
-            LOG.warn("Replay MV epoch failed: {}", epoch);
-            LOG.warn("Failed to replay MV epoch", e);
-        }
+        LOG.info("Ignore legacy MV epoch during journal replay: {}", epoch);
     }
 
     /**
@@ -134,10 +109,10 @@ public class MaterializedViewMgr {
      */
     public long store(DataOutputStream output, long checksum) throws IOException {
         SerializedJobs data = new SerializedJobs();
-        data.jobList = new ArrayList<>(jobMap.values());
+        data.jobList = new ArrayList<>();
         String json = GsonUtils.GSON.toJson(data);
         Text.writeString(output, json);
-        checksum ^= data.jobList.size();
+        checksum ^= 0;
         return checksum;
     }
 
@@ -302,22 +277,16 @@ public class MaterializedViewMgr {
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
-        int numJson = 1 + jobMap.size();
+        int numJson = 1;
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.MATERIALIZED_VIEW_MGR, numJson);
-        writer.writeInt(jobMap.size());
-        for (MVMaintenanceJob mvMaintenanceJob : jobMap.values()) {
-            writer.writeJson(mvMaintenanceJob);
-        }
+        writer.writeInt(0);
 
         writer.close();
     }
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         reader.readCollection(MVMaintenanceJob.class, mvMaintenanceJob -> {
-            // NOTE: job's view is not serialized, cannot use it directly!
-            MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
-            mvMaintenanceJob.restore();
-            jobMap.put(mvId, mvMaintenanceJob);
+            LOG.info("Ignore legacy MV maintenance job while loading compatibility metadata: {}", mvMaintenanceJob);
         });
     }
 
