@@ -436,10 +436,6 @@ void split_rowid_pairs(const std::vector<RowidPairs>& rowid_pairs, std::vector<u
                 // skip in this round
                 continue;
             }
-            if (each.first < container->start_rowid) {
-                // skip invalid rowid to prevent unsigned underflow
-                continue;
-            }
             // append to sorted_source_rowids and unsorted_upt_rowids
             // Align rowid
             sorted_source_rowids->push_back(each.first - container->start_rowid);
