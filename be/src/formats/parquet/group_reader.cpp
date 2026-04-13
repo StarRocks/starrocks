@@ -174,6 +174,18 @@ StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* va
     return result;
 }
 
+// Cast a typed-shredded decimal column to a (possibly different) decimal target type.
+//
+// This function is needed because the shredded typed column already holds native decimal
+// storage (int32 / int64 / int128 physical values with precision+scale baked into the
+// TypeDescriptor). That is NOT a variant-binary-encoded value, so VariantRowConverter::cast_to
+// cannot be used: that path decodes variant binary wire format and explicitly excludes
+// decimal targets (see the "VARIANT -> Decimal types: DecimalNonDecimalCast" comment in
+// variant_row_converter.cpp). Instead we go through TypeConverter::convert_column, which
+// understands native decimal storage and handles precision/scale widening correctly.
+//
+// If source_type == target_type (same precision and scale) no conversion is necessary and the
+// column is returned as-is.
 StatusOr<ColumnPtr> cast_decimal_projection_column(const ColumnPtr& source_column, const TypeDescriptor& source_type,
                                                    const TypeDescriptor& target_type) {
     if (source_type == target_type) {
