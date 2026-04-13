@@ -200,6 +200,11 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
             return maxTvrDelta;
         }
 
+        if (maxTvrDelta.start().isEmpty() && mv.getCurrentRefreshMode() == MaterializedView.RefreshMode.AUTO) {
+            throw new SemanticException("No checkpoint found for base table: %s.%s during AUTO IVM planning",
+                    baseTableInfo.getDbName(), baseTableInfo.getTableName());
+        }
+
         // check the delta traits between the max delta
         List<TvrTableDeltaTrait> tableDeltaTraits = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .listTableDeltaTraits(baseTableInfo.getDbName(), snapshotTable,
