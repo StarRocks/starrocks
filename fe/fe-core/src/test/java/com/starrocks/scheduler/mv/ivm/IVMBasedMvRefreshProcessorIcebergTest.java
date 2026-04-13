@@ -24,6 +24,7 @@ import com.starrocks.common.tvr.TvrTableDelta;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
@@ -464,23 +465,29 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
         Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
 
-        // if the base table has no retractable changes, the refresh processor should be full refresh
+        // Without a checkpoint, AUTO should bypass IVM planning and fall back to PCT.
         {
             advanceTableVersionTo(2);
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
             Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
             MVHybridBasedRefreshProcessor hybridBasedRefreshProcessor =
                     (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
         }
-        // if the base table has retractable changes, the refresh processor should be full refresh
+        // Once a checkpoint exists, append-only changes can switch AUTO back to IVM.
         {
-            mockListTableDeltaTraits();
-            MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+            MaterializedView refreshedMv = getMv("test_mv1");
+            advanceTableVersionTo(3);
+            mockListTableDeltaTraits(ImmutableList.of(
+                    TvrTableDeltaTrait.ofMonotonic(
+                            TvrTableDelta.of(2L, 3L),
+                            TvrDeltaStats.EMPTY)
+            ));
+            MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(refreshedMv);
             Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
             MVHybridBasedRefreshProcessor hybridBasedRefreshProcessor =
                     (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
         }
     }
 
@@ -491,7 +498,6 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
 
         advanceTableVersionTo(2);
-        mockListTableDeltaTraits();
 
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
         Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
@@ -521,6 +527,30 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         MVHybridBasedRefreshProcessor hybrid2 =
                 (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
         Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+    }
+
+    @Test
+    public void testAutoRefreshFallsBackToPctWhenLineageValidationFails() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+        Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
+
+        advanceTableVersionTo(2);
+        MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybrid1 =
+                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+
+        MaterializedView refreshedMv = getMv("test_mv1");
+        advanceTableVersionTo(3);
+        mockListTableDeltaTraitsThrows("Starting snapshot (exclusive) 2 is not a parent ancestor of end snapshot 3");
+
+        MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybrid2 =
+                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
     }
 
     @Test
@@ -691,44 +721,88 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
     }
 
     /**
-     * Test that IVM refresh records complete PCT metadata without batch truncation.
+     * Test that IVM records complete PCT metadata without truncation by
+     * partition_refresh_number.
      */
     @Test
     public void testIVMPCTMetadataNotTruncatedByPartitionRefreshNumber() throws Exception {
-        // Create a PARTITIONED MV on partitioned Iceberg table t1 (4 partitions: date=2020-01-01..04).
-        // partition_refresh_number=1 would truncate to 1 partition in the old code path.
+        // Create a PARTITIONED incremental MV on partitioned Iceberg table t1
+        // (4 partitions: date=2020-01-01..04). partition_refresh_number=1 would
+        // truncate to 1 partition in the old code path.
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental",
+                "`date`", Map.of("partition_refresh_number", "1"));
+        Assertions.assertEquals(MaterializedView.RefreshMode.INCREMENTAL, mv.getCurrentRefreshMode());
+
+        advanceTableVersionTo(2);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVIVMBasedRefreshProcessor);
+
+        MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
+        MVTaskRunExtraMessage extraMessage = mvContext.getStatus().getMvTaskRunExtraMessage();
+        Set<String> mvPartitionsToRefresh = extraMessage.getMvPartitionsToRefresh();
+        Assertions.assertNotNull(mvPartitionsToRefresh, "mvPartitionsToRefresh should not be null");
+        Assertions.assertTrue(mvPartitionsToRefresh.size() > 1,
+                "IVM should record complete PCT metadata without truncation, but got: " + mvPartitionsToRefresh);
+    }
+
+    @Test
+    public void testAutoRecoveredIvmRecordsPCTMetadataWithoutBatchTruncation() throws Exception {
         String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
         MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
                 "`date`", Map.of("partition_refresh_number", "1"));
         Assertions.assertEquals(MaterializedView.RefreshMode.AUTO, mv.getCurrentRefreshMode());
 
-        // Initial refresh: all 4 partitions detected as new
-        {
-            advanceTableVersionTo(2);
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
-            TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
-            MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+        advanceTableVersionTo(2);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        MVHybridBasedRefreshProcessor hybridProcessor =
+                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
 
-            // Verify IVM path was used (auto mode -> hybrid -> IVM)
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-            MVHybridBasedRefreshProcessor hybridProcessor =
-                    (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-            Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
-
-            // Verify PCT metadata records ALL partitions, not truncated to 1.
-            // Before the fix, partition_refresh_number=1 would truncate mvPartitionsToRefresh to 1 partition.
-            // After the fix (skipBatchFilter=true), all detected partitions should be recorded.
-            MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
-            MVTaskRunExtraMessage extraMessage = mvContext.getStatus().getMvTaskRunExtraMessage();
-            Set<String> mvPartitionsToRefresh = extraMessage.getMvPartitionsToRefresh();
-            Assertions.assertNotNull(mvPartitionsToRefresh,
-                    "mvPartitionsToRefresh should not be null");
-            // t1 has 4 partitions -> MV should have 4 corresponding partitions, all recorded
-            Assertions.assertTrue(mvPartitionsToRefresh.size() > 1,
-                    "IVM should record all detected partitions in PCT metadata, " +
-                            "not truncated by partition_refresh_number. " +
-                            "Expected >1 but got: " + mvPartitionsToRefresh);
+        TaskRun nextTaskRun = hybridProcessor.getCurrentProcessor().getNextTaskRun();
+        while (nextTaskRun != null) {
+            initAndExecuteTaskRun(nextTaskRun);
+            MVTaskRunProcessor nextProcessor = getMVTaskRunProcessor(nextTaskRun);
+            BaseMVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
+            if (refreshProcessor instanceof MVHybridBasedRefreshProcessor) {
+                MVHybridBasedRefreshProcessor nextHybrid =
+                        (MVHybridBasedRefreshProcessor) refreshProcessor;
+                nextTaskRun = nextHybrid.getCurrentProcessor().getNextTaskRun();
+            } else if (refreshProcessor instanceof MVPCTBasedRefreshProcessor) {
+                nextTaskRun = ((MVPCTBasedRefreshProcessor) refreshProcessor).getNextTaskRun();
+            } else {
+                nextTaskRun = null;
+            }
         }
+
+        MaterializedView refreshedMv = getMv("test_mv1");
+        MockIcebergMetadata mockIcebergMetadata =
+                (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr()
+                        .getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+        mockIcebergMetadata.updatePartitions("partitioned_db", "t1",
+                ImmutableList.of("date=2020-01-02", "date=2020-01-03"));
+        advanceTableVersionTo(3);
+        mockListTableDeltaTraits(ImmutableList.of(
+                TvrTableDeltaTrait.ofMonotonic(
+                        TvrTableDelta.of(2L, 3L),
+                        TvrDeltaStats.EMPTY)
+        ));
+
+        db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(refreshedMv.getDbId());
+        taskRun = withMVRefreshTaskRun(db.getFullName(), refreshedMv);
+        mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        hybridProcessor = (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+
+        MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
+        MVTaskRunExtraMessage extraMessage = mvContext.getStatus().getMvTaskRunExtraMessage();
+        Set<String> mvPartitionsToRefresh = extraMessage.getMvPartitionsToRefresh();
+        Assertions.assertEquals(Set.of("p20200102", "p20200103"), mvPartitionsToRefresh,
+                "Recovered IVM should record complete changed MV partitions without truncation");
     }
 
     @Test
