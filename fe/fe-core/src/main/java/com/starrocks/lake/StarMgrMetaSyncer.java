@@ -141,21 +141,31 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         // that already owns at least one of these shards — that way the BE's staros
         // worker can resolve the root location of the bundle locally without an extra
         // get-shard-info RPC.
+        //
+        // Use the batched getAllNodeIdsByShards API to amortize the owner lookup into a
+        // single FE→StarMgr RPC. Doing it per-shard here would amplify control-plane
+        // traffic and defeat the purpose of the optimization.
         Set<ComputeNode> candidateAggregatorNodes = null;
         if (isFileBundling) {
             candidateAggregatorNodes = Sets.newHashSet();
-            for (long shardId : shardIds) {
-                try {
-                    long ownerId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId,
-                            computeResource.getWorkerGroupId());
+            try {
+                Map<Long, List<Long>> shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
+                        shardIds, computeResource.getWorkerGroupId());
+                for (List<Long> nodeIds : shardToNodeIds.values()) {
+                    if (nodeIds == null || nodeIds.isEmpty()) {
+                        continue;
+                    }
+                    // Match the semantics of getPrimaryComputeNodeIdByShard: the first
+                    // replica is treated as the owner of the shard.
                     ComputeNode owner = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                            .getBackendOrComputeNode(ownerId);
+                            .getBackendOrComputeNode(nodeIds.get(0));
                     if (owner != null) {
                         candidateAggregatorNodes.add(owner);
                     }
-                } catch (StarRocksException ignored) {
-                    // a missing/unresolvable shard must not block aggregator selection
                 }
+            } catch (StarRocksException ignored) {
+                // a missing/unresolvable batch must not block aggregator selection; we
+                // will fall back to picking from any alive node in the warehouse below.
             }
         }
 

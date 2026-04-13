@@ -846,13 +846,14 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     //
     // we will only delete the bundle segment files and bundle tablet meta when the state is ALL_TABLETS_TO_BE_DELETED
     // and NOT_BUNDLE_TABLET_META.
+    // Prefer a locally-owned tablet id as the anchor so that downstream fs ops on the URI
+    // can resolve the shard from the staros worker cache instead of paying for a
+    // get-shard-info RPC when the vacuum aggregator does not own tablet_ids[0]. The anchor
+    // is independent of `version`, so compute it once before the loop.
+    const int64_t anchor_tablet_id = tablet_mgr->pick_local_anchor_tablet_id(tablet_ids);
     for (auto version : bundle_tablet_versions) {
         // Get the path of the bundle tablet metadata file for this version.
-        // Prefer a locally-owned tablet id as the anchor so that downstream fs ops on
-        // the URI can resolve the shard from the staros worker cache instead of paying
-        // for a get-shard-info RPC when the vacuum aggregator does not own tablet_ids[0].
-        auto path = tablet_mgr->bundle_tablet_metadata_location(tablet_mgr->pick_local_anchor_tablet_id(tablet_ids),
-                                                                version);
+        auto path = tablet_mgr->bundle_tablet_metadata_location(anchor_tablet_id, version);
 
         // Check the state of the bundle tablet metadata for this version
         // This tells us whether all tablets in this bundle are being deleted or not
