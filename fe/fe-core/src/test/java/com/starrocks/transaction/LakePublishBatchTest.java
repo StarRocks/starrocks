@@ -722,7 +722,8 @@ public class LakePublishBatchTest {
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
         awaitPublish(publishVersionDaemon, waiter7);
 
-        List<TransactionStateBatch> batch = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getReadyPublishTransactionsBatch();
+        List<TransactionStateBatch> batch = GlobalStateMgr.getCurrentState()
+                .getGlobalTransactionMgr().getReadyPublishTransactionsBatch();
         Assertions.assertEquals(1, batch.size());
 
         Config.lake_enable_batch_publish_version = true;
