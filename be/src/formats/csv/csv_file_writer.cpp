@@ -159,15 +159,13 @@ Status CSVFileWriter::write(Chunk* chunk) {
                 if (columns[c]->is_null(r)) {
                     // NULL values go through the NullableConverter, which emits "\N"
                     // without enclosing (matches Redshift / Postgres COPY behavior).
-                    RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r,
-                                                            *_converter_options));
+                    RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r, *_converter_options));
                 } else {
                     // Non-NULL: wrap with enclose char and escape internal enclose/escape chars.
                     RETURN_IF_ERROR(_write_enclosed_field(converter, *columns[c], r, *_converter_options));
                 }
             } else {
-                RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r,
-                                                        *_converter_options));
+                RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r, *_converter_options));
             }
 
             if (c + 1 != columns.size()) {

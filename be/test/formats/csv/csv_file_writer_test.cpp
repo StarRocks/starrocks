@@ -1291,8 +1291,7 @@ TEST_F(CSVFileWriterTest, TestFactoryWithGzipCompression) {
 // Returns writer options pre-configured with given enclose/escape.
 namespace {
 
-std::shared_ptr<Chunk> _build_enclose_test_chunk(const std::vector<int32_t>& ids,
-                                                 const std::vector<std::string>& names,
+std::shared_ptr<Chunk> _build_enclose_test_chunk(const std::vector<int32_t>& ids, const std::vector<std::string>& names,
                                                  const std::vector<std::string>& nullable_values,
                                                  const std::vector<uint8_t>& nullable_nulls) {
     auto chunk = std::make_shared<Chunk>();
@@ -1354,11 +1353,8 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeRFC4180) {
     //   (1, "hello",        "not null")    -- plain
     //   (2, "hello,world",  NULL)          -- comma + NULL
     //   (3, "say \"hi\"",   "val")         -- internal double quotes
-    auto chunk = _build_enclose_test_chunk(
-            {1, 2, 3},
-            {"hello", "hello,world", "say \"hi\""},
-            {"not null", "", "val"},
-            {0, 1, 0});
+    auto chunk = _build_enclose_test_chunk({1, 2, 3}, {"hello", "hello,world", "say \"hi\""}, {"not null", "", "val"},
+                                           {0, 1, 0});
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->close().io_status);
 
@@ -1368,9 +1364,10 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeRFC4180) {
     //   "1","hello","not null"\n
     //   "2","hello,world",\N\n
     //   "3","say ""hi""","val"\n
-    std::string expect = "\"1\",\"hello\",\"not null\"\n"
-                         "\"2\",\"hello,world\",\\N\n"
-                         "\"3\",\"say \"\"hi\"\"\",\"val\"\n";
+    std::string expect =
+            "\"1\",\"hello\",\"not null\"\n"
+            "\"2\",\"hello,world\",\\N\n"
+            "\"3\",\"say \"\"hi\"\"\",\"val\"\n";
     ASSERT_EQ(content, expect);
 }
 
@@ -1404,11 +1401,8 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeBackslash) {
     //   (2, "path\\to",   NULL)           -- escape char inside
     //   (3, "end\\",      "val")          -- trailing escape char
     //   (4, "a\\\"b",     "x")            -- both escape and enclose chars
-    auto chunk = _build_enclose_test_chunk(
-            {1, 2, 3, 4},
-            {"say \"hi\"", "path\\to", "end\\", "a\\\"b"},
-            {"not null", "", "val", "x"},
-            {0, 1, 0, 0});
+    auto chunk = _build_enclose_test_chunk({1, 2, 3, 4}, {"say \"hi\"", "path\\to", "end\\", "a\\\"b"},
+                                           {"not null", "", "val", "x"}, {0, 1, 0, 0});
     ASSERT_OK(writer->write(chunk.get()));
     ASSERT_OK(writer->close().io_status);
 
@@ -1419,10 +1413,11 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeBackslash) {
     //   "2","path\\to",\N\n
     //   "3","end\\","val"\n
     //   "4","a\\\"b","x"\n
-    std::string expect = "\"1\",\"say \\\"hi\\\"\",\"not null\"\n"
-                         "\"2\",\"path\\\\to\",\\N\n"
-                         "\"3\",\"end\\\\\",\"val\"\n"
-                         "\"4\",\"a\\\\\\\"b\",\"x\"\n";
+    std::string expect =
+            "\"1\",\"say \\\"hi\\\"\",\"not null\"\n"
+            "\"2\",\"path\\\\to\",\\N\n"
+            "\"3\",\"end\\\\\",\"val\"\n"
+            "\"4\",\"a\\\\\\\"b\",\"x\"\n";
     ASSERT_EQ(content, expect);
 }
 
@@ -1697,9 +1692,10 @@ TEST_F(CSVFileWriterTest, TestEncloseConstStringColumn) {
     std::string content;
     ASSERT_OK(_fs.read_file(_file_path, &content));
     // Each row: enclosed id, enclosed constant string with doubled quotes.
-    std::string expect = "\"1\",\"hello,\"\"world\"\"\"\n"
-                         "\"2\",\"hello,\"\"world\"\"\"\n"
-                         "\"3\",\"hello,\"\"world\"\"\"\n";
+    std::string expect =
+            "\"1\",\"hello,\"\"world\"\"\"\n"
+            "\"2\",\"hello,\"\"world\"\"\"\n"
+            "\"3\",\"hello,\"\"world\"\"\"\n";
     ASSERT_EQ(content, expect);
 }
 
