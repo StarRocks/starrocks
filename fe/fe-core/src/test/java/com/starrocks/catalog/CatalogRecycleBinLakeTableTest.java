@@ -237,6 +237,8 @@ public class CatalogRecycleBinLakeTableTest {
      * needs to inspect the state between partition completion and table finalization.
      */
     protected static void waitUntilNoAsyncDeletion(CatalogRecycleBin recycleBin, long tableId, long time) {
+        // Submit async tasks if not yet started, then poll until all complete.
+        recycleBin.erasePartition(time);
         long deadline = System.currentTimeMillis() + 5000;
         while (recycleBin.isAnyLakeTablePartitionDeleting(tableId) && System.currentTimeMillis() < deadline) {
             try {
