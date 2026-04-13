@@ -226,53 +226,6 @@ FROM par_tbl1
 GROUP BY datekey, k1;
 ```
 
-<!--
-### 多基表对齐分区
-
-![Partitioned Materialized View-3](../../../_assets/partitioned_mv-3.png)
-
-如果多张基表的分区可以互相对齐，即基表使用相同类型的分区键，您就可以基于多张基表创建分区物化视图。您可以使用 JOIN 连接基表，并将分区键设置为公共列。您也可以使用 UNION 连接基表。具有对齐分区的基表称为 Reference Table。任意 Reference Table 中的数据变更都将触发对应物化视图分区的刷新任务。
-
-该功能自 v3.3 起支持。
-
-```SQL
--- 使用 JOIN 连接基表。
-CREATE MATERIALIZED VIEW par_mv6
-REFRESH ASYNC
-PARTITION BY datekey
-AS SELECT 
-  par_tbl1.datekey,
-  par_tbl1.k1 AS t1k1,
-  par_tbl3.k1 AS t2k1, 
-  sum(par_tbl1.v1) AS SUM1, 
-  sum(par_tbl3.v1) AS SUM2
-FROM par_tbl1 JOIN par_tbl3 ON par_tbl1.datekey = par_tbl3.datekey_new
-GROUP BY par_tbl1.datekey, t1k1, t2k1;
-
--- 使用 UNION 连接基表。
-CREATE MATERIALIZED VIEW par_mv7
-REFRESH ASYNC
-PARTITION BY datekey
-AS SELECT 
-  par_tbl1.datekey,
-  par_tbl1.k1 AS t1k1,
-  sum(par_tbl1.v1) AS SUM1
-FROM par_tbl1
-GROUP BY 
-  par_tbl1.datekey,
-  par_tbl1.k1
-UNION ALL
-SELECT
-  par_tbl3.datekey_new,
-  par_tbl3.k1 AS t2k1, 
-  sum(par_tbl3.v1) AS SUM2
-FROM par_tbl3
-GROUP BY 
-  par_tbl3.datekey_new,
-  par_tbl3.k1;
-```
--->
-
 ### 实现增量刷新和透明改写
 
 您可以创建一个分区物化视图，通过分区刷新来实现对物化视图的增量更新，并通过局部数据物化实现查询的透明重写。
