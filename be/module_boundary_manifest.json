@@ -114,6 +114,38 @@
       "remediation": "Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem."
     },
     {
+      "id": "spillcore",
+      "doc_label": "SpillCore",
+      "summary": "Core spill block and directory primitives without pipeline/query/runtime-service coupling.",
+      "owned_targets": ["SpillCore"],
+      "owned_globs": [
+        "be/src/exec/spill/block_manager.h",
+        "be/src/exec/spill/common.h",
+        "be/src/exec/spill/spill_fwd.h",
+        "be/src/exec/spill/dir_manager.h",
+        "be/src/exec/spill/dir_manager.cpp",
+        "be/src/exec/spill/log_block_manager.h",
+        "be/src/exec/spill/log_block_manager.cpp",
+        "be/src/exec/spill/file_block_manager.h",
+        "be/src/exec/spill/file_block_manager.cpp",
+        "be/src/exec/spill/hybird_block_manager.h",
+        "be/src/exec/spill/hybird_block_manager.cpp",
+        "be/src/exec/spill/block_reader.cpp",
+        "be/src/exec/spill/global_spill_manager.h"
+      ],
+      "allowed_include_prefixes": ["exec/spill/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
+      "forbidden_include_prefixes": ["exec/pipeline/", "exec/workgroup/", "exprs/", "runtime/", "storage/", "util/"],
+      "forbidden_includes": [
+        "fs/fs_factory.h",
+        "runtime/exec_env.h",
+        "exec/sort_exec_exprs.h"
+      ],
+      "allowed_target_deps": ["FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_test_targets": ["spill_core_test"],
+      "allowed_test_link_deps": ["SpillCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep SpillCore limited to reusable spill block and directory infrastructure; move query bootstrap, pipeline ownership, and runtime-service integration upward."
+    },
+    {
       "id": "typecore",
       "doc_label": "TypesCore",
       "summary": "Core type system without runtime/storage/exec coupling.",
