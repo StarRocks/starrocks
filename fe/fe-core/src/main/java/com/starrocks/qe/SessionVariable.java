@@ -4481,19 +4481,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isMVPlanner() {
-        return enableMVPlanner;
+        return false;
     }
 
     public void setMVPlanner(boolean enable) {
-        this.enableMVPlanner = enable;
+        // Deprecated no-op kept for dump/session replay compatibility.
     }
 
     public boolean isEnableIncrementalRefreshMV() {
-        return enableIncrementalRefreshMV;
+        return false;
     }
 
     public void setEnableIncrementalRefreshMv(boolean enable) {
-        this.enableIncrementalRefreshMV = enable;
+        // Deprecated no-op kept for dump/session replay compatibility.
     }
 
     public long getLogRejectedRecordNum() {

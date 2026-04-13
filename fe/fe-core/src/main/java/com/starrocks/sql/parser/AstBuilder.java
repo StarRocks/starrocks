@@ -232,7 +232,6 @@ import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
-import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
@@ -9328,7 +9327,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         } else if (context.MANUAL() != null) {
             return new ManualRefreshSchemeDesc(refreshMoment, pos);
         } else if (context.INCREMENTAL() != null) {
-            return new IncrementalRefreshSchemeDesc(refreshMoment, pos);
+            throw new ParsingException("Legacy REFRESH INCREMENTAL materialized views are no longer supported", pos);
         }
         return null;
     }

@@ -875,13 +875,7 @@ public class QueryAnalyzer {
                 }
 
                 if (node.isBinlogQuery()) {
-                    for (Column column : getBinlogMetaColumns()) {
-                        SlotRef slot = new SlotRef(tableName, column.getName(), column.getName());
-                        Field field = new Field(column.getName(), column.getType(), tableName, slot, true,
-                                column.isAllowNull());
-                        columns.put(field, column);
-                        fields.add(field);
-                    }
+                    throw new SemanticException("Legacy _BINLOG_ queries are no longer supported");
                 }
 
                 // Add virtual columns for OLAP tables

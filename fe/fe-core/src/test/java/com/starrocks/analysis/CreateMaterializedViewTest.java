@@ -85,6 +85,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
@@ -2916,7 +2917,10 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "distributed by hash(l_shipdate) " +
                 " as select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
-        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
+                () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        Assertions.assertTrue(exception.getMessage().contains(
+                "Legacy REFRESH INCREMENTAL materialized views are no longer supported"));
     }
 
     @Test
