@@ -14,10 +14,9 @@
 
 #include "storage/delta_writer.h"
 
-#include "column/raw_data_visitor.h"
-
 #include <utility>
 
+#include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"

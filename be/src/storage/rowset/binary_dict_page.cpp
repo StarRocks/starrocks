@@ -42,8 +42,8 @@
 #include "column/append_with_mask.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/raw_data_visitor.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute

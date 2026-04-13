@@ -17,10 +17,10 @@
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/global_dict/types.h"
-#include "column/raw_data_visitor.h"
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/primary_key_encoder.h"

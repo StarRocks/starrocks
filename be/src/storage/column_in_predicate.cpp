@@ -16,8 +16,8 @@
 
 #include "column/column.h"
 #include "column/column_helper.h"
-#include "column/raw_data_visitor.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "roaring/roaring.hh"

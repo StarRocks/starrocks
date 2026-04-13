@@ -43,8 +43,8 @@
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
-#include "column/raw_data_visitor.h"
 #include "column/fixed_length_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/schema.h"
 #include "gutil/endian.h"
 #include "gutil/stringprintf.h"

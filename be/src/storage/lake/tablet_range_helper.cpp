@@ -18,8 +18,8 @@
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
-#include "column/raw_data_visitor.h"
 #include "column/datum_convert.h"
+#include "column/raw_data_visitor.h"
 #include "column/schema.h"
 #include "common/logging.h"
 #include "fmt/format.h"

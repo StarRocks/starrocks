@@ -18,8 +18,8 @@
 #include <vector>
 
 #include "base/hash/unaligned_access.h"
-#include "column/raw_data_visitor.h"
 #include "base/string/slice.h" // for Slice
+#include "column/raw_data_visitor.h"
 #include "common/logging.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
