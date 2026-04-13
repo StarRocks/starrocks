@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# StarRocks バージョン 4.1
+# StarRocks version 4.1
 
 :::warning
 
