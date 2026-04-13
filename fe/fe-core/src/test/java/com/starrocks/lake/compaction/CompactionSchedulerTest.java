@@ -209,6 +209,12 @@ public class CompactionSchedulerTest {
                 LakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
                 result = aggregatorNode;
             }
+
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return theAggregatorNode;
+            }
         };
 
         new Expectations() {
@@ -406,8 +412,24 @@ public class CompactionSchedulerTest {
                 systemInfoService.getBackendOrComputeNode(1002L);
                 result = node2;
 
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseManager;
+        final ComputeNode theAggregatorNode = aggregatorNode;
+        new MockUp<LakeAggregator>() {
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+                return theAggregatorNode;
+            }
+
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return theAggregatorNode;
+            }
+        };
+
+        new Expectations() {
+            {
+                BrpcProxy.getLakeService("192.168.0.3", 9050);
+                result = lakeService;
             }
         };
 
@@ -567,6 +589,12 @@ public class CompactionSchedulerTest {
                 lakeAggregator.chooseAggregatorNode(WarehouseManager.DEFAULT_RESOURCE);
                 result = null;
             }
+
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return null;
+            }
         };
 
         CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
@@ -581,5 +609,158 @@ public class CompactionSchedulerTest {
                     method.invoke(scheduler, currentVersion, beToTablets, txnId, priority,
                             WarehouseManager.DEFAULT_RESOURCE, 99L);
                 });
+    }
+
+    /**
+     * Test createCompactionTasks with parallel compaction config enabled via table property
+     */
+    @Test
+    public void testCreateCompactionTasksWithParallelConfig() throws Exception {
+        long currentVersion = 1000L;
+        long txnId = 3000L;
+        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        beToTablets.put(1001L, Lists.newArrayList(101L, 102L));
+        PartitionStatistics.CompactionPriority priority = PartitionStatistics.CompactionPriority.DEFAULT;
+
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        ComputeNode node1 = new ComputeNode(1001L, "192.168.0.1", 9040);
+        node1.setBrpcPort(9050);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(1001L);
+                result = node1;
+            }
+        };
+
+        new Expectations() {
+            {
+                BrpcProxy.getLakeService("192.168.0.1", 9050);
+                result = lakeService;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        // Create a mock table with parallel compaction enabled via table property
+        Map<String, String> tableProperties = new HashMap<>();
+        tableProperties.put("lake_compaction_max_parallel", "5");
+        TableProperty tableProperty = new TableProperty(tableProperties);
+        tableProperty.buildLakeCompactionMaxParallel();
+
+        OlapTable mockTable = Mockito.mock(OlapTable.class);
+        Mockito.when(mockTable.getTableProperty()).thenReturn(tableProperty);
+
+        Method method = CompactionScheduler.class.getDeclaredMethod("createCompactionTasks",
+                long.class, Map.class, long.class, boolean.class, PartitionStatistics.CompactionPriority.class,
+                OlapTable.class);
+        method.setAccessible(true);
+        List<CompactionTask> tasks = (List<CompactionTask>) method.invoke(scheduler, currentVersion, beToTablets,
+                txnId, false, priority, mockTable);
+
+        Assertions.assertNotNull(tasks);
+        Assertions.assertEquals(1, tasks.size());
+
+        // Verify the parallel config was set in the request
+        Field requestField = CompactionTask.class.getDeclaredField("request");
+        requestField.setAccessible(true);
+        CompactRequest request = (CompactRequest) requestField.get(tasks.get(0));
+
+        Assertions.assertNotNull(request.parallelConfig);
+        Assertions.assertTrue(request.parallelConfig.enableParallel);
+        Assertions.assertEquals(5, (int) request.parallelConfig.maxParallelPerTablet);
+        // maxBytesPerSubtask is 0 (let BE use its own config)
+        Assertions.assertEquals(0L, (long) request.parallelConfig.maxBytesPerSubtask);
+    }
+
+    /**
+     * Test createAggregateCompactionTask with parallel compaction config enabled via table property
+     */
+    @Test
+    public void testCreateAggregateCompactionTaskWithParallelConfig() throws Exception {
+        long currentVersion = 1000L;
+        long txnId = 4000L;
+        Map<Long, List<Long>> beToTablets = new HashMap<>();
+        beToTablets.put(1001L, Lists.newArrayList(101L, 102L));
+        beToTablets.put(1002L, Lists.newArrayList(201L, 202L));
+        PartitionStatistics.CompactionPriority priority = PartitionStatistics.CompactionPriority.DEFAULT;
+
+        CompactionMgr compactionManager = new CompactionMgr();
+
+        ComputeNode node1 = new ComputeNode(1001L, "192.168.0.1", 9040);
+        node1.setBrpcPort(9050);
+        ComputeNode node2 = new ComputeNode(1002L, "192.168.0.2", 9040);
+        node2.setBrpcPort(9050);
+        ComputeNode aggregatorNode = new ComputeNode(1003L, "192.168.0.3", 9040);
+        aggregatorNode.setBrpcPort(9050);
+
+        new Expectations() {
+            {
+                systemInfoService.getBackendOrComputeNode(1001L);
+                result = node1;
+                systemInfoService.getBackendOrComputeNode(1002L);
+                result = node2;
+            }
+        };
+
+        final ComputeNode theAggregatorNode = aggregatorNode;
+        new MockUp<LakeAggregator>() {
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+                return theAggregatorNode;
+            }
+
+            @Mock
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    java.util.Collection<ComputeNode> candidateNodes) {
+                return theAggregatorNode;
+            }
+        };
+
+        new Expectations() {
+            {
+                BrpcProxy.getLakeService("192.168.0.3", 9050);
+                result = lakeService;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(compactionManager, systemInfoService,
+                globalTransactionMgr, globalStateMgr, "");
+
+        // Create a mock table with parallel compaction enabled via table property
+        Map<String, String> tableProperties = new HashMap<>();
+        tableProperties.put("lake_compaction_max_parallel", "8");
+        TableProperty tableProperty = new TableProperty(tableProperties);
+        tableProperty.buildLakeCompactionMaxParallel();
+
+        OlapTable mockTable = Mockito.mock(OlapTable.class);
+        Mockito.when(mockTable.getTableProperty()).thenReturn(tableProperty);
+
+        Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
+                long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class,
+                ComputeResource.class, long.class, OlapTable.class);
+        method.setAccessible(true);
+        CompactionTask task = (CompactionTask) method.invoke(scheduler, currentVersion, beToTablets, txnId,
+                priority, WarehouseManager.DEFAULT_RESOURCE, 99L, mockTable);
+
+        Assertions.assertNotNull(task);
+        Assertions.assertTrue(task instanceof AggregateCompactionTask);
+
+        Field requestField = AggregateCompactionTask.class.getDeclaredField("request");
+        requestField.setAccessible(true);
+        AggregateCompactRequest aggRequest = (AggregateCompactRequest) requestField.get(task);
+
+        Assertions.assertEquals(2, aggRequest.requests.size());
+
+        // Verify parallel config was set in each request
+        for (CompactRequest req : aggRequest.requests) {
+            Assertions.assertNotNull(req.parallelConfig, "parallelConfig should be set when enabled");
+            Assertions.assertTrue(req.parallelConfig.enableParallel);
+            Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
+            // maxBytesPerSubtask is 0 (let BE use its own config)
+            Assertions.assertEquals(0L, (long) req.parallelConfig.maxBytesPerSubtask);
+        }
     }
 }
