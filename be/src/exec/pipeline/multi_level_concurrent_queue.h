@@ -57,16 +57,18 @@ public:
     MultiLevelConcurrentQueue& operator=(MultiLevelConcurrentQueue&&) = delete;
 
     // Enqueue from worker threads. Uses implicit producer path.
-    void enqueue(T item, int level, int worker_id) {
+    // Returns false if the underlying queue fails to allocate storage.
+    bool enqueue(T item, int level, int worker_id) {
         DCHECK(level >= 0 && level < NUM_LEVELS);
         DCHECK(worker_id >= 0 && worker_id < _num_workers);
-        _levels[level].queue.enqueue(std::move(item));
+        return _levels[level].queue.enqueue(std::move(item));
     }
 
     // Enqueue with implicit producer (for external threads).
-    void enqueue(T item, int level) {
+    // Returns false if the underlying queue fails to allocate storage.
+    bool enqueue(T item, int level) {
         DCHECK(level >= 0 && level < NUM_LEVELS);
-        _levels[level].queue.enqueue(std::move(item));
+        return _levels[level].queue.enqueue(std::move(item));
     }
 
     // Dequeue with ConsumerToken (for worker threads - avoids thundering herd).
@@ -86,7 +88,10 @@ public:
         return _levels[level].queue.try_dequeue(item);
     }
 
-    bool empty(int level) const {
+    // Approximate emptiness check backed by ConcurrentQueue::size_approx().
+    // Callers must not use this as an exact drain/termination condition while
+    // producers or consumers are still active.
+    bool empty_approx(int level) const {
         DCHECK(level >= 0 && level < NUM_LEVELS);
         return _levels[level].queue.size_approx() == 0;
     }

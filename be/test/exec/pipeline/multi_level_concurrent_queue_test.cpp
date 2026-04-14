@@ -28,10 +28,10 @@ namespace starrocks::pipeline {
 PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_single_level_basic) {
     MultiLevelConcurrentQueue<int, 1> queue(2);
 
-    queue.enqueue(10, 0, 0);
-    queue.enqueue(20, 0, 1);
+    ASSERT_TRUE(queue.enqueue(10, 0, 0));
+    ASSERT_TRUE(queue.enqueue(20, 0, 1));
 
-    ASSERT_FALSE(queue.empty(0));
+    ASSERT_FALSE(queue.empty_approx(0));
     ASSERT_EQ(queue.size_approx(0), 2);
 
     int item = 0;
@@ -42,18 +42,18 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_single_level_basic) {
     int second = item;
 
     ASSERT_EQ(first + second, 30);
-    ASSERT_TRUE(queue.empty(0));
+    ASSERT_TRUE(queue.empty_approx(0));
     ASSERT_FALSE(queue.try_dequeue(0, item));
 }
 
 PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_level_isolation) {
     MultiLevelConcurrentQueue<int, 4> queue(1);
 
-    queue.enqueue(100, 0, 0);
-    queue.enqueue(200, 1, 0);
-    queue.enqueue(300, 2, 0);
+    ASSERT_TRUE(queue.enqueue(100, 0, 0));
+    ASSERT_TRUE(queue.enqueue(200, 1, 0));
+    ASSERT_TRUE(queue.enqueue(300, 2, 0));
 
-    ASSERT_TRUE(queue.empty(3));
+    ASSERT_TRUE(queue.empty_approx(3));
     int item = 0;
     ASSERT_FALSE(queue.try_dequeue(3, item));
 
@@ -67,15 +67,15 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_level_isolation) {
     ASSERT_EQ(item, 300);
 
     for (int l = 0; l < 4; ++l) {
-        ASSERT_TRUE(queue.empty(l));
+        ASSERT_TRUE(queue.empty_approx(l));
     }
 }
 
 PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_implicit_producer) {
     MultiLevelConcurrentQueue<int, 2> queue(1);
 
-    queue.enqueue(42, 0);
-    queue.enqueue(99, 1);
+    ASSERT_TRUE(queue.enqueue(42, 0));
+    ASSERT_TRUE(queue.enqueue(99, 1));
 
     int item = 0;
     ASSERT_TRUE(queue.try_dequeue(0, item));
@@ -85,21 +85,21 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_implicit_producer) {
     ASSERT_EQ(item, 99);
 }
 
-PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_size_and_empty) {
+PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_size_and_empty_approx) {
     MultiLevelConcurrentQueue<int, 2> queue(2);
 
-    ASSERT_TRUE(queue.empty(0));
-    ASSERT_TRUE(queue.empty(1));
+    ASSERT_TRUE(queue.empty_approx(0));
+    ASSERT_TRUE(queue.empty_approx(1));
     ASSERT_EQ(queue.size_approx(0), 0);
     ASSERT_EQ(queue.size_approx(1), 0);
     ASSERT_EQ(queue.size_approx(), 0);
 
-    queue.enqueue(1, 0, 0);
-    queue.enqueue(2, 0, 1);
-    queue.enqueue(3, 1, 0);
+    ASSERT_TRUE(queue.enqueue(1, 0, 0));
+    ASSERT_TRUE(queue.enqueue(2, 0, 1));
+    ASSERT_TRUE(queue.enqueue(3, 1, 0));
 
-    ASSERT_FALSE(queue.empty(0));
-    ASSERT_FALSE(queue.empty(1));
+    ASSERT_FALSE(queue.empty_approx(0));
+    ASSERT_FALSE(queue.empty_approx(1));
     ASSERT_EQ(queue.size_approx(0), 2);
     ASSERT_EQ(queue.size_approx(1), 1);
     ASSERT_EQ(queue.size_approx(), 3);
@@ -111,8 +111,8 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_size_and_empty) {
 
     ASSERT_TRUE(queue.try_dequeue(0, item));
     ASSERT_TRUE(queue.try_dequeue(1, item));
-    ASSERT_TRUE(queue.empty(0));
-    ASSERT_TRUE(queue.empty(1));
+    ASSERT_TRUE(queue.empty_approx(0));
+    ASSERT_TRUE(queue.empty_approx(1));
     ASSERT_EQ(queue.size_approx(), 0);
 }
 
@@ -131,7 +131,7 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_multithread_correctness) {
     for (int w = 0; w < kNumWorkers; ++w) {
         producers.emplace_back([&queue, w]() {
             for (int i = 0; i < kItemsPerWorker; ++i) {
-                queue.enqueue(i, i % kNumLevels, w);
+                ASSERT_TRUE(queue.enqueue(i, i % kNumLevels, w));
             }
         });
     }
@@ -177,8 +177,8 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_multithread_correctness) {
 PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_move_only_type) {
     MultiLevelConcurrentQueue<std::unique_ptr<int>, 2> queue(1);
 
-    queue.enqueue(std::make_unique<int>(42), 0, 0);
-    queue.enqueue(std::make_unique<int>(99), 1);
+    ASSERT_TRUE(queue.enqueue(std::make_unique<int>(42), 0, 0));
+    ASSERT_TRUE(queue.enqueue(std::make_unique<int>(99), 1));
 
     std::unique_ptr<int> item;
 
@@ -190,8 +190,8 @@ PARALLEL_TEST(MultiLevelConcurrentQueueTest, test_move_only_type) {
     ASSERT_NE(item, nullptr);
     ASSERT_EQ(*item, 99);
 
-    ASSERT_TRUE(queue.empty(0));
-    ASSERT_TRUE(queue.empty(1));
+    ASSERT_TRUE(queue.empty_approx(0));
+    ASSERT_TRUE(queue.empty_approx(1));
 }
 
 } // namespace starrocks::pipeline
