@@ -36,7 +36,9 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "orc_schema_builder.h"
+#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_filter.h"
+#include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "types/logical_type.h"
 
@@ -516,6 +518,14 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
             size_t zero_count = SIMD::count_zero(_broker_load_filter->data(), _broker_load_filter->size());
             if (zero_count != 0) {
                 _num_rows_filtered = zero_count;
+                // Phase 4 of the rejected records feature: before the
+                // chunk is filtered, capture the offending rows. Unlike
+                // text formats, ORC has no raw line text we could log --
+                // but the columnar reader has already materialized every
+                // column value into the Chunk by this point, so we can
+                // emit a structured `{col: value, ...}` record for each
+                // rejected row and hand it to the Phase 3 sync daemon.
+                capture_rejected_rows_before_filter(chunk->get());
                 (*chunk)->filter(*_broker_load_filter);
             }
         } else {
@@ -524,6 +534,40 @@ Status OrcChunkReader::_fill_chunk(ChunkPtr* chunk, const std::vector<SlotDescri
     }
 
     return Status::OK();
+}
+
+void OrcChunkReader::capture_rejected_rows_before_filter(Chunk* chunk) {
+    if (_state == nullptr || chunk == nullptr) {
+        return;
+    }
+    if (!_state->enable_log_rejected_record()) {
+        return;
+    }
+    auto* writer = RuntimeStateHelper::rejected_record_writer(_state);
+    if (writer == nullptr) {
+        return;
+    }
+
+    // Build column names once per chunk. _src_slot_descriptors is the
+    // slot list we populated the Chunk from, so position i in the chunk
+    // maps to _src_slot_descriptors[i].
+    std::vector<std::string> col_names;
+    col_names.reserve(_src_slot_descriptors.size());
+    for (const auto* slot : _src_slot_descriptors) {
+        col_names.emplace_back(slot != nullptr ? slot->col_name() : "");
+    }
+
+    const uint8_t* mask = _broker_load_filter->data();
+    const size_t n = _broker_load_filter->size();
+    for (size_t i = 0; i < n; ++i) {
+        if (mask[i] != 0) continue;
+        // source_info is kept minimal -- ORC doesn't have a per-row file
+        // offset in this path. The Phase 3 daemon enriches with the load
+        // label / file name from job metadata.
+        writer->append_from_chunk(*chunk, i, col_names, "ORC_ROW_REJECTED",
+                                  "Row filtered by ORC broker-load validation", /*error_column=*/"",
+                                  "{\"format\":\"orc\"}");
+    }
 }
 
 ChunkPtr OrcChunkReader::_create_chunk(const std::vector<SlotDescriptor*>& src_slot_descriptors,
