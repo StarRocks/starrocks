@@ -549,10 +549,9 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
 
-        // IVM rule rewrite: try unified Delta/Version framework first, then TVR as fallback
+        // IVM rule rewrite
         if (context.getSessionVariable().isEnableIVMRefresh()) {
             IvmRewriter.rewrite(tree, rootTaskContext, scheduler, requiredColumns);
-            scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.TVR_REWRITE_RULES);
         }
 
         if (sessionVariable.isEnableFineGrainedRangePredicate()) {
