@@ -47,7 +47,7 @@ import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.IsNullPredicate;
 import com.starrocks.sql.ast.expression.LiteralExprFactory;
 import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -295,7 +295,7 @@ public class IVMAnalyzer {
             String aggFuncName = aggFuncExpr.getFunctionName();
             // build intermediate aggregate function
             FunctionCallExpr intermediateAggFuncExpr = buildIntermediateAggregateFunc(aggFuncExpr);
-            String newAggFuncName = TvrOpUtils.getTvrAggStateColumnName(aggFuncExpr);
+            String newAggFuncName = IvmOpUtils.getIvmAggStateColumnName(aggFuncExpr);
 
             IVMAggFunctionInfo aggFunctionInfo = new IVMAggFunctionInfo(aggFuncExpr, aggFuncName,
                     intermediateAggFuncExpr, newAggFuncName);
@@ -311,15 +311,15 @@ public class IVMAnalyzer {
         selectRelation.setAggregate(newAggFuncs);
 
         // Build the row ID function expression
-        int encodeRowIdVersion = TvrOpUtils.deduceEncodeRowIdVersion(groupByExprs);
+        int encodeRowIdVersion = IvmOpUtils.deduceEncodeRowIdVersion(groupByExprs);
         if (statement != null) {
             statement.setEncodeRowIdVersion(encodeRowIdVersion);
         }
-        FunctionCallExpr rowIdFuncExpr = TvrOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, groupByExprs);
+        FunctionCallExpr rowIdFuncExpr = IvmOpUtils.buildRowIdFuncExpr(encodeRowIdVersion, groupByExprs);
         SelectList selectList = selectRelation.getSelectList();
         List<SelectListItem> newItems = Lists.newArrayList();
         // add row_id func expr
-        newItems.add(new SelectListItem(rowIdFuncExpr, TvrOpUtils.COLUMN_ROW_ID));
+        newItems.add(new SelectListItem(rowIdFuncExpr, IvmOpUtils.COLUMN_ROW_ID));
         // add original items
         selectList.getItems()
                 .stream()

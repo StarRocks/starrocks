@@ -37,9 +37,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.optimizer.rule.transformation.TransformationRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.common.AggregateFunctionRollupUtils;
-import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 
 import java.util.Comparator;
 import java.util.List;
@@ -93,7 +93,7 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         }
         // Must be able to load the target MV for state merge
         MaterializedView mv = IvmRewriter.loadTargetMv(context);
-        return mv != null && mv.getColumn(TvrOpUtils.COLUMN_ROW_ID) != null;
+        return mv != null && mv.getColumn(IvmOpUtils.COLUMN_ROW_ID) != null;
     }
 
     @Override
@@ -108,12 +108,12 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
 
         // Step 1: Get MV schema info
-        Column rowIdColumn = mv.getColumn(TvrOpUtils.COLUMN_ROW_ID);
+        Column rowIdColumn = mv.getColumn(IvmOpUtils.COLUMN_ROW_ID);
         Preconditions.checkState(rowIdColumn != null, "__ROW_ID__ column must exist in MV");
         int encodeRowIdVersion = mv.getEncodeRowIdVersion();
 
         List<Column> aggStateColumns = mv.getFullSchema().stream()
-                .filter(col -> col.getName().startsWith(TvrOpUtils.COLUMN_AGG_STATE_PREFIX))
+                .filter(col -> col.getName().startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX))
                 .collect(Collectors.toList());
 
         // Step 2: Create MV scan
@@ -141,7 +141,7 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         List<ScalarOperator> uniqueKeys = groupingKeys.stream()
                 .map(col -> (ScalarOperator) col)
                 .collect(Collectors.toList());
-        ScalarOperator eqPredicate = TvrOpUtils.buildRowIdEqBinaryPredicateOp(
+        ScalarOperator eqPredicate = IvmOpUtils.buildRowIdEqBinaryPredicateOp(
                 encodeRowIdVersion, mvRowIdRef, uniqueKeys);
 
         // Step 6: Build LEFT OUTER JOIN (intermediate agg ⋈ MV scan)
@@ -174,7 +174,7 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             Preconditions.checkState(intermediateRef != null,
                     "Intermediate ref should not be null for: %s", origCall);
             ColumnRefOperator mvStateRef = mvAggStateRefs.get(i);
-            ScalarOperator stateUnion = TvrOpUtils.buildStateUnionScalarOperator(
+            ScalarOperator stateUnion = IvmOpUtils.buildStateUnionScalarOperator(
                     origCall, intermediateRef, mvStateRef);
             projMap.put(origRef, stateUnion);
         }
