@@ -72,7 +72,6 @@ import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateSyncMVStmt;
 import com.starrocks.sql.ast.DmlStmt;
-import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.RefreshSchemeClause;
@@ -2929,8 +2928,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
     }
 
     @Test
-    public void testInjectedLegacyIncrementalCreateRejectedBeforePersistence() throws Exception {
-        String mvName = "legacy_incremental_create_guard_mv";
+    public void testInjectedUnsupportedRefreshSchemeCreateRejectedBeforePersistence() throws Exception {
+        String mvName = "unsupported_refresh_scheme_create_guard_mv";
         String sql = "create materialized view test." + mvName + "\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +
@@ -2938,13 +2937,12 @@ public class CreateMaterializedViewTest extends MVTestBase {
         try {
             CreateMaterializedViewStatement stmt =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            stmt.setRefreshSchemeDesc(new IncrementalRefreshSchemeDesc(
-                    stmt.getRefreshSchemeDesc().getMoment(), NodePosition.ZERO));
+            stmt.setRefreshSchemeDesc(new RefreshSchemeClause(NodePosition.ZERO,
+                    stmt.getRefreshSchemeDesc().getMoment()));
 
             DdlException exception = Assertions.assertThrows(DdlException.class,
                     () -> currentState.getLocalMetastore().createMaterializedView(stmt));
-            Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
-                    exception.getMessage());
+            Assertions.assertEquals("Unsupported refresh scheme type", exception.getMessage());
             Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName));
         } finally {
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(), mvName) != null) {

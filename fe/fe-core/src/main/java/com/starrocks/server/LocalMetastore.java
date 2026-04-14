@@ -218,7 +218,6 @@ import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HintNode;
-import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ManualRefreshSchemeDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
@@ -3190,9 +3189,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeClause refreshSchemeDesc = stmt.getRefreshSchemeDesc();
-        if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
-            throwLegacyIncrementalMaintenanceUnsupported();
-        }
         if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
