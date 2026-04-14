@@ -292,7 +292,7 @@ public class ConnectProcessor {
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
         ctx.getAuditEventBuilder().setQueriedRelations(
-                AnalyzerUtils.collectAllTableAndViewRelationNames(parsedStmt, true));
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt));
 
         if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             // Some information like username, password in the stmt should not be printed.
