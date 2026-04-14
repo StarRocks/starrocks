@@ -116,7 +116,8 @@ public class ProfileManager implements MemoryTrackable {
                 return null;
             }
             try {
-                return ProfileSerializer.deserialize(profileContent);
+                return RuntimeProfileParser.parseFrom(
+                        CompressionUtils.gzipDecompressString(profileContent));
             } catch (IOException e) {
                 LOG.warn("Failed to deserialize profile: {}", e.getMessage());
                 return null;
@@ -128,8 +129,15 @@ public class ProfileManager implements MemoryTrackable {
          * {@link Config#profile_info_format}.
          */
         public String getProfileString() {
-            RuntimeProfile profile = getRuntimeProfile();
-            return profile != null ? format(profile) : null;
+            if (profileContent == null) {
+                return null;
+            }
+            try {
+                return CompressionUtils.gzipDecompressString(profileContent);
+            } catch (IOException e) {
+                LOG.warn("Failed to deserialize profile: {}", e.getMessage());
+                return null;
+            }
         }
 
         /** Formats {@code profile} per the current {@link Config#profile_info_format}. */
