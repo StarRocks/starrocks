@@ -138,6 +138,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -799,9 +800,33 @@ public class AnalyzerUtils {
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
-        Map<TableName, Relation> allTableAndViewRelations = Maps.newHashMap();
+        if (parseNode == null) {
+            return Collections.emptyMap();
+        }
+        Map<TableName, Relation> allTableAndViewRelations = new LinkedHashMap<>();
         new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
         return allTableAndViewRelations;
+    }
+
+    public static List<String> collectAllTableAndViewRelationNamesForAudit(ParseNode parseNode) {
+        Map<TableName, Relation> allTableAndViewRelations = collectAllTableAndViewRelations(parseNode);
+        List<String> relationNames = new ArrayList<>(allTableAndViewRelations.size());
+        for (TableName tableName : allTableAndViewRelations.keySet()) {
+            relationNames.add(formatTableNameForAudit(tableName));
+        }
+        return relationNames;
+    }
+
+    static String formatTableNameForAudit(TableName tableName) {
+        StringBuilder stringBuilder = new StringBuilder();
+        if (tableName.getCatalog() != null) {
+            stringBuilder.append(tableName.getCatalog()).append(".");
+        }
+        if (tableName.getDb() != null) {
+            stringBuilder.append(tableName.getDb()).append(".");
+        }
+        stringBuilder.append(tableName.getTbl());
+        return stringBuilder.toString();
     }
 
     public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {

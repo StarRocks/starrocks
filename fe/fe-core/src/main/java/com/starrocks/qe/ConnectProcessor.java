@@ -76,6 +76,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DmlStmt;
@@ -308,6 +309,8 @@ public class ConnectProcessor {
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
+        ctx.getAuditEventBuilder().setQueriedRelations(
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(parsedStmt));
 
         if (parsedStmt != null && AuditEncryptionChecker.needEncrypt(parsedStmt)) {
             // Some information like username, password in the stmt should not be printed.
