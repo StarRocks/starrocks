@@ -58,7 +58,8 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
 
     private static final Set<OperatorType> SUPPORTED = Set.of(OperatorType.LOGICAL_HIVE_SCAN,
             OperatorType.LOGICAL_ICEBERG_SCAN,
-            OperatorType.LOGICAL_FILE_SCAN
+            OperatorType.LOGICAL_FILE_SCAN,
+            OperatorType.LOGICAL_FLUSS_SCAN
     );
 
     public static final RewriteSimpleAggToHDFSScanRule SCAN_NO_PROJECT =

@@ -35,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalMetaScanOperator;
@@ -79,6 +80,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScan
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
@@ -159,6 +161,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalKuduScan(LogicalKuduScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalFlussScan(LogicalFlussScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 
@@ -374,6 +380,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalKuduScan(PhysicalKuduScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalFlussScan(PhysicalFlussScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
