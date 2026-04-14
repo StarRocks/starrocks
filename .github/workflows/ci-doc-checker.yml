@@ -94,7 +94,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: 24
 
       - uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
         id: changed-files
@@ -118,8 +118,6 @@ jobs:
           globs: ${{ steps.changed-files.outputs.all_changed_files }}
           separator: ","
 
-<<<<<<< HEAD
-=======
   docusaurus-build:
     runs-on: ubuntu-latest
     needs: markdownlint # Only runs if markdownlint passes!
@@ -161,9 +159,7 @@ jobs:
         with:
           node-version: 24
 
->>>>>>> c1b01f1364 ([Doc] Vale rule to prevent HTML comments in docs outside of code blocks (#71627))
       - name: docusaurus-mdx-checker
-        if: always()
         run: |
           npx docusaurus-mdx-checker -c docs
 
@@ -176,6 +172,7 @@ jobs:
             --config docs/lychee.toml
             --offline "docs/**/*.md"
 
+      # 3. Your original Docusaurus build logic
       - name: Docusaurus build
         env:
           NODE_OPTIONS: --max-old-space-size=9216
@@ -184,7 +181,7 @@ jobs:
         working-directory: ./docs/docusaurus
         run: |
           rm -rf ./docs
-          rm -rf ./i18n/zh/docusaurus-plugin-content-dos/current
+          rm -rf ./i18n/zh/docusaurus-plugin-content-docs/current
           mkdir -p ./i18n/zh/docusaurus-plugin-content-docs
           mv ../en ./docs
           rm -rf ./docs/release_notes ./docs/ecosystem_release
