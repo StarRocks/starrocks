@@ -4,18 +4,32 @@ displayed_sidebar: docs
 
 # StarRocks JDBC 驱动
 
-StarRocks 提供原生 JDBC 驱动，支持任何 JDBC 兼容的客户端、IDE 或应用程序直接连接。
+StarRocks 提供原生 JDBC 驱动，支持任何兼容 JDBC 的客户端、IDE 或应用程序直接连接。
 
-## 前提条件
+## 先决条件
 
 - Java 8 或更高版本
 - 一个正在运行的 StarRocks 集群
 
 ## 下载
 
-StarRocks JDBC 驱动可在[Maven Central](https://central.sonatype.com/artifact/com.starrocks/starrocks-connector-j)。
+StarRocks JDBC 驱动可在 [Maven Central](https://central.sonatype.com/artifact/com.starrocks/starrocks-connector-j).
 
 您可以直接从 Maven Central 下载 JAR 包，或按照以下说明将其作为依赖项添加到您的项目中。
+
+### 通过 Maven CLI 下载
+
+如果您已安装 Maven，则无需创建项目即可下载 JAR 包：
+
+```bash
+mvn dependency:get -Dartifact=com.starrocks:starrocks-connector-j:1.1.1
+```
+
+JAR 包将保存到您的本地 Maven 仓库中，路径为：
+
+```
+~/.m2/repository/com/starrocks/starrocks-connector-j/1.1.1/starrocks-connector-j-1.1.1.jar
+```
 
 ## 在您的项目中使用 JAR 包
 
@@ -41,7 +55,7 @@ implementation 'com.starrocks:starrocks-connector-j:1.1.1'
 
 ### 纯 Java
 
-从[Maven Central](https://central.sonatype.com/artifact/com.starrocks/starrocks-connector-j)下载 JAR 包，并在编译和运行时将其添加到 classpath 中：
+从 [Maven Central](https://central.sonatype.com/artifact/com.starrocks/starrocks-connector-j) 下载 JAR 包，并在编译和运行时将其添加到 classpath 中：
 
 ```bash
 javac -cp starrocks-connector-j-<version>.jar MyApp.java
@@ -58,8 +72,8 @@ jdbc:starrocks://<fe_host>:<fe_query_port>/<catalog>.<database>
 |-----------|-------------|
 | `fe_host` | StarRocks 集群的 FE 主机 IP 地址。 |
 | `fe_query_port` | FE 查询端口，默认为 `9030`。 |
-| `catalog` | 要连接的 catalog。内部表使用 `default_catalog`，外部 catalog 使用其名称。 |
-| `database` | catalog 中的数据库。 |
+| `catalog` | 要连接的 Catalog。内部表使用 `default_catalog`，外部 Catalog 使用其名称。 |
+| `database` | Catalog 中的数据库。 |
 
 **示例：**
 
@@ -76,7 +90,7 @@ jdbc:starrocks://192.168.1.1:9030/default_catalog.my_database
 
 ## 元数据发现
 
-StarRocks JDBC 驱动支持标准的 JDBC 元数据 API (`DatabaseMetaData`)，允许工具内省 catalog、schema、表和列。这使得 IDE 功能（如 schema 浏览、自动补全和表内省）能够开箱即用。
+StarRocks JDBC 驱动支持标准的 JDBC 元数据 API (`DatabaseMetaData`)，允许工具自省 Catalog、Schema、表和列。这使得 IDE 功能（如 Schema 浏览、自动补全和表自省）能够开箱即用。
 
 ## 示例：从 Java 连接
 

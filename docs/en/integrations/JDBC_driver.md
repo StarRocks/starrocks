@@ -17,6 +17,20 @@ The StarRocks JDBC driver is available on [Maven Central](https://central.sonaty
 
 You can download the JAR directly from Maven Central, or add it as a dependency in your project using the instructions below.
 
+### Download via Maven CLI
+
+If you have Maven installed, you can download the JAR without creating a project:
+
+```bash
+mvn dependency:get -Dartifact=com.starrocks:starrocks-connector-j:1.1.1
+```
+
+The JAR will be saved to your local Maven repository at:
+
+```
+~/.m2/repository/com/starrocks/starrocks-connector-j/1.1.1/starrocks-connector-j-1.1.1.jar
+```
+
 ## Use the JAR in your project
 
 ### Maven
