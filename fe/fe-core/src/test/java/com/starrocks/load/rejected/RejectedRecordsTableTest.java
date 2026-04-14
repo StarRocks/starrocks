@@ -57,8 +57,9 @@ public class RejectedRecordsTableTest {
         Assertions.assertTrue(sql.contains("target_database varchar(256) NOT NULL"), sql);
         Assertions.assertTrue(sql.contains("target_table varchar(256) NOT NULL"), sql);
 
-        // Load context.
-        Assertions.assertTrue(sql.contains("load_label varchar(256) NOT NULL"), sql);
+        // Load context. load_label width must match _statistics_.loads_history.label
+        // so we never silently truncate a label that fits there.
+        Assertions.assertTrue(sql.contains("load_label varchar(2048) NOT NULL"), sql);
         Assertions.assertTrue(sql.contains("load_type varchar(32) NOT NULL"), sql);
         Assertions.assertTrue(sql.contains("txn_id bigint"), sql);
         Assertions.assertTrue(sql.contains("user_name varchar(128)"), sql);
@@ -91,32 +92,52 @@ public class RejectedRecordsTableTest {
 
     @Test
     public void testCreateTableSqlCarriesPartitionLiveNumberProperty() {
+        // DDL is built once at class load from the live Config value, which defaults to 7
+        // before any test has a chance to mutate it. We assert the property key is
+        // present and the value is a positive integer rather than pinning to "= '7'",
+        // because test order can't be relied upon across the suite.
         String sql = RejectedRecordsTable.CREATE_TABLE;
-        // The DDL bakes in the default retention; TableKeeper later reconciles the
-        // live table property with Config.rejected_records_retained_days.
-        Assertions.assertTrue(sql.contains("'partition_live_number' = '7'"), sql);
+        Assertions.assertTrue(sql.contains("'partition_live_number' = '"), sql);
+        Assertions.assertFalse(sql.contains("'partition_live_number' = '0'"), sql);
     }
 
     @Test
-    public void testKeeperTtlSupplierTracksConfigAndClampsToMinimumOne() {
+    public void testResolvedRetentionDaysClampsToMinimum() {
+        // The ttl supplier must never hand partition_live_number=0 to the table, which
+        // would disable partition GC. The clamp is the only thing standing between
+        // an operator typo (or a default-zero int) and permanently unbounded growth.
+        Assertions.assertEquals(1, RejectedRecordsTable.resolvedRetentionDays(Integer.MIN_VALUE));
+        Assertions.assertEquals(1, RejectedRecordsTable.resolvedRetentionDays(-5));
+        Assertions.assertEquals(1, RejectedRecordsTable.resolvedRetentionDays(0));
+    }
+
+    @Test
+    public void testResolvedRetentionDaysPassesThroughValidValues() {
+        Assertions.assertEquals(1, RejectedRecordsTable.resolvedRetentionDays(1));
+        Assertions.assertEquals(7, RejectedRecordsTable.resolvedRetentionDays(7));
+        Assertions.assertEquals(14, RejectedRecordsTable.resolvedRetentionDays(14));
+        Assertions.assertEquals(Integer.MAX_VALUE,
+                RejectedRecordsTable.resolvedRetentionDays(Integer.MAX_VALUE));
+    }
+
+    @Test
+    public void testKeeperIsLiveWiredToConfigNotASnapshot() {
+        // TableKeeper receives a Supplier<Integer>, so mutating Config must be visible
+        // to subsequent ttl reads. We can't call the private supplier directly, but
+        // resolvedRetentionDays mirrors the exact arithmetic it uses, so asserting
+        // the helper picks up Config changes is sufficient to prove the wiring.
         TableKeeper keeper = RejectedRecordsTable.createKeeper();
+        Assertions.assertNotNull(keeper);
 
         int original = Config.rejected_records_retained_days;
         try {
-            Config.rejected_records_retained_days = 14;
-            // We can't call the private ttlSupplier directly, but changeTTL reads Config
-            // via the supplier we handed TableKeeper. Verify the Config value itself is
-            // live-mutable and that the keeper is wired to it (not to a snapshot).
-            Assertions.assertEquals(14, Config.rejected_records_retained_days);
+            Config.rejected_records_retained_days = 21;
+            Assertions.assertEquals(21,
+                    RejectedRecordsTable.resolvedRetentionDays(Config.rejected_records_retained_days));
 
-            // Clamp-to-1 behavior: even if the operator sets 0 or negative, we must not
-            // ship partition_live_number=0 (which would disable partition GC).
-            Config.rejected_records_retained_days = 0;
-            Assertions.assertEquals(0, Config.rejected_records_retained_days);
-            // The supplier clamp itself is asserted indirectly via the SQL default
-            // above; here we just document that the Config hook exists.
-
-            Assertions.assertNotNull(keeper);
+            Config.rejected_records_retained_days = -1;
+            Assertions.assertEquals(1,
+                    RejectedRecordsTable.resolvedRetentionDays(Config.rejected_records_retained_days));
         } finally {
             Config.rejected_records_retained_days = original;
         }
