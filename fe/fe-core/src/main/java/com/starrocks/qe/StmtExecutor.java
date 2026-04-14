@@ -441,10 +441,8 @@ public class StmtExecutor {
                     .orElse("this is a desensitized sql");
             summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
                     SqlCredentialRedactor.redact(desensitizedSql));
-        } else if (SqlCredentialRedactor.mayNeedCredentialRedaction(sql)) {
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, SqlCredentialRedactor.redact(sql));
         } else {
-            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, sql);
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, SqlCredentialRedactor.redact(sql));
         }
         summaryProfile.addInfoString(ProfileManager.WAREHOUSE_CNGROUP, GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getWarehouseComputeResourceName(context.getCurrentComputeResource()));
