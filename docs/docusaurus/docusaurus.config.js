@@ -43,7 +43,8 @@ const config = {
     locales: ["en", "zh", "ja"],
     localeConfigs: {
       en: {
-        htmlLang: "en-US",
+        htmlLang: 'en-US',
+	label: 'English',
       },
       zh: {
         htmlLang: "zh-CN",
