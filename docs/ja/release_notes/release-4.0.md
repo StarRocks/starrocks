@@ -175,11 +175,6 @@ displayed_sidebar: docs
 - Group Provider 経由で取得した外部グループへの StarRocks 内部ロールの付与をサポート。[#63385](https://github.com/StarRocks/starrocks/pull/63385) [#63258](https://github.com/StarRocks/starrocks/pull/63258)
 - 外部テーブルのリフレッシュ権限を制御するため、外部テーブルに REFRESH 権限を追加しました。[#63385](https://github.com/StarRocks/starrocks/pull/62636)
 
-<!--
-- StarRocks FE 側で証明書を設定することで HTTPS をサポートし、クラウドやイントラネットでの暗号化通信要件を満たす安全なシステムアクセスを実現。[#56394](https://github.com/StarRocks/starrocks/pull/56394)
-- BE ノード間の HTTPS 通信をサポートし、データ伝送の暗号化と完全性を保証。内部データ漏洩や中間者攻撃を防止。[#53695](https://github.com/StarRocks/starrocks/pull/53695)
--->
-
 ### ストレージ最適化とクラスタ管理
 
 - 共有データクラスタのクラウドネイティブテーブルにファイルバンドル（File Bundling）最適化を導入。ロード、Compaction、Publish 操作によって生成されるデータファイルを自動的にバンドルし、外部ストレージシステムへの高頻度アクセスによる API コストを削減。ファイルバンドリングは、v4.0 以降で作成されたテーブルに対してデフォルトで有効化されています。[#58316](https://github.com/StarRocks/starrocks/issues/58316)
