@@ -1606,8 +1606,13 @@ public:
             if (binding.kind == TopBinding::Kind::SCALAR) {
                 append_top_scalar_binding_value(_row, binding, typed_col_dst);
             } else {
+                // When the base value column is null (fully-shredded row), _row_value is an
+                // empty string_view which is not a valid VariantValue.  Use the default null
+                // VariantRowRef so that append_variant_binding_row treats any path lookup on
+                // a missing full-row as null rather than crashing.
+                VariantRowRef full_row = _row_value.empty() ? VariantRowRef() : VariantRowRef(_row_metadata, _row_value);
                 RETURN_IF_ERROR(VariantColumnReader::append_variant_binding_row(
-                        _row, binding, _raw_metadata, VariantRowRef(_row_metadata, _row_value), typed_col_dst));
+                        _row, binding, _raw_metadata, full_row, typed_col_dst));
             }
         }
         return Status::OK();
