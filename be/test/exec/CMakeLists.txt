@@ -42,3 +42,13 @@ target_link_libraries(starrocks_exec_core_test_objs PRIVATE StarRocksPCH)
 set_target_properties(starrocks_exec_core_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 add_executable(exec_core_test $<TARGET_OBJECTS:starrocks_exec_core_test_objs>)
 target_link_libraries(exec_core_test ${EXEC_CORE_TEST_LINK_LIBS} gtest_main)
+
+# ADBC smoke tests (throwaway — deleted before PR push per D-16)
+add_library(starrocks_adbc_smoke_test_objs OBJECT
+    ../base/cxa_throw_wrap.cpp
+    adbc_smoke_test.cpp
+)
+target_link_libraries(starrocks_adbc_smoke_test_objs PRIVATE StarRocksPCH)
+set_target_properties(starrocks_adbc_smoke_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
+add_executable(adbc_smoke_test $<TARGET_OBJECTS:starrocks_adbc_smoke_test_objs>)
+target_link_libraries(adbc_smoke_test ${EXEC_CORE_TEST_LINK_LIBS} gtest_main)
