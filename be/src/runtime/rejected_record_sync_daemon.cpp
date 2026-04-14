@@ -174,33 +174,67 @@ void RejectedRecordSyncDaemon::run_one_tick() {
     std::vector<std::string> files = scan_once();
     _files_scanned.fetch_add(static_cast<int64_t>(files.size()), std::memory_order_relaxed);
     if (files.empty()) {
+        garbage_collect_stale_files();
         return;
     }
-    int max_rows = std::max(1, config::rejected_record_sync_max_batch_rows);
-    // Chunk into batches sized so each Stream Load stays under the configured
-    // row cap. We use file count as a rough proxy for row count (one line per
-    // record); a more precise split would require reading each file first.
+    const int max_rows = std::max(1, config::rejected_record_sync_max_batch_rows);
+
+    // Accumulate rows across files into a single in-memory payload;
+    // commit whenever the row counter reaches the soft cap. This makes
+    // `rejected_record_sync_max_batch_rows` honor its name: oversized
+    // files are still posted in one go (we can't subdivide one source
+    // file across posts because the atomicity unit is the file -- if
+    // the post succeeds we delete the file, if it fails we retry the
+    // whole file next tick) but any accumulation of smaller files is
+    // bounded.
+    std::ostringstream payload;
     std::vector<std::string> batch;
-    batch.reserve(std::min<size_t>(files.size(), 128));
-    int row_budget = max_rows;
+    int64_t batch_rows = 0;
+
     auto commit = [&]() {
-        if (batch.empty()) return;
-        auto st = flush_batch(batch);
+        if (batch.empty()) {
+            return;
+        }
+        auto st = post_to_stream_load(payload.str());
         if (!st.ok()) {
             _sync_failures.fetch_add(1, std::memory_order_relaxed);
-            LOG(WARNING) << "RejectedRecordSyncDaemon: flush_batch failed (" << batch.size()
-                         << " files): " << st.message() << "; leaving files on disk for retry.";
+            LOG(WARNING) << "RejectedRecordSyncDaemon: post_to_stream_load failed (" << batch.size()
+                         << " files, " << batch_rows << " rows): " << st.message()
+                         << "; leaving files on disk for retry.";
+        } else {
+            _records_flushed.fetch_add(batch_rows, std::memory_order_relaxed);
+            // Only delete source files on a successful post; on failure
+            // the `.syncing.<tick>` files remain and the next tick will
+            // re-claim + retry them via scan_once's adopt-stale path.
+            for (const auto& f : batch) {
+                remove_file(f);
+            }
         }
+        payload.str("");
+        payload.clear();
         batch.clear();
-        row_budget = max_rows;
+        batch_rows = 0;
     };
+
     for (const auto& f : files) {
-        // Without reading the file ahead of time we can't know the exact row
-        // count, so fall back to a conservative cap: at most max_rows files
-        // per batch. Oversized files still get shipped -- the cap is a
-        // soft limit to bound merge-commit transaction size.
+        std::ifstream in(f);
+        if (!in.is_open()) {
+            LOG(WARNING) << "RejectedRecordSyncDaemon: cannot open " << f << " for reading; skipping.";
+            remove_file(f); // unreadable file would otherwise be re-claimed forever
+            continue;
+        }
+        int64_t file_rows = 0;
+        std::string line;
+        while (std::getline(in, line)) {
+            if (line.empty()) {
+                continue;
+            }
+            payload << line << '\n';
+            ++file_rows;
+        }
         batch.push_back(f);
-        if (--row_budget <= 0 || batch.size() >= static_cast<size_t>(max_rows)) {
+        batch_rows += file_rows;
+        if (batch_rows >= max_rows) {
             commit();
         }
     }
@@ -254,8 +288,12 @@ std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
 }
 
 Status RejectedRecordSyncDaemon::flush_batch(const std::vector<std::string>& files) {
-    // Concatenate the JSON Lines contents of each file into a single
-    // payload. rapidjson / simdjson parsing on the FE side will split lines.
+    // Thin wrapper retained for tests that want to exercise the
+    // read-concatenate-post-delete path directly. Production traffic
+    // goes through `run_one_tick`, which caps batch size at
+    // `rejected_record_sync_max_batch_rows` and split-commits larger
+    // backlogs. This entry point ignores the row cap and ships the
+    // whole `files` list as one post.
     std::ostringstream payload;
     int64_t row_count = 0;
     for (const auto& f : files) {
@@ -272,8 +310,6 @@ Status RejectedRecordSyncDaemon::flush_batch(const std::vector<std::string>& fil
         }
     }
     if (row_count == 0) {
-        // Every file was empty or unreadable. Still remove them so we don't
-        // scan them repeatedly.
         for (const auto& f : files) {
             remove_file(f);
         }
@@ -281,9 +317,6 @@ Status RejectedRecordSyncDaemon::flush_batch(const std::vector<std::string>& fil
     }
     RETURN_IF_ERROR(post_to_stream_load(payload.str()));
     _records_flushed.fetch_add(row_count, std::memory_order_relaxed);
-    // Post succeeded -- delete the files we just shipped. A crash between
-    // post and delete means those records are duplicated into the system
-    // table; the PK on `id` (UUID) dedups them transparently.
     for (const auto& f : files) {
         remove_file(f);
     }
