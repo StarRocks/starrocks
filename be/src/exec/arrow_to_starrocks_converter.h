@@ -39,7 +39,40 @@ struct ArrowConvertContext {
     class SlotDescriptor* current_slot;
     std::string current_file;
     int error_message_counter = 0;
-    void report_error_message(const std::string& reason, const std::string& raw_data);
+
+    // --- Parquet rejected-record anchor fields ---
+    //
+    // These let `_statistics_.rejected_records.source_info` carry a stable
+    // pointer back to the offending row in the source Parquet file, so a
+    // future `parquet_read_rows()` TVF can rehydrate the full row on
+    // demand. They are scoped to the Broker-Load Parquet scanner (the
+    // only path that runs this context); Arrow Flight and other users
+    // leave them at -1 and `report_error_message` omits them from the
+    // emitted anchor.
+    //
+    // current_batch_first_row_in_file: absolute row number in the
+    //     Parquet file where the RecordBatch currently being converted
+    //     starts. ParquetScanner updates this before pulling each batch.
+    // file_size / file_mtime_ms: snapshotted when the scanner opens the
+    //     file. Included in the anchor so the TVF can fail-closed when
+    //     the file has been modified since rejection was recorded.
+    //
+    // `row_offset_in_array` is not stored on the context because
+    // individual ConvertFunc callers know the offset cheaply (it's their
+    // loop variable). `report_error_message` takes it as a parameter
+    // instead so we never accumulate stale state when converters fail
+    // mid-batch and the next batch's first call overwrites it.
+    int64_t current_batch_first_row_in_file = -1;
+    int64_t file_size = -1;
+    int64_t file_mtime_ms = -1;
+
+    // `row_offset_in_array`:
+    //   -1            -> no row offset available; source_info omits `row_in_file`.
+    //   >= 0          -> absolute row index in the file is
+    //                    `current_batch_first_row_in_file + row_offset_in_array`
+    //                    (only when `current_batch_first_row_in_file >= 0`).
+    void report_error_message(const std::string& reason, const std::string& raw_data,
+                              int64_t row_offset_in_array = -1);
 };
 
 // fill null_column's range [column_start_idx, column_start_idx + num_elements) with

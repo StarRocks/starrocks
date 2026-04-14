@@ -454,6 +454,12 @@ Status ParquetScanner::next_batch() {
         } else {
             if (status.ok()) {
                 _next_batch_counter++;
+                // Record where this RecordBatch starts in the file BEFORE
+                // `_last_file_scan_rows` is advanced past it. Any
+                // `ctx->report_error_message(..., row_offset_in_array)` fired
+                // during the upcoming conversion pass will resolve
+                // `row_in_file = current_batch_first_row_in_file + row_offset_in_array`.
+                _conv_ctx.current_batch_first_row_in_file = _last_file_scan_rows;
                 _last_file_scan_rows += _batch->num_rows();
                 if (_next_batch_counter % 32 == 0) {
                     auto incr_bytes = (int64_t)((double)_last_file_scan_rows / _curr_file_reader->total_num_rows() *
@@ -488,6 +494,14 @@ Status ParquetScanner::open_next_reader() {
             return st;
         }
         _conv_ctx.current_file = file->filename();
+        // Seed the Parquet rejected-record anchor fields so any
+        // type-conversion error this scanner fires can carry the
+        // `(file, row_in_file, file_size, file_mtime_ms)` tuple the
+        // `parquet_read_rows()` TVF needs to rehydrate the full row on
+        // replay. Reset per file.
+        _conv_ctx.current_batch_first_row_in_file = -1;
+        _conv_ctx.file_mtime_ms =
+                range_desc.__isset.modification_time ? range_desc.modification_time * 1000 : -1;
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);
@@ -502,6 +516,7 @@ Status ParquetScanner::open_next_reader() {
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));
         _last_file_size = file_size;
+        _conv_ctx.file_size = file_size;
         _last_range_size = range_desc.size;
         // switch to next file if the current file is empty
         if (file_size == 0) {

@@ -163,13 +163,30 @@ can `SELECT`; until then, operator-run dashboards should use `root`
 
 ## Limitations
 
-- **Parquet full-row capture is not yet wired.** Parquet loads capture
-  the offending column's raw value + column name into a single-column
-  `raw_record` fragment (`error_code='TYPE_MISMATCH'`), not the full
-  row, because Parquet has no broker-load row filter yet. Replay from
-  these fragments is lossy (other columns are missing); until Parquet
-  broker-load validation ships, use the ORC pipeline if you need
-  full-row replay semantics for columnar sources.
+- **Parquet rejected records carry an anchor, not the full row.**
+  Parquet loads record the offending column's raw value in a
+  single-column `raw_record` fragment **plus** a source anchor in
+  `source_info`:
+
+  ```json
+  {
+    "format": "parquet",
+    "file": "gs://bucket/orders.parquet",
+    "row_in_file": 1817542,
+    "file_size": 12345678,
+    "file_mtime_ms": 1711531331000
+  }
+  ```
+
+  `raw_record` alone is enough to diagnose what went wrong column by
+  column. For full-row replay a follow-up commit will ship a
+  `parquet_read_rows(file, anchors)` TVF that rehydrates the full row
+  by re-reading the source file using the anchor. Until that TVF
+  lands, the anchor is still useful for pointing users at the exact
+  row in the original Parquet file (`row_in_file` is 0-based) and for
+  validating that the source file has not changed (`file_size` and
+  `file_mtime_ms` are snapshotted at scan open and should be compared
+  before attempting any manual rehydration).
 - **`information_schema.loads.rejected_record_path` is deprecated.**
   The BE-local tab-delimited rejected-record file it used to point at
   was removed; the column is kept for upgrade compatibility but is

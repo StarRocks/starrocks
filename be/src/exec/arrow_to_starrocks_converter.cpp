@@ -323,7 +323,13 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
                             std::string raw_data = std::string(s_data, s_size);
                             std::string reason =
                                     strings::Substitute("string length $0 exceeds max length $1", s_size, max_length);
-                            ctx->report_error_message(reason, raw_data);
+                            // `i` indexes into the Arrow array; subtract
+                            // array_start_idx so the anchor's row offset
+                            // is relative to the RecordBatch start (which
+                            // is what ctx->current_batch_first_row_in_file
+                            // tracks).
+                            ctx->report_error_message(reason, raw_data,
+                                                      static_cast<int64_t>(i - array_start_idx));
                         }
                     }
                 }
@@ -1156,7 +1162,8 @@ LogicalType get_strict_type(ArrowTypeId at) {
 
 static const int MAX_ERROR_MESSAGE_COUNTER = 100;
 
-void ArrowConvertContext::report_error_message(const std::string& reason, const std::string& raw_data) {
+void ArrowConvertContext::report_error_message(const std::string& reason, const std::string& raw_data,
+                                                int64_t row_offset_in_array) {
     if (state == nullptr) return;
     if (error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     error_message_counter += 1;
@@ -1166,34 +1173,55 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
                                 col_name.empty() ? "null" : col_name, raw_data);
     RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
 
-    // Parquet / Arrow-Flight loads have no broker-load row filter (that
-    // is ORC-only today), so we cannot produce a proper per-row
-    // raw_record the way the ORC path does in Phase 4. What we DO have
-    // is the offending column's raw bytes -- emit them as a single-column
-    // JSON fragment so `_statistics_.rejected_records` at least carries
-    // the column, the raw value, and the source file a user can use to
-    // locate the upstream bad row. Replay from this is necessarily lossy
-    // (no other columns) and operators needing full-row replay for
-    // Parquet should follow the "Parquet broker-load validation" feature
-    // tracked in the rejected-records plan file.
+    // Emit a rejected-records anchor. The `raw_record` column stays as
+    // a single-column diagnostic fragment so users can quickly eyeball
+    // what went wrong without running the TVF; the `source_info` column
+    // carries everything a future `parquet_read_rows()` TVF needs to
+    // rehydrate the full row on demand:
+    //   * `file`          -- Parquet URI (always set)
+    //   * `row_in_file`   -- absolute row index (only when both
+    //                        current_batch_first_row_in_file and
+    //                        row_offset_in_array are known; the
+    //                        Arrow-Flight path and batch-wide errors
+    //                        leave it unset)
+    //   * `file_size`     -- snapshot at scanner open (fail-closed check
+    //                        in the TVF)
+    //   * `file_mtime_ms` -- ditto
+    //
+    // Replay from the anchor requires the TVF to re-read the Parquet
+    // file, which is the price we pay for not building the full ORC-
+    // style broker-load validation pipeline on the Parquet side. See
+    // the rejected-records plan file for the TVF follow-up.
     auto* writer = RuntimeStateHelper::rejected_record_writer(state);
     if (writer != nullptr) {
         const std::string key = col_name.empty() ? std::string("_raw") : col_name;
-        // source_info: {"format": "parquet", "file": "..."} -- the FE side
-        // uses load_type + source_info.format to distinguish Arrow Flight
-        // vs. file-source loads when surfacing results.
-        std::string source_info;
-        source_info.reserve(current_file.size() + 40);
-        source_info.append("{\"format\":\"parquet\",\"file\":");
-        rapidjson::StringBuffer file_buf;
-        rapidjson::Writer<rapidjson::StringBuffer> file_writer(file_buf);
-        file_writer.String(current_file.c_str(), static_cast<rapidjson::SizeType>(current_file.size()));
-        source_info.append(file_buf.GetString(), file_buf.GetSize());
-        source_info.append("}");
+
+        rapidjson::Document src_doc;
+        src_doc.SetObject();
+        auto& alloc = src_doc.GetAllocator();
+        src_doc.AddMember("format", rapidjson::Value("parquet", 7, alloc), alloc);
+        src_doc.AddMember("file",
+                          rapidjson::Value(current_file.c_str(),
+                                           static_cast<rapidjson::SizeType>(current_file.size()), alloc),
+                          alloc);
+        if (current_batch_first_row_in_file >= 0 && row_offset_in_array >= 0) {
+            int64_t row_in_file = current_batch_first_row_in_file + row_offset_in_array;
+            src_doc.AddMember("row_in_file", rapidjson::Value(row_in_file), alloc);
+        }
+        if (file_size >= 0) {
+            src_doc.AddMember("file_size", rapidjson::Value(file_size), alloc);
+        }
+        if (file_mtime_ms >= 0) {
+            src_doc.AddMember("file_mtime_ms", rapidjson::Value(file_mtime_ms), alloc);
+        }
+        rapidjson::StringBuffer src_buf;
+        rapidjson::Writer<rapidjson::StringBuffer> src_writer(src_buf);
+        src_doc.Accept(src_writer);
 
         writer->append_from_slices({Slice{raw_data.data(), raw_data.size()}},
                                    {key},
-                                   /*error_code=*/"TYPE_MISMATCH", reason, col_name, source_info);
+                                   /*error_code=*/"TYPE_MISMATCH", reason, col_name,
+                                   std::string(src_buf.GetString(), src_buf.GetSize()));
     }
 }
 
