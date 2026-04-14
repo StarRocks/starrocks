@@ -33,6 +33,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/query_statistics.h"
+#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_filter_worker.h"
 #include "runtime/runtime_state.h"
 
@@ -157,6 +158,23 @@ void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, con
 
     // TODO(meegoo): custom delimiter
     (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+}
+
+RejectedRecordWriter* RuntimeStateHelper::rejected_record_writer(RuntimeState* state) {
+    if (state == nullptr) {
+        return nullptr;
+    }
+    // Only LOAD queries produce rejected records; short-circuit to avoid
+    // allocating a writer for pure SELECT queries that happen to set
+    // log_rejected_record_num.
+    if (state->_query_options.query_type != TQueryType::LOAD) {
+        return nullptr;
+    }
+    std::lock_guard<std::mutex> l(state->_rejected_record_lock);
+    if (state->_rejected_record_writer == nullptr) {
+        state->_rejected_record_writer = std::make_unique<RejectedRecordWriter>(state);
+    }
+    return state->_rejected_record_writer.get();
 }
 
 void RuntimeStateHelper::update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params) {

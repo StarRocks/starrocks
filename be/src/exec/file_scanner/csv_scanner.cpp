@@ -22,6 +22,10 @@
 #include "column/column_helper.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
+#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 
@@ -592,7 +596,34 @@ void CSVScanner::_report_error(const CSVReader::Record& record, const std::strin
 }
 
 void CSVScanner::_report_rejected_record(const CSVReader::Record& record, const std::string& err_msg) {
+    // Legacy: keep writing the existing tab-delimited rejected-record file
+    // so ErrorURL / tracking_url consumers continue to work until Phase 4
+    // deletes the legacy path.
     RuntimeStateHelper::append_rejected_record_to_file(_state, record.to_string(), err_msg, _curr_reader->filename());
+
+    // Phase 2: also emit a structured JSON Lines record so the Phase 3 sync
+    // daemon has something to ship to `_statistics_.rejected_records`. We
+    // cannot cheaply reach the per-column Slices from here (_report_rejected_record
+    // is called after the reader has already advanced), so we use the raw
+    // line as the `_raw` fallback. Scanner call sites that still have the
+    // per-column Slices will migrate to `append_from_slices()` in a
+    // follow-up commit.
+    if (auto* writer = RuntimeStateHelper::rejected_record_writer(_state); writer != nullptr) {
+        rapidjson::Document src_doc;
+        src_doc.SetObject();
+        auto& alloc = src_doc.GetAllocator();
+        const std::string& filename = _curr_reader->filename();
+        src_doc.AddMember("format", rapidjson::Value("csv", 3, alloc), alloc);
+        src_doc.AddMember("file",
+                          rapidjson::Value(filename.c_str(), static_cast<rapidjson::SizeType>(filename.size()), alloc),
+                          alloc);
+        rapidjson::StringBuffer buf;
+        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+        src_doc.Accept(w);
+
+        writer->append_raw(record.to_string(), "PARSE_ERROR", err_msg, /*error_column=*/"",
+                           std::string(buf.GetString(), buf.GetSize()));
+    }
 }
 
 static TypeDescriptor get_type_desc(const Slice& field, const bool& sampleTypes) {

@@ -24,6 +24,7 @@ namespace starrocks {
 
 class ObjectPool;
 class QueryStatisticsRecvr;
+class RejectedRecordWriter;
 class RuntimeState;
 struct TReportExecStatusParams;
 
@@ -38,6 +39,12 @@ public:
                                          bool is_summary = false);
     static void append_rejected_record_to_file(RuntimeState* state, const std::string& record,
                                                const std::string& error_msg, const std::string& source);
+
+    // Phase 2: return the per-fragment RejectedRecordWriter, constructing it
+    // on first call under the existing rejected-record lock. Returns nullptr
+    // only if rejected-record logging is disabled for this state.
+    static RejectedRecordWriter* rejected_record_writer(RuntimeState* state);
+
     static void update_report_load_status(const RuntimeState* state, TReportExecStatusParams* load_params);
 
     static std::shared_ptr<QueryStatisticsRecvr> query_recv(RuntimeState* state);

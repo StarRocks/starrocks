@@ -24,6 +24,7 @@ set(RUNTIME_CORE_TEST_FILES
     mem_pool_test.cpp
     load_fail_point_test.cpp
     query_statistics_test.cpp
+    rejected_record_writer_core_test.cpp
     runtime_state_core_test.cpp
     runtime_filter_core_test.cpp
     thrift_rpc_helper_test.cpp
