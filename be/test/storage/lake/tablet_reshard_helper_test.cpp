@@ -73,8 +73,7 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_ssts) {
         rowset->add_segments("sc_seg.dat");
         auto* del = rowset->add_del_files();
         del->set_name("sc_del.dat");
-        auto& delvec_file =
-                (*op_schema_change->mutable_delvec_meta()->mutable_version_to_file())[1];
+        auto& delvec_file = (*op_schema_change->mutable_delvec_meta()->mutable_version_to_file())[1];
         delvec_file.set_name("delvec1.dat");
         delvec_file.set_shared(false);
     }

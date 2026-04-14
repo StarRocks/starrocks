@@ -892,10 +892,9 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 const bool allow_delete_shared =
                         !is_range_distribution &&
                         can_bundle_meta_file_to_be_deleted(versions_and_states[garbage_version]);
-                RETURN_IF_ERROR(
-                        collect_garbage_files(*metadata, data_dir, &deleter,
-                                              allow_delete_shared ? nullptr : &dummy_shared_file_deleter,
-                                              &dummy_file_size, TabletRetainInfo()));
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter,
+                                                      allow_delete_shared ? nullptr : &dummy_shared_file_deleter,
+                                                      &dummy_file_size, TabletRetainInfo()));
                 if (metadata->has_prev_garbage_version()) {
                     garbage_version = metadata->prev_garbage_version();
                 } else {
