@@ -30,6 +30,9 @@
 #include "fslib/star_cache_handler.h"
 #endif
 #include "fs/fs_util.h"
+#include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/query_statistics.h"
@@ -136,28 +139,64 @@ void RuntimeStateHelper::append_error_msg_to_file(RuntimeState* state, const std
 
 void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, const std::string& record,
                                                         const std::string& error_msg, const std::string& source) {
-    std::lock_guard<std::mutex> l(state->_rejected_record_lock);
     // Only load job need to write rejected record
     if (state->_query_options.query_type != TQueryType::LOAD) {
         return;
     }
 
-    // If file havn't been opened, open it here
-    if (state->_rejected_record_file == nullptr) {
-        Status status = RuntimeStateHelper::create_rejected_record_file(state);
-        if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
-            if (state->_rejected_record_file != nullptr) {
-                state->_rejected_record_file->close();
-                state->_rejected_record_file.reset();
-            }
-            return;
-        }
-    }
-    state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
+    {
+        std::lock_guard<std::mutex> l(state->_rejected_record_lock);
 
-    // TODO(meegoo): custom delimiter
-    (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+        // If file havn't been opened, open it here
+        if (state->_rejected_record_file == nullptr) {
+            Status status = RuntimeStateHelper::create_rejected_record_file(state);
+            if (!status.ok()) {
+                LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
+                if (state->_rejected_record_file != nullptr) {
+                    state->_rejected_record_file->close();
+                    state->_rejected_record_file.reset();
+                }
+                return;
+            }
+        }
+        state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
+
+        // TODO(meegoo): custom delimiter
+        (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+    }
+
+    // Fan out every legacy-path rejected row to the Phase 2 RejectedRecordWriter
+    // so the Phase 3 sync daemon can ship them to _statistics_.rejected_records
+    // without requiring each of the 17 legacy call sites to migrate manually.
+    // The writer uses BE-assigned UUIDs so duplicate writes (if a refactored
+    // call site also calls the writer directly) are deduped by the system
+    // table's primary key on (id, created_at).
+    //
+    // `source` is the legacy tab-delimited helper's free-form source string
+    // -- for file loads it is the file name, for INSERT / Routine Load it
+    // may be empty. We wrap whatever we got into a minimal JSON object so
+    // the system table's `source_info` column has a consistent shape.
+    if (auto* writer = RuntimeStateHelper::rejected_record_writer(state); writer != nullptr) {
+        std::string source_info_json;
+        if (!source.empty()) {
+            // Use rapidjson to escape the source string so path components with
+            // quotes or backslashes don't break the JSON. Building a tiny
+            // document is cheaper than a careful hand-rolled escape pass and
+            // keeps this in sync with how the writer's own builders escape
+            // their strings.
+            rapidjson::Document d;
+            d.SetObject();
+            auto& alloc = d.GetAllocator();
+            d.AddMember("source",
+                        rapidjson::Value(source.c_str(), static_cast<rapidjson::SizeType>(source.size()), alloc),
+                        alloc);
+            rapidjson::StringBuffer buf;
+            rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+            d.Accept(w);
+            source_info_json.assign(buf.GetString(), buf.GetSize());
+        }
+        writer->append_raw(record, /*error_code=*/"REJECTED", error_msg, /*error_column=*/"", source_info_json);
+    }
 }
 
 RejectedRecordWriter* RuntimeStateHelper::rejected_record_writer(RuntimeState* state) {
