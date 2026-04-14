@@ -734,6 +734,42 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：导入数据信息保留的时长。
 - 引入版本：-
 
+### enable_rejected_record_sync
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：拒绝记录同步守护线程的特性开关。启用后，BE 常驻的 `RejectedRecordSyncDaemon` 会扫描 `RejectedRecordWriter` 产生的分片级 JSON Lines 文件，并通过 merge-commit Stream Load 批量回写到 `_statistics_.rejected_records` 系统表。在分阶段上线期间默认关闭：升级到含该守护线程的版本后，只有在运维显式开启后集群才会开始向新系统表写入数据。
+- 引入版本：-
+
+### rejected_record_sync_interval_sec
+
+- 默认值：30
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：`RejectedRecordSyncDaemon` 的扫描周期。未找到新文件的 tick 为 no-op。减小该值可降低拒绝行在 `_statistics_.rejected_records` 中可查询的延迟，增大该值可减轻文件系统压力。
+- 引入版本：-
+
+### rejected_record_sync_max_batch_rows
+
+- 默认值：10000
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：单次 merge-commit Stream Load 批次包含的软上限行数。超出上限的回写量会在多个 tick 间拆分。该上限用于限制 Stream Load 事务规模，避免一次过大的 flush 反压影响无关的 load。
+- 引入版本：-
+
+### rejected_record_local_retention_hours
+
+- 默认值：24
+- 类型：Int
+- 单位：小时
+- 是否动态：是
+- 描述：本地 JSON Lines 文件被守护线程回收前的最长保留时间。作为兜底上限：同步失败通常每个 tick 都会重试，但在 FE 不可达、系统表被删除、鉴权异常等配置异常场景下，该配置可防止文件无限堆积占满存储路径。
+- 引入版本：-
+
 ### load_process_max_memory_limit_bytes
 
 - 默认值：107374182400

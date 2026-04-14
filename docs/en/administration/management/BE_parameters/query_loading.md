@@ -740,6 +740,42 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Description: The time for which data loading logs are reserved.
 - Introduced in: -
 
+### enable_rejected_record_sync
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Feature flag for the rejected records sync daemon. When true, the BE-resident `RejectedRecordSyncDaemon` scans per-fragment JSON Lines files produced by `RejectedRecordWriter` and batch-ships them to the `_statistics_.rejected_records` system table via merge-commit Stream Load. Defaults to false during the phased rollout so a cluster upgrading to a binary that contains the daemon does not start writing to the new system table until the operator explicitly opts in.
+- Introduced in: -
+
+### rejected_record_sync_interval_sec
+
+- Default: 30
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How often the `RejectedRecordSyncDaemon` wakes to scan local JSON Lines files. A tick with no new files is a no-op. Smaller values reduce the latency with which rejected rows become queryable in `_statistics_.rejected_records`; larger values reduce filesystem pressure.
+- Introduced in: -
+
+### rejected_record_sync_max_batch_rows
+
+- Default: 10000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Soft upper bound on rows shipped in a single merge-commit Stream Load batch. Larger backlogs are split across consecutive daemon ticks. The cap bounds Stream Load transaction size so a single oversized flush cannot back-pressure unrelated loads.
+- Introduced in: -
+
+### rejected_record_local_retention_hours
+
+- Default: 24
+- Type: Int
+- Unit: Hours
+- Is mutable: Yes
+- Description: Maximum age for per-fragment JSON Lines files before the daemon garbage-collects them. Intended as a last-resort cap: sync failures normally retry on every tick, but a misconfigured cluster (FE unreachable, system table dropped, auth broken) cannot slowly fill the store path when this setting is in effect.
+- Introduced in: -
+
 ### load_process_max_memory_limit_bytes
 
 - Default: 107374182400

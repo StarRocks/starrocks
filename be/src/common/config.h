@@ -547,6 +547,29 @@ CONF_Int32(arrow_flight_port, "-1");
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
+
+// --- Rejected records sync daemon (Phase 3 of the rejected_records feature) ---
+// How often the RejectedRecordSyncDaemon wakes up to scan local JSON Lines
+// files produced by RejectedRecordWriter. A tick that finds no new files is
+// a no-op; batches are flushed either when a tick picks up files or when a
+// single scan accumulates more than `rejected_record_sync_max_batch_rows`
+// rows worth of records.
+CONF_mInt32(rejected_record_sync_interval_sec, "30");
+// Upper bound on rows included in one merge-commit Stream Load batch. The
+// daemon splits larger backlogs across consecutive ticks rather than
+// attempting a single oversized transaction.
+CONF_mInt32(rejected_record_sync_max_batch_rows, "10000");
+// How long the daemon keeps unsyncable local files around before garbage
+// collecting them. Sync failures (FE down, auth error, table missing) keep
+// the files for re-sync; anything older than this is discarded so a
+// misconfigured cluster cannot slowly fill the store path.
+CONF_mInt32(rejected_record_local_retention_hours, "24");
+// Kill switch for the daemon. Defaults to false during the phased rollout
+// so clusters that upgrade to a Phase 3 binary do not start shipping
+// rejected records into _statistics_.rejected_records until the operator
+// has verified the table exists and set log_rejected_record_num > 0 on
+// targeted loads.
+CONF_mBool(enable_rejected_record_sync, "false");
 // Whether to execute load channel RPC requests asynchronously, that is,
 // to run RPCs in a separate thread pool instead of within BRPC workers
 CONF_mBool(enable_load_channel_rpc_async, "true");

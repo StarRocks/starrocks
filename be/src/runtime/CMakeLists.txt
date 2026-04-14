@@ -78,6 +78,7 @@ set(RUNTIME_FILES
     result_buffer_mgr.cpp
     runtime_state_helper.cpp
     rejected_record_writer.cpp
+    rejected_record_sync_daemon.cpp
     fragment_mgr.cpp
     load_path_mgr.cpp
     dummy_load_path_mgr.cpp
