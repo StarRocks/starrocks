@@ -264,8 +264,7 @@ public:
                             staros::GetShardResponse* /*reply*/) override {
         return ::grpc::Status(::grpc::StatusCode::INTERNAL, "mock starmgr error");
     }
-    ::grpc::Status WorkerHeartbeat(::grpc::ServerContext* /*context*/,
-                                   const staros::WorkerHeartbeatRequest* /*req*/,
+    ::grpc::Status WorkerHeartbeat(::grpc::ServerContext* /*context*/, const staros::WorkerHeartbeatRequest* /*req*/,
                                    staros::WorkerHeartbeatResponse* /*reply*/) override {
         return ::grpc::Status::OK;
     }
