@@ -30,6 +30,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/delete_predicates.h"
 #include "storage/lake/column_mode_partial_update_handler.h"
+#include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/lake_delvec_loader.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/segment_metadata_filter.h"
@@ -307,6 +308,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
                 _tablet_mgr, nullptr, seg_options.lake_io_opts.fill_data_cache, seg_options.lake_io_opts);
         seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
+        seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
         seg_options.version = options.version;
     }
     if (options.delete_predicates != nullptr) {
@@ -502,6 +504,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
     seg_options.delvec_loader =
             std::make_shared<LakeDelvecLoader>(_tablet_mgr, builder, true /*fill cache*/, seg_options.lake_io_opts);
     seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
+    seg_options.idg_loader = std::make_shared<LakeIndexDeltaGroupLoader>(_tablet_metadata);
     seg_options.version = version;
     seg_options.tablet_id = tablet_id();
     seg_options.rowset_id = metadata().id();
