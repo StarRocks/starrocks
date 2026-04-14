@@ -71,6 +71,20 @@ public class MaterializedViewMgrEditLogTest {
     private static final long INDEX_ID = 80006L;
     private static final long TABLET_ID = 80007L;
 
+    private static final class MaintenanceWorkInput {
+        private final CreateMaterializedViewStatement stmt;
+        private final ExecPlan execPlan;
+        private final ColumnRefFactory columnRefFactory;
+
+        private MaintenanceWorkInput(CreateMaterializedViewStatement stmt,
+                                     ExecPlan execPlan,
+                                     ColumnRefFactory columnRefFactory) {
+            this.stmt = stmt;
+            this.execPlan = execPlan;
+            this.columnRefFactory = columnRefFactory;
+        }
+    }
+
     @BeforeEach
     public void setUp() throws Exception {
         UtFrameUtils.setUpForPersistTest();
@@ -125,15 +139,11 @@ public class MaterializedViewMgrEditLogTest {
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         
-        // Set maintenance plan (required for MVMaintenanceJob)
-        ExecPlan execPlan = new ExecPlan();
-        mv.setMaintenancePlan(execPlan);
-        
         return mv;
     }
 
-    private CreateMaterializedViewStatement createCreateMaterializedViewStatement(MaterializedView mv) throws Exception {
-        // Create a mock CreateMaterializedViewStatement with maintenance plan
+    private MaintenanceWorkInput createMaintenanceWorkInput(MaterializedView mv) throws Exception {
+        // Create a mock CreateMaterializedViewStatement with explicit maintenance inputs
         CreateMaterializedViewStatement stmt = new CreateMaterializedViewStatement(
                 null, false, null, null, null, null, null, null, null, null, null, 0, 0, null, null);
         
@@ -153,10 +163,8 @@ public class MaterializedViewMgrEditLogTest {
         physicalPlanField.setAccessible(true);
         physicalPlanField.set(execPlan, physicalPlan);
         
-        // Set maintenance plan with ColumnRefFactory
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        stmt.setMaintenancePlan(execPlan, columnRefFactory);
-        return stmt;
+        return new MaintenanceWorkInput(stmt, execPlan, columnRefFactory);
     }
 
     @Test
@@ -164,7 +172,8 @@ public class MaterializedViewMgrEditLogTest {
         // Mock IMTCreator.createIMT to avoid exceptions during testing
         new MockUp<IMTCreator>() {
             @Mock
-            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) {
+            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view,
+                                         ExecPlan execPlan, ColumnRefFactory columnRefFactory) {
                 // Do nothing - skip IMT creation for testing
             }
         };
@@ -175,19 +184,19 @@ public class MaterializedViewMgrEditLogTest {
         db.registerTableUnlocked(mv);
 
         // 2. Create CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
+        MaintenanceWorkInput input = createMaintenanceWorkInput(mv);
 
         // 3. Create job first time
         MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
         MvId mvId = new MvId(DB_ID, MV_ID);
-        mvMgr.prepareMaintenanceWork(stmt, mv);
+        mvMgr.prepareMaintenanceWork(input.stmt, mv, input.execPlan, input.columnRefFactory);
 
         // 4. Verify job was created
         Assertions.assertNotNull(mvMgr.getJob(mvId), "Job should be created after first call");
 
         // 5. Try to create job again - should fail silently (exception is caught)
         // The method catches DdlException and removes the job from jobMap
-        mvMgr.prepareMaintenanceWork(stmt, mv);
+        mvMgr.prepareMaintenanceWork(input.stmt, mv, input.execPlan, input.columnRefFactory);
     }
 
     @Test
@@ -202,11 +211,11 @@ public class MaterializedViewMgrEditLogTest {
         db.registerTableUnlocked(mv);
 
         // 2. Create CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
+        MaintenanceWorkInput input = createMaintenanceWorkInput(mv);
 
         // 3. Call prepareMaintenanceWork - should return early for non-incremental MV
         MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
-        mvMgr.prepareMaintenanceWork(stmt, mv);
+        mvMgr.prepareMaintenanceWork(input.stmt, mv, input.execPlan, input.columnRefFactory);
 
         // 4. Verify no job was created
         MvId mvId = new MvId(DB_ID, MV_ID);
@@ -218,7 +227,8 @@ public class MaterializedViewMgrEditLogTest {
         // Mock IMTCreator.createIMT to avoid exceptions during testing
         new MockUp<IMTCreator>() {
             @Mock
-            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) {
+            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view,
+                                         ExecPlan execPlan, ColumnRefFactory columnRefFactory) {
                 // Do nothing - skip IMT creation for testing
             }
         };
@@ -229,12 +239,12 @@ public class MaterializedViewMgrEditLogTest {
         db.registerTableUnlocked(mv);
 
         // 2. Create CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
+        MaintenanceWorkInput input = createMaintenanceWorkInput(mv);
 
         // 3. Call prepareMaintenanceWork on master
         MaterializedViewMgr masterMvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
         MvId mvId = new MvId(DB_ID, MV_ID);
-        masterMvMgr.prepareMaintenanceWork(stmt, mv);
+        masterMvMgr.prepareMaintenanceWork(input.stmt, mv, input.execPlan, input.columnRefFactory);
 
         // 4. Verify master state - job was created
         MVMaintenanceJob masterJob = masterMvMgr.getJob(mvId);
@@ -288,7 +298,8 @@ public class MaterializedViewMgrEditLogTest {
         // Mock IMTCreator.createIMT to avoid exceptions during testing
         new MockUp<IMTCreator>() {
             @Mock
-            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) {
+            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view,
+                                         ExecPlan execPlan, ColumnRefFactory columnRefFactory) {
                 // Do nothing - skip IMT creation for testing
             }
         };
@@ -299,7 +310,7 @@ public class MaterializedViewMgrEditLogTest {
         db.registerTableUnlocked(mv);
 
         // 2. Create CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
+        MaintenanceWorkInput input = createMaintenanceWorkInput(mv);
 
         // 3. Mock EditLog.logMVJobState to throw exception
         EditLog currentEditLog = GlobalStateMgr.getCurrentState().getEditLog();
@@ -317,7 +328,7 @@ public class MaterializedViewMgrEditLogTest {
 
         // 5. Execute prepareMaintenanceWork - exception is caught internally, so it won't throw
         // But the job should not be added to jobMap if EditLog fails
-        mvMgr.prepareMaintenanceWork(stmt, mv);
+        mvMgr.prepareMaintenanceWork(input.stmt, mv, input.execPlan, input.columnRefFactory);
 
         Assertions.assertNull(mvMgr.getJob(mvId));
     }

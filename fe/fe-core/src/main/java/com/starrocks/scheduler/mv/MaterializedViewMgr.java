@@ -32,6 +32,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVReportEpochTask;
@@ -141,7 +142,10 @@ public class MaterializedViewMgr {
      * 3. Create job for MV maintenance
      * 4. Compute physical topology of MV job
      */
-    public void prepareMaintenanceWork(CreateMaterializedViewStatement stmt, MaterializedView view)
+    void prepareMaintenanceWork(CreateMaterializedViewStatement stmt,
+                                MaterializedView view,
+                                ExecPlan execPlan,
+                                ColumnRefFactory columnRefFactory)
             throws DdlException {
         if (!view.getRefreshScheme().isIncremental()) {
             return;
@@ -152,14 +156,13 @@ public class MaterializedViewMgr {
                 throw new DdlException("MV already existed");
             }
             // Prepare the table sink for exec-plan
-            ExecPlan execPlan = stmt.getMaintenancePlan();
             PlanFragment sinkFragment = execPlan.getTopFragment();
             OlapTableSink tableSink = (OlapTableSink) sinkFragment.getSink();
             tableSink.setDstTable(view);
             tableSink.setPartitionIds(view.getAllPartitionIds());
 
             // Create the job but not execute it
-            MVMaintenanceJob job = new MVMaintenanceJob(view);
+            MVMaintenanceJob job = new MVMaintenanceJob(view, execPlan);
             // TODO(murphy) atomic persist the meta of MV (IMT, MaintenancePlan) along with materialized view
             AtomicBoolean jobExist = new AtomicBoolean(false);
             GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job, wal -> {
@@ -168,7 +171,7 @@ public class MaterializedViewMgr {
                 }
             });
             if (!jobExist.get()) {
-                IMTCreator.createIMT(stmt, view);
+                IMTCreator.createIMT(stmt, view, execPlan, columnRefFactory);
             }
             LOG.info("create the maintenance job for MV: {}", view.getName());
         } catch (Exception e) {

@@ -57,10 +57,13 @@ import java.util.stream.Collectors;
 class IMTCreator {
     private static final Logger LOG = LogManager.getLogger(IMTCreator.class);
 
-    public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) throws DdlException {
-        ExecPlan maintenancePlan = stmt.getMaintenancePlan();
+    static void createIMT(CreateMaterializedViewStatement stmt,
+                          MaterializedView view,
+                          ExecPlan maintenancePlan,
+                          ColumnRefFactory columnRefFactory) throws DdlException {
         OptExpression optExpr = maintenancePlan.getPhysicalPlan();
-        List<CreateTableStmt> createTables = IMTCreatorVisitor.createIMTForOperator(stmt, optExpr, view);
+        List<CreateTableStmt> createTables =
+                IMTCreatorVisitor.createIMTForOperator(stmt, optExpr, view, columnRefFactory);
 
         for (CreateTableStmt create : createTables) {
             LOG.info("creating IMT {} for MV {}", create.getTableName(), view.getName());
@@ -77,14 +80,17 @@ class IMTCreator {
     static class IMTCreatorVisitor extends OptExpressionVisitor<Void, Void> {
         private CreateMaterializedViewStatement stmt;
         private MaterializedView view;
+        private ColumnRefFactory columnRefFactory;
         private List<CreateTableStmt> result = new ArrayList<>();
 
         public static List<CreateTableStmt> createIMTForOperator(CreateMaterializedViewStatement stmt,
                                                                  OptExpression optExpr,
-                                                                 MaterializedView view) {
+                                                                 MaterializedView view,
+                                                                 ColumnRefFactory columnRefFactory) {
             IMTCreatorVisitor visitor = new IMTCreatorVisitor();
             visitor.stmt = stmt;
             visitor.view = view;
+            visitor.columnRefFactory = columnRefFactory;
             visitor.visit(visitor, optExpr);
             return visitor.result;
         }
@@ -117,7 +123,6 @@ class IMTCreator {
         @Override
         public Void visitPhysicalStreamAgg(OptExpression optExpr, Void ctx) {
             MVOperatorProperty property = optExpr.getMvOperatorProperty();
-            ColumnRefFactory columnRefFactory = stmt.getColumnRefFactory();
             Map<String, String> properties = view.getProperties();
 
             if (!property.getModify().isInsertOnly()) {

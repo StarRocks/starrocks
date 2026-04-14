@@ -45,7 +45,7 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         MaterializedView view = new MaterializedView();
         view.setId(1024);
         view.setName("view1");
-        view.setMaintenancePlan(new ExecPlan());
+        ExecPlan plan = new ExecPlan();
 
         List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
         BaseTableInfo baseTableInfo1 = new BaseTableInfo(100L, "db", "tbl1", 1L);
@@ -57,7 +57,7 @@ public class MVMaintenanceJobTest extends PlanTestBase {
 
         view.setBaseTableInfos(baseTableInfos);
 
-        MVMaintenanceJob job = new MVMaintenanceJob(view);
+        MVMaintenanceJob job = new MVMaintenanceJob(view, plan);
         assertFalse(job.isRunnable());
 
         job.startJob();
@@ -108,9 +108,8 @@ public class MVMaintenanceJobTest extends PlanTestBase {
         view.setDbId(dbId);
         view.setId(1024);
         view.setName("view1");
-        view.setMaintenancePlan(pair.second);
 
-        MVMaintenanceJob job = new MVMaintenanceJob(view);
+        MVMaintenanceJob job = new MVMaintenanceJob(view, pair.second);
         job.buildContext();
         job.buildPhysicalTopology();
 

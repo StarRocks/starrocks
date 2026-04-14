@@ -87,7 +87,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -627,9 +626,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private List<ExpressionSerializedObject> serializedPartitionRefTableExprs;
     @Deprecated
     private List<Expr> partitionRefTableExprs;
-
-    // Maintenance plan for this MV
-    private transient ExecPlan maintenancePlan;
 
     // NOTE: The `maxMVRewriteStaleness` option helps you achieve consistently high performance
     // with controlled costs when processing large, frequently changing datasets.
@@ -2105,14 +2101,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     MvUtils.formatBaseTableInfos(baseTableInfos)));
         }
         return result;
-    }
-
-    public ExecPlan getMaintenancePlan() {
-        return maintenancePlan;
-    }
-
-    public void setMaintenancePlan(ExecPlan maintenancePlan) {
-        this.maintenancePlan = maintenancePlan;
     }
 
     /**

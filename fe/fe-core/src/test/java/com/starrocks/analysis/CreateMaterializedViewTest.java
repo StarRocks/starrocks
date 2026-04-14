@@ -30,6 +30,7 @@ import com.starrocks.catalog.LightWeightIcebergTable;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -58,6 +59,7 @@ import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -2973,7 +2975,9 @@ public class CreateMaterializedViewTest extends MVTestBase {
                     (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(testDb.getFullName(),
                             "async_mv_1");
             Assertions.assertFalse(mv.getRefreshScheme().isIncremental());
-            Assertions.assertNull(mv.getMaintenancePlan());
+            Method getJob = MaterializedViewMgr.class.getDeclaredMethod("getJob", MvId.class);
+            getJob.setAccessible(true);
+            Assertions.assertNull(getJob.invoke(GlobalStateMgr.getCurrentState().getMaterializedViewMgr(), mv.getMvId()));
             Assertions.assertTrue(mv.getFullSchema().get(0).isKey());
             Assertions.assertFalse(mv.getFullSchema().get(1).isKey());
         } catch (Exception e) {

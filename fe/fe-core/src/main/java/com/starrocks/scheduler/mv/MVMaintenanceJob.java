@@ -100,7 +100,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     private transient Map<Long, MVMaintenanceTask> taskMap;
     private transient BiMap<Long, TNetworkAddress> taskId2Addr;
 
-    public MVMaintenanceJob(MaterializedView view) {
+    MVMaintenanceJob(MaterializedView view, ExecPlan plan) {
         this.jobId = view.getId();
         this.dbId = view.getDbId();
         this.viewId = view.getId();
@@ -108,7 +108,7 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         this.epoch = new MVEpoch(view.getMvId());
         this.serializedState = JobState.INIT;
         this.state.set(JobState.INIT);
-        this.plan = Preconditions.checkNotNull(view.getMaintenancePlan());
+        this.plan = Preconditions.checkNotNull(plan);
     }
 
     // TODO recover the entire job state, include execution plan
@@ -227,11 +227,10 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
         }
 
         // Build  query coordinator
-        ExecPlan execPlan = this.view.getMaintenancePlan();
-        List<PlanFragment> fragments = execPlan.getFragments();
-        List<ScanNode> scanNodes = execPlan.getScanNodes();
-        TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
-        JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(connectContext, fragments, scanNodes, descTable, execPlan);
+        List<PlanFragment> fragments = plan.getFragments();
+        List<ScanNode> scanNodes = plan.getScanNodes();
+        TDescriptorTable descTable = plan.getDescTbl().toThrift();
+        JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(connectContext, fragments, scanNodes, descTable, plan);
         this.queryCoordinator = new CoordinatorPreprocessor(connectContext, jobSpec, false);
         this.epochCoordinator = new TxnBasedEpochCoordinator(this);
     }
