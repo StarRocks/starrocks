@@ -391,6 +391,12 @@ public class TableFunctionTable extends Table {
             tTableFunctionTable.setCsv_column_seperator(csvColumnSeparator);
             tTableFunctionTable.setCsv_row_delimiter(csvRowDelimiter);
             tTableFunctionTable.setCsv_include_header(csvIncludeHeader);
+            if (csvEnclose != 0) {
+                tTableFunctionTable.setCsv_enclose(csvEnclose);
+            }
+            if (csvEscape != 0) {
+                tTableFunctionTable.setCsv_escape(csvEscape);
+            }
         }
         tTableFunctionTable.setParquet_use_legacy_encoding(parquetUseLegacyEncoding);
         TParquetOptions parquetOptions = new TParquetOptions();
@@ -918,6 +924,29 @@ public class TableFunctionTable extends Table {
                         "expect a boolean value (true or false).", includeHeader);
             }
             this.csvIncludeHeader = includeHeader.equalsIgnoreCase("true");
+        }
+
+        // csv enclose & escape options: accept exactly one single-byte ASCII character.
+        // Reject empty, multi-character, or multi-byte (non-ASCII) values so that the
+        // byte transmitted to BE unambiguously represents the user's intent.
+        if (properties.containsKey(PROPERTY_CSV_ENCLOSE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ENCLOSE).getBytes(StandardCharsets.UTF_8);
+            if (bs.length != 1) {
+                throw new SemanticException(
+                        "csv.enclose must be a single-byte ASCII character, got \"%s\" (%d bytes)",
+                        properties.get(PROPERTY_CSV_ENCLOSE), bs.length);
+            }
+            this.csvEnclose = bs[0];
+        }
+
+        if (properties.containsKey(PROPERTY_CSV_ESCAPE)) {
+            byte[] bs = properties.get(PROPERTY_CSV_ESCAPE).getBytes(StandardCharsets.UTF_8);
+            if (bs.length != 1) {
+                throw new SemanticException(
+                        "csv.escape must be a single-byte ASCII character, got \"%s\" (%d bytes)",
+                        properties.get(PROPERTY_CSV_ESCAPE), bs.length);
+            }
+            this.csvEscape = bs[0];
         }
 
         // parquet options

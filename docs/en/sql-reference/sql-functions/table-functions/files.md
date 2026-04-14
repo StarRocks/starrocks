@@ -914,7 +914,12 @@ unload_data_param ::=
     "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
     "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } ,
-    "target_max_file_size" = "<int>"
+    "target_max_file_size" = "<int>",
+    "csv.column_separator" = "<column_separator>",
+    "csv.row_delimiter" = "<row_delimiter>",
+    "csv.include_header" = { "true" | "false" },
+    "csv.enclose" = "<enclose_character>",
+    "csv.escape" = "<escape_character>"
 ```
 
 | **Key**          | **Required** | **Description**                                              |
@@ -923,6 +928,11 @@ unload_data_param ::=
 | `partition_by`     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). `FILES()` extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 7. |
 | `single`           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
 | `target_max_file_size` | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |
+| `csv.column_separator` | No       | The column separator used in CSV-format output files. Default value: `\t`. Only applicable when `format` is `csv`.                       |
+| `csv.row_delimiter` | No          | The row delimiter used in CSV-format output files. Default value: `\n`. Only applicable when `format` is `csv`.                          |
+| `csv.include_header` | No         | Whether to include column names as the first row of CSV-format output files. Valid values: `true`, `false` (default). Only applicable when `format` is `csv`. |
+| `csv.enclose`      | No           | The character used to enclose each field value in CSV-format output files. When specified, all non-NULL fields are wrapped with this character, and occurrences of the enclose/escape characters within field values are escaped using the `csv.escape` character. NULL values are output as `\N` without enclosing. Type: single-byte ASCII character. Multi-character or multi-byte (non-ASCII) values are rejected with a semantic error. Default: `NONE` (disabled). Only applicable when `format` is `csv`. |
+| `csv.escape`       | No           | The character used to escape the enclose character and the escape character itself within field values. Type: single-byte ASCII character. Multi-character or multi-byte (non-ASCII) values are rejected with a semantic error. Default: `NONE`. Common combinations:<ul><li>`"csv.enclose"="\""`, `"csv.escape"="\""`: RFC 4180 style (doubled quotes).</li><li>`"csv.enclose"="\""`, `"csv.escape"="\\"`: backslash escape style.</li></ul>**NOTE**<br />When re-importing RFC 4180 doubled-quote output (where `escape` equals `enclose`) back into StarRocks, set only `csv.enclose` without `csv.escape` on the read side. StarRocks' CSV reader natively handles doubled quotes via its ENCLOSE state. |
 
 ## Examples
 

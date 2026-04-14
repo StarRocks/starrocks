@@ -17,11 +17,21 @@
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
+<<<<<<< HEAD
+=======
+#include "base/utility/defer_op.h"
+#include "column/column_helper.h"
+>>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
 #include "common/http/content_type.h"
 #include "csv_escape.h"
 #include "exec/hdfs_scanner_text.h"
 #include "formats/utils.h"
+<<<<<<< HEAD
 #include "output_stream_file.h"
+=======
+#include "io/formatted_output_stream_file.h"
+#include "io/formatted_output_stream_string.h"
+>>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
 #include "runtime/current_thread.h"
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
@@ -81,11 +91,17 @@ Status CSVFileWriter::_write_header() {
             LOG(WARNING)
                     << "include_header is enabled but column_names is empty, this may indicate an upstream logic issue";
         } else {
+            const bool use_enclose = (_writer_options->enclose != 0);
             for (size_t i = 0; i < _column_names.size(); i++) {
-                // Escape column names that contain special characters (delimiter, quotes, newlines)
-                std::string escaped_name =
-                        csv::escape_csv_field(_column_names[i], _writer_options->column_terminated_by);
-                RETURN_IF_ERROR(_output_stream->write(escaped_name));
+                if (use_enclose) {
+                    // Enclose the column name with the same escape semantics as data fields
+                    RETURN_IF_ERROR(_write_enclosed_string(_column_names[i]));
+                } else {
+                    // Escape column names that contain special characters (delimiter, quotes, newlines)
+                    std::string escaped_name =
+                            csv::escape_csv_field(_column_names[i], _writer_options->column_terminated_by);
+                    RETURN_IF_ERROR(_output_stream->write(escaped_name));
+                }
                 if (i + 1 != _column_names.size()) {
                     RETURN_IF_ERROR(_output_stream->write(_writer_options->column_terminated_by));
                 }
@@ -123,6 +139,16 @@ Status CSVFileWriter::write(Chunk* chunk) {
         columns.push_back(std::move(column));
     }
 
+    // Expression evaluation can produce ConstColumn (e.g. `SELECT NULL AS c, ...`),
+    // whose `is_nullable()` may be true but whose dynamic type is not NullableColumn.
+    // Unpack those here so downstream converters can safely rely on concrete column
+    // types without every per-type `down_cast` having to handle ConstColumn.
+    for (auto& column : columns) {
+        column = ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), column);
+    }
+
+    const bool use_enclose = (_writer_options->enclose != 0);
+
     for (size_t r = 0; r < chunk->num_rows(); r++) {
         for (size_t c = 0; c < columns.size(); c++) {
             csv::Converter* converter;
@@ -131,7 +157,23 @@ Status CSVFileWriter::write(Chunk* chunk) {
             } else {
                 converter = _column_converters[c].second.get();
             }
-            RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r, *_converter_options));
+
+            if (use_enclose) {
+                // Use the polymorphic Column::is_null() to decide on enclosure. After
+                // unpack_and_duplicate_const_column above, this safely handles both
+                // regular and previously-const nullable columns.
+                if (columns[c]->is_null(r)) {
+                    // NULL values go through the NullableConverter, which emits "\N"
+                    // without enclosing (matches Redshift / Postgres COPY behavior).
+                    RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r, *_converter_options));
+                } else {
+                    // Non-NULL: wrap with enclose char and escape internal enclose/escape chars.
+                    RETURN_IF_ERROR(_write_enclosed_field(converter, *columns[c], r, *_converter_options));
+                }
+            } else {
+                RETURN_IF_ERROR(converter->write_string(_output_stream.get(), *columns[c], r, *_converter_options));
+            }
+
             if (c + 1 != columns.size()) {
                 RETURN_IF_ERROR(_output_stream->write(_writer_options->column_terminated_by));
             }
@@ -140,6 +182,51 @@ Status CSVFileWriter::write(Chunk* chunk) {
     }
 
     return Status::OK();
+}
+
+Status CSVFileWriter::_write_enclosed_string(const std::string& value) {
+    const char enclose = _writer_options->enclose;
+    const char escape = _writer_options->escape;
+
+    // Write opening enclose
+    RETURN_IF_ERROR(_output_stream->write(enclose));
+
+    if (escape != 0) {
+        const char* data = value.data();
+        size_t size = value.size();
+        size_t start = 0;
+        for (size_t i = 0; i < size; i++) {
+            // When escape == enclose, both conditions refer to the same char,
+            // so we handle it once (doubling). The first branch covers it.
+            if (data[i] == enclose) {
+                RETURN_IF_ERROR(_output_stream->write(Slice(data + start, i - start)));
+                RETURN_IF_ERROR(_output_stream->write(escape));
+                start = i; // the enclose char itself will be written in the next segment
+            } else if (data[i] == escape && escape != enclose) {
+                // Escape the escape character itself so the CSV reader's ESCAPE state
+                // (csv_reader.cpp lines 282-294) doesn't strip it on re-import.
+                RETURN_IF_ERROR(_output_stream->write(Slice(data + start, i - start)));
+                RETURN_IF_ERROR(_output_stream->write(escape));
+                start = i;
+            }
+        }
+        RETURN_IF_ERROR(_output_stream->write(Slice(data + start, size - start)));
+    } else {
+        RETURN_IF_ERROR(_output_stream->write(Slice(value)));
+    }
+
+    // Write closing enclose
+    return _output_stream->write(enclose);
+}
+
+Status CSVFileWriter::_write_enclosed_field(csv::Converter* converter, const Column& column, size_t row_num,
+                                            const csv::Converter::Options& options) {
+    // Write the field content into a temporary in-memory string buffer, then scan
+    // and escape via _write_enclosed_string.
+    io::FormattedOutputStreamString field_buf(256);
+    RETURN_IF_ERROR(converter->write_string(&field_buf, column, row_num, options));
+    RETURN_IF_ERROR(field_buf.finalize()); // flush internal buffer to string
+    return _write_enclosed_string(field_buf.as_string());
 }
 
 FileWriter::CommitResult CSVFileWriter::close() {
@@ -199,6 +286,18 @@ Status CSVFileWriterFactory::init() {
     if (_options.contains(CSVWriterOptions::IS_HIVE)) {
         _parsed_options->is_hive = _options[CSVWriterOptions::IS_HIVE] == "true";
     }
+<<<<<<< HEAD
+=======
+    if (_options.contains(CSVWriterOptions::INCLUDE_HEADER)) {
+        _parsed_options->include_header = boost::iequals(_options[CSVWriterOptions::INCLUDE_HEADER], "true");
+    }
+    if (_options.contains(CSVWriterOptions::ENCLOSE) && !_options[CSVWriterOptions::ENCLOSE].empty()) {
+        _parsed_options->enclose = _options[CSVWriterOptions::ENCLOSE][0];
+    }
+    if (_options.contains(CSVWriterOptions::ESCAPE) && !_options[CSVWriterOptions::ESCAPE].empty()) {
+        _parsed_options->escape = _options[CSVWriterOptions::ESCAPE][0];
+    }
+>>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
     return Status::OK();
 }
 
