@@ -17,11 +17,7 @@
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
-<<<<<<< HEAD
-=======
-#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
->>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
 #include "common/http/content_type.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
 #include "formats/column_evaluator.h"
