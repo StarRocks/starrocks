@@ -15,14 +15,15 @@
 package com.starrocks.service.arrow.flight.sql;
 
 import com.google.common.cache.Cache;
+import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.plugin.AuditEvent;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -56,24 +57,30 @@ import org.apache.arrow.flight.Ticket;
 import org.apache.arrow.flight.sql.FlightSqlProducer;
 import org.apache.arrow.flight.sql.impl.FlightSql;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.ipc.ReadChannel;
+import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.lang.reflect.Field;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
+import java.lang.reflect.Method;
+import java.nio.channels.Channels;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Answers.CALLS_REAL_METHODS;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -93,6 +100,7 @@ public class ArrowFlightSqlServiceImplTest {
     private ArrowFlightSqlSessionManager sessionManager;
     private ArrowFlightSqlConnectContext mockContext;
     private FlightProducer.CallContext mockCallContext;
+    private SessionVariable mockSessionVariable;
     @Mocked
     AuditEncryptionChecker mockChecker;
 
@@ -116,6 +124,34 @@ public class ArrowFlightSqlServiceImplTest {
         }
     }
 
+    private static class CapturingResultListener implements FlightProducer.StreamListener<Result> {
+        private final CountDownLatch finished = new CountDownLatch(1);
+        private volatile Result result;
+        private volatile Throwable error;
+        private volatile boolean completed;
+
+        @Override
+        public void onNext(Result val) {
+            this.result = val;
+        }
+
+        @Override
+        public void onError(Throwable t) {
+            this.error = t;
+            finished.countDown();
+        }
+
+        @Override
+        public void onCompleted() {
+            this.completed = true;
+            finished.countDown();
+        }
+
+        public boolean await() throws InterruptedException {
+            return finished.await(5, TimeUnit.SECONDS);
+        }
+    }
+
     @BeforeEach
     public void setUp() throws IllegalAccessException, NoSuchFieldException, InterruptedException {
         sessionManager = mock(ArrowFlightSqlSessionManager.class);
@@ -129,7 +165,7 @@ public class ArrowFlightSqlServiceImplTest {
         when(mockContext.getExecutionId()).thenReturn(new com.starrocks.thrift.TUniqueId(1, 1));
         when(mockContext.getArrowFlightSqlToken()).thenReturn("token123");
 
-        SessionVariable mockSessionVariable = mock(SessionVariable.class);
+        mockSessionVariable = mock(SessionVariable.class);
         when(mockContext.getSessionVariable()).thenReturn(mockSessionVariable);
         when(mockContext.acquireRunningToken(anyLong())).thenReturn(true);
         when(mockSessionVariable.getQueryTimeoutS()).thenReturn(10);
@@ -519,42 +555,75 @@ public class ArrowFlightSqlServiceImplTest {
     }
 
     @Test
-    public void testCreatePreparedStatement() throws Exception {
-        // mock request
+    public void testCreatePreparedStatementUsesAnalyzedSchema() throws Exception {
+        String query = "SELECT 1 AS c1, 'x' AS c2";
         FlightSql.ActionCreatePreparedStatementRequest request = mock(FlightSql.ActionCreatePreparedStatementRequest.class);
-        when(request.getQuery()).thenReturn("SELECT 1");
+        when(request.getQuery()).thenReturn(query);
+        ArrowFlightSqlConnectContext realContext = new ArrowFlightSqlConnectContext("token123");
+        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(realContext);
 
-        // mock context
-        FlightProducer.CallContext callContext = mock(FlightProducer.CallContext.class);
-        when(callContext.peerIdentity()).thenReturn("token123");
+        CapturingResultListener listener = new CapturingResultListener();
+        service.createPreparedStatement(request, mockCallContext, listener);
 
-        // mock sessionManager
-        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(mockContext);
+        FlightSql.ActionCreatePreparedStatementResult preparedStatementResult = awaitPreparedStatementResult(listener);
 
-        // mock listener
-        FlightProducer.StreamListener<Result> listener = mock(FlightProducer.StreamListener.class);
+        String preparedStatementHandle = preparedStatementResult.getPreparedStatementHandle().toStringUtf8();
+        assertNotNull(preparedStatementHandle);
+        assertEquals(query, realContext.getPreparedStatement(preparedStatementHandle));
 
-        // mock ArrowUtil.createSingleSchemaRoot
-        try (
-                MockedStatic<ArrowUtil> mockArrowUtil = mockStatic(ArrowUtil.class);
-                MockedStatic<ArrowFlightSqlServiceImpl> mockStatic =
-                        mockStatic(ArrowFlightSqlServiceImpl.class, CALLS_REAL_METHODS)
-        ) {
-            // mock createSingleSchemaRoot
-            VectorSchemaRoot mockRoot = mock(VectorSchemaRoot.class);
-            Schema mockSchema = mock(Schema.class);
-            when(mockRoot.getSchema()).thenReturn(mockSchema);
-            mockArrowUtil.when(() -> ArrowUtil.createSingleSchemaRoot(anyString(), anyString())).thenReturn(mockRoot);
+        Schema datasetSchema = deserializeSchema(preparedStatementResult.getDatasetSchema());
+        assertEquals(2, datasetSchema.getFields().size());
+        assertEquals("c1", datasetSchema.getFields().get(0).getName());
+        assertTrue(datasetSchema.getFields().get(0).getType() instanceof org.apache.arrow.vector.types.pojo.ArrowType.Int);
+        assertEquals("c2", datasetSchema.getFields().get(1).getName());
+        assertTrue(datasetSchema.getFields().get(1).getType() instanceof org.apache.arrow.vector.types.pojo.ArrowType.Utf8);
 
-            // mock serializeMetadata
-            mockStatic.when(() -> ArrowFlightSqlServiceImpl.serializeMetadata(mockSchema))
-                    .thenReturn(ByteBuffer.wrap("mock".getBytes(StandardCharsets.UTF_8)));
+        Schema parameterSchema = deserializeSchema(preparedStatementResult.getParameterSchema());
+        assertTrue(parameterSchema.getFields().isEmpty());
+    }
 
-            // call method
-            service.createPreparedStatement(request, callContext, listener);
+    @Test
+    public void testCreatePreparedStatementFallsBackToPlaceholderSchemaForNonQueryStatement() throws Exception {
+        String query = "SHOW DATABASES";
+        FlightSql.ActionCreatePreparedStatementRequest request = mock(FlightSql.ActionCreatePreparedStatementRequest.class);
+        when(request.getQuery()).thenReturn(query);
+        ArrowFlightSqlConnectContext realContext = new ArrowFlightSqlConnectContext("token123");
+        when(sessionManager.validateAndGetConnectContext("token123")).thenReturn(realContext);
 
-            // wait executor
-            Thread.sleep(500);
+        CapturingResultListener listener = new CapturingResultListener();
+        service.createPreparedStatement(request, mockCallContext, listener);
+
+        FlightSql.ActionCreatePreparedStatementResult preparedStatementResult = awaitPreparedStatementResult(listener);
+
+        String preparedStatementHandle = preparedStatementResult.getPreparedStatementHandle().toStringUtf8();
+        assertNotNull(preparedStatementHandle);
+        assertEquals(query, realContext.getPreparedStatement(preparedStatementHandle));
+
+        Schema datasetSchema = deserializeSchema(preparedStatementResult.getDatasetSchema());
+        assertEquals(1, datasetSchema.getFields().size());
+        assertEquals("result", datasetSchema.getFields().get(0).getName());
+        assertTrue(datasetSchema.getFields().get(0).getType() instanceof org.apache.arrow.vector.types.pojo.ArrowType.Int);
+        assertTrue(datasetSchema.getFields().get(0).isNullable());
+
+        Schema parameterSchema = deserializeSchema(preparedStatementResult.getParameterSchema());
+        assertTrue(parameterSchema.getFields().isEmpty());
+    }
+
+    @Test
+    public void testBuildSchemaFromQueryRestoresPreviousConnectContext() throws Exception {
+        ConnectContext previous = new ConnectContext();
+        previous.setThreadLocalInfo();
+        ArrowFlightSqlConnectContext arrowContext = new ArrowFlightSqlConnectContext("token123");
+        Method method = ArrowFlightSqlServiceImpl.class
+                .getDeclaredMethod("buildSchemaFromQuery", ArrowFlightSqlConnectContext.class, String.class);
+        method.setAccessible(true);
+
+        try {
+            Schema schema = (Schema) method.invoke(service, arrowContext, "SELECT 1 AS c1");
+            assertNotNull(schema);
+            assertSame(previous, ConnectContext.get());
+        } finally {
+            ConnectContext.remove();
         }
     }
 
@@ -609,6 +678,20 @@ public class ArrowFlightSqlServiceImplTest {
         Field field = target.getClass().getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(target, value);
+    }
+
+    private FlightSql.ActionCreatePreparedStatementResult awaitPreparedStatementResult(CapturingResultListener listener)
+            throws Exception {
+        assertTrue(listener.await(), "Timed out waiting for createPreparedStatement result");
+        assertNull(listener.error, "Unexpected createPreparedStatement error: " + listener.error);
+        assertTrue(listener.completed);
+        assertNotNull(listener.result);
+        return Any.parseFrom(listener.result.getBody()).unpack(FlightSql.ActionCreatePreparedStatementResult.class);
+    }
+
+    private Schema deserializeSchema(ByteString schemaBytes) throws IOException {
+        return MessageSerializer.deserializeSchema(
+                new ReadChannel(Channels.newChannel(new ByteArrayInputStream(schemaBytes.toByteArray()))));
     }
 
     @Test
