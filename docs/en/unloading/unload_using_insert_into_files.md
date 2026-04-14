@@ -210,10 +210,26 @@ Example:
 ```SQL
 -- Unload data into CSV files.
 INSERT INTO FILES(
-  'path' = 'file:///home/ubuntu/csvfile/', 
-  'format' = 'csv', 
-  'csv.column_separator' = ',', 
+  'path' = 'file:///home/ubuntu/csvfile/',
+  'format' = 'csv',
+  'csv.column_separator' = ',',
   'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- Unload data into CSV files with field enclosing (RFC 4180 style).
+-- Field values containing commas or quotes are wrapped with the enclose
+-- character, and internal quotes are escaped by doubling (because
+-- csv.escape is the same as csv.enclose). NULL values are output as \N
+-- without enclosing.
+INSERT INTO FILES(
+  'path' = 'file:///home/ubuntu/csvfile_enclosed/',
+  'format' = 'csv',
+  'csv.column_separator' = ',',
+  'csv.row_delimiter' = '\n',
+  'csv.enclose' = '"',
+  'csv.escape' = '"',
+  'csv.include_header' = 'true'
 )
 SELECT * FROM sales_records;
 
@@ -225,6 +241,25 @@ INSERT INTO FILES(
 )
 SELECT * FROM sales_records;
 ```
+
+:::note
+
+When `csv.enclose` is set, every non-NULL field value is wrapped with the enclose character,
+and occurrences of the enclose character (and the escape character itself, when different)
+inside field values are escaped with the `csv.escape` character. NULL values are output as
+`\N` without enclosing.
+
+If you need to re-import RFC 4180-style doubled-quote output (where `csv.escape` equals
+`csv.enclose`) back into StarRocks, set only `csv.enclose` on the read side and do NOT set
+`csv.escape`. StarRocks' CSV reader natively handles doubled quotes via its ENCLOSE state.
+
+Also note that NULL values round-trip cleanly **only** when `csv.escape` is not
+backslash (`\`). The NULL marker `\N` is fixed, and when `csv.escape = '\\'` the reader's
+ESCAPE state strips the leading backslash and reads `\N` as the literal character `N`
+instead of NULL. Use `csv.escape = '"'` (RFC 4180 doubling) for datasets that need
+NULL roundtrip.
+
+:::
 
 ## See also
 
