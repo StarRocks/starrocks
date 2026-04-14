@@ -155,7 +155,7 @@ jobs:
           git merge --squash --no-edit ${BRANCH} || (echo "::error::Merge conflict, please check." && exit -1)
 
       # 2. Replicate the Node.js setup
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
 
@@ -175,7 +175,7 @@ jobs:
       # 3. Your original Docusaurus build logic
       - name: Docusaurus build
         env:
-          NODE_OPTIONS: --max-old-space-size=8192
+          NODE_OPTIONS: --max-old-space-size=9216
           DISABLE_VERSIONING: true
           DOCUSAURUS_IGNORE_SSG_WARNINGS: true
         working-directory: ./docs/docusaurus

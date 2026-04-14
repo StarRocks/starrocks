@@ -1,0 +1,5 @@
+extends: script
+message: "HTML comment found outside a code block. Please remove the comment as Docusaurus does not allow HTML comments outside of code blocks." 
+level: error
+scope: raw
+script: HTMLComment.tengo
