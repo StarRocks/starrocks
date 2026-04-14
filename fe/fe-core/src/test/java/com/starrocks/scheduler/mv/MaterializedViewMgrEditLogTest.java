@@ -33,7 +33,6 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.KeysType;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
@@ -116,7 +115,7 @@ public class MaterializedViewMgrEditLogTest {
     }
 
     private static MVMaintenanceJob createLegacyJob(MaterializedView mv) {
-        return new MVMaintenanceJob(mv, new ExecPlan());
+        return new MVMaintenanceJob(mv);
     }
 
     private static void logLegacyJob(MaterializedViewMgr mvMgr, MVMaintenanceJob job) {
@@ -196,5 +195,31 @@ public class MaterializedViewMgrEditLogTest {
         Assertions.assertEquals(masterJob.getDbId(), restoredJob.getDbId());
         Assertions.assertEquals(masterJob.getViewId(), restoredJob.getViewId());
         Assertions.assertEquals(masterJob.getState(), restoredJob.getState());
+    }
+
+    @Test
+    public void testReplayLegacyEpochFromEditLog() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
+        db.registerTableUnlocked(mv);
+
+        MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
+        MvId mvId = new MvId(DB_ID, MV_ID);
+        mvMgr.replay(createLegacyJob(mv));
+
+        MVEpoch epoch = new MVEpoch(mvId);
+        epoch.setState(MVEpoch.EpochState.COMMITTED);
+        GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
+
+        MVEpoch replayEpoch = (MVEpoch) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_MV_EPOCH_UPDATE);
+        Assertions.assertNotNull(replayEpoch);
+        Assertions.assertEquals(MVEpoch.EpochState.COMMITTED, replayEpoch.getState());
+
+        MaterializedViewMgr followerMvMgr = new MaterializedViewMgr();
+        followerMvMgr.replay(createLegacyJob(mv));
+        followerMvMgr.replayEpoch(replayEpoch);
+
+        Assertions.assertEquals(MVEpoch.EpochState.COMMITTED, followerMvMgr.getJob(mvId).getEpoch().getState());
     }
 }
