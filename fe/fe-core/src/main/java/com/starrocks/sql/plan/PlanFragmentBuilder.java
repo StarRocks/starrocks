@@ -86,6 +86,7 @@ import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IntersectNode;
 import com.starrocks.planner.JDBCScanNode;
 import com.starrocks.planner.JoinNode;
+import com.starrocks.planner.FlussScanNode;
 import com.starrocks.planner.KuduScanNode;
 import com.starrocks.planner.LookUpNode;
 import com.starrocks.planner.MergeJoinNode;
@@ -191,6 +192,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScan
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalFlussScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalLookUpOperator;
@@ -1725,6 +1727,53 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), kuduScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalFlussScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalFlussScanOperator node = (PhysicalFlussScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            prepareContextSlots(node, context, tupleDescriptor);
+
+            FlussScanNode flussScanNode =
+                    new FlussScanNode(context.getNextNodeId(), tupleDescriptor, "FlussScanNode");
+            flussScanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            flussScanNode.computeStatistics(optExpression.getStatistics());
+            currentExecGroup.add(flussScanNode, true);
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    flussScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                flussScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate(), node.getLimit());
+                HDFSScanNodePredicates scanNodePredicates = flussScanNode.getScanNodePredicates();
+                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
+            } catch (Exception e) {
+                LOG.warn("Fluss scan node get scan range locations failed : ", e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            flussScanNode.setLimit(node.getLimit());
+            flussScanNode.setDataCacheOptions(node.getDataCacheOptions());
+
+            tupleDescriptor.computeMemLayout();
+            registerScanNode(node, flussScanNode, context);
+
+            PlanFragment flussScanFragment =
+                    new PlanFragment(context.getNextFragmentId(), flussScanNode, DataPartition.RANDOM);
+            context.getFragments().add(flussScanFragment);
+            return flussScanFragment;
         }
 
         @Override
