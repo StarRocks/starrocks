@@ -313,6 +313,18 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     _file->write(buf.GetString(), buf.GetSize());
     _file->put('\n');
     _records_written.fetch_add(1, std::memory_order_relaxed);
+
+    // Single counter-increment site for the entire feature. All paths
+    // that eventually reach the writer -- legacy
+    // RuntimeStateHelper::append_rejected_record_to_file, ORC's
+    // capture_rejected_rows_before_filter, and the Parquet
+    // ArrowConvertContext::report_error_message -- go through
+    // append_serialized, so enable_log_rejected_record()'s cap now
+    // applies symmetrically. Counting here rather than in the entry
+    // methods means callers that build up a record and then fail at
+    // file open (best-effort no-op, see ensure_file_open) don't
+    // inflate the counter past the usable writes.
+    _state->note_rejected_record();
 }
 
 std::string RejectedRecordWriter::build_json_from_chunk(const Chunk& chunk, size_t row_idx,

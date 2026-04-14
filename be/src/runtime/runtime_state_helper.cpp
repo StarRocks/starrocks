@@ -133,7 +133,14 @@ void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, con
     if (writer == nullptr) {
         return;
     }
-    state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
+    // The per-load rejected-row counter is now maintained inside the
+    // writer (RejectedRecordWriter::append_serialized). That keeps
+    // counting consistent across every entry point: legacy helper,
+    // ORC's capture_rejected_rows_before_filter, Parquet's
+    // ArrowConvertContext, and future direct callers all advance the
+    // same counter. Double-counting from the helper would make the
+    // `log_rejected_record_num` cap fire at half the configured limit
+    // for legacy call sites while leaving ORC unbounded.
 
     // `source` is the legacy free-form string (file name for file loads,
     // empty for INSERT / Routine Load). Wrap it in JSON so the system

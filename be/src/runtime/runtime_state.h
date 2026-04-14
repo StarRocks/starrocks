@@ -294,6 +294,13 @@ public:
                _query_options.log_rejected_record_num > _num_log_rejected_rows;
     }
 
+    // Single accounting point for rejected-row counting, bumped from
+    // inside `RejectedRecordWriter::append_serialized`. All entry paths
+    // that eventually reach the writer (legacy helper, ORC capture,
+    // Parquet ArrowConvertContext) share this counter so the per-load
+    // cap in `log_rejected_record_num` fires symmetrically.
+    void note_rejected_record() { _num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed); }
+
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
     int64_t num_rows_load_from_source() const noexcept { return _num_rows_load_total_from_source.load(); }
