@@ -479,10 +479,10 @@ CONF_mInt32(pk_index_parallel_execution_threadpool_size, "1048576");
 CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
-// Whether enable parallel row-mode partial update publish for lake PK tables.
-CONF_mBool(lake_enable_parallel_row_mode_partial_update, "true");
-// Max threads for partial update segment-level parallelism (controls concurrency and memory).
-CONF_mInt32(lake_partial_update_thread_pool_max_threads, "4");
+// Max threads for parallel row-mode partial update publish in lake PK tables.
+// Controls segment-level parallelism concurrency and memory. 0 means use CPU core count.
+// Negative values (e.g., -1) disable parallel execution.
+CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
