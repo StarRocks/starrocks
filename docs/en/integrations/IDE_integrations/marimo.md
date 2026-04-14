@@ -8,7 +8,7 @@ This guide describes how to integrate your StarRocks cluster with [Marimo](https
 
 ## Prerequisites
 
-First, start by installing Marimo and setting up a notebook according to the documentation found [here](https://github.com/marimo-team/marimo#quickstart).
+First, start by installing Marimo and setting up a notebook according to the [Marimo quickstart documentation](https://github.com/marimo-team/marimo#quickstart).
 
 You will also need the following packages:
 
