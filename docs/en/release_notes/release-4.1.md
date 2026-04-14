@@ -38,7 +38,7 @@ Release Date: April 13, 2026
 
 - **Cache Observability**
 
-  Cache hit ratio metrics are exposed in audit logs and the monitoring system for better cache transparency and latency predictability. Detailed Data Cache metrics include memory and disk quota, page cache statistics, and per-table hit rates. [#63964](https://github.com/StarRocks/starrocks/pull/63964)
+  Query-level cache hit ratio is now exposed in audit logs and the monitoring system for better cache transparency and latency diagnosis. Additional Data Cache metrics include memory and disk quota usage, and page cache statistics. [#63964](https://github.com/StarRocks/starrocks/pull/63964)
 
 - Added segment metadata filter for Lake tables to skip irrelevant segments based on sort key range during scans, reducing I/O for range-predicate queries. [#68124](https://github.com/StarRocks/starrocks/pull/68124)
 - Supports fast cancel for Lake DeltaWriter, reducing latency for cancelled ingestion jobs in shared-data clusters. [#68877](https://github.com/StarRocks/starrocks/pull/68877)
