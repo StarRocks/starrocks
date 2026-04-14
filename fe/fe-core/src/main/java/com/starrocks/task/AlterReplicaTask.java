@@ -98,6 +98,18 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private List<TColumn> baseSchemaColumns;
     // baseTabletReadSchema is used for shared-data in Fast Schema Evolution v2
     private TTabletSchema baseTabletReadSchema;
+
+    // ADD INDEX fast-path flags (lake only). When onlyAddIndex is true, BE skips
+    // data rewrite and builds standalone .idx files (Index Delta Group) for each
+    // entry in indexesToAdd. See LakeTableAddIndexJob and
+    // SchemaChangeHandler::do_process_add_index_only on BE.
+    private boolean onlyAddIndex = false;
+    private List<com.starrocks.thrift.TOlapTableIndex> indexesToAdd;
+
+    // DROP INDEX fast-path flags (lake only). When onlyDropIndex is true, BE
+    // writes an OpDropIndex TxnLog; publish applies tombstones into IDG.
+    private boolean onlyDropIndex = false;
+    private List<com.starrocks.thrift.TDropIndexInfo> dropIndexes;
     private RollupJobV2Params rollupJobV2Params;
 
     public static class RollupJobV2Params {
@@ -313,7 +325,37 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         if (baseTabletReadSchema != null) {
             req.setBase_tablet_read_schema(baseTabletReadSchema);
         }
+        if (onlyAddIndex) {
+            req.setOnly_add_index(true);
+            if (indexesToAdd != null && !indexesToAdd.isEmpty()) {
+                req.setIndexes_to_add(indexesToAdd);
+            }
+        }
+        if (onlyDropIndex) {
+            req.setOnly_drop_index(true);
+            if (dropIndexes != null && !dropIndexes.isEmpty()) {
+                req.setDrop_indexes(dropIndexes);
+            }
+        }
         return req;
+    }
+
+    /**
+     * Enable the ADD INDEX fast path on this task. Used by
+     * LakeTableAddIndexJob. No-op if `indexes` is null.
+     */
+    public void setOnlyAddIndex(List<com.starrocks.thrift.TOlapTableIndex> indexes) {
+        this.onlyAddIndex = true;
+        this.indexesToAdd = indexes;
+    }
+
+    /**
+     * Enable the DROP INDEX fast path on this task. Used by
+     * LakeTableDropIndexJob.
+     */
+    public void setOnlyDropIndex(List<com.starrocks.thrift.TDropIndexInfo> drops) {
+        this.onlyDropIndex = true;
+        this.dropIndexes = drops;
     }
 
     /*

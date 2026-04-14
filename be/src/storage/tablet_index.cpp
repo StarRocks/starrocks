@@ -103,6 +103,8 @@ StatusOr<IndexType> TabletIndex::_convert_index_type_from_thrift(TIndexType::typ
         return IndexType::BITMAP;
     case TIndexType::GIN:
         return IndexType::GIN;
+    case TIndexType::NGRAMBF:
+        return IndexType::NGRAMBF;
     case TIndexType::VECTOR:
         return IndexType::VECTOR;
     default:

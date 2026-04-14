@@ -329,6 +329,16 @@ static Status collect_alive_shared_files(TabletManager* tablet_mgr, const std::v
                     }
                 }
             }
+            // IDG .idx files: delayed-delete shared ones, symmetrically with DCG.
+            if (metadata->has_idg_meta()) {
+                for (const auto& [_, idg_ver] : metadata->idg_meta().idgs()) {
+                    for (const auto& entry : idg_ver.entries()) {
+                        if (entry.shared_file() && entry.has_index_file() && !entry.index_file().empty()) {
+                            RETURN_IF_ERROR(deleter->delay_delete(join_path(data_dir, entry.index_file())));
+                        }
+                    }
+                }
+            }
             if (metadata->has_sstable_meta()) {
                 for (const auto& sstable : metadata->sstable_meta().sstables()) {
                     if (sstable.shared()) {
@@ -1089,6 +1099,17 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                         }
                     }
                 }
+                // IDG .idx files for the latest metadata during full vacuum.
+                if (latest_metadata->has_idg_meta()) {
+                    for (const auto& [_, idg_ver] : latest_metadata->idg_meta().idgs()) {
+                        for (const auto& entry : idg_ver.entries()) {
+                            if (!entry.has_index_file() || entry.index_file().empty()) continue;
+                            if (!entry.shared_file() || allow_delete_shared_files) {
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, entry.index_file())));
+                            }
+                        }
+                    }
+                }
                 if (latest_metadata->sstable_meta().sstables_size() > 0) {
                     for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
                         if (!sst.shared() || allow_delete_shared_files) {
@@ -1269,10 +1290,17 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                                   total_files++;
                                                   total_bytes += entry.size.value_or(0);
 
-                                                  // should consider segment files, sst, del file, delvector, vector index
+                                                  // should consider segment files, sst, del file, delvector, vector index, idx
+                                                  // NOTE: .idx files are produced by the ADD INDEX fast path (Index
+                                                  // Delta Group). Active .idx files are referenced from
+                                                  // TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
+                                                  // MetaFileBuilder::apply_drop_index. Any .idx file that is older
+                                                  // than the expire window and not referenced by any live metadata is
+                                                  // a candidate here and reclaimed by the existing orphan scan logic.
                                                   if (!is_segment(entry.name) && !is_sst(entry.name) &&
                                                       !is_delvec(entry.name) && !is_del(entry.name) &&
-                                                      !is_vector_index(entry.name)) {
+                                                      !is_vector_index(entry.name) &&
+                                                      !is_idx(entry.name)) {
                                                       return true;
                                                   }
                                                   if (!entry.mtime.has_value()) {
@@ -1337,6 +1365,30 @@ StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSystem* fs,
         for (const auto& sst : sstable_meta.sstables()) {
             data_files.erase(sst.filename());
             data_files_in_metadatas.emplace(sst.filename());
+        }
+
+        // Referenced .cols files from DCG metadata are live.
+        if (check_meta->has_dcg_meta()) {
+            for (const auto& [_, dcg] : check_meta->dcg_meta().dcgs()) {
+                for (const auto& fname : dcg.column_files()) {
+                    data_files.erase(fname);
+                    data_files_in_metadatas.emplace(fname);
+                }
+            }
+        }
+        // Referenced .idx files from IDG metadata are live. Note: fully
+        // tombstoned IDG entries have already been removed by apply_drop_index
+        // (their files were moved to orphan_files), so iterating entries here
+        // is correct without extra filtering.
+        if (check_meta->has_idg_meta()) {
+            for (const auto& [_, idg_ver] : check_meta->idg_meta().idgs()) {
+                for (const auto& entry : idg_ver.entries()) {
+                    if (entry.has_index_file() && !entry.index_file().empty()) {
+                        data_files.erase(entry.index_file());
+                        data_files_in_metadatas.emplace(entry.index_file());
+                    }
+                }
+            }
         }
     };
 
@@ -1628,6 +1680,19 @@ Status drop_tablet_cache(TabletManager* tablet_mgr, int64_t tablet_id, int64_t v
             for (const auto& filename : dcg_ver.column_files()) {
                 std::string dcg_path = tablet_mgr->segment_location(tablet_id, filename);
                 drop_cache_func(dcg_path, 0 /* offset */, -1 /* unknown size */);
+            }
+        }
+        // Drop local cache for active IDG .idx files. Mirrors the DCG branch
+        // above so that removing a tablet version also evicts its per-segment
+        // index payloads from local cache.
+        if (metadata->has_idg_meta()) {
+            for (const auto& [_, idg_ver] : metadata->idg_meta().idgs()) {
+                for (const auto& entry : idg_ver.entries()) {
+                    if (entry.has_index_file() && !entry.index_file().empty()) {
+                        std::string idx_path = tablet_mgr->segment_location(tablet_id, entry.index_file());
+                        drop_cache_func(idx_path, 0 /* offset */, entry.has_file_size() ? entry.file_size() : -1);
+                    }
+                }
             }
         }
 

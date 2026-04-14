@@ -242,6 +242,122 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
     }
 }
 
+void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
+    // 1. Merge IDG entries into idg_meta, one per segment_id. New entry goes
+    //    to the front of the per-segment `entries` list so readers see the
+    //    newest first (mirrors DCG reverse-by-version ordering). Multiple
+    //    entries may coexist on the same segment from successive alters.
+    auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
+    for (const auto& se : op.segment_entries()) {
+        if (!se.has_entry()) continue;
+        IndexDeltaGroupVerPB& ver = (*idg_map)[se.segment_id()];
+        // Build new entries list: [new_entry, old_entries...]
+        IndexDeltaGroupVerPB merged;
+        merged.add_entries()->CopyFrom(se.entry());
+        for (const auto& old_e : ver.entries()) {
+            merged.add_entries()->CopyFrom(old_e);
+        }
+        ver.Swap(&merged);
+    }
+
+    // 2. Reconcile table_indices: add any new index not already present by
+    //    index_id. FE typically has pushed the new schema already, so this
+    //    is a defensive idempotent step. We do not overwrite existing
+    //    TabletIndexPB (schema is authoritative for non-IDG fields).
+    auto* schema = _tablet_meta->mutable_schema();
+    std::unordered_set<int64_t> have_ids;
+    for (const auto& ix : schema->table_indices()) {
+        if (ix.has_index_id()) have_ids.insert(ix.index_id());
+    }
+    for (const auto& new_ix : op.new_indexes()) {
+        if (!new_ix.has_index_id() || have_ids.count(new_ix.index_id()) == 0) {
+            schema->add_table_indices()->CopyFrom(new_ix);
+        }
+    }
+}
+
+void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
+    // 1. Build a fast-lookup set of (col_uid, index_type) to drop.
+    //    We key on the concrete (col_uid, index_type) pair because a single
+    //    index_id may cover multiple columns (multi-column GIN) and because
+    //    BE-side IDG entries are keyed by (col_uid, index_type).
+    std::unordered_set<uint64_t> drop_keys;
+    drop_keys.reserve(op.dropped_size());
+    std::unordered_set<int64_t> drop_ids;
+    for (const auto& d : op.dropped()) {
+        uint64_t k = (static_cast<uint64_t>(static_cast<uint32_t>(d.col_unique_id())) << 32) |
+                     static_cast<uint32_t>(d.index_type());
+        drop_keys.insert(k);
+        if (d.has_index_id()) drop_ids.insert(d.index_id());
+    }
+
+    // 2. Remove matching TabletIndexPB from schema (idempotent: FE may have
+    //    done this already via schema publish).
+    auto* schema = _tablet_meta->mutable_schema();
+    auto* indices = schema->mutable_table_indices();
+    for (int i = indices->size() - 1; i >= 0; --i) {
+        if (indices->Get(i).has_index_id() && drop_ids.count(indices->Get(i).index_id()) > 0) {
+            indices->DeleteSubrange(i, 1);
+        }
+    }
+
+    // 3. Walk IDG entries on every segment. For each entry, extend
+    //    dropped_keys to cover any active key that hits a tombstone. If the
+    //    entry's active keys become empty, promote the file to orphan and
+    //    drop the entry; otherwise just record the tombstone.
+    if (!_tablet_meta->has_idg_meta()) return;
+    auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
+    for (auto it = idg_map->begin(); it != idg_map->end();) {
+        auto& ver = it->second;
+        IndexDeltaGroupVerPB kept;
+        for (auto& entry : *ver.mutable_entries()) {
+            // Existing tombstones.
+            std::unordered_set<uint64_t> existing_drop;
+            for (const auto& dk : entry.dropped_keys()) {
+                uint64_t k = (static_cast<uint64_t>(static_cast<uint32_t>(dk.col_unique_id())) << 32) |
+                             static_cast<uint32_t>(dk.index_type());
+                existing_drop.insert(k);
+            }
+            // Determine which active keys are newly being tombstoned by this op.
+            bool any_active_remaining = false;
+            for (const auto& k : entry.keys()) {
+                uint64_t packed = (static_cast<uint64_t>(static_cast<uint32_t>(k.col_unique_id())) << 32) |
+                                  static_cast<uint32_t>(k.index_type());
+                if (existing_drop.count(packed) > 0) {
+                    continue; // already dead
+                }
+                if (drop_keys.count(packed) > 0) {
+                    // Add tombstone if not already present.
+                    auto* added = entry.add_dropped_keys();
+                    added->set_col_unique_id(k.col_unique_id());
+                    added->set_index_type(k.index_type());
+                    existing_drop.insert(packed);
+                } else {
+                    any_active_remaining = true;
+                }
+            }
+            if (any_active_remaining) {
+                kept.add_entries()->CopyFrom(entry);
+            } else {
+                // Fully tombstoned: orphan the .idx file.
+                if (entry.has_index_file() && !entry.index_file().empty()) {
+                    FileMetaPB file_meta;
+                    file_meta.set_name(entry.index_file());
+                    if (entry.has_file_size()) file_meta.set_size(entry.file_size());
+                    if (entry.has_shared_file()) file_meta.set_shared(entry.shared_file());
+                    _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+                }
+            }
+        }
+        if (kept.entries_size() == 0) {
+            it = idg_map->erase(it);
+        } else {
+            it->second.Swap(&kept);
+            ++it;
+        }
+    }
+}
+
 // delete from protobuf Map and return deleted count
 template <typename T>
 static int delete_from_protobuf_map(T* protobuf_map, const std::unordered_set<uint32_t>& delete_sids,

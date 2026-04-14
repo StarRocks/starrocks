@@ -324,6 +324,12 @@ public:
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
+        if (log.has_op_add_index()) {
+            _builder.apply_add_index(log.op_add_index());
+        }
+        if (log.has_op_drop_index()) {
+            _builder.apply_drop_index(log.op_drop_index());
+        }
         if (log.has_op_alter_metadata()) {
             DCHECK_EQ(_base_version + 1, _new_version);
             return apply_alter_meta_log(_metadata.get(), log.op_alter_metadata(), _tablet.tablet_mgr());
@@ -847,6 +853,12 @@ public:
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
+        }
+        if (log.has_op_add_index()) {
+            _builder.apply_add_index(log.op_add_index());
+        }
+        if (log.has_op_drop_index()) {
+            _builder.apply_drop_index(log.op_drop_index());
         }
         if (log.has_op_replication()) {
             RETURN_IF_ERROR(apply_replication_log(log.op_replication()));

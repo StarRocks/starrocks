@@ -36,6 +36,7 @@
 #include "storage/metadata_util.h"
 #include "storage/schema_change_utils.h"
 #include "storage/storage_engine.h"
+#include "storage/tablet_index.h"
 #include "storage/tablet_reader_params.h"
 
 namespace starrocks::lake {
@@ -646,20 +647,49 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
 // =============================================================================
 // DROP INDEX fast path (lake-only).
 //
-// Skeleton entry point only. The full implementation will:
-//   1) Construct OpDropIndex with drop_version = request.alter_version and
-//      one DroppedIndex per (index_id, col_unique_id, index_type) from
-//      request.drop_indexes.
-//   2) put_txn_log; publish merges tombstones into existing IDG entries
-//      (apply_drop_index in MetaFileBuilder, see Phase 2).
-//
-// Returns NotSupported until Phase 2 is implemented; FE classifier should
-// not yet route DROP INDEX traffic here.
+// Metadata-only: builds one OpDropIndex TxnLog with a DroppedIndex entry per
+// request.drop_indexes and writes it. Publish merges the tombstones into
+// IDG entries via MetaFileBuilder::apply_drop_index and drops matching
+// TabletIndexPB from schema.table_indices. Physical .idx cleanup happens
+// when compaction later rebuilds the segment (keys absent from the inlined
+// footer, the .idx file becomes unreferenced and gets vacuumed).
 Status SchemaChangeHandler::do_process_drop_index_only(const TAlterTabletReqV2& request) {
-    LOG(INFO) << "DROP INDEX fast path requested but not yet implemented; "
-              << "falling back to regular schema change. tablet="
-              << request.new_tablet_id;
-    return do_process_alter_tablet(request);
+    if (!request.__isset.drop_indexes || request.drop_indexes.empty()) {
+        LOG(WARNING) << "DROP INDEX fast path called with empty drop_indexes list; tablet="
+                     << request.new_tablet_id;
+        return Status::InvalidArgument("drop_indexes is empty for DROP INDEX fast path");
+    }
+    if (!request.__isset.txn_id) {
+        return Status::InvalidArgument("txn_id not set for DROP INDEX fast path");
+    }
+
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(request.new_tablet_id);
+    txn_log->set_txn_id(request.txn_id);
+    auto* op = txn_log->mutable_op_drop_index();
+    if (request.__isset.alter_version) {
+        op->set_drop_version(request.alter_version);
+    }
+
+    for (const auto& di : request.drop_indexes) {
+        auto* d = op->add_dropped();
+        if (di.__isset.index_id) d->set_index_id(di.index_id);
+        if (di.__isset.col_unique_id) d->set_col_unique_id(di.col_unique_id);
+        if (di.__isset.index_type) {
+            // Convert Thrift TIndexType to proto IndexType via the shared
+            // conversion helper on TabletIndex to stay consistent with the
+            // rest of the schema code.
+            auto converted = TabletIndex::convert_index_type_from_thrift(di.index_type);
+            if (!converted.ok()) {
+                return converted.status();
+            }
+            d->set_index_type(*converted);
+        }
+    }
+
+    LOG(INFO) << "DROP INDEX fast path commit: tablet=" << request.new_tablet_id
+              << " txn_id=" << request.txn_id << " drop_count=" << op->dropped_size();
+    return _tablet_manager->put_txn_log(std::move(txn_log));
 }
 
 } // namespace starrocks::lake
