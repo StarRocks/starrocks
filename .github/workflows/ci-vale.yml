@@ -1,0 +1,83 @@
+name: CI Vale Linter
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+    branches:
+      - main
+      - 'branch*'
+    paths:
+      - 'docs/en/**'
+      - 'docs/zh/**'
+      - 'docs/ja/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  vale:
+    runs-on: ubuntu-latest
+    name: Vale Lint
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: Clean workspace
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+      - name: Get base branch
+        id: branch
+        run: echo "branch=${{ github.base_ref }}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{ steps.branch.outputs.branch }}
+          git config --global user.name "docs-automation[bot]"
+          git config --global user.email "docs-automation[bot]@starrocks.io"
+          git checkout $BRANCH
+          git pull
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}"
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME}
+          git checkout $BRANCH_NAME
+          git checkout -b merge_pr
+          git merge --squash --no-edit ${BRANCH} || \
+            (echo "::error::Merge conflict, please check." && exit 1)
+
+      - uses: tj-actions/changed-files@22103cc46bda19c2b464ffe86db46df6922fd323
+        id: changed-files
+        with:
+          files: |
+            docs/en/**/*.md
+            docs/ja/**/*.md
+            docs/zh/**/*.md
+
+      - name: Install Vale
+        if: steps.changed-files.outputs.any_changed == 'true'
+        env:
+          # Script rules (extends: script / Tengo) require Vale 3.x.
+          # Update this version when a newer stable release is available.
+          VALE_VERSION: "3.13.1"
+        run: |
+          wget -q -O /tmp/vale.tar.gz \
+            "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz"
+          tar -xzf /tmp/vale.tar.gz -C /tmp
+          sudo mv /tmp/vale /usr/local/bin/vale
+          vale --version
+
+      - name: Run Vale
+        if: steps.changed-files.outputs.any_changed == 'true'
+        env:
+          CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
+        run: |
+          # CHANGED_FILES is space-separated; pass as shell word-split args.
+          # File names in docs/ are not expected to contain spaces.
+          # shellcheck disable=SC2086
+          vale --config docs/.vale.ini $CHANGED_FILES

@@ -1,0 +1,55 @@
+// HTMLComment.tengo
+//
+// Detect HTML comments (<!-- ... -->) that appear outside fenced code blocks
+// and inline code spans in Markdown/MDX files.
+//
+// Code regions excluded from flagging:
+//   - Backtick fenced code blocks:  ```[lang]\n...\n```
+//   - Tilde fenced code blocks:     ~~~[lang]\n...\n~~~
+//   - Inline code spans:            `...`  or  ``...``  etc.
+//
+// Closing fences may be indented (0 or more leading spaces/tabs), as allowed
+// by the CommonMark spec.  We also require the closing fence to be followed
+// by whitespace-only content then a newline or end-of-file, so that an
+// opening fence like ```bash is not mistaken for a closing fence.
+
+text := import("text")
+
+// Build the list of byte-offset ranges [begin, end] for all code regions.
+code_regions := []
+
+// Backtick fenced code blocks.
+// Closing fence: optional leading whitespace, ```, optional trailing whitespace,
+// then newline or end of string.
+for groups in text.re_find("(?s)```[^\n]*\n.*?\n[ \t]*```[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+// Tilde fenced code blocks (same structure, different fence character).
+for groups in text.re_find("(?s)~~~[^\n]*\n.*?\n[ \t]*~~~[ \t]*(?:\n|$)", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+// Inline code spans (single or multiple backticks, no newlines inside).
+for groups in text.re_find("`+[^`\n]+`+", scope, -1) {
+    m := groups[0]
+    code_regions = append(code_regions, [m.begin, m.end])
+}
+
+// Collect all HTML comment openings that fall outside any code region.
+matches := []
+for groups in text.re_find("<!--", scope, -1) {
+    comment := groups[0]
+    inside := false
+    for r in code_regions {
+        if comment.begin >= r[0] && comment.begin < r[1] {
+            inside = true
+            break
+        }
+    }
+    if !inside {
+        matches = append(matches, {begin: comment.begin, end: comment.end})
+    }
+}
