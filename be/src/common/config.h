@@ -1975,6 +1975,8 @@ CONF_Int32(llm_max_concurrent_queries, "8");
 CONF_Int32(llm_cache_size, "131072");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
+// When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.
+CONF_mBool(enable_lock_free_scan_task_queue, "true");
 
 // used by global late materialization, may be removed in the future
 CONF_mInt64(fetch_max_buffer_chunk_num, "8");

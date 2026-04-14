@@ -194,6 +194,7 @@
         "split_exchanger_buffer_chunk_num",
         "two_level_memory_threshold",
         "enable_pipeline_driver_parallel_prepare",
+        "enable_lock_free_scan_task_queue",
         "fetch_max_buffer_chunk_num",
         "max_batch_num_per_fetch_operator",
         "max_lookup_batch_request",
