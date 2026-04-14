@@ -204,6 +204,8 @@ public class JDBCScanNode extends ScanNode {
         msg.jdbc_scan_node.setColumns(columns);
         msg.jdbc_scan_node.setFilters(filters);
         msg.jdbc_scan_node.setLimit(limit);
+
+        setConnectorCatalogType(msg);
     }
 
     @Override

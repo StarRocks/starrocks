@@ -19,7 +19,11 @@ import com.starrocks.catalog.FileTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.optimizer.ScanOptimizeOption;
+import com.starrocks.thrift.TPlanNode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -73,5 +77,31 @@ public class FileTableScanNodeTest {
         desc.setTable(table);
         FileTableScanNode scanNode = new FileTableScanNode(new PlanNodeId(0), desc, "XXX");
         scanNode.setupScanRangeLocations();
+    }
+
+    @Test
+    public void testToThriftSetsConnectorCatalogType() throws Exception {
+        Map<String, String> properties = new HashMap<String, String>() {
+            {
+                put(FileTable.JSON_KEY_FILE_PATH, "hdfs://127.0.0.1:10000/hive/");
+                put(FileTable.JSON_KEY_COLUMN_SEPARATOR, "XXX");
+                put(FileTable.JSON_KEY_ROW_DELIMITER, "YYY");
+                put(FileTable.JSON_KEY_COLLECTION_DELIMITER, "ZZZ");
+                put(FileTable.JSON_KEY_MAP_DELIMITER, "MMM");
+                put(FileTable.JSON_KEY_FORMAT, "text");
+            }
+        };
+        FileTable table = new FileTable(0, "file_table", new ArrayList<>(), properties);
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        FileTableScanNode scanNode = new FileTableScanNode(new PlanNodeId(0), desc, "file table scan");
+        scanNode.setScanOptimizeOption(new ScanOptimizeOption());
+        TPlanNode node = new TPlanNode();
+        scanNode.toThrift(node);
+
+        Assertions.assertNotNull(node.getConnector_scan_node());
+        Assertions.assertEquals(StmtExecutor.toCatalogType(table.getType()),
+                node.getConnector_scan_node().getCatalog_type());
     }
 }

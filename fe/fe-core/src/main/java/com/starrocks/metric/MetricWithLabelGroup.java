@@ -16,6 +16,7 @@ package com.starrocks.metric;
 
 import com.google.common.collect.Maps;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -28,6 +29,10 @@ public class MetricWithLabelGroup<E extends Metric<?>> {
     public MetricWithLabelGroup(String labelKey, Supplier<E> metricCreator) {
         this.labelKey = labelKey;
         this.metricCreator = metricCreator;
+    }
+
+    public Map<String, E> getMetrics() {
+        return Collections.unmodifiableMap(labelValueToMetric);
     }
 
     public E getMetric(String labelValue) {

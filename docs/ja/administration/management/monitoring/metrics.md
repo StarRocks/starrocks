@@ -558,6 +558,45 @@ StarRocks クラスタのモニタリングサービスの構築方法につい�
 - タイプ: Cumulative
 - 説明: 各リソースグループの誤ったクエリ数。
 
+### Catalog タイプ別クエリメトリクス
+
+これらのメトリクスは、Catalog タイプごとのクエリ可観測性を提供します。各メトリクスには `catalog_type` ラベルがあり、
+値は `default`、`hive`、`iceberg`、`jdbc`、`deltalake`、`hudi`、`paimon`、`odps`、`kudu`、`elasticsearch` です。
+
+`default` は StarRocks 内部テーブル（OLAP/Cloud Native）を表します。
+
+| メトリクス | タイプ | 単位 | 説明 |
+|------|------|------|------|
+| `starrocks_fe_catalog_query_total` | Counter | リクエスト数 | Catalog タイプ別の総クエリ数 |
+| `starrocks_fe_catalog_query_success` | Counter | リクエスト数 | Catalog タイプ別の成功クエリ数 |
+| `starrocks_fe_catalog_query_err` | Counter | リクエスト数 | Catalog タイプ別の失敗クエリ数 |
+| `starrocks_fe_catalog_query_timeout` | Counter | リクエスト数 | Catalog タイプ別のタイムアウトクエリ数 |
+| `starrocks_fe_catalog_query_analysis_err` | Counter | リクエスト数 | Catalog タイプ別の分析エラークエリ数 |
+| `starrocks_fe_catalog_query_internal_err` | Counter | リクエスト数 | Catalog タイプ別の内部エラークエリ数 |
+| `starrocks_fe_catalog_query_err_rate` | Gauge | QPS | Catalog タイプ別のエラー率 |
+| `starrocks_fe_catalog_query_timeout_rate` | Gauge | QPS | Catalog タイプ別のタイムアウト率 |
+| `starrocks_fe_catalog_query_analysis_err_rate` | Gauge | QPS | Catalog タイプ別の分析エラー率 |
+| `starrocks_fe_catalog_query_internal_err_rate` | Gauge | QPS | Catalog タイプ別の内部エラー率 |
+| `starrocks_fe_catalog_query_latency_ms` | Histogram | ms | Catalog タイプ別のクエリレイテンシー |
+| `starrocks_fe_catalog_slow_query` | Counter | リクエスト数 | Catalog タイプ別のスロークエリ数 |
+| `starrocks_be_catalog_query_scan_bytes` | Counter | バイト | Catalog タイプ別のスキャンバイト数 |
+| `starrocks_be_catalog_query_scan_rows` | Counter | 行 | Catalog タイプ別のスキャン行数 |
+| `starrocks_be_catalog_files_scan_num_bytes_read` | Counter | バイト | Catalog タイプ別のファイルスキャン読み取りバイト数 |
+| `starrocks_be_catalog_files_scan_num_rows_return` | Counter | 行 | Catalog タイプ別のファイルスキャン戻り行数 |
+
+**Prometheus クエリ例:**
+
+```promql
+# Hive Catalog の総クエリ数
+starrocks_fe_catalog_query_total{catalog_type="hive"}
+
+# すべての Catalog タイプのエラー率比較
+starrocks_fe_catalog_query_err_rate
+
+# 外部テーブルのみのスキャンバイト数（default を除外）
+starrocks_be_catalog_query_scan_bytes{catalog_type!="default"}
+```
+
 ### starrocks_be_resource_group_cpu_limit_ratio
 
 - 単位: -
