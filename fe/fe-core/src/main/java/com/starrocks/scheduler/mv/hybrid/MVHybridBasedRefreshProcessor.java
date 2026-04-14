@@ -100,6 +100,13 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
         // reset the task run id for pct
         this.mvContext.getCtx().setQueryId(UUIDUtil.genUUID());
 
+        // Clear stale temp TVR state from any prior attempt (explain-only, failed run, etc.)
+        // before starting a fresh complete-refresh cycle. Without this, a SKIPPED result below
+        // would leave the stale map/owner intact, risking incorrect TVR promotion by a later run.
+        if (mvRefreshParams.isCompleteRefresh()) {
+            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
+        }
+
         // ① Execute PCT first — this calls syncAndCheckPCTPartitions() internally,
         //    which refreshes external tables and re-collects snapshotBaseTables.
         //    After this returns, snapshotBaseTables reflects the snapshot that PCT will actually process.
