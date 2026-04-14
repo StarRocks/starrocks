@@ -66,8 +66,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     private String db;
     @SerializedName(value = "fullDb")
     private String fullDb;
-    private transient boolean showInternalCatalog;
-
     private final NodePosition pos;
 
     public TableName() {
@@ -165,10 +163,6 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
         this.catalog = normalizeName(catalog);
     }
 
-    public void setShowInternalCatalog(boolean showInternalCatalog) {
-        this.showInternalCatalog = showInternalCatalog;
-    }
-
     // for rename table
     public void setTbl(String tbl) {
         this.tbl = normalizeName(tbl);
@@ -205,7 +199,7 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
     @Override
     public String toString() {
         StringBuilder stringBuilder = new StringBuilder();
-        if (catalog != null && (showInternalCatalog || !CatalogMgr.isInternalCatalog(catalog))) {
+        if (catalog != null && !CatalogMgr.isInternalCatalog(catalog)) {
             stringBuilder.append(catalog).append(".");
         }
         if (db != null) {

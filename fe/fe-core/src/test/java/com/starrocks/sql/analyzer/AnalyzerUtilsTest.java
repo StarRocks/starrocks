@@ -144,27 +144,18 @@ public class AnalyzerUtilsTest {
     @Test
     public void testCollectAllTableAndViewRelationNames() throws Exception {
         StatementBase insertStmt = UtFrameUtils.parseStmtWithNewParser(
-                "insert into relation_target " +
-                        "select src.k1 from relation_view rv " +
-                        "join relation_src src on rv.k1 = src.k1 " +
-                        "join relation_view rv2 on rv2.k1 = src.k1",
+                "insert into relation_target " + "select src.k1 from relation_view rv " +
+                        "join relation_src src on rv.k1 = src.k1 " + "join relation_view rv2 on rv2.k1 = src.k1",
                 starRocksAssert.getCtx());
-        List<String> relationNames = AnalyzerUtils.collectAllTableAndViewRelationNames(insertStmt, true);
-        Assertions.assertEquals(Arrays.asList(
-                qualifiedRelationName("test", "relation_view"),
+        List<String> relationNames = AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(insertStmt);
+        Assertions.assertEquals(Arrays.asList(qualifiedRelationName("test", "relation_view"),
                 qualifiedRelationName("test", "relation_src")), relationNames);
 
-        Assertions.assertEquals(Arrays.asList("test.relation_view", "test.relation_src"),
-                AnalyzerUtils.collectAllTableAndViewRelationNames(insertStmt));
-
-        StatementBase cteStmt = UtFrameUtils.parseStmtWithNewParser(
-                "with cte as (select k1 from relation_src) " +
-                        "select cte.k1 from cte join relation_view rv on cte.k1 = rv.k1",
-                starRocksAssert.getCtx());
-        Assertions.assertEquals(Arrays.asList(
-                qualifiedRelationName("test", "relation_src"),
-                qualifiedRelationName("test", "relation_view")),
-                AnalyzerUtils.collectAllTableAndViewRelationNames(cteStmt, true));
+        StatementBase cteStmt = UtFrameUtils.parseStmtWithNewParser("with cte as (select k1 from relation_src) " +
+                "select cte.k1 from cte join relation_view rv on cte.k1 = rv.k1", starRocksAssert.getCtx());
+        Assertions.assertEquals(Arrays.asList(qualifiedRelationName("test", "relation_src"),
+                        qualifiedRelationName("test", "relation_view")),
+                AnalyzerUtils.collectAllTableAndViewRelationNamesForAudit(cteStmt));
     }
 
     private String qualifiedRelationName(String dbName, String tableName) {
