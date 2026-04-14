@@ -816,7 +816,6 @@ public class AnalyzerUtils {
         return relationNames;
     }
 
-    @VisibleForTesting
     static String formatTableNameForAudit(TableName tableName) {
         StringBuilder stringBuilder = new StringBuilder();
         if (tableName.getCatalog() != null) {
