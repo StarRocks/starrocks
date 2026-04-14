@@ -447,6 +447,25 @@ vectorized_functions = [
     # returns NULL for NULL input and never produces a non-null BOOLEAN value.
     [30461, 'raise_error', True, False, 'BOOLEAN', ['VARCHAR'], 'StringFunctions::raise_error'],
 
+    # HTTP Request function - HTTP/HTTPS request scalar function with Named Parameters
+    # http_request(url, method, body, headers, timeout_ms, ssl_verify, username, password)
+    [30470, 'http_request', True, False, 'VARCHAR',
+     ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR', 'INT', 'BOOLEAN', 'VARCHAR', 'VARCHAR'],
+     'HttpRequestFunctions::http_request',
+     'HttpRequestFunctions::http_request_prepare', 'HttpRequestFunctions::http_request_close',
+     {
+         'named_args': [
+             {'name': 'url'},
+             {'name': 'method', 'default': 'GET'},
+             {'name': 'body', 'default': ''},
+             {'name': 'headers', 'default': '{}'},
+             {'name': 'timeout_ms', 'default': 30000},
+             {'name': 'ssl_verify', 'default': True},
+             {'name': 'username', 'default': ''},
+             {'name': 'password', 'default': ''}
+         ]
+     }],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', True, True, 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
