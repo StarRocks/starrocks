@@ -500,8 +500,16 @@ Status ParquetScanner::open_next_reader() {
         // `parquet_read_rows()` TVF needs to rehydrate the full row on
         // replay. Reset per file.
         _conv_ctx.current_batch_first_row_in_file = -1;
+        // TBrokerRangeDesc.modification_time is already in milliseconds:
+        // HiveConnectorScanRangeSource pipes FileStatus.getModificationTime()
+        // into it verbatim, and Hadoop's FileStatus specifies milliseconds.
+        // Consumers elsewhere in BE (cache_input_stream, datacache_options,
+        // page_reader) treat it the same way. Previously this code
+        // multiplied by 1000, which would have produced microseconds and
+        // broken any future TVF that compares the anchor's mtime against
+        // the live file's mtime.
         _conv_ctx.file_mtime_ms =
-                range_desc.__isset.modification_time ? range_desc.modification_time * 1000 : -1;
+                range_desc.__isset.modification_time ? range_desc.modification_time : -1;
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);
