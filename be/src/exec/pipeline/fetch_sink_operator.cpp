@@ -14,8 +14,8 @@
 
 #include "exec/pipeline/fetch_sink_operator.h"
 
-#include "agent/master_info.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "exec/pipeline/fetch_processor.h"
 
 namespace starrocks::pipeline {

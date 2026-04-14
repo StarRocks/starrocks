@@ -23,7 +23,6 @@ ADD_BE_LIB(Agent
         task_worker_pool.cpp
         utils.cpp
         publish_version.cpp
-        master_info.cpp
         finish_task.cpp
         report_task.cpp
         agent_task.cpp

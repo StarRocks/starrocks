@@ -14,8 +14,8 @@
 
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
 
-#include "agent/master_info.h"
 #include "base/metrics.h"
+#include "common/system/master_info.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "gutil/strings/substitute.h"
 #include "storage/storage_engine.h"

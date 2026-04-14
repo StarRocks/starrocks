@@ -14,11 +14,11 @@
 
 #include "exprs/dict_query_expr.h"
 
-#include "agent/master_info.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
+#include "common/system/master_info.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/FrontendService.h"
 #include "gutil/casts.h"

@@ -43,7 +43,6 @@
 
 #include "agent/agent_server.h"
 #include "agent/finish_task.h"
-#include "agent/master_info.h"
 #include "agent/publish_version.h"
 #include "agent/report_task.h"
 #include "agent/resource_group_usage_recorder.h"
@@ -56,6 +55,7 @@
 #include "common/config_network_fwd.h"
 #include "common/status.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/util/misc.h"
 #include "exec/pipeline/query_context.h"

@@ -14,11 +14,11 @@
 
 #include "storage/lake/horizontal_compaction_task.h"
 
-#include "agent/master_info.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"

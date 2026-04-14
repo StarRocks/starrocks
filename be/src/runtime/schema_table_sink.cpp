@@ -17,12 +17,12 @@
 #include <memory>
 #include <sstream>
 
-#include "agent/master_info.h"
 #include "base/brpc/ref_count_closure.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "common/configbase.h"
 #include "common/runtime_profile.h"
+#include "common/system/master_info.h"
 #include "exec/tablet_info.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"

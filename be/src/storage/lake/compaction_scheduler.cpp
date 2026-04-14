@@ -22,12 +22,12 @@
 #include <chrono>
 #include <thread>
 
-#include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"
 #include "fs/fs.h"

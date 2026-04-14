@@ -38,13 +38,13 @@
 
 #include <string_view>
 
-#include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "common/system/master_info.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"

@@ -41,7 +41,6 @@
 #include <memory>
 #include <sstream>
 
-#include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/network/network_util.h"
 #include "base/uid_util.h"
@@ -51,6 +50,7 @@
 #include "common/config_runtime_fwd.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"

@@ -24,11 +24,11 @@
 #include <aws/sts/STSClient.h>
 #include <curl/curl.h>
 
-#include "agent/master_info.h"
 #include "base/metrics.h"
 #include "base/url_coding.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
+#include "common/system/master_info.h"
 #include "fs/encrypt_file.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/Types_types.h"

@@ -22,11 +22,11 @@
 
 #include <chrono>
 
-#include "agent/master_info.h"
 #include "base/string/string_parser.hpp"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config.h"
+#include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "gen_cpp/FrontendService.h"
 #include "runtime/client_cache.h"

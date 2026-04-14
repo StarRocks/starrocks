@@ -22,8 +22,8 @@
 #include <cstdio>
 #include <cstdlib>
 
-#include "agent/master_info.h"
 #include "common/logging.h"
+#include "common/system/master_info.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"

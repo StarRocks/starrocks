@@ -18,7 +18,6 @@
 
 #include <climits>
 
-#include "agent/master_info.h"
 #include "base/debug/trace.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
@@ -27,6 +26,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"

@@ -26,6 +26,7 @@ set(COMMON_FILES
   system/disk_info.cpp
   system/cpu_info.cpp
   system/cpu_info_debug.cpp
+  system/master_info.cpp
   system/mem_info.cpp
   thread/cpu_util.cpp
   thread/thread.cpp

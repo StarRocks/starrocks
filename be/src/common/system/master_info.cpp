@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
 
 namespace starrocks {
 
@@ -25,12 +25,11 @@ static bool update(TMasterInfo& bg, const TMasterInfo& new_value) {
     if (new_value.epoch >= bg.epoch) {
         bg = new_value;
         return true;
-    } else {
-        return false;
     }
+    return false;
 }
 
-bool get_master_info(butil::DoublyBufferedData<TMasterInfo>::ScopedPtr* ptr) {
+bool get_master_info(MasterInfoPtr* ptr) {
     auto* data = get_or_create_data();
     return data->Read(ptr) == 0;
 }

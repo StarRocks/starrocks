@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
 
 #include "gtest/gtest.h"
 

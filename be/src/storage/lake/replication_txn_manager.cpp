@@ -21,13 +21,13 @@
 #include <set>
 
 #include "agent/agent_server.h"
-#include "agent/master_info.h"
 #include "agent/task_signatures_manager.h"
 #include "base/string/string_parser.hpp"
 #include "base/utility/defer_op.h"
 #include "common/config_http_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "fs/key_cache.h"
