@@ -65,3 +65,7 @@ mo.ui.table(df)
 ```
 
 ![Marimo notebook connected to StarRocks](../../_assets/marimo_starrocks.png)
+
+> **NOTE**
+>
+> Multi-catalog support requires Marimo version 0.22.5 or later.
