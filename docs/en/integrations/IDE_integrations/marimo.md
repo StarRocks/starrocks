@@ -31,7 +31,7 @@ import sqlalchemy as sa
 engine = sa.create_engine("starrocks://username:password@<host>:9030")
 ```
 
-Replace `<host>` with your StarRocks FE host (e.g. `tnglz2dcf.cloud-app.celerdata.com`).
+Replace `<host>` with your StarRocks FE host.
 
 ## Using Marimo UI for credentials
 
