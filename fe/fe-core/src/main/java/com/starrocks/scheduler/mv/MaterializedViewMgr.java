@@ -15,27 +15,18 @@
 package com.starrocks.scheduler.mv;
 
 import com.google.common.base.Preconditions;
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.io.Text;
 import com.starrocks.persist.ImageWriter;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -50,31 +41,6 @@ public class MaterializedViewMgr {
     private final MVTimelinessMgr mvTimelinessMgr = new MVTimelinessMgr();
     // MV's maintenance job
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
-
-    /**
-     * Reload jobs from meta store
-     */
-    public long reload(DataInputStream input, long checksum) throws IOException {
-        Preconditions.checkState(jobMap.isEmpty());
-
-        try {
-            String str = Text.readString(input);
-            SerializedJobs data = GsonUtils.GSON.fromJson(str, SerializedJobs.class);
-            if (CollectionUtils.isNotEmpty(data.jobList)) {
-                for (MVMaintenanceJob job : data.jobList) {
-                    // NOTE: job's view is not serialized, cannot use it directly!
-                    MvId mvId = new MvId(job.getDbId(), job.getViewId());
-                    job.restore();
-                    jobMap.put(mvId, job);
-                }
-                LOG.info("reload MV maintenance jobs: {}", data.jobList);
-                LOG.debug("reload MV maintenance job details: {}", str);
-            }
-            checksum ^= data.jobList.size();
-        } catch (EOFException ignored) {
-        }
-        return checksum;
-    }
 
     /**
      * Replay from journal
@@ -109,30 +75,13 @@ public class MaterializedViewMgr {
         }
     }
 
-    /**
-     * Store jobs in meta store
-     */
-    public long store(DataOutputStream output, long checksum) throws IOException {
-        SerializedJobs data = new SerializedJobs();
-        data.jobList = new ArrayList<>(jobMap.values());
-        String json = GsonUtils.GSON.toJson(data);
-        Text.writeString(output, json);
-        checksum ^= data.jobList.size();
-        return checksum;
-    }
-
     protected MVMaintenanceJob getJob(MvId mvId) {
         return jobMap.get(mvId);
     }
 
-    // fot test
+    // for test
     protected void clearJobs() {
         jobMap.clear();
-    }
-
-    static class SerializedJobs {
-        @SerializedName("jobList")
-        List<MVMaintenanceJob> jobList;
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
