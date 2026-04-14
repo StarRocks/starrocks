@@ -71,7 +71,6 @@ starrocks_set_default_packages() {
         jemalloc
         brotli
         arrow
-        go
         adbc
         librdkafka
         pulsar

@@ -951,48 +951,28 @@ build_arrow() {
     restore_compile_flags
 }
 
-# go (portable toolchain for building ADBC Flight SQL driver via CGo)
-build_go() {
-    check_if_source_exist $GO_SOURCE
-    if [ ! -x "$TP_INSTALL_DIR/go/bin/go" ]; then
-        rm -rf "$TP_INSTALL_DIR/go"
-        cp -r "$TP_SOURCE_DIR/$GO_SOURCE" "$TP_INSTALL_DIR/go"
-    fi
-}
-
 # adbc
 build_adbc() {
     check_if_source_exist $ADBC_SOURCE
-
-    # Use portable Go in a subshell to avoid polluting the caller's environment
-    (
-        export GOROOT=$TP_INSTALL_DIR/go
-        export GOPATH=$TP_SOURCE_DIR/.go_cache
-        export GOCACHE=$TP_SOURCE_DIR/.go_cache/build-cache
-        export PATH=$GOROOT/bin:$PATH
-
-        cd $TP_SOURCE_DIR/$ADBC_SOURCE/c
-        mkdir -p build && cd build
-        rm -rf CMakeCache.txt CMakeFiles/
-        ${CMAKE_CMD} \
-            -DADBC_DRIVER_MANAGER=ON \
-            -DADBC_DRIVER_FLIGHTSQL=ON \
-            -DADBC_BUILD_SHARED=OFF \
-            -DADBC_BUILD_STATIC=ON \
-            -DADBC_BUILD_TESTS=OFF \
-            -DADBC_BUILD_BENCHMARKS=OFF \
-            -DADBC_BUILD_EXAMPLES=OFF \
-            -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
-            -DCMAKE_INSTALL_LIBDIR=lib64 \
-            -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
-            -DArrow_DIR="${TP_INSTALL_DIR}/lib64/cmake/Arrow" \
-            -DArrowFlight_DIR="${TP_INSTALL_DIR}/lib64/cmake/ArrowFlight" \
-            -DArrowFlightSQL_DIR="${TP_INSTALL_DIR}/lib64/cmake/ArrowFlightSQL" \
-            -DCMAKE_BUILD_TYPE=Release \
-            -G "${CMAKE_GENERATOR}" ..
-        ${BUILD_SYSTEM} -j$PARALLEL
-        ${BUILD_SYSTEM} install
-    )
+    cd $TP_SOURCE_DIR/$ADBC_SOURCE/c
+    mkdir -p build && cd build
+    rm -rf CMakeCache.txt CMakeFiles/
+    ${CMAKE_CMD} \
+        -DADBC_DRIVER_MANAGER=ON \
+        -DADBC_DRIVER_FLIGHTSQL=OFF \
+        -DADBC_DRIVER_SQLITE=ON \
+        -DADBC_BUILD_SHARED=ON \
+        -DADBC_BUILD_STATIC=OFF \
+        -DADBC_BUILD_TESTS=OFF \
+        -DADBC_BUILD_BENCHMARKS=OFF \
+        -DADBC_BUILD_EXAMPLES=OFF \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib64 \
+        -DCMAKE_PREFIX_PATH="${TP_INSTALL_DIR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -G "${CMAKE_GENERATOR}" ..
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
 }
 
 # s2
