@@ -34,10 +34,6 @@ import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.thrift.TMVMaintenanceTasks;
-import com.starrocks.thrift.TMVReportEpochTask;
-import com.starrocks.transaction.TabletCommitInfo;
-import com.starrocks.transaction.TabletFailInfo;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,11 +47,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 
 /**
- * Manage lifetime of MV, including create, build, refresh, destroy
- * TODO(Murphy) refactor all MV management code into here
+ * Manage FE-side MV compatibility metadata such as legacy maintenance job replay/state
+ * and MV timeliness tracking.
  */
 public class MaterializedViewMgr {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMgr.class);
@@ -181,29 +176,6 @@ public class MaterializedViewMgr {
     }
 
     /**
-     * Start the maintenance job for MV after created
-     * 1. Schedule the maintenance task in executor
-     * 2. Coordinate the epoch/transaction progress: reading changelog of base table and incremental refresh the MV
-     * 3. Maintain the visibility of MV and job metadata
-     */
-    public void startMaintainMV(MaterializedView view) {
-        if (!view.getRefreshScheme().isIncremental()) {
-            return;
-        }
-        MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
-        job.startJob();
-        LOG.info("Start maintenance job for mv {}", view.getName());
-    }
-
-    public void pauseMaintainMV(MaterializedView view) {
-        if (!view.getRefreshScheme().isIncremental()) {
-            return;
-        }
-        MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
-        job.pauseJob();
-    }
-
-    /**
      * Stop the maintenance job for MV after dropped
      */
     public void stopMaintainMV(MaterializedView view) {
@@ -219,41 +191,6 @@ public class MaterializedViewMgr {
         job.stopJob();
         jobMap.remove(view.getMvId());
         LOG.info("Remove maintenance job for mv: {}", view.getName());
-    }
-
-    /**
-     * Refresh the MV
-     */
-    public void onTxnPublish(MaterializedView view) {
-        LOG.info("onTxnPublish: {}", view);
-        MVMaintenanceJob job = Preconditions.checkNotNull(getJob(view.getMvId()));
-        job.onTransactionPublish();
-    }
-
-    public void onReportEpoch(TMVMaintenanceTasks request) {
-        LOG.info("onReportEpoch: {}", request);
-        Preconditions.checkArgument(request.isSetDb_id(), "required");
-        Preconditions.checkArgument(request.isSetMv_id(), "required");
-        Preconditions.checkArgument(request.isSetTask_id(), "required");
-        Preconditions.checkArgument(request.isSetReport_epoch(), "must be report");
-
-        long dbId = request.getDb_id();
-        long mvId = request.getMv_id();
-        long taskId = request.getTask_id();
-
-        MVMaintenanceJob job = Preconditions.checkNotNull(getJob(new MvId(dbId, mvId)));
-        TMVReportEpochTask report = request.getReport_epoch();
-        LOG.info("onReportEpoch job:{}", job);
-
-        // add commitInfos & failInfos
-        MVEpoch epoch = job.getEpoch();
-        List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(report.getTxn_commit_info());
-        List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(report.getTxn_fail_info());
-        epoch.onEpochReport(commitInfos, failInfos);
-
-        // TODO: handle exception
-        MVMaintenanceTask task = job.getTask(taskId);
-        task.updateEpochState(report);
     }
 
     /**
@@ -286,10 +223,6 @@ public class MaterializedViewMgr {
     // fot test
     protected void clearJobs() {
         jobMap.clear();
-    }
-
-    public List<MVMaintenanceJob> getRunnableJobs() {
-        return this.jobMap.values().stream().filter(MVMaintenanceJob::isRunnable).collect(Collectors.toList());
     }
 
     static class SerializedJobs {
