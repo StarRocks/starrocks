@@ -1208,16 +1208,14 @@ Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64
     rss_rowids_per_segment->resize(pk_iters.size());
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
-        for (uint32_t i = 0; i < pk_iters.size() && st.ok(); i++) {
-            TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", 1);
-            std::unique_ptr<ThreadPoolToken> token;
-            if (config::enable_pk_index_parallel_execution) {
-                token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
-                        ThreadPool::ExecutionMode::CONCURRENT);
-            }
-            TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
-            st.update(index.parallel_get_rss_rowids(token.get(), pk_iters[i].get(), &(*rss_rowids_per_segment)[i]));
+        TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
+        std::unique_ptr<ThreadPoolToken> token;
+        if (config::enable_pk_index_parallel_execution) {
+            token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                    ThreadPool::ExecutionMode::CONCURRENT);
         }
+        TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
+        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment));
     }));
     return st;
 }

@@ -3836,9 +3836,9 @@ TEST_F(LakeColumnUpsertModeTest, test_del_files_handling_in_column_upsert_mode) 
 }
 
 // Test parallel column mode partial update publish with multiple source segments
-// and multiple update segments. This exercises both Phase 1 (parallel PK index lookup
-// via SegmentPKIterator lazy_load + parallel_get_rss_rowids) and Phase 2 (parallel
-// DCG generation across source segments).
+// and multiple update segments. This exercises both Phase 1 (cross-segment parallel
+// PK index lookup via batch_parallel_get_rss_rowids) and Phase 2 (parallel DCG
+// generation across source segments).
 TEST_P(LakePartialUpdateTest, test_parallel_column_mode_partial_update_multi_segments) {
     if (GetParam().partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
         GTEST_SKIP() << "Only COLUMN_UPDATE_MODE uses parallel column mode partial update";

@@ -104,7 +104,7 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
     // Create lazy-load SegmentPKIterators with deferred first load.
     // defer_data_load=true avoids loading the first chunk during init(), so that
     // all iterators can be created without a memory spike. The actual data load
-    // happens on-demand when each iterator is first consumed in parallel_get_rss_rowids.
+    // happens on-demand when each iterator is first consumed in batch_parallel_get_rss_rowids.
     std::vector<SegmentPKIteratorPtr> pk_iters(num_segments);
     for (uint32_t i = 0; i < num_segments; i++) {
         pk_iters[i] = std::make_unique<SegmentPKIterator>();

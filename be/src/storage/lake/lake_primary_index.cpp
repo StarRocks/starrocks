@@ -477,12 +477,15 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
     return segment_pk_iterator->status();
 }
 
-// Parallel query of PK index to retrieve rss_rowids (positional mapping) for each primary key.
-// Each rss_rowids[i] = (rssid << 32 | rowid) for the i-th PK, or NullIndexValue if not found.
-// Follows the same token submit + wait pattern as parallel_get().
-Status LakePrimaryIndex::parallel_get_rss_rowids(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator,
-                                                 std::vector<uint64_t>* rss_rowids) {
-    // Per-chunk slot to collect index query results without contention
+// Parallel query of PK index to retrieve rss_rowids for all segments at once.
+// Submits chunks from all segments to a single shared thread pool token, enabling
+// cross-segment parallelism.
+Status LakePrimaryIndex::batch_parallel_get_rss_rowids(
+        ThreadPoolToken* token, std::vector<SegmentPKIteratorPtr>& pk_iters,
+        std::vector<std::vector<uint64_t>>* rss_rowids_per_segment) {
+    const uint32_t num_segments = pk_iters.size();
+    rss_rowids_per_segment->resize(num_segments);
+
     struct RssRowidSlot {
         size_t begin_rowid = 0;
         size_t count = 0;
@@ -491,61 +494,70 @@ Status LakePrimaryIndex::parallel_get_rss_rowids(ThreadPoolToken* token, Segment
 
     std::mutex mutex;
     Status status = Status::OK();
-    std::vector<std::unique_ptr<RssRowidSlot>> slots;
+    std::vector<std::vector<std::unique_ptr<RssRowidSlot>>> per_segment_slots(num_segments);
 
-    for (; !segment_pk_iterator->done(); segment_pk_iterator->next()) {
-        auto current = segment_pk_iterator->current();
-        size_t num_rows = current.first->num_rows();
-        size_t begin_rowid = current.second;
+    // Iterate all segments' chunks on the main thread and submit them all to the shared pool.
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        auto* pk_iter = pk_iters[seg_idx].get();
+        for (; !pk_iter->done(); pk_iter->next()) {
+            auto current = pk_iter->current();
+            size_t num_rows = current.first->num_rows();
+            size_t begin_rowid = current.second;
 
-        // Allocate slot before submitting task (not thread-safe, must be done in main thread)
-        auto slot = std::make_unique<RssRowidSlot>();
-        slot->begin_rowid = begin_rowid;
-        slot->count = num_rows;
-        slots.push_back(std::move(slot));
-        auto* slot_ptr = slots.back().get();
+            auto slot = std::make_unique<RssRowidSlot>();
+            slot->begin_rowid = begin_rowid;
+            slot->count = num_rows;
+            per_segment_slots[seg_idx].push_back(std::move(slot));
+            auto* slot_ptr = per_segment_slots[seg_idx].back().get();
 
-        // Lambda captures current by value to keep the ChunkPtr alive
-        auto func = [this, slot_ptr, current = std::move(current), segment_pk_iterator, &mutex, &status]() {
-            auto pk_column_st = segment_pk_iterator->encoded_pk_column(current.first.get());
-            Status st;
-            if (pk_column_st.ok()) {
-                slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
-                st = get(*pk_column_st.value(), &slot_ptr->values);
+            auto func = [this, slot_ptr, current = std::move(current), pk_iter, &mutex, &status]() {
+                auto pk_column_st = pk_iter->encoded_pk_column(current.first.get());
+                Status st;
+                if (pk_column_st.ok()) {
+                    slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
+                    st = get(*pk_column_st.value(), &slot_ptr->values);
+                } else {
+                    st = pk_column_st.status();
+                }
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+            };
+
+            if (token) {
+                auto st = token->submit_func(func);
+                TRACE_COUNTER_INCREMENT("batch_parallel_get_rss_rowids_cnt", 1);
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
             } else {
-                st = pk_column_st.status();
+                func();
+                RETURN_IF_ERROR(status);
             }
-            std::lock_guard<std::mutex> l(mutex);
-            status.update(st);
-        };
-
-        if (token) {
-            auto st = token->submit_func(func);
-            TRACE_COUNTER_INCREMENT("parallel_get_rss_rowids_cnt", 1);
-            std::lock_guard<std::mutex> l(mutex);
-            status.update(st);
-        } else {
-            func();
-            RETURN_IF_ERROR(status);
         }
     }
 
     if (token) {
-        TRACE_COUNTER_SCOPE_LATENCY_US("parallel_get_rss_rowids_wait_us");
+        TRACE_COUNTER_SCOPE_LATENCY_US("batch_parallel_get_rss_rowids_wait_us");
         token->wait();
     }
     RETURN_IF_ERROR(status);
-    RETURN_IF_ERROR(segment_pk_iterator->status());
 
-    // Merge per-chunk results into the output vector
-    size_t total = 0;
-    if (!slots.empty()) {
-        auto& last = slots.back();
-        total = last->begin_rowid + last->count;
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        RETURN_IF_ERROR(pk_iters[seg_idx]->status());
     }
-    rss_rowids->resize(total);
-    for (auto& slot : slots) {
-        memcpy(rss_rowids->data() + slot->begin_rowid, slot->values.data(), slot->count * sizeof(uint64_t));
+
+    // Merge per-chunk results into per-segment output vectors
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        auto& slots = per_segment_slots[seg_idx];
+        size_t total = 0;
+        if (!slots.empty()) {
+            auto& last = slots.back();
+            total = last->begin_rowid + last->count;
+        }
+        auto& output = (*rss_rowids_per_segment)[seg_idx];
+        output.resize(total);
+        for (auto& slot : slots) {
+            memcpy(output.data() + slot->begin_rowid, slot->values.data(), slot->count * sizeof(uint64_t));
+        }
     }
 
     return Status::OK();
