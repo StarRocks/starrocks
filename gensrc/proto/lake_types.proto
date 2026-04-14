@@ -107,6 +107,48 @@ message DeltaColumnGroupMetadataPB {
     map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
 }
 
+// An Index Delta Group (IDG) entry describes a standalone .idx file
+// produced by an ADD INDEX schema change. The file stores index blobs
+// for one or more (column, index_type) pairs for a single segment,
+// without rewriting the segment data. Mirrors DeltaColumnGroupEntry for
+// generated columns but carries index payloads instead of new columns.
+message IndexDeltaGroupEntryPB {
+    message IndexKey {
+        optional int32 col_unique_id = 1;
+        optional IndexType index_type = 2;
+    }
+    // The (column, index_type) pairs covered by this entry, i.e. what
+    // this .idx file was built for at creation time.
+    repeated IndexKey keys = 1;
+    // .idx file name, relative to segment_location (or GIN dir name).
+    optional string index_file = 2;
+    // alter_version at which this entry was created. Used for:
+    //   - visibility filter: only visible to query_version >= version
+    //   - compaction conflict detection: entry.version > compact_version
+    //     means a racing add-index happened after compaction's base.
+    optional int64 version = 3;
+    optional bytes encryption_meta = 4;
+    // Whether .idx file is shared across tablets (cross-tablet bundle).
+    optional bool shared_file = 5 [default=false];
+    optional int64 file_size = 6;
+    // Tombstone set written by DROP INDEX. A key appearing here is
+    // logically removed for read: readers skip it. Physical cleanup
+    // happens when compaction rebuilds the segment (keys not in
+    // dropped_keys are inlined into the new segment footer, remaining
+    // .idx file becomes orphan).
+    repeated IndexKey dropped_keys = 7;
+}
+
+// Multiple generations of IDG entries on a single segment, newest first.
+message IndexDeltaGroupVerPB {
+    repeated IndexDeltaGroupEntryPB entries = 1;
+}
+
+// Tablet-level IDG metadata: segment_id (global rssid) -> IDG entries.
+message IndexDeltaGroupMetadataPB {
+    map<uint32, IndexDeltaGroupVerPB> idgs = 1;
+}
+
 message DelfileWithRowsetId {
     optional string name = 1;
     // origin rowset that generate this del file.
@@ -247,6 +289,9 @@ message TabletMetadataPB {
     // Watermark for async vector index build: all rowsets with end_version <= this value
     // have their .vi files fully built. Carry-forwarded during publish.
     optional int64 vector_index_built_version = 23;
+    // Per-segment index delta groups produced by ADD INDEX schema change
+    // (lake-only). Allows adding indexes without rewriting segment data.
+    optional IndexDeltaGroupMetadataPB idg_meta = 24;
 }
 
 message MetadataUpdateInfoPB {
@@ -384,6 +429,35 @@ message TxnLogPB {
         optional DeltaColumnGroupMetadataPB dcg_meta = 6;
     }
 
+    // Produced by ADD INDEX fast-path schema change (lake-only). Carries
+    // the per-segment IDG entries built during the alter; publish commits
+    // them into TabletMetadataPB.idg_meta.
+    message OpAddIndex {
+        message SegmentEntry {
+            optional uint32 segment_id = 1;
+            optional IndexDeltaGroupEntryPB entry = 2;
+        }
+        repeated SegmentEntry segment_entries = 1;
+        optional int64 alter_version = 2;
+        // Indexes added by this alter; redundant w.r.t. schema.table_indices
+        // that FE has already published, kept for idempotent reconciliation.
+        repeated TabletIndexPB new_indexes = 3;
+    }
+
+    // Produced by DROP INDEX fast-path schema change (lake-only). Applied
+    // as a logical tombstone: on publish, matching (col_unique_id,
+    // index_type) entries in IDG get their keys moved to dropped_keys.
+    // Physical cleanup happens at compaction time.
+    message OpDropIndex {
+        message DroppedIndex {
+            optional int64 index_id = 1;
+            optional int32 col_unique_id = 2;
+            optional IndexType index_type = 3;
+        }
+        repeated DroppedIndex dropped = 1;
+        optional int64 drop_version = 2;
+    }
+
     optional int64 tablet_id = 1;
     optional int64 txn_id = 2;
     optional OpWrite op_write = 3;
@@ -394,6 +468,10 @@ message TxnLogPB {
     optional int64 partition_id = 8;
     optional PUniqueId load_id = 9;
     optional OpParallelCompaction op_parallel_compaction = 10;
+    // ADD INDEX fast-path op (lake-only).
+    optional OpAddIndex op_add_index = 11;
+    // DROP INDEX fast-path op (lake-only).
+    optional OpDropIndex op_drop_index = 12;
 }
 
 message CombinedTxnLogPB {

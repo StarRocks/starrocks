@@ -366,7 +366,19 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
 
     MonotonicStopWatch timer;
     timer.start();
-    Status status = do_process_alter_tablet(request);
+    // Fast-path dispatch for ADD/DROP INDEX (lake-only). FE classifies these
+    // ahead of time and sets only_add_index / only_drop_index in the request.
+    // If the BE-side validation rejects (e.g. unsupported index column / type),
+    // do_process_add_index_only falls back to the regular schema-change path
+    // by calling do_process_alter_tablet from within itself.
+    Status status;
+    if (request.__isset.only_add_index && request.only_add_index) {
+        status = do_process_add_index_only(request);
+    } else if (request.__isset.only_drop_index && request.only_drop_index) {
+        status = do_process_drop_index_only(request);
+    } else {
+        status = do_process_alter_tablet(request);
+    }
     LOG(INFO) << "finish alter tablet. status: " << status.to_string()
               << ", duration: " << timer.elapsed_time() / 1000000 << " ms"
               << ", peak_mem_usage: " << CurrentThread::mem_tracker()->peak_consumption() << " bytes";
@@ -596,6 +608,58 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
               << "base tablet: " << base_tablet.id() << ", new tablet: " << new_tablet.id()
               << ", version: " << base_tablet.version();
     return Status::OK();
+}
+
+// =============================================================================
+// ADD INDEX fast path (lake-only).
+//
+// Skeleton entry point only. The full implementation will:
+//   1) Validate request (indexes_to_add types ∈ {bloom/ngram/bitmap/GIN},
+//      columns exist and are not short-key/sort-key, PK columns excluded
+//      on PK tables, etc.). On validation failure, fall back to
+//      do_process_alter_tablet so the alter still completes via the
+//      regular rewrite path.
+//   2) For each rowset.segment, submit a per-segment index-build task via
+//      SegmentTaskRunner against ExecEnv->agent_server()->
+//      get_lake_schema_change_thread_pool() with concurrency
+//      config::lake_schema_change_per_tablet_parallelism.
+//   3) Each task: open column iterators on the requested columns
+//      (fill_data_cache=false); for each (col,index_type) build via existing
+//      BloomFilterIndexWriter / BitmapIndexWriter / NgramBloomFilterIndexWriter
+//      / InvertedWriter into a single .idx file (gen_idx_filename(txn_id))
+//      with default WritableFileOptions (skip_fill_local_cache=false, so
+//      writes populate local cache, mirroring DCG .cols behaviour).
+//   4) Append IndexFileFooterPB and finalize. Collect IndexDeltaGroupEntryPB
+//      under an OpAddIndex; put_txn_log to commit.
+//
+// Until the full implementation lands, this returns Status::NotSupported so
+// that BEs advertising the only_add_index thrift field still degrade safely
+// if FE incorrectly routes traffic here. FE is expected to gate fast-path
+// dispatch behind its own classifier (LakeTableAddIndexJob).
+Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& request) {
+    LOG(INFO) << "ADD INDEX fast path requested but not yet implemented; "
+              << "falling back to regular schema change. tablet="
+              << request.new_tablet_id;
+    return do_process_alter_tablet(request);
+}
+
+// =============================================================================
+// DROP INDEX fast path (lake-only).
+//
+// Skeleton entry point only. The full implementation will:
+//   1) Construct OpDropIndex with drop_version = request.alter_version and
+//      one DroppedIndex per (index_id, col_unique_id, index_type) from
+//      request.drop_indexes.
+//   2) put_txn_log; publish merges tombstones into existing IDG entries
+//      (apply_drop_index in MetaFileBuilder, see Phase 2).
+//
+// Returns NotSupported until Phase 2 is implemented; FE classifier should
+// not yet route DROP INDEX traffic here.
+Status SchemaChangeHandler::do_process_drop_index_only(const TAlterTabletReqV2& request) {
+    LOG(INFO) << "DROP INDEX fast path requested but not yet implemented; "
+              << "falling back to regular schema change. tablet="
+              << request.new_tablet_id;
+    return do_process_alter_tablet(request);
 }
 
 } // namespace starrocks::lake

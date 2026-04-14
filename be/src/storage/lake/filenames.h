@@ -78,6 +78,14 @@ inline bool is_cols(std::string_view file_name) {
     return HasSuffixString(file_name, ".cols");
 }
 
+// Index Delta Group payload file produced by ADD INDEX fast-path schema change.
+// One .idx per ADD INDEX alter per segment, holding bloom-filter / bitmap /
+// ngram-bloom blobs (GIN keeps its own per-column inverted directory and is
+// referenced by IndexDeltaGroupEntryPB.index_file by directory name).
+inline bool is_idx(std::string_view file_name) {
+    return HasSuffixString(file_name, ".idx");
+}
+
 // Check if file is a Lake Compaction Rows Mapper file
 // WHY: Need to distinguish between local (.crm) and remote (.lcrm) mapper files
 // for correct cleanup behavior. Remote lcrm files must not be deleted immediately
@@ -96,6 +104,13 @@ inline std::string tablet_initial_metadata_filename() {
 
 inline std::string gen_delvec_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.delvec", txn_id, generate_uuid_string());
+}
+
+// Generate a filename for an Index Delta Group payload file.
+// FORMAT: {txn_id}_{uuid}.idx — txn_id for traceability, uuid for uniqueness
+// across retries of the same alter txn.
+inline std::string gen_idx_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.idx", txn_id, generate_uuid_string());
 }
 
 // Generate filename for Lake Compaction Rows Mapper file (.lcrm)
@@ -216,7 +231,8 @@ inline std::string extract_uuid_from(std::string_view file_name) {
     }
 
     // check extension
-    if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols") {
+    if (extension != ".dat" && extension != ".del" && extension != ".delvec" && extension != ".cols" &&
+        extension != ".idx") {
         return {};
     }
 

@@ -250,6 +250,8 @@ set(STORAGE_FILES
     lake/lake_replication_txn_manager.cpp
     lake/rowset.cpp
     lake/segment_metadata_filter.cpp
+    lake/segment_task_runner.cpp
+    lake/index_delta_group_loader.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp

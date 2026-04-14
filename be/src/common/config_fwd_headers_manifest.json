@@ -868,6 +868,7 @@
         "delete_worker_count_normal_priority",
         "delete_worker_count_high_priority",
         "alter_tablet_worker_count",
+        "lake_schema_change_per_tablet_parallelism",
         "parallel_clone_task_per_path",
         "storage_medium_migrate_count",
         "update_schema_worker_count",

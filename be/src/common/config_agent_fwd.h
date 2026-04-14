@@ -50,6 +50,18 @@ CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_mInt32(alter_tablet_worker_count, "3");
 
+// Maximum number of segment-level sub-tasks executed in parallel within a single
+// lake schema-change task (per-tablet). Currently only the ADD INDEX fast path
+// (lake AddIndexSchemaChange) submits sub-tasks to the dedicated lake_schema_change
+// thread pool; LinkedSchemaChange / DirectSchemaChange / SortedSchemaChange and
+// the DROP INDEX fast path remain single-threaded and are unaffected.
+//
+// The dedicated _thread_pool_lake_schema_change capacity is auto-derived as:
+//     pool_max = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+// so the outer alter pool and inner segment pool stay physically isolated and
+// never deadlock against each other.
+CONF_mInt32(lake_schema_change_per_tablet_parallelism, "4");
+
 // The count of parallel clone task per storage path
 CONF_mInt32(parallel_clone_task_per_path, "8");
 

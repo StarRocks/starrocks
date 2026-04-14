@@ -210,6 +210,27 @@ struct TAlterTabletReqV2 {
     //    schema matches tablet metadata schema. base_tablet_read_schema can directly replace columns;
     //    old BE will fall back to tablet metadata schema if columns are missing, with no compatibility impact.
     19: optional TTabletSchema base_tablet_read_schema
+
+    // ADD INDEX fast-path (lake-only). When true, BE skips data rewrite and
+    // builds indexes into standalone .idx files (Index Delta Group). The
+    // indexes_to_add list carries the new TabletIndex entries to build.
+    // BE that does not recognize this field falls back to the regular
+    // schema-change path automatically.
+    20: optional bool only_add_index
+    21: optional list<Descriptors.TOlapTableIndex> indexes_to_add
+
+    // DROP INDEX fast-path (lake-only). When true, BE writes a logical
+    // tombstone into IDG metadata; physical .idx file cleanup happens at
+    // compaction time.
+    22: optional bool only_drop_index
+    23: optional list<TDropIndexInfo> drop_indexes
+}
+
+// One index removal request used by the DROP INDEX fast-path.
+struct TDropIndexInfo {
+    1: optional i64 index_id
+    2: optional i32 col_unique_id
+    3: optional Descriptors.TIndexType index_type
 }
 
 struct TClusterInfo {

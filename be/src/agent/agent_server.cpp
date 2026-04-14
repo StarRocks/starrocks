@@ -127,6 +127,10 @@ public:
 
     ThreadPool* get_lake_replicate_file_thread_pool() const { return _thread_pool_replicate_file.get(); }
 
+    ThreadPool* get_lake_schema_change_thread_pool() const { return _thread_pool_lake_schema_change.get(); }
+
+    void update_lake_schema_change_thread_pool_max();
+
     void stop_task_worker_pool(TaskWorkerType type) const;
 
     DISALLOW_COPY_AND_MOVE(Impl);
@@ -162,6 +166,10 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_drop;
     std::unique_ptr<ThreadPool> _thread_pool_create_tablet;
     std::unique_ptr<ThreadPool> _thread_pool_alter_tablet;
+    // Sub-task pool for lake schema-change inner parallelism (e.g. per-segment
+    // index building). Sized as alter_tablet_worker_count *
+    // lake_schema_change_per_tablet_parallelism. See agent_server.cpp pool init.
+    std::unique_ptr<ThreadPool> _thread_pool_lake_schema_change;
     std::unique_ptr<ThreadPool> _thread_pool_clear_transaction;
     std::unique_ptr<ThreadPool> _thread_pool_storage_medium_migrate;
     std::unique_ptr<ThreadPool> _thread_pool_check_consistency;
@@ -257,6 +265,21 @@ Status AgentServer::Impl::init() {
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(alter_tablet, 0, config::alter_tablet_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_alter_tablet);
+
+        // Pool dedicated to lake schema-change *sub-tasks* (e.g. per-segment
+        // index building inside a single ADD INDEX job). Physically isolated
+        // from the alter_tablet outer pool to avoid the classic deadlock where
+        // outer tasks block holding their pool slot waiting for inner sub-tasks
+        // to drain. Capacity is auto-derived as
+        //     alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism
+        // because the worst case is every outer alter task fanning out
+        // lake_schema_change_per_tablet_parallelism inner tasks at once. The
+        // pool is DYNAMIC, so it does not hold idle threads when no schema
+        // change is running.
+        int lake_sc_pool_max = std::max(1, config::alter_tablet_worker_count *
+                                                   config::lake_schema_change_per_tablet_parallelism);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(lake_schema_change, 0, lake_sc_pool_max,
+                                       std::numeric_limits<int>::max(), _thread_pool_lake_schema_change);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(clear_transaction, 0, config::clear_transaction_task_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_clear_transaction);
@@ -363,6 +386,9 @@ void AgentServer::Impl::stop() {
         _thread_pool_drop->shutdown();
         _thread_pool_create_tablet->shutdown();
         _thread_pool_alter_tablet->shutdown();
+        if (_thread_pool_lake_schema_change != nullptr) {
+            _thread_pool_lake_schema_change->shutdown();
+        }
         _thread_pool_clear_transaction->shutdown();
         _thread_pool_storage_medium_migrate->shutdown();
         _thread_pool_check_consistency->shutdown();
@@ -724,6 +750,23 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
 
     Status st = thread_pool->update_max_threads(calc_max_threads_by_policy(*spec, new_val));
     LOG_IF(ERROR, !st.ok()) << st;
+    // alter_tablet_worker_count is one of the inputs into the lake_schema_change
+    // pool capacity formula. Keep that pool sized in sync when the outer knob
+    // changes (no-op if the inner pool has not been initialized, e.g. compute node).
+    if (type == TTaskType::ALTER) {
+        update_lake_schema_change_thread_pool_max();
+    }
+}
+
+void AgentServer::Impl::update_lake_schema_change_thread_pool_max() {
+    if (_thread_pool_lake_schema_change == nullptr) {
+        return;
+    }
+    int new_max = std::max(1, config::alter_tablet_worker_count *
+                                      config::lake_schema_change_per_tablet_parallelism);
+    Status st = _thread_pool_lake_schema_change->update_max_threads(new_max);
+    LOG_IF(ERROR, !st.ok()) << "Failed to update lake_schema_change pool max_threads to "
+                            << new_max << ": " << st;
 }
 
 #define STOP_IF_NOT_NULL(worker_pool) \
@@ -852,6 +895,14 @@ ThreadPool* AgentServer::get_thread_pool(int type) const {
 
 ThreadPool* AgentServer::get_lake_replicate_file_thread_pool() const {
     return _impl->get_lake_replicate_file_thread_pool();
+}
+
+ThreadPool* AgentServer::get_lake_schema_change_thread_pool() const {
+    return _impl->get_lake_schema_change_thread_pool();
+}
+
+void AgentServer::update_lake_schema_change_thread_pool_max() {
+    _impl->update_lake_schema_change_thread_pool_max();
 }
 
 void AgentServer::stop_task_worker_pool(TaskWorkerType type) const {
