@@ -37,6 +37,9 @@
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
+#include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "types/datetime_value.h"
@@ -1157,10 +1160,41 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
     if (state == nullptr) return;
     if (error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     error_message_counter += 1;
+    const std::string col_name = (current_slot == nullptr) ? "" : current_slot->col_name();
     std::string error_msg =
             strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
-                                (current_slot == nullptr) ? "null" : current_slot->col_name(), raw_data);
+                                col_name.empty() ? "null" : col_name, raw_data);
     RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
+
+    // Parquet / Arrow-Flight loads have no broker-load row filter (that
+    // is ORC-only today), so we cannot produce a proper per-row
+    // raw_record the way the ORC path does in Phase 4. What we DO have
+    // is the offending column's raw bytes -- emit them as a single-column
+    // JSON fragment so `_statistics_.rejected_records` at least carries
+    // the column, the raw value, and the source file a user can use to
+    // locate the upstream bad row. Replay from this is necessarily lossy
+    // (no other columns) and operators needing full-row replay for
+    // Parquet should follow the "Parquet broker-load validation" feature
+    // tracked in the rejected-records plan file.
+    auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+    if (writer != nullptr) {
+        const std::string key = col_name.empty() ? std::string("_raw") : col_name;
+        // source_info: {"format": "parquet", "file": "..."} -- the FE side
+        // uses load_type + source_info.format to distinguish Arrow Flight
+        // vs. file-source loads when surfacing results.
+        std::string source_info;
+        source_info.reserve(current_file.size() + 40);
+        source_info.append("{\"format\":\"parquet\",\"file\":");
+        rapidjson::StringBuffer file_buf;
+        rapidjson::Writer<rapidjson::StringBuffer> file_writer(file_buf);
+        file_writer.String(current_file.c_str(), static_cast<rapidjson::SizeType>(current_file.size()));
+        source_info.append(file_buf.GetString(), file_buf.GetSize());
+        source_info.append("}");
+
+        writer->append_from_slices({Slice{raw_data.data(), raw_data.size()}},
+                                   {key},
+                                   /*error_code=*/"TYPE_MISMATCH", reason, col_name, source_info);
+    }
 }
 
 } // namespace starrocks
