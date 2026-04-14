@@ -154,34 +154,40 @@ Status ADBCScanner::_init_adbc() {
 
 Status ADBCScanner::_try_parallel_read() {
     AdbcError error = ADBC_ERROR_INIT;
-    struct ArrowSchema c_schema {};
+    ArrowSchemaHolder schema_holder;
     struct AdbcPartitions partitions {};
     int64_t rows_affected = -1;
 
-    AdbcStatusCode sc = AdbcStatementExecutePartitions(&_statement, &c_schema, &partitions, &rows_affected, &error);
+    // Ensure partitions are released on all exit paths
+    auto cleanup_partitions = [&partitions]() {
+        if (partitions.release) {
+            partitions.release(&partitions);
+            partitions.release = nullptr;
+        }
+    };
+
+    AdbcStatusCode sc = AdbcStatementExecutePartitions(&_statement, schema_holder.get(), &partitions, &rows_affected, &error);
     if (sc != ADBC_STATUS_OK) {
-        // Driver doesn't support partitions -- fall back
         if (error.release) error.release(&error);
-        if (c_schema.release) c_schema.release(&c_schema);
+        cleanup_partitions();
         return Status::NotSupported("ADBC partitions not supported by driver");
     }
 
     if (partitions.num_partitions <= 1) {
-        // Not worth parallel overhead for a single partition
-        if (partitions.release) partitions.release(&partitions);
-        if (c_schema.release) c_schema.release(&c_schema);
+        cleanup_partitions();
         return Status::NotSupported("Only one partition, falling back to single stream");
     }
 
     // Create parallel reader with capped thread count
     size_t num_threads = std::min(partitions.num_partitions, (size_t)4);
     _parallel_reader = std::make_unique<ADBCParallelReader>(&_database, partitions, num_threads);
-    RETURN_IF_ERROR(_parallel_reader->start());
+    auto start_status = _parallel_reader->start();
+    cleanup_partitions();
+    if (!start_status.ok()) {
+        _parallel_reader.reset();
+        return start_status;
+    }
     _use_parallel = true;
-
-    // Release partitions memory
-    if (partitions.release) partitions.release(&partitions);
-    if (c_schema.release) c_schema.release(&c_schema);
 
     return Status::OK();
 }
