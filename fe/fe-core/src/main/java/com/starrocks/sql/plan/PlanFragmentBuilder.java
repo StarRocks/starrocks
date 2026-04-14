@@ -28,11 +28,9 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
@@ -47,7 +45,6 @@ import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
@@ -64,10 +61,8 @@ import com.starrocks.planner.BenchmarkScanNode;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.CacheStatsScanNode;
 import com.starrocks.planner.DataPartition;
-import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DecodeNode;
 import com.starrocks.planner.DeltaLakeScanNode;
-import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
@@ -96,7 +91,6 @@ import com.starrocks.planner.NestLoopJoinNode;
 import com.starrocks.planner.NoopSink;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.PartitionIdGenerator;
 import com.starrocks.planner.PlanFragment;
@@ -123,7 +117,6 @@ import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -131,11 +124,9 @@ import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.ast.BrokerDesc;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.OrderByElement;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -225,7 +216,6 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TPartitionType;
@@ -294,60 +284,6 @@ public class PlanFragmentBuilder {
                                               boolean hasOutputFragment) {
         return createPhysicalPlan(plan, connectContext, outputColumns, columnRefFactory, colNames, resultSinkType,
                 hasOutputFragment, false);
-    }
-
-    public static ExecPlan createPhysicalPlanForMV(ConnectContext connectContext,
-                                                   CreateMaterializedViewStatement createStmt,
-                                                   OptExpression optExpr,
-                                                   LogicalPlan logicalPlan,
-                                                   QueryRelation queryRelation,
-                                                   ColumnRefFactory columnRefFactory) throws DdlException {
-        List<String> colNames = queryRelation.getColumnOutputNames();
-        List<ColumnRefOperator> outputColumns = logicalPlan.getOutputColumn();
-        ExecPlan execPlan = new ExecPlan(connectContext, colNames, optExpr, outputColumns, false);
-        PlanFragment planFragment = new PhysicalPlanTranslator(columnRefFactory).translate(optExpr, execPlan);
-        // createOutputFragment(planFragment, execPlan, outputColumns, false);
-        execPlan.setPlanCount(optExpr.getPlanCount());
-        createStmt.setMaintenancePlan(execPlan, columnRefFactory);
-
-        // Finalize fragments
-        for (PlanFragment fragment : execPlan.getFragments()) {
-            // TODO(murphy) check it
-            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
-        }
-        Collections.reverse(execPlan.getFragments());
-
-        // Create a fake table sink here, replaced it after created the MV
-        PartitionInfo partitionInfo = LocalMetastore.buildPartitionInfo(createStmt, null);
-        long mvId = GlobalStateMgr.getCurrentState().getNextId();
-        long dbId = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createStmt.getDbName()).getId();
-        MaterializedView view = GlobalStateMgr.getCurrentState().getMaterializedViewMgr()
-                .createSinkTable(createStmt, partitionInfo, mvId, dbId);
-        TupleDescriptor tupleDesc = buildTupleDesc(execPlan, view);
-        view.setMaintenancePlan(execPlan);
-        List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
-
-        DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds,
-                view.writeQuorum(), view.enableReplicatedStorage(), false, false,
-                connectContext.getCurrentComputeResource());
-        execPlan.getTopFragment().setSink(tableSink);
-
-        return execPlan;
-    }
-
-    private static TupleDescriptor buildTupleDesc(ExecPlan execPlan, Table table) {
-        DescriptorTable descriptorTable = execPlan.getDescTbl();
-        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
-        for (Column column : table.getFullSchema()) {
-            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-            slotDescriptor.setIsMaterialized(true);
-            slotDescriptor.setType(column.getType());
-            slotDescriptor.setColumn(column);
-            slotDescriptor.setIsNullable(column.isAllowNull());
-            // TODO(murphy) support global dict
-        }
-        olapTuple.computeMemLayout();
-        return olapTuple;
     }
 
     private static void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
