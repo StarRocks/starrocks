@@ -23,8 +23,11 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.BoolLiteral;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -414,5 +417,45 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkAnyActionOnWarehouse(ConnectContext context, String name) throws AccessDeniedException {
         checkAnyActionOnObject(context, ObjectType.WAREHOUSE, Collections.singletonList(name));
+    }
+
+    /**
+     * Built-in row access policy for the {@code _statistics_.rejected_records}
+     * system table.
+     *
+     * <p>This is the v1 of the policy: anyone other than {@code root} sees
+     * nothing. It replaces the implicit "admin-only SELECT" access model with
+     * an explicit policy routed through
+     * {@link SecurityPolicyRewriteRule#buildView}, which means a future
+     * commit can swap the {@code FALSE} literal for a richer predicate
+     * ({@code (target_database, target_table) IN (...tables user has SELECT
+     * on...)} or a {@code has_table_privilege()} UDF call) without touching
+     * anything outside this method.
+     *
+     * <p>We return {@code null} for non-matching tables so the general
+     * policy-resolution path (for user-defined RLS) is unchanged.
+     */
+    @Override
+    public Expr getRowAccessPolicy(ConnectContext currentUser, TableName tableName) {
+        if (tableName == null) {
+            return null;
+        }
+        String catalog = tableName.getCatalog();
+        if (catalog != null && !catalog.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+            return null;
+        }
+        if (!RejectedRecordsTable.DATABASE_NAME.equals(tableName.getDb())
+                || !RejectedRecordsTable.TABLE_NAME.equals(tableName.getTbl())) {
+            return null;
+        }
+
+        UserIdentity user = currentUser != null ? currentUser.getCurrentUserIdentity() : null;
+        if (user != null && user.equals(UserIdentity.ROOT)) {
+            return null; // admins see everything
+        }
+        // Non-admin: hide all rows. Operators who need to grant narrower
+        // visibility should follow the migration path outlined in the
+        // feature plan (has_table_privilege() UDF + predicate rewrite).
+        return new BoolLiteral(false);
     }
 }
