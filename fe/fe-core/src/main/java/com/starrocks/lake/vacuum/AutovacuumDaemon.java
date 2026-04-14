@@ -46,6 +46,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.logging.log4j.LogManager;
@@ -212,59 +213,80 @@ public class AutovacuumDaemon extends FrontendDaemon {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
 
-        // When shared-file cleanup is on, all tablets of the partition are sent to a single
-        // aggregator node. Prefer a node that already owns at least one of these tablets so
-        // that on BE side the batch anchor tablet can be resolved locally via the staros
-        // worker cache (no extra get-shard-info RPC).
-        //
-        // Use the batched getAllNodeIdsByShards API to resolve all tablet owners in a
-        // single FE→StarMgr RPC. Doing a per-tablet lookup here would amplify control-plane
-        // traffic proportional to the partition size and defeat the optimization.
-        Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
-        if (enableSharedFileCleanup && !tablets.isEmpty()) {
+        // Resolve all tablet owners in a single batched RPC. The result serves both:
+        // - enableSharedFileCleanup: collect candidate aggregator nodes (prefer a node
+        //   that owns at least one tablet), then assign all tablets to the chosen one.
+        // - non-shared: assign each tablet to its first alive owner CN.
+        // This avoids N per-tablet getComputeNodeAssignedToTablet RPCs in either path.
+        Map<Long, List<Long>> shardToNodeIds = null;
+        if (!tablets.isEmpty()) {
             StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
             List<Long> tabletIds = tablets.stream().map(Tablet::getId).collect(Collectors.toList());
             try {
-                Map<Long, List<Long>> shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
+                shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
                         tabletIds, computeResource.getWorkerGroupId());
+            } catch (StarRocksException e) {
+                LOG.warn("Failed to batch-resolve tablet owners for {} tablets, falling back",
+                        tablets.size(), e);
+            }
+        }
+
+        SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+
+        if (enableSharedFileCleanup) {
+            // Collect candidate aggregator nodes from the batched result, then pick one.
+            Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
+            if (shardToNodeIds != null) {
                 for (List<Long> nodeIds : shardToNodeIds.values()) {
                     if (nodeIds == null || nodeIds.isEmpty()) {
                         continue;
                     }
-                    // Treat the first replica as the shard owner, matching the semantics
-                    // of getComputeNodeAssignedToTablet / getPrimaryComputeNodeIdByShard.
-                    ComputeNode owner = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
-                            .getBackendOrComputeNode(nodeIds.get(0));
+                    ComputeNode owner = clusterInfo.getBackendOrComputeNode(nodeIds.get(0));
                     if (owner != null) {
                         candidateAggregatorNodes.add(owner);
                     }
                 }
-            } catch (StarRocksException ignored) {
-                // a missing/unresolvable batch must not block vacuum; we will fall back
-                // to picking from any alive node in the warehouse below.
             }
-        }
-
-        ComputeNode pickNode = null;
-        for (Tablet tablet : tablets) {
-            LakeTablet lakeTablet = (LakeTablet) tablet;
-
-            if (enableSharedFileCleanup) {
-                // shared cleanup runs on a single node.
-                if (pickNode == null) {
-                    pickNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
-                }
-            } else {
-                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet.getId());
-            }
-
+            ComputeNode pickNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
             if (pickNode == null) {
                 return;
             }
-            TabletInfoPB tabletInfo = new TabletInfoPB();
-            tabletInfo.setTabletId(tablet.getId());
-            tabletInfo.setMinVersion(lakeTablet.getMinVersion());
-            nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
+            for (Tablet tablet : tablets) {
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                TabletInfoPB tabletInfo = new TabletInfoPB();
+                tabletInfo.setTabletId(tablet.getId());
+                tabletInfo.setMinVersion(lakeTablet.getMinVersion());
+                nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
+            }
+        } else {
+            for (Tablet tablet : tablets) {
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                // Try batched result first: find first alive owner for this tablet.
+                ComputeNode pickNode = null;
+                List<Long> nodeIds = (shardToNodeIds != null)
+                        ? shardToNodeIds.get(lakeTablet.getId()) : null;
+                if (nodeIds != null) {
+                    for (long nodeId : nodeIds) {
+                        if (clusterInfo.checkBackendAlive(nodeId)
+                                || clusterInfo.checkComputeNodeAlive(nodeId)) {
+                            pickNode = clusterInfo.getBackendOrComputeNode(nodeId);
+                            break;
+                        }
+                    }
+                }
+                if (pickNode == null) {
+                    // Batched result missing or no alive replica — fall back to per-tablet RPC.
+                    pickNode = warehouseManager.getComputeNodeAssignedToTablet(
+                            computeResource, lakeTablet.getId());
+                }
+                if (pickNode == null) {
+                    return;
+                }
+                TabletInfoPB tabletInfo = new TabletInfoPB();
+                tabletInfo.setTabletId(tablet.getId());
+                tabletInfo.setMinVersion(lakeTablet.getMinVersion());
+                nodeToTablets.computeIfAbsent(pickNode, k -> Lists.newArrayList()).add(tabletInfo);
+            }
         }
 
         ClusterSnapshotMgr clusterSnapshotMgr = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr();
