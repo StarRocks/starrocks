@@ -144,7 +144,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         try {
             shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
                     shardIds, computeResource.getWorkerGroupId());
-        } catch (StarRocksException e) {
+        } catch (Exception e) {
             LOG.warn("Failed to batch-resolve shard owners for {} shards, falling back",
                     shardIds.size(), e);
         }

@@ -27,7 +27,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -225,7 +224,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
             try {
                 shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
                         tabletIds, computeResource.getWorkerGroupId());
-            } catch (StarRocksException e) {
+            } catch (Exception e) {
                 LOG.warn("Failed to batch-resolve tablet owners for {} tablets, falling back",
                         tablets.size(), e);
             }
