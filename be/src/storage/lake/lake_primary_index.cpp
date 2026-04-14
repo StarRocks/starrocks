@@ -480,9 +480,9 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
 // Parallel query of PK index to retrieve rss_rowids for all segments at once.
 // Submits chunks from all segments to a single shared thread pool token, enabling
 // cross-segment parallelism.
-Status LakePrimaryIndex::batch_parallel_get_rss_rowids(
-        ThreadPoolToken* token, std::vector<SegmentPKIteratorPtr>& pk_iters,
-        std::vector<std::vector<uint64_t>>* rss_rowids_per_segment) {
+Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
+                                                       std::vector<SegmentPKIteratorPtr>& pk_iters,
+                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment) {
     const uint32_t num_segments = pk_iters.size();
     rss_rowids_per_segment->resize(num_segments);
 
