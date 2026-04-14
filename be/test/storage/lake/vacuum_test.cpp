@@ -4517,4 +4517,81 @@ TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_combined_txnl
     }
 }
 
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_shared_orphan_files) {
+    // Verify that shared files in orphan_files and compaction_inputs are NOT deleted
+    // for range distribution tablets, even when can_bundle_meta_file_to_be_deleted
+    // would allow it. This protects files that may still be referenced by new split tablets.
+    const std::string shared_orphan = "0000000000f859e4_88888888-8888-8888-8888-8888888888h1.dat";
+    const std::string private_orphan = "0000000000f859e4_88888888-8888-8888-8888-8888888888h2.dat";
+    const std::string shared_compaction_input = "0000000000f859e4_88888888-8888-8888-8888-8888888888h3.dat";
+    const std::string latest_segment = "0000000000f959e4_99999999-9999-9999-9999-9999999999i1.dat";
+    create_data_file(shared_orphan);
+    create_data_file(private_orphan);
+    create_data_file(shared_compaction_input);
+    create_data_file(latest_segment);
+
+    // Version 3 (latest): range distribution tablet with orphan_files and compaction_inputs
+    // from a previous compaction. One orphan file is shared, one is not.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 7000,
+        "version": 3,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        },
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000f959e4_99999999-9999-9999-9999-9999999999i1.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "orphan_files": [
+            {
+                "name": "0000000000f859e4_88888888-8888-8888-8888-8888888888h1.dat",
+                "size": 100,
+                "shared": true
+            },
+            {
+                "name": "0000000000f859e4_88888888-8888-8888-8888-8888888888h2.dat",
+                "size": 100,
+                "shared": false
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "0000000000f859e4_88888888-8888-8888-8888-8888888888h3.dat"
+                ],
+                "shared_segments": [true]
+            }
+        ]
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(7000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Shared orphan file should be retained (protected by range distribution check)
+        EXPECT_TRUE(file_exist(shared_orphan));
+        // Shared compaction input should be retained
+        EXPECT_TRUE(file_exist(shared_compaction_input));
+        // Private orphan file can be deleted (not shared, so safe)
+        EXPECT_FALSE(file_exist(private_orphan));
+        // Latest metadata data files should be retained (existing is_range_distribution protection)
+        EXPECT_TRUE(file_exist(latest_segment));
+
+        // Metadata file should be deleted
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(7000, 3)));
+    }
+}
+
 } // namespace starrocks::lake

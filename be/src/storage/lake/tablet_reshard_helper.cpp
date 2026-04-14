@@ -28,26 +28,49 @@ void set_all_data_files_shared(RowsetMetadataPB* rowset_metadata) {
     }
 }
 
+// Marks all data files referenced by an OpWrite as shared. Used for both the
+// top-level op_write and every op_replication.op_writes[*], which share the same
+// OpWrite schema and the same publish path (apply_opwrite / batch_apply_opwrite).
+static void set_all_data_files_shared(TxnLogPB_OpWrite* op_write) {
+    if (op_write->has_rowset()) {
+        set_all_data_files_shared(op_write->mutable_rowset());
+    }
+    for (auto& sst : *op_write->mutable_ssts()) {
+        sst.set_shared(true);
+    }
+    // op_write.dels is a plain string list with no per-entry shared flag; populate
+    // the parallel `shared_dels` so that apply_opwrite can transfer the shared
+    // state into RowsetMetadataPB.del_files when the txn is published on a child.
+    auto* shared_dels = op_write->mutable_shared_dels();
+    shared_dels->Clear();
+    shared_dels->Resize(op_write->dels_size(), true);
+}
+
+// Marks all data files referenced by an OpCompaction as shared. Used both for the
+// top-level op_compaction and for every nested subtask in op_parallel_compaction,
+// so the rule must stay consistent across both.
+static void set_all_data_files_shared(TxnLogPB_OpCompaction* op_compaction) {
+    if (op_compaction->has_output_rowset()) {
+        set_all_data_files_shared(op_compaction->mutable_output_rowset());
+    }
+    if (op_compaction->has_output_sstable()) {
+        op_compaction->mutable_output_sstable()->set_shared(true);
+    }
+    for (auto& sstable : *op_compaction->mutable_output_sstables()) {
+        sstable.set_shared(true);
+    }
+    for (auto& sst : *op_compaction->mutable_ssts()) {
+        sst.set_shared(true);
+    }
+}
+
 void set_all_data_files_shared(TxnLogPB* txn_log) {
     if (txn_log->has_op_write()) {
-        auto* op_write = txn_log->mutable_op_write();
-        if (op_write->has_rowset()) {
-            set_all_data_files_shared(op_write->mutable_rowset());
-        }
+        set_all_data_files_shared(txn_log->mutable_op_write());
     }
 
     if (txn_log->has_op_compaction()) {
-        auto* op_compaction = txn_log->mutable_op_compaction();
-        if (op_compaction->has_output_rowset()) {
-            set_all_data_files_shared(op_compaction->mutable_output_rowset());
-        }
-        if (op_compaction->has_output_sstable()) {
-            auto* sstable = op_compaction->mutable_output_sstable();
-            sstable->set_shared(true);
-        }
-        for (auto& sstable : *op_compaction->mutable_output_sstables()) {
-            sstable.set_shared(true);
-        }
+        set_all_data_files_shared(txn_log->mutable_op_compaction());
     }
 
     if (txn_log->has_op_schema_change()) {
@@ -63,19 +86,22 @@ void set_all_data_files_shared(TxnLogPB* txn_log) {
     }
 
     if (txn_log->has_op_replication()) {
+        // Each replication op_write flows through the same apply_opwrite path on
+        // publish (see txn_log_applier.cpp apply_write_log). Share the same rule as
+        // the top-level op_write so shared_dels / ssts are populated consistently.
         for (auto& op_write : *txn_log->mutable_op_replication()->mutable_op_writes()) {
-            if (op_write.has_rowset()) {
-                set_all_data_files_shared(op_write.mutable_rowset());
-            }
+            set_all_data_files_shared(&op_write);
         }
     }
 
     if (txn_log->has_op_parallel_compaction()) {
         auto* op_parallel_compaction = txn_log->mutable_op_parallel_compaction();
+        // Each subtask is a full OpCompaction that gets republished via
+        // publish_primary_compaction (see txn_log_applier.cpp) and whose ssts are
+        // merged back into parent compactions (see tablet_parallel_compaction_manager.cpp).
+        // Treat its files identically to a top-level OpCompaction.
         for (auto& subtask_op : *op_parallel_compaction->mutable_subtask_compactions()) {
-            if (subtask_op.has_output_rowset()) {
-                set_all_data_files_shared(subtask_op.mutable_output_rowset());
-            }
+            set_all_data_files_shared(&subtask_op);
         }
         if (op_parallel_compaction->has_output_sstable()) {
             op_parallel_compaction->mutable_output_sstable()->set_shared(true);

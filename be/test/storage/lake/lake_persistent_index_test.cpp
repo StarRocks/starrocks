@@ -958,4 +958,175 @@ TEST_F(LakePersistentIndexTest, test_need_rebuild_counts) {
     }
 }
 
+// Verify that ingest_sst skips SST files that already exist in _sstable_filesets
+// (loaded by init from metadata). This prevents duplicate ingest during tablet split
+// where the SST was already loaded from shared metadata with correct shared/fileset_id.
+TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int M = 3;
+    const int N = 100;
+
+    auto tablet_id = _tablet_metadata->id();
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index->init(_tablet_metadata));
+
+    // Write data in multiple batches to create SST files (same pattern as test_major_compaction)
+    for (int i = 0; i < M; ++i) {
+        vector<Key> keys;
+        vector<Slice> key_slices;
+        vector<IndexValue> values;
+        keys.reserve(N);
+        key_slices.reserve(N);
+        values.reserve(N);
+        for (int j = 0; j < N; j++) {
+            keys.emplace_back(j);
+            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+            values.emplace_back(j * 2);
+        }
+        index->prepare(EditVersion(i, 0), 0);
+        vector<IndexValue> upsert_old_values(keys.size());
+        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+        ASSERT_OK(index->flush_memtable(true));
+        ASSERT_OK(index->sync_flush_all_memtables(10000000));
+    }
+
+    // Commit to get sstable_meta
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    ASSERT_OK(index->commit(&builder));
+
+    // Verify we have SST files in metadata
+    ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
+
+    // Mark them as shared (simulating tablet split)
+    auto* sstable_meta = tablet_metadata_ptr->mutable_sstable_meta();
+    for (auto& sst_pb : *sstable_meta->mutable_sstables()) {
+        sst_pb.set_shared(true);
+    }
+
+    // Get the filename of the first SST
+    const std::string sst_filename = tablet_metadata_ptr->sstable_meta().sstables(0).filename();
+    int64_t sst_filesize = tablet_metadata_ptr->sstable_meta().sstables(0).filesize();
+
+    // Re-init the index with the updated metadata (shared SSTs)
+    auto index2 = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index2->init(tablet_metadata_ptr));
+
+    // Now try to ingest the same SST again
+    FileMetaPB sst_meta;
+    sst_meta.set_name(sst_filename);
+    sst_meta.set_size(sst_filesize);
+    sst_meta.set_shared(false); // wrong shared value
+
+    PersistentIndexSstableRangePB sst_range;
+    DelvecPagePB delvec_page;
+    // ingest_sst should skip because the SST already exists in _sstable_filesets
+    ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
+
+    // Commit and verify: the sstable_meta should have exactly the same SSTs as before,
+    // with shared=true preserved (not overwritten by the duplicate ingest)
+    auto tablet_metadata_ptr2 = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr2->CopyFrom(*tablet_metadata_ptr);
+    MetaFileBuilder builder2(tablet, tablet_metadata_ptr2);
+    ASSERT_OK(index2->commit(&builder2));
+
+    // Count SSTs with matching filename - should be exactly 1 (no duplicate)
+    int match_count = 0;
+    for (const auto& sst : tablet_metadata_ptr2->sstable_meta().sstables()) {
+        if (sst.filename() == sst_filename) {
+            match_count++;
+            EXPECT_TRUE(sst.shared()) << "shared flag should be preserved from init metadata";
+        }
+    }
+    EXPECT_EQ(match_count, 1) << "SST should not be duplicated after ingest_sst";
+
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
+// Verify that ingest_sst preserves the sst_meta.shared flag when committing a brand-new
+// SST (not already present in _sstable_filesets). This is the cross-publish scenario
+// where set_all_data_files_shared has marked sst_meta.shared=true on the txn log and
+// the downstream tablet must persist it into sstable_meta so that remove_compacted_sst
+// and vacuum continue to see the file as shared.
+TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_sst) {
+    auto l0_max_mem_usage = config::l0_max_mem_usage;
+    config::l0_max_mem_usage = 10;
+    using Key = uint64_t;
+    const int M = 3;
+    const int N = 100;
+
+    auto tablet_id = _tablet_metadata->id();
+
+    // Phase 1: create an SST on disk by writing and flushing on a temporary index.
+    std::string sst_filename;
+    int64_t sst_filesize = 0;
+    {
+        auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+        ASSERT_OK(index->init(_tablet_metadata));
+        for (int i = 0; i < M; ++i) {
+            vector<Key> keys;
+            vector<Slice> key_slices;
+            vector<IndexValue> values;
+            keys.reserve(N);
+            key_slices.reserve(N);
+            values.reserve(N);
+            for (int j = 0; j < N; j++) {
+                keys.emplace_back(j);
+                key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
+                values.emplace_back(j * 2);
+            }
+            index->prepare(EditVersion(i, 0), 0);
+            vector<IndexValue> upsert_old_values(keys.size());
+            ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
+            ASSERT_OK(index->flush_memtable(true));
+            ASSERT_OK(index->sync_flush_all_memtables(10000000));
+        }
+        Tablet tablet(_tablet_mgr.get(), tablet_id);
+        auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+        tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+        MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+        ASSERT_OK(index->commit(&builder));
+        ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
+        sst_filename = tablet_metadata_ptr->sstable_meta().sstables(0).filename();
+        sst_filesize = tablet_metadata_ptr->sstable_meta().sstables(0).filesize();
+    }
+
+    // Phase 2: build a fresh index backed by the empty _tablet_metadata (no SSTs loaded).
+    // Now ingest the SST from phase 1 with shared=true (as cross-publish would do after
+    // set_all_data_files_shared has marked op_write.ssts shared).
+    auto index2 = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
+    ASSERT_OK(index2->init(_tablet_metadata));
+
+    FileMetaPB sst_meta;
+    sst_meta.set_name(sst_filename);
+    sst_meta.set_size(sst_filesize);
+    sst_meta.set_shared(true); // cross-publish marks this true
+
+    PersistentIndexSstableRangePB sst_range;
+    DelvecPagePB delvec_page;
+    ASSERT_OK(index2->ingest_sst(sst_meta, sst_range, 0, 1, delvec_page, nullptr));
+
+    // Commit and verify the shared flag made it into sstable_meta.
+    Tablet tablet(_tablet_mgr.get(), tablet_id);
+    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
+    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
+    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
+    ASSERT_OK(index2->commit(&builder));
+
+    int match_count = 0;
+    for (const auto& sst : tablet_metadata_ptr->sstable_meta().sstables()) {
+        if (sst.filename() == sst_filename) {
+            match_count++;
+            EXPECT_TRUE(sst.shared()) << "sst_meta.shared=true must be preserved in committed sstable_meta";
+        }
+    }
+    EXPECT_EQ(match_count, 1);
+
+    config::l0_max_mem_usage = l0_max_mem_usage;
+}
+
 } // namespace starrocks::lake

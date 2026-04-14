@@ -178,6 +178,14 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
         if (replace_seg.first < rowset->segment_encryption_metas_size()) {
             rowset->set_segment_encryption_metas(replace_seg.first, replace_seg.second.encryption_meta);
         }
+        // The rewrite file is a brand-new file private to this tablet, not shared with
+        // sibling split tablets. If the original segment was marked shared during a
+        // cross-publish, clear the flag so GC routes the rewrite file through the normal
+        // deleter instead of the shared-file path (which would leak it under
+        // is_range_distribution in delete_tablets_impl).
+        if (replace_seg.first < rowset->shared_segments_size()) {
+            rowset->set_shared_segments(replace_seg.first, false);
+        }
         rowset->clear_bundle_file_offsets(); // clear shared file offsets, since we rewrite segments.
     }
 
@@ -195,6 +203,11 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std:
                     << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
                                    op_write.dels_size());
             del_file_with_rid.set_encryption_meta(op_write.del_encryption_metas(i));
+        }
+        // Preserve the per-del shared flag from cross-publish (tablet split). The list
+        // is either empty (all dels private) or parallel to op_write.dels.
+        if (i < op_write.shared_dels_size()) {
+            del_file_with_rid.set_shared(op_write.shared_dels(i));
         }
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
@@ -341,7 +354,17 @@ void MetaFileBuilder::remove_compacted_sst(const TxnLogPB_OpCompaction& op_compa
         FileMetaPB file_meta;
         file_meta.set_name(input_sstable.filename());
         file_meta.set_size(input_sstable.filesize());
-        file_meta.set_shared(input_sstable.shared());
+        // Prefer the shared flag from tablet metadata over the txn log value,
+        // because the txn log value may have lost the shared flag during cross-publish
+        // in tablet split scenarios.
+        bool shared = input_sstable.shared();
+        for (const auto& meta_sst : _tablet_meta->sstable_meta().sstables()) {
+            if (meta_sst.filename() == input_sstable.filename()) {
+                shared = meta_sst.shared();
+                break;
+            }
+        }
+        file_meta.set_shared(shared);
         _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
     }
 }
@@ -898,8 +921,7 @@ bool is_primary_key(const TabletMetadata& metadata) {
 }
 
 void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, FileInfo>& replace_segments,
-                                 const std::vector<FileMetaPB>& orphan_files, const std::vector<std::string>& dels,
-                                 const std::vector<std::string>& del_encryption_metas) {
+                                 const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels) {
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segments_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
@@ -953,10 +975,8 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb, const std::m
     _pending_rowset_data.orphan_files.insert(_pending_rowset_data.orphan_files.end(), orphan_files.begin(),
                                              orphan_files.end());
 
-    // Merge delete files
+    // Merge delete files (each entry already carries name + shared + encryption_meta).
     _pending_rowset_data.dels.insert(_pending_rowset_data.dels.end(), dels.begin(), dels.end());
-    _pending_rowset_data.del_encryption_metas.insert(_pending_rowset_data.del_encryption_metas.end(),
-                                                     del_encryption_metas.begin(), del_encryption_metas.end());
 
     // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
     _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
@@ -994,6 +1014,11 @@ Status MetaFileBuilder::set_final_rowset() {
         if (replace_seg.first < rowset->segment_encryption_metas_size()) {
             rowset->set_segment_encryption_metas(replace_seg.first, replace_seg.second.encryption_meta);
         }
+        // See apply_opwrite: clear the shared flag for the rewrite file, which is
+        // private to this tablet and must not be GC'd through the shared-file path.
+        if (replace_seg.first < rowset->shared_segments_size()) {
+            rowset->set_shared_segments(replace_seg.first, false);
+        }
         rowset->clear_bundle_file_offsets(); // clear shared file offsets, since we rewrite segments.
     }
 
@@ -1001,15 +1026,16 @@ Status MetaFileBuilder::set_final_rowset() {
     rowset->set_version(_tablet_meta->version());
 
     // Handle delete files (same logic as apply_opwrite)
-    for (int i = 0; i < _pending_rowset_data.dels.size(); i++) {
+    for (const auto& del : _pending_rowset_data.dels) {
         DelfileWithRowsetId del_file_with_rid;
-        del_file_with_rid.set_name(_pending_rowset_data.dels[i]);
+        del_file_with_rid.set_name(del.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // For now, op_offset is always max segment's id
         del_file_with_rid.set_op_offset(get_max_segment_idx(*rowset));
-        if (i < _pending_rowset_data.del_encryption_metas.size()) {
-            del_file_with_rid.set_encryption_meta(_pending_rowset_data.del_encryption_metas[i]);
+        if (!del.encryption_meta().empty()) {
+            del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }
+        del_file_with_rid.set_shared(del.shared());
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
 
@@ -1041,26 +1067,32 @@ Status MetaFileBuilder::set_final_rowset() {
 void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
                                           const std::map<int, FileInfo>& replace_segments,
                                           const std::vector<FileMetaPB>& orphan_files) {
-    // Extract del files and encryption metas similar to apply_opwrite
-    std::vector<std::string> dels;
-    std::vector<std::string> del_encryption_metas;
-
-    // Collect del files
-    for (int i = 0; i < op_write.dels_size(); i++) {
-        dels.push_back(op_write.dels(i));
-    }
-
+    // Pack each del into a FileMetaPB carrying name + shared + encryption_meta together.
+    // The parallel repeated fields on the proto (dels / del_encryption_metas / shared_dels)
+    // must all agree in length or be empty. We validate the encryption-meta size just like
+    // apply_opwrite does; shared_dels is optional (empty means "all private") and is
+    // read positionally.
     if (op_write.del_encryption_metas_size() > 0) {
         CHECK(op_write.del_encryption_metas_size() == op_write.dels_size())
                 << fmt::format("del_encryption_metas_size:{} != dels_size:{}", op_write.del_encryption_metas_size(),
                                op_write.dels_size());
-        for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
-            del_encryption_metas.push_back(op_write.del_encryption_metas(i));
+    }
+
+    std::vector<FileMetaPB> dels;
+    dels.reserve(op_write.dels_size());
+    for (int i = 0; i < op_write.dels_size(); i++) {
+        auto& del = dels.emplace_back();
+        del.set_name(op_write.dels(i));
+        if (i < op_write.del_encryption_metas_size()) {
+            del.set_encryption_meta(op_write.del_encryption_metas(i));
+        }
+        if (i < op_write.shared_dels_size()) {
+            del.set_shared(op_write.shared_dels(i));
         }
     }
 
     // Accumulate into pending rowset
-    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels, del_encryption_metas);
+    add_rowset(op_write.rowset(), replace_segments, orphan_files, dels);
 }
 
 } // namespace starrocks::lake
