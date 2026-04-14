@@ -558,6 +558,88 @@ static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_variant_reader(tpar
     return ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
 }
 
+static StatusOr<std::unique_ptr<ColumnReader>> make_shredded_decimal_variant_reader(tparquet::RowGroup& rg,
+                                                                                    ColumnReaderOptions& opts,
+                                                                                    bool stats_on_leaf_chunk = false,
+                                                                                    bool leaf_value_all_null = false,
+                                                                                    bool include_leaf_value = true) {
+    ParquetField meta_f;
+    meta_f.name = "metadata";
+    meta_f.type = ColumnType::SCALAR;
+    meta_f.physical_type = tparquet::Type::BYTE_ARRAY;
+    meta_f.physical_column_index = 0;
+
+    ParquetField val_f;
+    val_f.name = "value";
+    val_f.type = ColumnType::SCALAR;
+    val_f.physical_type = tparquet::Type::BYTE_ARRAY;
+    val_f.physical_column_index = 1;
+
+    ParquetField price_val_f;
+    price_val_f.name = "value";
+    price_val_f.type = ColumnType::SCALAR;
+    price_val_f.physical_type = tparquet::Type::BYTE_ARRAY;
+    price_val_f.physical_column_index = 2;
+
+    ParquetField price_typed_f;
+    price_typed_f.name = "typed_value";
+    price_typed_f.type = ColumnType::SCALAR;
+    price_typed_f.physical_type = tparquet::Type::INT32;
+    price_typed_f.physical_column_index = 3;
+    {
+        tparquet::DecimalType decimal_type;
+        decimal_type.__set_precision(5);
+        decimal_type.__set_scale(2);
+        tparquet::LogicalType logical_type;
+        logical_type.__set_DECIMAL(decimal_type);
+        price_typed_f.schema_element.__set_logicalType(logical_type);
+        price_typed_f.precision = 5;
+        price_typed_f.scale = 2;
+    }
+
+    ParquetField tv_struct;
+    tv_struct.name = "typed_value";
+    tv_struct.type = ColumnType::STRUCT;
+    ParquetField price_node;
+    price_node.name = "price";
+    price_node.type = ColumnType::STRUCT;
+    price_node.children = include_leaf_value ? std::vector<ParquetField>{price_val_f, price_typed_f}
+                                             : std::vector<ParquetField>{price_typed_f};
+    tv_struct.children = {price_node};
+
+    ParquetField field;
+    field.name = "data";
+    field.type = ColumnType::STRUCT;
+    field.children = {meta_f, val_f, tv_struct};
+
+    for (int i = 0; i <= 3; ++i) {
+        tparquet::ColumnChunk chunk;
+        chunk.__set_file_path("col" + std::to_string(i));
+        chunk.file_offset = 0;
+        chunk.meta_data.data_page_offset = 4;
+        chunk.meta_data.__set_type(i == 3 ? tparquet::Type::INT32 : tparquet::Type::BYTE_ARRAY);
+        if ((i == 1 || i == 2) && leaf_value_all_null) {
+            tparquet::Statistics stats;
+            stats.__set_null_count(5);
+            chunk.meta_data.__set_statistics(stats);
+        }
+        if (i == 3 && stats_on_leaf_chunk) {
+            int32_t min_val = 1050;
+            int32_t max_val = 1250;
+            tparquet::Statistics stats;
+            stats.__set_null_count(0);
+            stats.__set_min_value(std::string(reinterpret_cast<const char*>(&min_val), sizeof(min_val)));
+            stats.__set_max_value(std::string(reinterpret_cast<const char*>(&max_val), sizeof(max_val)));
+            chunk.meta_data.__set_statistics(stats);
+        }
+        rg.columns.emplace_back(std::move(chunk));
+    }
+    rg.__set_num_rows(5);
+    opts.row_group_meta = &rg;
+
+    return ColumnReaderFactory::create(opts, &field, TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT));
+}
+
 // Build a minimal FileMetaData (writer version "unknown") so that
 // has_correct_min_max_stats does not dereference a null pointer.
 // For INT32 with SIGNED sort order HasCorrectStatistics returns true regardless of version.
@@ -766,6 +848,39 @@ TEST(VariantZoneMapTest, ZoneMapReaderRewritesPredicatesToLeafType) {
     auto bloom_result = zm_reader.row_group_bloom_filter({pred}, CompoundNodeType::AND, 0, 5);
     ASSERT_OK(bloom_result);
     EXPECT_FALSE(bloom_result.value());
+}
+
+TEST(VariantZoneMapTest, ZoneMapReaderRewritesDecimalPredicatesToLeafType) {
+    auto file_meta = make_minimal_file_meta();
+    ASSERT_NE(file_meta, nullptr);
+
+    tparquet::RowGroup rg;
+    ColumnReaderOptions opts;
+    opts.file_meta_data = file_meta.get();
+    ASSIGN_OR_ABORT(auto reader,
+                    make_shredded_decimal_variant_reader(rg, opts, /*stats_on_leaf_chunk=*/true,
+                                                         /*leaf_value_all_null=*/true, /*include_leaf_value=*/true));
+    auto* vr = down_cast<VariantColumnReader*>(reader.get());
+
+    auto path = VariantPathParser::parse_shredded_path(std::string_view("price"));
+    ASSERT_OK(path);
+    auto virtual_slot_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 10, 2);
+    VariantVirtualZoneMapReader zm_reader(vr, *path, virtual_slot_type);
+
+    ObjectPool pool;
+    TypeInfoPtr ti = get_type_info(virtual_slot_type);
+    ASSERT_NE(ti, nullptr);
+    auto* pred = pool.add(new_column_gt_predicate_from_datum(ti, 0, Datum(int64_t(2000))));
+
+    auto row_group_result = zm_reader.row_group_zone_map_filter({pred}, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(row_group_result);
+    EXPECT_TRUE(row_group_result.value());
+
+    SparseRange<uint64_t> row_ranges;
+    auto page_result = zm_reader.page_index_zone_map_filter({pred}, &row_ranges, CompoundNodeType::AND, 0, 5);
+    ASSERT_OK(page_result);
+    EXPECT_FALSE(page_result.value());
+    EXPECT_TRUE(row_ranges.empty());
 }
 
 TEST(VariantZoneMapTest, ZoneMapReaderSkipsPushdownWhenPredicateRewriteFails) {

@@ -184,12 +184,14 @@ bool ColumnReader::check_type_can_apply_bloom_filter(const TypeDescriptor& col_t
         //      And any convert should be disabled, because the length cannot change.
     } else if (type == LogicalType::TYPE_DECIMAL32 || type == LogicalType::TYPE_DECIMAL64 ||
                type == LogicalType::TYPE_DECIMAL128 || type == LogicalType::TYPE_DECIMALV2) {
-        //TODO: Decimal can be stored as INT32, INT64, BYTE_ARRAY, FLBA in parquet
-        //      SR stores the decimalxx as intxx with precision and scale,
-        //      First the int type should match the parquet's physical type
-        //      And the logical type of sr and parquet's scale and precision should also be the same
-        //      Ohterwise, we need to convert the value.
-        //      But we should notice that if the convert will cause precision loss, otherwise it should be disabled.
+        const bool exact_decimal_layout = field.precision == col_type.precision && field.scale == col_type.scale;
+        if (exact_decimal_layout) {
+            if (type == LogicalType::TYPE_DECIMAL32 && parquet_type == tparquet::Type::type::INT32) {
+                appliable = true;
+            } else if (type == LogicalType::TYPE_DECIMAL64 && parquet_type == tparquet::Type::type::INT64) {
+                appliable = true;
+            }
+        }
     } else {
         //TODO: Other types like TYPE_TIME, TYPE_DATE_V1, TYPE_DATETIME, TYPE_DATETIME_V1 is stored different with int type in sr
         //    should be converted as int32_t or int64_t.

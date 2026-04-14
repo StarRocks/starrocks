@@ -22,6 +22,7 @@
 
 #include "column/column_helper.h"
 #include "column/const_column.h"
+#include "column/variant_encoder.h"
 #include "common/config_exec_fwd.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
@@ -336,6 +337,33 @@ static ColumnPtr make_typed_only_variant_column_for_virtual_column_test() {
     typed_col->append_datum(int64_t(22));
     typed_columns.emplace_back(typed_col->as_mutable_ptr());
     variant->set_shredded_columns({"a.b.c"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed_columns), nullptr, nullptr);
+    return variant;
+}
+
+static ColumnPtr make_typed_decimal32_variant_column_for_virtual_column_test() {
+    auto variant = VariantColumn::create();
+    MutableColumns typed_columns;
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    auto typed_col = ColumnHelper::create_column(decimal_type, true);
+    typed_col->append_datum(Datum(int32_t(1050)));
+    typed_col->append_datum(Datum(int32_t(1250)));
+    typed_columns.emplace_back(typed_col->as_mutable_ptr());
+    variant->set_shredded_columns({"a.b.c"}, {decimal_type}, std::move(typed_columns), nullptr, nullptr);
+    return variant;
+}
+
+// Build a raw (non-shredded) VariantColumn from JSON strings.
+// The path "a.b.c" is embedded in each row's binary variant encoding; there is no typed
+// shredded column.  This forces project_variant_leaf_column to use the row-by-row fallback
+// path (build_decimal_variant_projection_column / build_variant_projection_column).
+static ColumnPtr make_raw_json_variant_column_for_virtual_column_test(
+        std::initializer_list<std::string_view> json_rows) {
+    auto variant = VariantColumn::create();
+    for (auto json : json_rows) {
+        auto encoded = VariantEncoder::encode_json_text_to_variant(json);
+        DCHECK(encoded.ok()) << encoded.status().to_string();
+        variant->append(&encoded.value());
+    }
     return variant;
 }
 
@@ -2680,6 +2708,72 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedVirtualColumnRespectsSourc
     EXPECT_EQ(22, result->get(1).get_int64());
 }
 
+TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedDecimalVirtualColumn) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(106, "data.id", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(303)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_decimal32_variant_column_for_virtual_column_test(), SlotId(303));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(1050, result->get(0).get_int32());
+    EXPECT_EQ(1250, result->get(1).get_int32());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnWithWidening) {
+    auto* param = _create_group_reader_param();
+
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 10, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(107, "data.id", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(304)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(make_typed_decimal32_variant_column_for_virtual_column_test(), SlotId(304));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(1050, result->get(0).get_int64());
+    EXPECT_EQ(1250, result->get(1).get_int64());
+}
+
 TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualVarcharColumnFromPhysicalSourceSlot) {
     auto* param = _create_group_reader_param();
 
@@ -2965,6 +3059,33 @@ TEST_F(GroupReaderTest, CreateColumnReadersRegistersVirtualZoneMapReaderForPhysi
     auto it = group_reader->_column_readers.find(virtual_slot->id());
     ASSERT_NE(it, group_reader->_column_readers.end());
     EXPECT_NE(nullptr, down_cast<VariantVirtualZoneMapReader*>(it->second.get()));
+}
+
+TEST(GroupReaderBloomFilterTest, DecimalBloomFilterApplicabilityRequiresExactLayoutMatch) {
+    MockColumnReader reader(tparquet::Type::INT32);
+
+    ParquetField decimal32_field;
+    decimal32_field.physical_type = tparquet::Type::INT32;
+    decimal32_field.precision = 5;
+    decimal32_field.scale = 2;
+    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2),
+                                                         decimal32_field));
+    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 6, 2),
+                                                          decimal32_field));
+
+    ParquetField decimal64_field;
+    decimal64_field.physical_type = tparquet::Type::INT64;
+    decimal64_field.precision = 16;
+    decimal64_field.scale = 2;
+    EXPECT_TRUE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 16, 2),
+                                                         decimal64_field));
+
+    ParquetField decimal128_field;
+    decimal128_field.physical_type = tparquet::Type::FIXED_LEN_BYTE_ARRAY;
+    decimal128_field.precision = 22;
+    decimal128_field.scale = 4;
+    EXPECT_FALSE(reader.check_type_can_apply_bloom_filter(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 22, 4),
+                                                          decimal128_field));
 }
 
 // ── Hidden variant source active/lazy classification ─────────────────────────
@@ -3277,6 +3398,145 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenSourceSlotMissingFromActiveC
     auto status = group_reader->_fill_dst_chunk(active_chunk, &dst_chunk);
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_internal_error());
+}
+
+// ── Decimal virtual column fallback tests ──────────────────────────────────────
+//
+// These tests exercise the row-by-row decimal fallback path that is reached when
+// neither build_exact_typed_variant_projection nor build_decimal_typed_variant_projection
+// succeeds (i.e. the shredded leaf is absent or is a non-decimal type).
+//
+// Covered lines in group_reader.cpp (build_decimal_typed_variant_projection early
+// returns + build_decimal_variant_projection_column body):
+//   line 219: !reader.is_typed_exact() → no shredded leaf at path, decimal target
+//   line 224: source leaf is not decimal (e.g. INT64) with decimal target
+//   lines 262-300: build_decimal_variant_projection_column (normal + overflow rows)
+//   lines 346-351: TYPE_DECIMAL32/64/128 switch cases in project_variant_leaf_column
+
+// Test: raw JSON variant data (no typed shredded leaf) with a DECIMAL32 target.
+// build_decimal_typed_variant_projection returns NotFound at line 219 (no typed exact
+// leaf), then build_decimal_variant_projection_column is invoked for the row-by-row cast.
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnFromRawVariantFallback) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 5, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(400, "data.price", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    // Project path "a.b.c" → DECIMAL32(5,2). The raw variant rows hold integer values
+    // at that path; they must be cast row-by-row via cast_variant_to_decimal.
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(401)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    // Raw variant: {"a":{"b":{"c":10}}} and {"a":{"b":{"c":20}}} — no typed shredded leaf.
+    auto variant_src = make_raw_json_variant_column_for_virtual_column_test(
+            {R"({"a":{"b":{"c":10}}})", R"({"a":{"b":{"c":20}}})"});
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_src, SlotId(401));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    // 10 → 10.00 in DECIMAL32(5,2) stored as 1000; 20 → 2000.
+    EXPECT_EQ(1000, result->get(0).get_int32());
+    EXPECT_EQ(2000, result->get(1).get_int32());
+}
+
+// Test: variant with an INT64 typed shredded leaf at "a.b.c" but a DECIMAL32 target.
+// build_decimal_typed_variant_projection returns NotFound at line 224 (source is INT64,
+// not a decimal type), then build_decimal_variant_projection_column does the row-by-row
+// cast reading from the typed INT64 column.
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnFromBigintTypedLeafFallback) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 7, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(402, "data.price", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(403)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    // Typed INT64 leaf at "a.b.c" (values 11 and 22).
+    // Target DECIMAL32(7,2): exact match fails (INT64 ≠ DECIMAL32); decimal typed match
+    // fails at line 224 (INT64 is not a decimal type); row-by-row cast follows.
+    auto variant_src = make_typed_only_variant_column_for_virtual_column_test(); // INT64 values 11, 22
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_src, SlotId(403));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    // 11 → 11.00 stored as 1100; 22 → 2200.
+    EXPECT_EQ(1100, result->get(0).get_int32());
+    EXPECT_EQ(2200, result->get(1).get_int32());
+}
+
+// Test: raw JSON variant with a value that overflows DECIMAL32 storage.
+// cast_variant_to_decimal uses DecimalV3Cast::from_integer which checks for int32_t overflow
+// (value × scale_factor > INT32_MAX).  For scale=2, scale_factor=100; integer 21474837 ×
+// 100 = 2147483700 exceeds INT32_MAX (2147483647), so overflow=true and the row is NULL
+// (lines 292-293 in build_decimal_variant_projection_column).
+TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnOverflowBecomesNull) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto decimal_type = TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 2);
+    auto* virtual_slot = _pool.add(new SlotDescriptor(404, "data.price", decimal_type));
+    param->read_cols.clear();
+    GroupReaderParam::Column virtual_col{};
+    virtual_col.slot_desc = virtual_slot;
+    param->read_cols.emplace_back(virtual_col);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto projection, make_virtual_projection_for_test("a.b.c", virtual_slot->type(), SlotId(405)));
+    group_reader->_variant_virtual_projections.emplace(virtual_slot->id(), std::move(projection));
+
+    // Row 0: integer 5 → 5 × 100 = 500, fits in int32_t → non-null.
+    // Row 1: integer 21474837 → 21474837 × 100 = 2147483700 > INT32_MAX → overflow → NULL.
+    auto variant_src = make_raw_json_variant_column_for_virtual_column_test(
+            {R"({"a":{"b":{"c":5}}})", R"({"a":{"b":{"c":21474837}}})"});
+
+    auto read_chunk = std::make_shared<Chunk>();
+    read_chunk->append_column(variant_src, SlotId(405));
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
+
+    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, &dst_chunk));
+    const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
+    ASSERT_EQ(2, result->size());
+    EXPECT_EQ(500, result->get(0).get_int32()); // 5 × 100 = 500
+    EXPECT_TRUE(result->is_null(1));            // 21474837 × 100 overflows int32_t → NULL
 }
 
 } // namespace starrocks::parquet

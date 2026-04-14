@@ -30,11 +30,10 @@ function: assert_explain_verbose_contains("select get_variant_int(data, '$.id') 
 function: assert_explain_verbose_contains("select get_variant_int(data, '$.id') from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(bigint(20))/id(bigint(20))]")
 function: assert_explain_verbose_contains("select cast(variant_query(data, '$.profile.rank') as bigint) from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(bigint(20))/profile(bigint(20))/rank(bigint(20))]")
 function: assert_explain_verbose_contains("select sum(get_variant_int(data, '$.profile.metrics.views')) from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(bigint(20))/profile(bigint(20))/metrics(bigint(20))/views(bigint(20))]")
--- DECIMAL cast is not a supported rewrite target (FE isSupportedCastTarget excludes DECIMAL).
--- These will become assert_explain_verbose_contains once FE DECIMAL rewrite is implemented.
-function: assert_explain_not_contains("select cast(variant_query(data, '$.profile.price') as decimal(5, 2)) from test_variant_virtual_column", "ExtendedColumnAccessPath")
-function: assert_explain_not_contains("select cast(variant_query(data, '$.profile.amount') as decimal(16, 2)) from test_variant_virtual_column", "ExtendedColumnAccessPath")
-function: assert_explain_not_contains("select cast(variant_query(data, '$.profile.balance') as decimal(22, 4)) from test_variant_virtual_column", "ExtendedColumnAccessPath")
+function: assert_explain_verbose_contains("select cast(variant_query(data, '$.profile.price') as decimal(5, 2)) from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(decimal(5, 2))/profile(decimal(5, 2))/price(decimal(5, 2))]")
+function: assert_explain_verbose_contains("select cast(variant_query(data, '$.profile.amount') as decimal(16, 2)) from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(decimal(16, 2))/profile(decimal(16, 2))/amount(decimal(16, 2))]")
+function: assert_explain_verbose_contains("select cast(variant_query(data, '$.profile.balance') as decimal(22, 4)) from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(decimal(22, 4))/profile(decimal(22, 4))/balance(decimal(22, 4))]")
+function: assert_explain_verbose_contains("select cast(variant_query(data, '$.profile.price') as decimal(10, 2)) from test_variant_virtual_column", "ExtendedColumnAccessPath: [/data(decimal(10, 2))/profile(decimal(10, 2))/price(decimal(10, 2))]")
 
 set cbo_variant_path_rewrite = true;
 
@@ -131,7 +130,7 @@ from test_variant_virtual_column
 where get_variant_int(data, '$.profile.salary') >= 52000
 order by id;
 
--- DECIMAL read correctness: all three precision tiers (DECIMAL4/8/16), no rewrite, row-level eval
+-- DECIMAL read correctness: all three precision tiers (DECIMAL4/8/16), with virtual-column rewrite
 select cast(variant_query(data, '$.profile.price') as decimal(5, 2)) as price
 from test_variant_virtual_column
 order by price;
@@ -144,7 +143,12 @@ select cast(variant_query(data, '$.profile.balance') as decimal(22, 4)) as balan
 from test_variant_virtual_column
 order by balance;
 
--- DECIMAL predicate correctness (row-level, no pushdown yet)
+-- DECIMAL widening correctness: typed decimal leaf widened to a compatible target decimal
+select cast(variant_query(data, '$.profile.price') as decimal(10, 2)) as price_wide
+from test_variant_virtual_column
+order by price_wide;
+
+-- DECIMAL predicate correctness with variant virtual predicate pushdown
 select count(*) from test_variant_virtual_column
 where cast(variant_query(data, '$.profile.price') as decimal(5, 2)) >= 11.50;
 

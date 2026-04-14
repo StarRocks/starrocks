@@ -39,6 +39,7 @@
 #include "common/system/master_info.h"
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 #include "exprs/chunk_predicate_evaluator.h"
+#include "exprs/decimal_cast_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/variant_path_reader.h"
@@ -52,7 +53,9 @@
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
 #include "gen_cpp/Exprs_types.h"
+#include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
+#include "storage/convert_helper.h"
 #include "types/type_descriptor.h"
 #include "utils.h"
 
@@ -171,6 +174,61 @@ StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* va
     return result;
 }
 
+// Cast a typed-shredded decimal column to a (possibly different) decimal target type.
+//
+// This function is needed because the shredded typed column already holds native decimal
+// storage (int32 / int64 / int128 physical values with precision+scale baked into the
+// TypeDescriptor). That is NOT a variant-binary-encoded value, so VariantRowConverter::cast_to
+// cannot be used: that path decodes variant binary wire format and explicitly excludes
+// decimal targets (see the "VARIANT -> Decimal types: DecimalNonDecimalCast" comment in
+// variant_row_converter.cpp). Instead we go through TypeConverter::convert_column, which
+// understands native decimal storage and handles precision/scale widening correctly.
+//
+// If source_type == target_type (same precision and scale) no conversion is necessary and the
+// column is returned as-is.
+StatusOr<ColumnPtr> cast_decimal_projection_column(const ColumnPtr& source_column, const TypeDescriptor& source_type,
+                                                   const TypeDescriptor& target_type) {
+    if (source_type == target_type) {
+        return source_column;
+    }
+
+    const TypeConverter* converter = get_type_converter(source_type.type, target_type.type);
+    if (converter == nullptr) {
+        return Status::NotFound("no decimal converter for variant typed projection");
+    }
+
+    TypeInfoPtr source_type_info = get_type_info(source_type);
+    TypeInfoPtr target_type_info = get_type_info(target_type);
+    if (source_type_info == nullptr || target_type_info == nullptr) {
+        return Status::NotSupported("missing type info for decimal variant projection");
+    }
+
+    auto result = ColumnHelper::create_column(target_type, true);
+    MemPool mem_pool;
+    RETURN_IF_ERROR(converter->convert_column(source_type_info.get(), *source_column, target_type_info.get(),
+                                              result.get(), &mem_pool));
+    return result;
+}
+
+StatusOr<ColumnPtr> build_decimal_typed_variant_projection(const VariantColumn* variant_column,
+                                                           const ColumnPtr& variant_src, const VariantPath& path,
+                                                           const TypeDescriptor& target_type) {
+    VariantPathReader reader;
+    reader.prepare(variant_column, &path);
+    if (!reader.is_typed_exact()) {
+        return Status::NotFound("variant path is not an exact typed leaf");
+    }
+
+    const TypeDescriptor& source_type = reader.typed_type_desc();
+    if (!source_type.is_decimalv3_type() || !target_type.is_decimalv3_type()) {
+        return Status::NotFound("variant typed leaf is not decimal");
+    }
+
+    ASSIGN_OR_RETURN(auto exact_source_projection,
+                     build_exact_typed_variant_projection(variant_column, variant_src, path, source_type));
+    return cast_decimal_projection_column(exact_source_projection, source_type, target_type);
+}
+
 template <LogicalType ResultType>
 StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant_column, const ColumnPtr& variant_src,
                                                     const VariantPath& path, const cctz::time_zone& zone) {
@@ -200,6 +258,47 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
     return builder.build(false);
 }
 
+template <LogicalType ResultType>
+StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn* variant_column,
+                                                            const ColumnPtr& variant_src, const VariantPath& path,
+                                                            const TypeDescriptor& target_type) {
+    const size_t num_rows = variant_src->size();
+
+    ColumnBuilder<ResultType> builder(num_rows, target_type.precision, target_type.scale);
+    VariantPathReader reader;
+    reader.prepare(variant_column, &path);
+
+    const bool src_is_const = variant_src->is_constant();
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (variant_src->is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+        size_t variant_row = src_is_const ? 0 : row;
+        VariantReadResult read = reader.read_row(variant_row);
+        if (read.state != VariantReadState::kValue) {
+            builder.append_null();
+            continue;
+        }
+        const VariantValue& variant_value = read.value.as_ref().get_value();
+        if (variant_value.type() == VariantType::NULL_TYPE) {
+            builder.append_null();
+            continue;
+        }
+        RunTimeCppType<ResultType> decimal_value{};
+        ASSIGN_OR_RETURN(bool overflow,
+                         cast_variant_to_decimal<RunTimeCppType<ResultType>>(&decimal_value, variant_value,
+                                                                             target_type.precision, target_type.scale));
+        if (overflow) {
+            builder.append_null();
+        } else {
+            builder.append(decimal_value);
+        }
+    }
+
+    return builder.build(false);
+}
+
 StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, const VariantPath& path,
                                                 const TypeDescriptor& target_type, const cctz::time_zone& zone) {
     auto* variant_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(variant_src.get()));
@@ -210,6 +309,13 @@ StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, co
     auto exact_typed_result = build_exact_typed_variant_projection(variant_column, variant_src, path, target_type);
     if (exact_typed_result.ok()) {
         return exact_typed_result;
+    }
+    if (target_type.is_decimalv3_type()) {
+        auto decimal_typed_result =
+                build_decimal_typed_variant_projection(variant_column, variant_src, path, target_type);
+        if (decimal_typed_result.ok()) {
+            return decimal_typed_result;
+        }
     }
 
     switch (target_type.type) {
@@ -237,6 +343,12 @@ StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, co
         return build_variant_projection_column<TYPE_DATETIME>(variant_column, variant_src, path, zone);
     case TYPE_TIME:
         return build_variant_projection_column<TYPE_TIME>(variant_column, variant_src, path, zone);
+    case TYPE_DECIMAL32:
+        return build_decimal_variant_projection_column<TYPE_DECIMAL32>(variant_column, variant_src, path, target_type);
+    case TYPE_DECIMAL64:
+        return build_decimal_variant_projection_column<TYPE_DECIMAL64>(variant_column, variant_src, path, target_type);
+    case TYPE_DECIMAL128:
+        return build_decimal_variant_projection_column<TYPE_DECIMAL128>(variant_column, variant_src, path, target_type);
     case TYPE_VARIANT:
         return build_variant_projection_column<TYPE_VARIANT>(variant_column, variant_src, path, zone);
     default:
