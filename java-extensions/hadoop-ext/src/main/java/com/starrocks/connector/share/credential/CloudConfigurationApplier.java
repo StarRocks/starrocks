@@ -113,22 +113,17 @@ public class CloudConfigurationApplier {
         String region = props.getOrDefault(CloudConfigurationConstants.AWS_S3_REGION, "");
         String endpoint = props.getOrDefault(CloudConfigurationConstants.AWS_S3_ENDPOINT, "");
 
-        // When stsRegion is not explicitly set, fall back to the S3 region for STS calls.
-        // This matches the FE behavior where the SDK v2 STS client resolves region automatically,
-        // but the Hadoop AssumedRoleCredentialProvider requires an explicit region.
-        String effectiveStsRegion = stsRegion.isEmpty() ? region : stsRegion;
-
         if (useAWSSDKDefaultBehavior) {
             if (!iamRoleArn.isEmpty()) {
                 applyAssumeRole(DEFAULT_CREDENTIAL_PROVIDER, conf,
-                        iamRoleArn, effectiveStsRegion, stsEndpoint, externalId);
+                        iamRoleArn, stsRegion, stsEndpoint, externalId);
             } else {
                 conf.set(Constants.AWS_CREDENTIALS_PROVIDER, DEFAULT_CREDENTIAL_PROVIDER);
             }
         } else if (useInstanceProfile) {
             if (!iamRoleArn.isEmpty()) {
                 applyAssumeRole(IAM_CREDENTIAL_PROVIDER, conf,
-                        iamRoleArn, effectiveStsRegion, stsEndpoint, externalId);
+                        iamRoleArn, stsRegion, stsEndpoint, externalId);
             } else {
                 conf.set(Constants.AWS_CREDENTIALS_PROVIDER, IAM_CREDENTIAL_PROVIDER);
             }
@@ -137,7 +132,7 @@ public class CloudConfigurationApplier {
             conf.set(Constants.SECRET_KEY, secretKey);
             if (!iamRoleArn.isEmpty()) {
                 applyAssumeRole(SIMPLE_CREDENTIAL_PROVIDER, conf,
-                        iamRoleArn, effectiveStsRegion, stsEndpoint, externalId);
+                        iamRoleArn, stsRegion, stsEndpoint, externalId);
             } else {
                 if (!sessionToken.isEmpty()) {
                     conf.set(Constants.SESSION_TOKEN, sessionToken);
@@ -168,11 +163,6 @@ public class CloudConfigurationApplier {
         conf.set(Constants.ASSUMED_ROLE_ARN, iamRoleArn);
         if (!stsRegion.isEmpty()) {
             conf.set(Constants.ASSUMED_ROLE_STS_ENDPOINT_REGION, stsRegion);
-            // Hadoop's STSClientFactory requires both region and endpoint to be set together.
-            // Auto-generate the STS endpoint from the region when not explicitly provided.
-            if (stsEndpoint.isEmpty()) {
-                stsEndpoint = "sts." + stsRegion + ".amazonaws.com";
-            }
         }
         if (!stsEndpoint.isEmpty()) {
             if (stsRegion.isEmpty()) {
