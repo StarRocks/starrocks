@@ -1,0 +1,176 @@
+---
+displayed_sidebar: docs
+sidebar_label: "拒绝行"
+keywords: ['rejected', 'records', 'max_filter_ratio', '回放']
+---
+
+# 拒绝行（Rejected records）
+
+当导入允许非零 `max_filter_ratio` 时，StarRocks 将每一条被过滤的行写入
+系统表 **`_statistics_.rejected_records`**，使运维可以在不重跑整次导入的
+前提下检视脏数据并用 SQL 回放到目标表。本文说明如何启用、查询并回放这些记录。
+
+系统表覆盖的行级拒绝场景：
+
+- Stream Load、Routine Load、Broker Load、`INSERT`（含
+  `INSERT INTO ... SELECT ... FROM FILES()`）
+- Scanner 解析失败（CSV 列数不匹配、类型转换失败、strict mode 过滤）
+- Sink 约束校验失败（NOT NULL、分区范围外、VARCHAR 超长、DECIMAL 精度）
+- ORC 读取器的行级拒绝（列式格式，在 filter 应用前捕获）
+
+## 启用拒绝行捕获
+
+默认关闭，新集群在显式开启前不会写入系统表。需要同时设置两个开关：
+
+1. **单次导入**：把 `log_rejected_record_num` 设为正数（上限）或 `-1`（不限）：
+
+   ```sql
+   -- Session 级（INSERT / INSERT ... SELECT）
+   SET log_rejected_record_num = -1;
+
+   -- Broker Load 属性
+   LOAD LABEL mydb.my_label ( ... )
+   PROPERTIES (
+       "log_rejected_record_num" = "10000"
+   );
+
+   -- Routine Load 属性
+   CREATE ROUTINE LOAD mydb.my_job ON my_table ...
+   PROPERTIES (
+       "log_rejected_record_num" = "10000",
+       ...
+   );
+
+   -- Stream Load 头部
+   curl -H "log_rejected_record_num: 10000" ...
+   ```
+
+2. **集群级**：把 BE 配置 `enable_rejected_record_sync` 设为 `true`。
+   不设置时拒绝行仍然会落到 BE 本地 JSON Lines 文件，但同步守护线程
+   不会把它们回写到系统表：
+
+   ```bash
+   curl -X POST "http://<be>:<be_http_port>/api/update_config?enable_rejected_record_sync=true"
+   ```
+
+   或者写入 `be.conf` 以持久化：
+
+   ```
+   enable_rejected_record_sync=true
+   ```
+
+## 查询系统表
+
+使用 `DESCRIBE _statistics_.rejected_records;` 查看完整 schema。日常排障
+最常用的列：
+
+- `raw_record`（JSON）— 被拒绝的行，以列名为键
+- `error_code`、`error_message`、`error_column` — 拒绝原因
+- `load_label`、`load_type`、`txn_id`、`user_name` — 谁产生的
+- `source_info`（JSON）— 文件导入是 `file`+`line`，Routine Load 是
+  `topic`/`partition`/`offset`
+- `created_at` — 分区键；查询时优先用它过滤
+
+```sql
+-- 某次导入的全部拒绝行，按最新排序
+SELECT created_at, error_code, error_column, error_message, raw_record
+FROM _statistics_.rejected_records
+WHERE load_label = 'load_orders_20260327'
+ORDER BY created_at DESC
+LIMIT 100;
+
+-- 最近 24 小时某张目标表的错误分布
+SELECT error_code, error_column, COUNT(*) AS cnt
+FROM _statistics_.rejected_records
+WHERE target_database = 'mydb'
+  AND target_table = 'orders'
+  AND created_at >= NOW() - INTERVAL 1 DAY
+GROUP BY error_code, error_column
+ORDER BY cnt DESC;
+
+-- 与 information_schema.loads JOIN 查看一次事务的整体信息
+SELECT r.created_at, r.error_code, r.raw_record, l.state, l.scan_rows
+FROM _statistics_.rejected_records AS r
+JOIN information_schema.loads AS l
+  ON r.txn_id = l.job_id
+WHERE r.txn_id = 12345;
+```
+
+## 回放拒绝行
+
+`raw_record` 列是 JSON，键为列名、值为原始字符串。用 `->>` 取出字符串，
+再 `CAST(... AS <type>)` 恢复目标类型。
+
+```sql
+-- 修复 VARCHAR 超长后回放
+INSERT INTO mydb.orders (order_id, customer_name, amount, created_at)
+SELECT
+    CAST(raw_record->>'order_id'      AS BIGINT),
+    LEFT(raw_record->>'customer_name', 64),
+    CAST(raw_record->>'amount'        AS DECIMAL(10,2)),
+    CAST(raw_record->>'created_at'    AS DATETIME)
+FROM _statistics_.rejected_records
+WHERE target_database = 'mydb'
+  AND target_table = 'orders'
+  AND error_code    = 'VALUE_OUT_OF_RANGE'
+  AND created_at    > '2026-03-27';
+```
+
+当 Scanner 完全无法按列拆分（例如 CSV 列数不匹配）时，`raw_record`
+只含单键 `_raw`，保存原始整行：
+
+```sql
+-- 排查无法解析的前 20 行
+SELECT raw_record->>'_raw' AS raw_line
+FROM _statistics_.rejected_records
+WHERE error_code = 'PARSE_ERROR'
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+## 保留与清理
+
+表按日分区，`partition_live_number = 7` 自动过期。调整 FE 配置
+`rejected_records_retained_days`（默认 `7`）后，TableKeeper 守护线程
+会在下一次 tick 时把表属性同步为新值。一次性清理：
+
+```sql
+DELETE FROM _statistics_.rejected_records
+WHERE target_database = 'mydb'
+  AND target_table    = 'orders'
+  AND created_at      < '2026-03-01';
+```
+
+## 权限
+
+默认只有 `root` 能看到 `_statistics_.rejected_records` 的数据。内建的
+行访问策略会向其他所有用户返回空结果集，即使显式 `GRANT SELECT` 也无效。
+后续版本会放开为"查询方对 `target_database.target_table` 有 SELECT
+权限就能看到对应行"；在此之前，运维看板请使用 `root`（或被授予
+`impersonate root` 的角色）。
+
+## 当前限制
+
+- **Parquet 行级捕获尚未接入。** `.parquet` 文件导入时发生的行级校验
+  失败当前不会落到 `_statistics_.rejected_records`；`information_schema.loads`
+  的导入级错误信息是唯一信号，需要等 Parquet broker-load 校验接入后才能
+  补齐。
+- **遗留拒绝行文件保留。** `ErrorURL` / `tracking_url` 仍然返回 BE
+  本地 tab 分隔文件，与系统表写入并行，以保持上线过渡期兼容。等所有
+  消费者迁移完成后，遗留路径会被删除。
+- **秒级延迟。** 导入结束后，拒绝行在 `rejected_record_sync_interval_sec`
+  （默认 30 秒）内才在系统表中可查询，并非即时可见。
+
+## 相关配置一览
+
+| 作用域 | 名称 | 默认值 | 说明 |
+| --- | --- | --- | --- |
+| Session | `log_rejected_record_num` | `0` | `0` = 关闭、`-1` = 不限、`N` = 限额 `N` 条 |
+| FE | `rejected_records_retained_days` | `7` | 系统表每日分区保留天数 |
+| BE | `enable_rejected_record_sync` | `false` | 同步守护线程总开关 |
+| BE | `rejected_record_sync_interval_sec` | `30` | 同步调度周期 |
+| BE | `rejected_record_sync_max_batch_rows` | `10000` | 单次 merge-commit 批次行数软上限 |
+| BE | `rejected_record_local_retention_hours` | `24` | 本地文件 GC 保留上限 |
+| BE | `rejected_record_sync_user` | `root` | 守护线程 Stream Load 使用的用户 |
+| BE | `rejected_record_sync_password` | _(空)_ | 配套密码 |
+| BE | `rejected_record_sync_post_timeout_sec` | `60` | 单次 Stream Load 请求超时 |
