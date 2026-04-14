@@ -411,8 +411,6 @@ public class TableFunctionTableTest {
                     () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
         }
     }
-<<<<<<< HEAD
-=======
 
     @Test
     public void testCSVEncloseEscapeForUnload() {
@@ -576,5 +574,4 @@ public class TableFunctionTableTest {
             );
         }
     }
->>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
 }

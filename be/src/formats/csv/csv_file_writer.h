@@ -27,14 +27,10 @@ struct CSVWriterOptions : FileWriterOptions {
     std::string collection_delim = ",";
     std::string mapkey_delim = ",";
     bool is_hive = false;
-<<<<<<< HEAD
-=======
-    bool include_header = false;
     // 0 = disabled. When set, all non-NULL fields are wrapped with this char.
     char enclose = 0;
     // 0 = disabled. Used together with enclose to escape enclose/escape chars inside fields.
     char escape = 0;
->>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
 
     inline static std::string COLUMN_TERMINATED_BY = "column_terminated_by";
     inline static std::string LINE_TERMINATED_BY = "line_terminated_by";
@@ -42,12 +38,8 @@ struct CSVWriterOptions : FileWriterOptions {
     inline static std::string COLLECTION_DELIM = "collection_delim";
     inline static std::string MAPKEY_DELIM = "mapkey_delim";
     inline static std::string IS_HIVE = "is_hive";
-<<<<<<< HEAD
-=======
-    inline static std::string INCLUDE_HEADER = "include_header";
     inline static std::string ENCLOSE = "enclose";
     inline static std::string ESCAPE = "escape";
->>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
 };
 
 // The primary purpose of this class is to support hive + csv. Use with caution in other cases.
