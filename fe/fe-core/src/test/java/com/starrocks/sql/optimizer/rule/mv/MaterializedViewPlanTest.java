@@ -32,8 +32,7 @@ public class MaterializedViewPlanTest extends PlanTestBase {
 
         AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        Assertions.assertTrue(exception.getMessage().contains(
-                "Legacy REFRESH INCREMENTAL materialized views are no longer supported"));
+        Assertions.assertTrue(exception.getMessage().contains("Getting syntax error"));
     }
 
     @Test

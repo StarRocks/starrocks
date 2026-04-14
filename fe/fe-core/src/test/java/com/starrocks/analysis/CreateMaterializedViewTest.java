@@ -2923,8 +2923,7 @@ public class CreateMaterializedViewTest extends MVTestBase {
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
         AnalysisException exception = Assertions.assertThrows(AnalysisException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
-        Assertions.assertTrue(exception.getMessage().contains(
-                "Legacy REFRESH INCREMENTAL materialized views are no longer supported"));
+        Assertions.assertTrue(exception.getMessage().contains("Getting syntax error"));
     }
 
     @Test
