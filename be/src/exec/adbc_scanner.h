@@ -23,18 +23,19 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "exec/adbc_arrow_raii.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
 
+struct ADBCScanContext; // forward decl; defined in connector/adbc_connector.h
 class ADBCParallelReader;
 class TupleDescriptor;
 
 class ADBCScanner {
 public:
-    ADBCScanner(std::string driver, std::string uri, std::string username, std::string password, std::string token,
-                std::string sql, const TupleDescriptor* tuple_desc, std::string ca_cert_file,
-                std::string client_cert_file, std::string client_key_file, bool tls_verify);
+    // Takes context by const ref (per D-01). Scanner copies the context.
+    ADBCScanner(const ADBCScanContext& ctx, const TupleDescriptor* tuple_desc);
     ~ADBCScanner();
 
     Status open(RuntimeState* state);
@@ -50,24 +51,12 @@ private:
     Status _try_parallel_read();
     Status _fallback_single_stream_read();
     Status _convert_batch_to_chunk(const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk);
-    static Status _read_file_to_string(const std::string& path, std::string* content);
 
-    // Connection parameters
-    std::string _driver;
-    std::string _uri;
-    std::string _username;
-    std::string _password;
-    std::string _token;
-    std::string _sql;
+    // Context (copied, not borrowed, since caller may not outlive scanner)
+    const ADBCScanContext _ctx;
     const TupleDescriptor* _tuple_desc;
 
-    // TLS parameters
-    std::string _ca_cert_file;
-    std::string _client_cert_file;
-    std::string _client_key_file;
-    bool _tls_verify = true;
-
-    // ADBC C API handles (must be released in reverse order)
+    // ADBC C API handles (released in reverse order in close())
     AdbcDatabase _database{};
     AdbcConnection _connection{};
     AdbcStatement _statement{};
@@ -75,9 +64,8 @@ private:
     bool _connection_initialized = false;
     bool _statement_initialized = false;
 
-    // Arrow C stream (single-stream fallback) — managed directly instead of via
-    // ImportRecordBatchReader to work around Go ADBC driver not nulling release callback.
-    ArrowArrayStream _c_stream{};
+    // Arrow C stream — RAII-managed (per D-08, BE-08)
+    ArrowArrayStreamHolder _c_stream_holder;
     std::shared_ptr<arrow::Schema> _arrow_schema;
     bool _stream_initialized = false;
 

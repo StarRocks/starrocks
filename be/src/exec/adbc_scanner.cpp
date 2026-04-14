@@ -17,12 +17,13 @@
 #include <arrow/c/bridge.h>
 #include <glog/logging.h>
 
-#include <fstream>
 #include <sstream>
 
 #include "base/time/time.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "connector/adbc_connector.h"
+#include "exec/adbc_driver_registry.h"
 #include "exec/adbc_parallel_reader.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/arrow_type_traits.h"
@@ -45,32 +46,8 @@ namespace starrocks {
 // ADBCScanner
 // ================================
 
-ADBCScanner::ADBCScanner(std::string driver, std::string uri, std::string username, std::string password,
-                         std::string token, std::string sql, const TupleDescriptor* tuple_desc,
-                         std::string ca_cert_file, std::string client_cert_file, std::string client_key_file,
-                         bool tls_verify)
-        : _driver(std::move(driver)),
-          _uri(std::move(uri)),
-          _username(std::move(username)),
-          _password(std::move(password)),
-          _token(std::move(token)),
-          _sql(std::move(sql)),
-          _tuple_desc(tuple_desc),
-          _ca_cert_file(std::move(ca_cert_file)),
-          _client_cert_file(std::move(client_cert_file)),
-          _client_key_file(std::move(client_key_file)),
-          _tls_verify(tls_verify) {}
-
-Status ADBCScanner::_read_file_to_string(const std::string& path, std::string* content) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file.is_open()) {
-        return Status::InvalidArgument(fmt::format("Cannot open certificate file: {}", path));
-    }
-    std::ostringstream ss;
-    ss << file.rdbuf();
-    *content = ss.str();
-    return Status::OK();
-}
+ADBCScanner::ADBCScanner(const ADBCScanContext& ctx, const TupleDescriptor* tuple_desc)
+        : _ctx(ctx), _tuple_desc(tuple_desc) {}
 
 ADBCScanner::~ADBCScanner() {
     if (!_closed) {
@@ -103,75 +80,74 @@ Status ADBCScanner::open(RuntimeState* state) {
 Status ADBCScanner::_init_adbc() {
     AdbcError error = ADBC_ERROR_INIT;
 
-    LOG(INFO) << "ADBC: _init_adbc starting, driver=" << _driver << " uri=" << _uri;
+    // 1. Ensure driver is loaded via the registry (enforces BE-05 load-once,
+    //    BE-06 never-dlclose). The registry calls AdbcLoadDriver() which
+    //    performs dlopen(RTLD_NOW | RTLD_LOCAL) on first call, and returns
+    //    the cached AdbcDriver on subsequent calls.
+    auto driver_result = ADBCDriverRegistry::instance().get_or_load(
+            _ctx.driver_url, _ctx.entrypoint);
+    if (!driver_result.ok()) return driver_result.status();
 
-    // Initialize database
-    // The Flight SQL driver is statically linked (Go/cgo-based, crashes if loaded via dlopen).
-    // Its .a provides all ADBC API functions directly, so no driver manager is needed.
+    // 2. Init database
     RETURN_ADBC_NOT_OK(AdbcDatabaseNew(&_database, &error), error);
-    LOG(INFO) << "ADBC: AdbcDatabaseNew OK";
-    RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "uri", _uri.c_str(), &error), error);
-    LOG(INFO) << "ADBC: SetOption uri OK";
 
-    if (!_username.empty()) {
-        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "username", _username.c_str(), &error), error);
-    }
-    if (!_password.empty()) {
-        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "password", _password.c_str(), &error), error);
-    }
-    if (!_token.empty()) {
-        std::string auth_header = "Bearer " + _token;
+    // 3. Set driver path (MUST be first option per ADBC protocol)
+    error = ADBC_ERROR_INIT;
+    RETURN_ADBC_NOT_OK(
+            AdbcDatabaseSetOption(&_database, "driver", _ctx.driver_url.c_str(), &error), error);
+
+    // 4. Optional entrypoint
+    if (!_ctx.entrypoint.empty()) {
+        error = ADBC_ERROR_INIT;
         RETURN_ADBC_NOT_OK(
-                AdbcDatabaseSetOption(&_database, "adbc.flight.sql.authorization_header", auth_header.c_str(), &error),
-                error);
+                AdbcDatabaseSetOption(&_database, "entrypoint", _ctx.entrypoint.c_str(), &error), error);
     }
 
-    // TLS options -- must be set before AdbcDatabaseInit
-    if (!_ca_cert_file.empty()) {
-        std::string pem_content;
-        RETURN_IF_ERROR(_read_file_to_string(_ca_cert_file, &pem_content));
-        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.tls_root_certs",
-                                                 pem_content.c_str(), &error),
-                           error);
-    }
-
-    if (!_client_cert_file.empty() && !_client_key_file.empty()) {
-        std::string cert_content, key_content;
-        RETURN_IF_ERROR(_read_file_to_string(_client_cert_file, &cert_content));
-        RETURN_IF_ERROR(_read_file_to_string(_client_key_file, &key_content));
-        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.mtls_cert_chain",
-                                                 cert_content.c_str(), &error),
-                           error);
-        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.mtls_private_key",
-                                                 key_content.c_str(), &error),
-                           error);
-    }
-
-    if (!_tls_verify) {
+    // 5. Standard options: uri, username, password
+    if (!_ctx.uri.empty()) {
+        error = ADBC_ERROR_INIT;
         RETURN_ADBC_NOT_OK(
-                AdbcDatabaseSetOption(&_database, "adbc.flight.sql.client_option.tls_skip_verify", "true", &error),
-                error);
-        LOG(WARNING) << "ADBC TLS certificate verification DISABLED (insecure mode)";
+                AdbcDatabaseSetOption(&_database, "uri", _ctx.uri.c_str(), &error), error);
+    }
+    if (!_ctx.username.empty()) {
+        error = ADBC_ERROR_INIT;
+        RETURN_ADBC_NOT_OK(
+                AdbcDatabaseSetOption(&_database, "username", _ctx.username.c_str(), &error), error);
+    }
+    if (!_ctx.password.empty()) {
+        error = ADBC_ERROR_INIT;
+        RETURN_ADBC_NOT_OK(
+                AdbcDatabaseSetOption(&_database, "password", _ctx.password.c_str(), &error), error);
     }
 
-    LOG(INFO) << "ADBC: calling AdbcDatabaseInit...";
+    // 6. Forward ALL adbc_options before Init (per BE-02)
+    for (const auto& [key, value] : _ctx.adbc_options) {
+        // Skip uri/username/password — already set above
+        if (key == "uri" || key == "username" || key == "password") continue;
+        error = ADBC_ERROR_INIT;
+        RETURN_ADBC_NOT_OK(
+                AdbcDatabaseSetOption(&_database, key.c_str(), value.c_str(), &error), error);
+    }
+
+    // 7. Initialize database (driver manager routes to the already-loaded driver)
+    error = ADBC_ERROR_INIT;
     RETURN_ADBC_NOT_OK(AdbcDatabaseInit(&_database, &error), error);
     _database_initialized = true;
-    LOG(INFO) << "ADBC: AdbcDatabaseInit OK";
 
-    // Initialize connection
+    // 8. Connection (per BE-03: per-fragment, never cached)
+    error = ADBC_ERROR_INIT;
     RETURN_ADBC_NOT_OK(AdbcConnectionNew(&_connection, &error), error);
-    LOG(INFO) << "ADBC: AdbcConnectionNew OK";
+    error = ADBC_ERROR_INIT;
     RETURN_ADBC_NOT_OK(AdbcConnectionInit(&_connection, &_database, &error), error);
     _connection_initialized = true;
-    LOG(INFO) << "ADBC: AdbcConnectionInit OK";
 
-    // Create statement and set SQL
+    // 9. Statement
+    error = ADBC_ERROR_INIT;
     RETURN_ADBC_NOT_OK(AdbcStatementNew(&_connection, &_statement, &error), error);
+    error = ADBC_ERROR_INIT;
+    RETURN_ADBC_NOT_OK(
+            AdbcStatementSetSqlQuery(&_statement, _ctx.sql.c_str(), &error), error);
     _statement_initialized = true;
-    LOG(INFO) << "ADBC: AdbcStatementNew OK";
-    RETURN_ADBC_NOT_OK(AdbcStatementSetSqlQuery(&_statement, _sql.c_str(), &error), error);
-    LOG(INFO) << "ADBC: SetSqlQuery OK, sql=" << _sql;
 
     return Status::OK();
 }
@@ -211,18 +187,16 @@ Status ADBCScanner::_try_parallel_read() {
 }
 
 Status ADBCScanner::_fallback_single_stream_read() {
-    LOG(INFO) << "ADBC: _fallback_single_stream_read starting...";
     AdbcError error = ADBC_ERROR_INIT;
     int64_t rows_affected = -1;
 
-    RETURN_ADBC_NOT_OK(AdbcStatementExecuteQuery(&_statement, &_c_stream, &rows_affected, &error), error);
+    RETURN_ADBC_NOT_OK(AdbcStatementExecuteQuery(&_statement, &_c_stream_holder.stream, &rows_affected, &error), error);
     _stream_initialized = true;
-    LOG(INFO) << "ADBC: ExecuteQuery OK, rows_affected=" << rows_affected;
 
     // Get schema from the C stream
     struct ArrowSchema c_schema {};
-    if (_c_stream.get_schema(&_c_stream, &c_schema) != 0) {
-        const char* err = _c_stream.get_last_error(&_c_stream);
+    if (_c_stream_holder.stream.get_schema(&_c_stream_holder.stream, &c_schema) != 0) {
+        const char* err = _c_stream_holder.stream.get_last_error(&_c_stream_holder.stream);
         return Status::InternalError(fmt::format("Failed to get schema from ADBC stream: {}", err ? err : "unknown"));
     }
     auto schema_result = arrow::ImportSchema(&c_schema);
@@ -232,15 +206,12 @@ Status ADBCScanner::_fallback_single_stream_read() {
     _arrow_schema = std::move(schema_result).ValueUnsafe();
 
     _use_parallel = false;
-    LOG(INFO) << "ADBC: stream initialized OK, schema=" << _arrow_schema->ToString();
 
     return Status::OK();
 }
 
 Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     *eos = false;
-    LOG(INFO) << "ADBC: get_next called, _use_parallel=" << _use_parallel << " _tuple_desc=" << (void*)_tuple_desc
-              << " chunk=" << (void*)chunk << " *chunk=" << (chunk ? (void*)chunk->get() : nullptr);
 
     std::shared_ptr<arrow::RecordBatch> batch;
 
@@ -264,11 +235,11 @@ Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
                 return Status::OK();
             }
         } else {
-            // Read directly from the C stream (avoids Arrow's assertion on Go driver's release)
+            // Read directly from the C stream
             struct ArrowArray c_array {};
-            int rc = _c_stream.get_next(&_c_stream, &c_array);
+            int rc = _c_stream_holder.stream.get_next(&_c_stream_holder.stream, &c_array);
             if (rc != 0) {
-                const char* err = _c_stream.get_last_error(&_c_stream);
+                const char* err = _c_stream_holder.stream.get_last_error(&_c_stream_holder.stream);
                 return Status::InternalError(fmt::format("Arrow stream read error: {}", err ? err : "unknown"));
             }
             if (c_array.release == nullptr) {
@@ -290,11 +261,7 @@ Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         }
     }
 
-    LOG(INFO) << "ADBC: got batch with " << batch->num_rows() << " rows, " << batch->num_columns() << " cols"
-              << ", schema=" << batch->schema()->ToString();
-
     RETURN_IF_ERROR(_convert_batch_to_chunk(batch, chunk));
-    LOG(INFO) << "ADBC: _convert_batch_to_chunk OK, chunk rows=" << (*chunk)->num_rows();
 
     _rows_read += (*chunk)->num_rows();
     _bytes_read += (*chunk)->bytes_usage();
@@ -304,15 +271,12 @@ Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
 Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk) {
     size_t num_rows = batch->num_rows();
-    LOG(INFO) << "ADBC: _convert_batch_to_chunk num_rows=" << num_rows << " batch_cols=" << batch->num_columns()
-              << " _tuple_desc=" << (void*)_tuple_desc;
     if (num_rows == 0) {
         *chunk = std::make_shared<Chunk>();
         return Status::OK();
     }
 
     const auto& slots = _tuple_desc->slots();
-    LOG(INFO) << "ADBC: tuple_desc has " << slots.size() << " slots";
     Columns columns(slots.size());
 
     // Initialize chunk filter (1 = valid). The arrow converter accesses it unconditionally.
@@ -321,7 +285,6 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
     for (size_t i = 0; i < slots.size(); i++) {
         SlotDescriptor* slot = slots[i];
         if (!slot->is_materialized()) {
-            LOG(INFO) << "ADBC: slot[" << i << "] not materialized, skipping";
             continue;
         }
 
@@ -335,10 +298,6 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
         ArrowTypeId arrow_type_id = arrow_type->id();
         LogicalType sr_type = slot->type().type;
         bool is_nullable = slot->is_nullable();
-
-        LOG(INFO) << "ADBC: converting slot[" << i << "] name=" << slot->col_name()
-                  << " arrow_type=" << arrow_type->ToString() << " sr_type=" << type_to_string(sr_type)
-                  << " nullable=" << is_nullable;
 
         ConvertFunc converter = get_arrow_converter(arrow_type_id, sr_type, is_nullable, true);
         if (converter == nullptr) {
@@ -354,17 +313,14 @@ Status ADBCScanner::_convert_batch_to_chunk(const std::shared_ptr<arrow::RecordB
         if (is_nullable) {
             auto* nullable = down_cast<NullableColumn*>(column.get());
             auto* null_column = nullable->null_column_raw_ptr();
-            // fill_null_column internally resizes the null column
             size_t null_count = fill_null_column(arrow_column.get(), 0, num_rows, null_column, 0);
             nullable->set_has_null(null_count != 0);
             uint8_t* null_data = &null_column->get_data().front();
 
             Column* data_col = nullable->data_column_raw_ptr();
-            // Do NOT resize data_col -- the converter handles sizing
             RETURN_IF_ERROR(converter(arrow_column.get(), 0, num_rows, data_col, 0, null_data, &chunk_filter, nullptr,
                                       nullptr));
         } else {
-            // Do NOT resize column -- the converter handles sizing
             RETURN_IF_ERROR(converter(arrow_column.get(), 0, num_rows, column.get(), 0, nullptr, &chunk_filter, nullptr,
                                       nullptr));
         }
@@ -387,20 +343,13 @@ void ADBCScanner::close(RuntimeState* state) {
     if (_closed) return;
     _closed = true;
 
-    // Close parallel reader first
+    // Close parallel reader first (Pitfall 6: must close before AdbcDatabaseRelease)
     if (_parallel_reader) {
         _parallel_reader->close();
         _parallel_reader.reset();
     }
 
-    // Release C stream manually — the Go ADBC driver doesn't null out release after
-    // calling it, which violates the Arrow C Data Interface protocol and triggers an
-    // assertion abort in Arrow's ArrowArrayStreamRelease helper.
-    if (_stream_initialized && _c_stream.release) {
-        _c_stream.release(&_c_stream);
-        _c_stream.release = nullptr; // workaround for Go driver protocol violation
-        _stream_initialized = false;
-    }
+    // ArrowArrayStream is released automatically by _c_stream_holder destructor (RAII)
     _arrow_schema.reset();
     _pending_batch.reset();
 
