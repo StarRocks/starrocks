@@ -14,14 +14,8 @@
 
 package com.starrocks.connector.share.credential;
 
-import com.starrocks.connector.share.credential.provider.AssumedRoleCredentialProvider;
-import com.starrocks.connector.share.credential.provider.OverwriteAwsDefaultCredentialsProvider;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.Constants;
-import org.apache.hadoop.fs.s3a.S3AFileSystem;
-import org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider;
-import org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider;
-import org.apache.hadoop.fs.s3a.auth.IAMInstanceCredentialsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,11 +34,23 @@ public class CloudConfigurationApplier {
 
     private static final Logger LOG = LoggerFactory.getLogger(CloudConfigurationApplier.class);
 
-    private static final String DEFAULT_CREDENTIAL_PROVIDER = OverwriteAwsDefaultCredentialsProvider.class.getName();
-    private static final String IAM_CREDENTIAL_PROVIDER = IAMInstanceCredentialsProvider.class.getName();
-    private static final String ASSUME_ROLE_CREDENTIAL_PROVIDER = AssumedRoleCredentialProvider.class.getName();
-    private static final String SIMPLE_CREDENTIAL_PROVIDER = SimpleAWSCredentialsProvider.class.getName();
-    private static final String TEMPORARY_CREDENTIAL_PROVIDER = TemporaryAWSCredentialsProvider.class.getName();
+    // Keep provider names as literals so scanner UTs without hadoop-aws/AWS SDK on the
+    // classpath can still initialize this helper when no aws.s3.* properties are present.
+    private static final String DEFAULT_CREDENTIAL_PROVIDER =
+            "com.starrocks.connector.share.credential.provider.OverwriteAwsDefaultCredentialsProvider";
+    private static final String IAM_CREDENTIAL_PROVIDER =
+            "org.apache.hadoop.fs.s3a.auth.IAMInstanceCredentialsProvider";
+    private static final String ASSUME_ROLE_CREDENTIAL_PROVIDER =
+            "com.starrocks.connector.share.credential.provider.AssumedRoleCredentialProvider";
+    private static final String SIMPLE_CREDENTIAL_PROVIDER =
+            "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider";
+    private static final String TEMPORARY_CREDENTIAL_PROVIDER =
+            "org.apache.hadoop.fs.s3a.TemporaryAWSCredentialsProvider";
+    // Mirrors AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID.
+    private static final String CUSTOM_EXTERNAL_ID =
+            "starrocks.fs.s3a.external-id";
+    private static final String S3A_FILE_SYSTEM =
+            "org.apache.hadoop.fs.s3a.S3AFileSystem";
 
     /**
      * Applies StarRocks cloud configuration properties to a Hadoop Configuration.
@@ -71,15 +77,14 @@ public class CloudConfigurationApplier {
 
     private static void applyAwsCloudConfiguration(Map<String, String> props, Configuration conf) {
         // Set S3A filesystem implementations
-        String s3aFileSystem = S3AFileSystem.class.getName();
-        conf.set("fs.s3.impl", s3aFileSystem);
-        conf.set("fs.s3a.impl", s3aFileSystem);
-        conf.set("fs.s3n.impl", s3aFileSystem);
-        conf.set("fs.oss.impl", s3aFileSystem);
-        conf.set("fs.ks3.impl", s3aFileSystem);
-        conf.set("fs.obs.impl", s3aFileSystem);
-        conf.set("fs.tos.impl", s3aFileSystem);
-        conf.set("fs.cosn.impl", s3aFileSystem);
+        conf.set("fs.s3.impl", S3A_FILE_SYSTEM);
+        conf.set("fs.s3a.impl", S3A_FILE_SYSTEM);
+        conf.set("fs.s3n.impl", S3A_FILE_SYSTEM);
+        conf.set("fs.oss.impl", S3A_FILE_SYSTEM);
+        conf.set("fs.ks3.impl", S3A_FILE_SYSTEM);
+        conf.set("fs.obs.impl", S3A_FILE_SYSTEM);
+        conf.set("fs.tos.impl", S3A_FILE_SYSTEM);
+        conf.set("fs.cosn.impl", S3A_FILE_SYSTEM);
 
         // Set retry limits (same as AwsCloudConfiguration.applyToConfiguration)
         conf.set(Constants.RETRY_LIMIT, "3");
@@ -171,6 +176,6 @@ public class CloudConfigurationApplier {
             }
             conf.set(Constants.ASSUMED_ROLE_STS_ENDPOINT, stsEndpoint);
         }
-        conf.set(AssumedRoleCredentialProvider.CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, externalId);
+        conf.set(CUSTOM_EXTERNAL_ID, externalId);
     }
 }
