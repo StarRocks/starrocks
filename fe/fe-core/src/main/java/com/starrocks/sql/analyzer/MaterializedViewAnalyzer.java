@@ -115,8 +115,8 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
-import com.starrocks.sql.optimizer.rule.tvr.common.TvrOpUtils;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
@@ -660,12 +660,12 @@ public class MaterializedViewAnalyzer {
                     colName = colWithComments.get(i).getColName();
                 }
                 Column column = new Column(colName, type, colNullable);
-                if (TvrOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(colName)) {
+                if (IvmOpUtils.COLUMN_ROW_ID.equalsIgnoreCase(colName)) {
                     column.setIsKey(true);
                     column.setIsAllowNull(false);
                     column.setIsHidden(true);
                 }
-                if (colName.startsWith(TvrOpUtils.COLUMN_AGG_STATE_PREFIX)) {
+                if (colName.startsWith(IvmOpUtils.COLUMN_AGG_STATE_PREFIX)) {
                     column.setIsHidden(true);
                 }
                 if (colWithComments != null) {

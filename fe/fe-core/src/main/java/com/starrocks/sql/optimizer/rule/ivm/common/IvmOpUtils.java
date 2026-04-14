@@ -10,9 +10,9 @@
 // distributed under the License is distributed on an "AS IS" BASIS,
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
-// limitations under the License
+// limitations under the License.
 
-package com.starrocks.sql.optimizer.rule.tvr.common;
+package com.starrocks.sql.optimizer.rule.ivm.common;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
@@ -39,9 +39,16 @@ import com.starrocks.type.VarcharType;
 import java.util.List;
 
 /**
- * Utility class for TVR operations.
+ * Utility class for IVM (Incremental View Maintenance) operations.
+ *
+ * <p>Contains helpers for:
+ * <ul>
+ *   <li>Aggregate state column naming ({@code __AGG_STATE_*})</li>
+ *   <li>Row-id encoding ({@code encode_sort_key} / {@code encode_fingerprint_sha256})</li>
+ *   <li>Row-id equality predicate and state_union scalar operator construction</li>
+ * </ul>
  */
-public class TvrOpUtils {
+public class IvmOpUtils {
     public static final String COLUMN_ROW_ID = "__ROW_ID__";
     public static final String COLUMN_AGG_STATE_PREFIX = "__AGG_STATE";
     public static final ImmutableMap<Integer, String> ENCODE_ROW_ID_FUNCTION_MAP =
@@ -50,23 +57,20 @@ public class TvrOpUtils {
                     .put(1, FunctionSet.ENCODE_FINGERPRINT_SHA256)
                     .build();
 
-    public static String getTvrAggStateColumnName(FunctionCallExpr functionCallExpr) {
-        // TODO: format functionCallExpr to a more readable name
+    private IvmOpUtils() {
+    }
+
+    public static String getIvmAggStateColumnName(FunctionCallExpr functionCallExpr) {
         // agg_state column name is like __AGG_STATE_<agg_func_name>
-        String exprFuncName = AstToStringBuilder.getAliasName(functionCallExpr, false,
-                false);
+        String exprFuncName = AstToStringBuilder.getAliasName(functionCallExpr, false, false);
         return String.format("%s_%s", COLUMN_AGG_STATE_PREFIX, exprFuncName);
     }
 
     /**
      * encode_row_id(...) -> encode_sort_key(...) if all args are fixed-length and total size <= 32 bytes
      *                    -> encode_fingerprint_sha256(...) otherwise
-     * Note: Since syntax sugars are applied during parsing (before type analysis),
-     * types are not yet available. For now, we always use encode_fingerprint_sha256.
-     * TODO: Implement type-based optimization during semantic analysis phase.
      */
     public static int deduceEncodeRowIdVersion(List<Expr> children) {
-        // Check if all children have types available (they should be analyzed)
         boolean allTypesAvailable = true;
         int totalSize = 0;
 
@@ -76,7 +80,6 @@ public class TvrOpUtils {
                 break;
             }
 
-            // Check if it's a variable-length type
             if (child.getType().isScalarType()) {
                 ScalarType scalarType = (ScalarType) child.getType();
                 if (scalarType.getPrimitiveType().isVariableLengthType()) {
@@ -85,17 +88,14 @@ public class TvrOpUtils {
                 }
                 totalSize += scalarType.getPrimitiveType().getTypeSize();
             } else if (child.getType().isComplexType()) {
-                // Complex types (ARRAY, MAP, STRUCT) are variable-length
                 allTypesAvailable = false;
                 break;
             }
         }
 
-        // If all types are fixed-length and total size <= 32 bytes, use encode_sort_key
         if (allTypesAvailable && totalSize > 0 && totalSize <= 32) {
             return 0;
         }
-        // Otherwise, use encode_fingerprint_sha256 (default for variable-length or large data)
         return 1;
     }
 
@@ -114,52 +114,39 @@ public class TvrOpUtils {
 
     /**
      * Build the row id function expression for IVM.
-     * - For multi unique keys, use ENCODE_SORT_KEY to encode them to a varbinary and use FROM_BINARY to convert it into
-     * varchar:
-     *  `FROM_BINARY(ENCODE_ROW_ID(k1, k2, ..., kn), 'encode64')
-     * TODO: Since binary type is not supported to be used for primary keys, we can remove from_binary in the future.
+     * For multi unique keys, use ENCODE_ROW_ID to encode them to a varbinary and use FROM_BINARY to convert it into
+     * varchar: {@code FROM_BINARY(ENCODE_ROW_ID(k1, k2, ..., kn), 'encode64')}
      */
-    public static FunctionCallExpr buildRowIdFuncExpr(int encodeRowIdVersion,
-                                                      List<Expr> uniqueKeys) {
+    public static FunctionCallExpr buildRowIdFuncExpr(int encodeRowIdVersion, List<Expr> uniqueKeys) {
         final String encodeRowIdFuncName = getEncodeRowIdFunctionNameChecked(encodeRowIdVersion);
-        // This method is a placeholder for the actual implementation of building a row ID function.
-        // The implementation would typically create a FunctionCallExpr that represents the row ID function
-        // used in incremental view maintenance (IVM).
         FunctionCallExpr encodeSortKeyFunc = new FunctionCallExpr(encodeRowIdFuncName, uniqueKeys);
         List<Expr> fromBinaryArgs = Lists.newArrayList(encodeSortKeyFunc, new StringLiteral("encode64"));
-        FunctionCallExpr fromBinaryFunc = new FunctionCallExpr(FunctionSet.FROM_BINARY, fromBinaryArgs);
-        return fromBinaryFunc;
+        return new FunctionCallExpr(FunctionSet.FROM_BINARY, fromBinaryArgs);
     }
 
     public static ScalarOperator buildRowIdEqBinaryPredicateOp(int encodeRowIdVersion,
-                                                               ColumnRefOperator aggStateRowIdScalarOp,
-                                                               List<ScalarOperator> uniqueKeys) {
-        // build row id operator for agg state table
+                                                                ColumnRefOperator aggStateRowIdScalarOp,
+                                                                List<ScalarOperator> uniqueKeys) {
         ScalarOperator deltaInputRowIdScalarOp = buildRowIdColumnOperator(encodeRowIdVersion, uniqueKeys);
-        BinaryPredicateOperator eqBinaryPredicateOperator =
-                new BinaryPredicateOperator(BinaryType.EQ, aggStateRowIdScalarOp, deltaInputRowIdScalarOp);
-        return eqBinaryPredicateOperator;
+        return new BinaryPredicateOperator(BinaryType.EQ, aggStateRowIdScalarOp, deltaInputRowIdScalarOp);
     }
 
     public static ScalarOperator buildRowIdColumnOperator(int encodeRowIdVersion,
-                                                          List<ScalarOperator> uniqueKeys) {
-        // build row id operator for agg state table
-        Type[] argTypes = uniqueKeys.stream()
-                .map(ScalarOperator::getType)
-                .toArray(Type[]::new);
+                                                           List<ScalarOperator> uniqueKeys) {
+        Type[] argTypes = uniqueKeys.stream().map(ScalarOperator::getType).toArray(Type[]::new);
         final String encodeRowIdFuncName = getEncodeRowIdFunctionNameChecked(encodeRowIdVersion);
         Function newFunc = ExprUtils.getBuiltinFunction(encodeRowIdFuncName, argTypes,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (newFunc == null) {
             throw new IllegalArgumentException("Function " + encodeRowIdFuncName + " not found");
         }
-        ScalarOperator rowIdScalarOp = new CallOperator(encodeRowIdFuncName, VarbinaryType.VARBINARY, uniqueKeys, newFunc);
-        // varbinary to varchar
+        ScalarOperator rowIdScalarOp =
+                new CallOperator(encodeRowIdFuncName, VarbinaryType.VARBINARY, uniqueKeys, newFunc);
         return fromBinaryToVarchar(rowIdScalarOp);
     }
 
     private static ScalarOperator fromBinaryToVarchar(ScalarOperator rowIdScalarOp) {
-        Type[] argTypes = new Type[] { rowIdScalarOp.getType(), VarcharType.VARCHAR };
+        Type[] argTypes = new Type[] {rowIdScalarOp.getType(), VarcharType.VARCHAR};
         Function newFunc = ExprUtils.getBuiltinFunction(FunctionSet.FROM_BINARY, argTypes,
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (newFunc == null) {
@@ -170,13 +157,11 @@ public class TvrOpUtils {
     }
 
     public static ScalarOperator buildStateUnionScalarOperator(CallOperator aggFunc,
-                                                               ScalarOperator intermediateAggScalarOp,
-                                                               ScalarOperator aggStateAggStateColumnRef) {
+                                                                ScalarOperator intermediateAggScalarOp,
+                                                                ScalarOperator aggStateAggStateColumnRef) {
         Preconditions.checkArgument(intermediateAggScalarOp.getType().equals(aggStateAggStateColumnRef.getType()),
                 "The type of intermediateAggScalarOp and aggStateTableRowIdScalarOp must be the same");
-        // build row id operator for agg state table
-        Type[] argTypes = new Type[] { intermediateAggScalarOp.getType(), aggStateAggStateColumnRef.getType() };
-        // get the state union function name
+        Type[] argTypes = new Type[] {intermediateAggScalarOp.getType(), aggStateAggStateColumnRef.getType()};
         String origAggFuncName = AggStateUtils.getAggFuncNameOfCombinator(aggFunc.getFnName());
         String stateUnionFunctionName = AggStateUtils.stateUnionFunctionName(origAggFuncName);
         Function newFunc = ExprUtils.getBuiltinFunction(stateUnionFunctionName, argTypes,
