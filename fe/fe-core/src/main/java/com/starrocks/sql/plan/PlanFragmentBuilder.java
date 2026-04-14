@@ -3030,6 +3030,30 @@ public class PlanFragmentBuilder {
             List<Expr> conjuncts = joinExpr.conjuncts;
             Map<SlotId, Expr> commonSlotMap = joinExpr.commonSubOperatorMap;
 
+            // Fix: for bucket-shuffle joins (LOCAL_HASH_BUCKET / SHUFFLE_HASH_BUCKET), the build exchange
+            // partitions only by the bucket key column(s) from rightDistributionSpec. Using probePartitionByExprs
+            // from leftDistributionSpec (which may include all join equality keys) causes the BE to hash on
+            // wrong columns when looking up the BF bucket, producing wrong results. Remap probePartitionByExprs
+            // to the probe-side columns corresponding to the build exchange's actual partition columns.
+            if ((distributionMode == JoinNode.DistributionMode.LOCAL_HASH_BUCKET ||
+                    distributionMode == JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET) &&
+                    rightDistributionSpec instanceof HashDistributionSpec) {
+                List<Expr> rightBuildExprs = getShuffleExprs((HashDistributionSpec) rightDistributionSpec, context);
+                List<Expr> bucketProbeExprs = new ArrayList<>();
+                for (Expr buildExpr : rightBuildExprs) {
+                    for (Expr conjunct : eqJoinConjuncts) {
+                        // After splitJoinOnPredicate normalization: child(0)=probe side, child(1)=build side
+                        if (conjunct.getChild(1).equals(buildExpr)) {
+                            bucketProbeExprs.add(conjunct.getChild(0));
+                            break;
+                        }
+                    }
+                }
+                if (bucketProbeExprs.size() == rightBuildExprs.size()) {
+                    probePartitionByExprs = bucketProbeExprs;
+                }
+            }
+
             setNullableForJoin(joinOperator, leftFragment, rightFragment, context);
 
             JoinNode joinNode;
