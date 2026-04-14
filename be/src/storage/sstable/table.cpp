@@ -5,6 +5,7 @@
 #include "storage/sstable/table.h"
 
 #include <butil/time.h> // NOLINT
+#include <limits>
 
 #include "base/coding.h"
 #include "base/container/lru_cache.h"
@@ -273,6 +274,48 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     Status s;
     Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
     std::unique_ptr<Iterator> current_block_itr_ptr;
+
+    // Prefetch pass: scan index to identify all needed blocks and warm the data cache.
+    // This converts sequential blocking reads into parallel prefetches, reducing P99 latency
+    // when multiple SST blocks must be fetched from the data cache (local disk or remote).
+    {
+        Cache* block_cache = rep_->options.block_cache;
+        RandomAccessFile* prefetch_file = (options.file != nullptr) ? options.file : rep_->file;
+        Iterator* prefetch_iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+        int64_t prefetch_cnt = 0;
+        uint64_t prev_offset = std::numeric_limits<uint64_t>::max();
+        for (auto it = begin; it != end; ++it) {
+            auto& k = keys[*it];
+            prefetch_iiter->Seek(k);
+            if (!prefetch_iiter->Valid()) continue;
+            Slice handle_value = prefetch_iiter->value();
+            BlockHandle handle;
+            if (!handle.DecodeFrom(&handle_value).ok()) continue;
+            if (handle.offset() == prev_offset) continue; // same block as previous key
+            prev_offset = handle.offset();
+            // Check bloom filter
+            FilterBlockReader* filter = rep_->filter;
+            if (filter != nullptr && !filter->KeyMayMatch(handle.offset(), k)) continue;
+            // Check in-memory block cache
+            if (block_cache != nullptr) {
+                char cache_key_buffer[16];
+                encode_fixed64_le(reinterpret_cast<uint8_t*>(cache_key_buffer), rep_->cache_id);
+                encode_fixed64_le(reinterpret_cast<uint8_t*>(cache_key_buffer + 8), handle.offset());
+                CacheKey key(cache_key_buffer, sizeof(cache_key_buffer));
+                auto ch = block_cache->lookup(key);
+                if (ch != nullptr) {
+                    block_cache->release(ch);
+                    continue; // already in memory cache
+                }
+            }
+            // Not in cache — issue prefetch to warm the data cache layer
+            (void)prefetch_file->touch_cache(handle.offset(),
+                                             static_cast<size_t>(handle.size()) + kBlockTrailerSize);
+            prefetch_cnt++;
+        }
+        delete prefetch_iiter;
+        TRACE_COUNTER_INCREMENT("prefetch_block_cnt", prefetch_cnt);
+    }
 
     // return true if find k
     auto search_in_block = [](const Slice& k, std::string* value, Iterator* current_block_itr) -> StatusOr<bool> {
