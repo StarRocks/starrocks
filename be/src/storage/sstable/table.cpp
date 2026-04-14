@@ -5,6 +5,7 @@
 #include "storage/sstable/table.h"
 
 #include <butil/time.h> // NOLINT
+
 #include <limits>
 
 #include "base/coding.h"
@@ -309,8 +310,7 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
                 }
             }
             // Not in cache — issue prefetch to warm the data cache layer
-            (void)prefetch_file->touch_cache(handle.offset(),
-                                             static_cast<size_t>(handle.size()) + kBlockTrailerSize);
+            (void)prefetch_file->touch_cache(handle.offset(), static_cast<size_t>(handle.size()) + kBlockTrailerSize);
             prefetch_cnt++;
         }
         delete prefetch_iiter;
