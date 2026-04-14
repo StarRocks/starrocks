@@ -1,0 +1,43 @@
+name: AI SR SKILLS
+
+on:
+  pull_request_target:
+    branches:
+      - branch-ci-test-qa
+    types:
+      - opened
+      - reopened
+
+concurrency:
+  group: AI-SR-SKILLS-${{ github.event.number }}
+  cancel-in-progress: true
+
+permissions:
+  pull-requests: write
+
+jobs:
+  assign-reviewer:
+    runs-on: [self-hosted, normal]
+    continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+    if: >
+      github.event.action == 'opened' &&
+      !startsWith(github.head_ref, 'mergify/')
+    steps:
+      - name: Assign PR Reviewer
+        run: |
+          echo "=== DEBUG ==="
+          echo "PR: ${{ github.event.number }}"
+          echo "ACTION: ${{ github.event.action }}"
+          echo "BASE_REF: ${{ github.base_ref }}"
+          echo "HEAD_REF: ${{ github.head_ref }}"
+          echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
+          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+          echo "=== RUN ==="
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" || true
