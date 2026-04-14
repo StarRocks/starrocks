@@ -15,6 +15,7 @@
 #include "runtime/rejected_record_writer.h"
 
 #include <filesystem>
+#include <fstream>
 
 #include "agent/master_info.h"
 #include "base/uid_util.h"
@@ -146,42 +147,36 @@ RejectedRecordWriter::RejectedRecordWriter(RuntimeState* state) : _state(state) 
     DCHECK(state != nullptr);
 }
 
-RejectedRecordWriter::~RejectedRecordWriter() {
-    flush();
-    std::lock_guard<std::mutex> lock(_file_lock);
-    if (_file && _file->is_open()) {
-        _file->close();
-    }
-}
+RejectedRecordWriter::~RejectedRecordWriter() = default;
 
 void RejectedRecordWriter::flush() {
-    std::lock_guard<std::mutex> lock(_file_lock);
-    if (_file && _file->is_open()) {
-        _file->flush();
-    }
+    // No-op: every append_serialized call now open-writes-closes the
+    // backing file, so nothing is held in the writer's own buffers.
+    // Kept for API compatibility with callers that still call flush()
+    // defensively at fragment teardown.
 }
 
-bool RejectedRecordWriter::ensure_file_open() {
+const std::string& RejectedRecordWriter::resolve_file_path() {
     // Caller holds _file_lock.
-    if (_file && _file->is_open()) {
-        return true;
+    if (_path_resolved) {
+        return _file_path;
     }
-    if (_open_failed) {
-        return false;
+    if (_path_resolve_failed) {
+        return _file_path; // empty
     }
 
     DCHECK(_state != nullptr);
     ExecEnv* env = _state->exec_env();
     if (env == nullptr || env->load_path_mgr() == nullptr) {
-        _open_failed = true;
-        return false;
+        _path_resolve_failed = true;
+        return _file_path;
     }
 
     // Reuse the rejected-record directory layout (store-path-relative so it
-    // lives on the same mount as the legacy reject file and is cleaned up
-    // by the same retention policy). We append `.jsonl` so the Phase 3 sync
-    // daemon can scan only the new JSON Lines files and coexist with the
-    // legacy tab-delimited ones until all call sites migrate.
+    // lives on the same mount that the legacy retention policy already
+    // sweeps). `.jsonl` suffix lets the sync daemon filter files picked up
+    // by this writer from anything else that might coexist under the
+    // rejected-record root.
     std::string base = env->load_path_mgr()->get_load_rejected_record_absolute_path(
             /*rejected_record_dir=*/"", _state->db(), _state->load_label(), _state->load_job_id(),
             _state->fragment_instance_id());
@@ -192,19 +187,13 @@ bool RejectedRecordWriter::ensure_file_open() {
     if (ec) {
         LOG(WARNING) << "RejectedRecordWriter: failed to create parent directory for " << _file_path << ": "
                      << ec.message();
-        _open_failed = true;
-        return false;
+        _file_path.clear();
+        _path_resolve_failed = true;
+        return _file_path;
     }
-
-    _file = std::make_unique<std::ofstream>(_file_path, std::ios::out | std::ios::app);
-    if (!_file->is_open()) {
-        LOG(WARNING) << "RejectedRecordWriter: failed to open " << _file_path;
-        _open_failed = true;
-        _file.reset();
-        return false;
-    }
-    VLOG(1) << "RejectedRecordWriter opened " << _file_path;
-    return true;
+    _path_resolved = true;
+    VLOG(1) << "RejectedRecordWriter path resolved " << _file_path;
+    return _file_path;
 }
 
 void RejectedRecordWriter::append_from_chunk(const Chunk& chunk, size_t row_idx,
@@ -307,11 +296,27 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     doc.Accept(writer);
 
     std::lock_guard<std::mutex> lock(_file_lock);
-    if (!ensure_file_open()) {
+    const std::string& path = resolve_file_path();
+    if (path.empty()) {
         return;
     }
-    _file->write(buf.GetString(), buf.GetSize());
-    _file->put('\n');
+    // Append mode + explicit close-at-end. The sync daemon's processing
+    // loop atomically renames files it claims for a flush, so a concurrent
+    // rename between this ofstream's open() and close() is fine: we write
+    // to whatever inode the name now points at (new file the writer
+    // implicitly created for the post-rename path), and the daemon has
+    // already captured the previous inode under its claimed name. In
+    // the other direction, the daemon reads and removes only files
+    // suffixed with .syncing.<uuid>, never the live .jsonl path the
+    // writer touches here.
+    std::ofstream out(path, std::ios::out | std::ios::app);
+    if (!out.is_open()) {
+        LOG(WARNING) << "RejectedRecordWriter: failed to open " << path << " for append";
+        return;
+    }
+    out.write(buf.GetString(), buf.GetSize());
+    out.put('\n');
+    out.close();
     _records_written.fetch_add(1, std::memory_order_relaxed);
 
     // Single counter-increment site for the entire feature. All paths

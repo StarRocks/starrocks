@@ -37,6 +37,12 @@ namespace {
 
 constexpr const char* kJsonlExtension = ".jsonl";
 constexpr const char* kRejectedRecordDir = "/rejected_record";
+// Files the daemon has claimed for a flush get this suffix appended so
+// concurrent writers never see them as the active `.jsonl` path.
+// Making it per-tick via a UUID prevents a crashed daemon from leaving a
+// `.syncing` file that the next daemon boot might interpret as "already
+// being processed" and skip forever.
+constexpr const char* kSyncingSuffix = ".syncing";
 
 // Best-effort delete; logs on failure but never throws. Missing files are
 // not an error (another tick may have raced us).
@@ -48,9 +54,23 @@ void remove_file(const std::string& path) {
     }
 }
 
-// Recursively walk `root` and collect paths ending in `.jsonl`. Symlinks
-// are not followed so a malicious / misconfigured link cannot pull the
-// daemon out of the store path.
+// Does this path name a live `.jsonl` writer file OR a dangling
+// `.jsonl.syncing.<id>` left over by a crashed previous tick?
+bool is_claimable(const std::filesystem::path& p) {
+    if (p.extension() == kJsonlExtension) {
+        return true;
+    }
+    // Match `foo.jsonl.syncing.<anything>`: the ".jsonl" needs to still
+    // be in the filename (as an interior extension) before ".syncing.*".
+    // extension() only returns the last component, so walk once.
+    const std::string name = p.filename().string();
+    auto pos = name.find(".jsonl.syncing");
+    return pos != std::string::npos;
+}
+
+// Recursively walk `root` and collect `.jsonl` / `.jsonl.syncing.*`
+// paths. Symlinks are not followed so a malicious / misconfigured link
+// cannot pull the daemon out of the store path.
 void collect_jsonl(const std::string& root, std::vector<std::string>* out) {
     std::error_code ec;
     if (!std::filesystem::exists(root, ec) || ec) {
@@ -71,9 +91,8 @@ void collect_jsonl(const std::string& root, std::vector<std::string>* out) {
         if (!it->is_regular_file(ec) || ec) {
             continue;
         }
-        const auto& p = it->path();
-        if (p.extension() == kJsonlExtension) {
-            out->push_back(p.string());
+        if (is_claimable(it->path())) {
+            out->push_back(it->path().string());
         }
     }
 }
@@ -146,6 +165,12 @@ void RejectedRecordSyncDaemon::tick_loop() {
 }
 
 void RejectedRecordSyncDaemon::run_one_tick() {
+    // scan_once now atomically renames `.jsonl` files to
+    // `.jsonl.syncing.<tick-uuid>`. Any writer still holding the
+    // `.jsonl` path will implicitly create a fresh inode on its next
+    // open-append-close cycle (the writer no longer holds a long-lived
+    // fd -- see Fix 3.3 in the feature branch). That fresh inode will
+    // be picked up by a subsequent tick rather than racing this one.
     std::vector<std::string> files = scan_once();
     _files_scanned.fetch_add(static_cast<int64_t>(files.size()), std::memory_order_relaxed);
     if (files.empty()) {
@@ -188,9 +213,42 @@ std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
     if (_env == nullptr) {
         return out;
     }
+    // Per-tick suffix so a crash mid-tick leaves recoverable files --
+    // the next boot sees a dangling `.syncing.<old-tick>` file and
+    // re-includes it (adopt_stale_syncing below).
+    const std::string tick_suffix =
+            std::string(kSyncingSuffix) + "." + std::to_string(static_cast<uint64_t>(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            std::chrono::steady_clock::now().time_since_epoch())
+                            .count()));
+
+    std::vector<std::string> candidates;
     for (const auto& sp : _env->store_paths()) {
         std::string rejected_root = sp.path + kRejectedRecordDir;
-        collect_jsonl(rejected_root, &out);
+        // Pick up both live `.jsonl` (rename them into this tick) and
+        // orphaned `.syncing.*` from previous crashed / killed ticks
+        // (re-claim them by rename into this tick's suffix, so we don't
+        // stomp on a genuinely-in-flight previous tick -- in normal
+        // operation ticks don't overlap because the daemon is single-
+        // threaded, but a fresh BE boot after a crash will find
+        // leftovers here).
+        collect_jsonl(rejected_root, &candidates);
+    }
+
+    for (const auto& src : candidates) {
+        std::string dst = src + tick_suffix;
+        std::error_code ec;
+        std::filesystem::rename(src, dst, ec);
+        if (ec) {
+            // ENOENT = another tick already claimed it; any other error
+            // is transient and we'll retry on the next tick.
+            if (ec != std::errc::no_such_file_or_directory) {
+                LOG(WARNING) << "RejectedRecordSyncDaemon: rename " << src << " -> " << dst
+                             << " failed: " << ec.message();
+            }
+            continue;
+        }
+        out.push_back(std::move(dst));
     }
     return out;
 }

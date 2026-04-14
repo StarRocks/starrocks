@@ -15,8 +15,6 @@
 #pragma once
 
 #include <atomic>
-#include <fstream>
-#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -136,13 +134,25 @@ public:
     static std::string build_json_from_raw(const std::string& raw_text);
 
 private:
-    // Open the backing file on first use. Returns false on any failure;
-    // the writer then silently degrades to a no-op so the load succeeds.
-    bool ensure_file_open();
+    // Resolve the backing JSON Lines path for the current fragment.
+    // Creates the parent directory tree on first call. Returns an empty
+    // string on any failure; callers treat that as a best-effort no-op
+    // so a single load never aborts because bad-row capture couldn't
+    // be persisted.
+    const std::string& resolve_file_path();
 
     // Serialize a single JSON Lines record and append it to the file. All
     // three public entry methods converge here after building the
     // `raw_record` JSON object.
+    //
+    // Open-write-close each call so the sync daemon can atomically
+    // rename the file out from under us without creating fd-vs-path
+    // race holes. At the rejection rates we ever expect (one-in-many-
+    // thousand), the syscall overhead is not measurable against the
+    // cost of the rejection itself; in return we get crash-safe
+    // semantics (a record that makes it past append_serialized is
+    // guaranteed to be durable in the filesystem, not sitting in our
+    // own stream buffer).
     void append_serialized(const std::string& raw_record_json, const std::string& error_code,
                            const std::string& error_message, const std::string& error_column,
                            const std::string& source_info);
@@ -150,8 +160,8 @@ private:
     RuntimeState* _state;
     std::mutex _file_lock;
     std::string _file_path;
-    std::unique_ptr<std::ofstream> _file;
-    bool _open_failed = false;
+    bool _path_resolved = false;
+    bool _path_resolve_failed = false;
     std::atomic<int64_t> _records_written{0};
 };
 
