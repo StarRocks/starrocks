@@ -1,0 +1,148 @@
+-- name: test_iceberg_update_partitioned
+create external catalog iceberg_upd_part_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+-- result:
+-- !result
+create database iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_update_partitioned/${uuid0}/iceberg_update_db_${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders (
+    id INT,
+    product STRING,
+    amount DECIMAL(10,2),
+    status STRING,
+    order_date DATE
+) PARTITION BY (order_date) PROPERTIES ("format-version" = "2");
+-- result:
+-- !result
+INSERT INTO iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders VALUES
+    (1, 'Widget', 100.00, 'PENDING', '2024-01-01'),
+    (2, 'Gadget', 200.00, 'PENDING', '2024-01-01'),
+    (3, 'Widget', 150.00, 'SHIPPED', '2024-01-02'),
+    (4, 'Gadget', 300.00, 'PENDING', '2024-01-02'),
+    (5, 'Widget', 250.00, 'PENDING', '2024-01-03');
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders ORDER BY id;
+-- result:
+1	Widget	100.00	PENDING	2024-01-01
+2	Gadget	200.00	PENDING	2024-01-01
+3	Widget	150.00	SHIPPED	2024-01-02
+4	Gadget	300.00	PENDING	2024-01-02
+5	Widget	250.00	PENDING	2024-01-03
+-- !result
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET status = 'CANCELLED' WHERE order_date = '2024-01-01' AND status = 'PENDING';
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders ORDER BY id;
+-- result:
+1	Widget	100.00	CANCELLED	2024-01-01
+2	Gadget	200.00	CANCELLED	2024-01-01
+3	Widget	150.00	SHIPPED	2024-01-02
+4	Gadget	300.00	PENDING	2024-01-02
+5	Widget	250.00	PENDING	2024-01-03
+-- !result
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET status = 'DELIVERED' WHERE product = 'Widget';
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders ORDER BY id;
+-- result:
+1	Widget	100.00	DELIVERED	2024-01-01
+2	Gadget	200.00	CANCELLED	2024-01-01
+3	Widget	150.00	DELIVERED	2024-01-02
+4	Gadget	300.00	PENDING	2024-01-02
+5	Widget	250.00	DELIVERED	2024-01-03
+-- !result
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET amount = amount * 1.1 WHERE order_date = '2024-01-02';
+-- result:
+-- !result
+SELECT id, amount FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders WHERE order_date = '2024-01-02' ORDER BY id;
+-- result:
+3	165.00
+4	330.00
+-- !result
+SELECT id, amount FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders WHERE order_date = '2024-01-01' ORDER BY id;
+-- result:
+1	100.00
+2	200.00
+-- !result
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET order_date = '2099-01-01' WHERE id = 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Update for Iceberg table do not support updating partition column: order_date.')
+-- !result
+create table iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events (
+    id INT,
+    message STRING,
+    level STRING,
+    region STRING
+) PARTITION BY (region) PROPERTIES ("format-version" = "2");
+-- result:
+-- !result
+INSERT INTO iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events VALUES
+    (1, 'Login failed', 'ERROR', 'US'),
+    (2, 'Disk full', 'WARN', 'US'),
+    (3, 'Login OK', 'INFO', 'EU'),
+    (4, 'Timeout', 'ERROR', 'EU'),
+    (5, 'OOM', 'ERROR', 'APAC');
+-- result:
+-- !result
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events SET level = 'RESOLVED' WHERE region = 'US' AND level = 'ERROR';
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events ORDER BY id;
+-- result:
+1	Login failed	RESOLVED	US
+2	Disk full	WARN	US
+3	Login OK	INFO	EU
+4	Timeout	ERROR	EU
+5	OOM	ERROR	APAC
+-- !result
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events SET message = concat(message, ' [acked]') WHERE level = 'ERROR';
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events WHERE level = 'ERROR' ORDER BY id;
+-- result:
+4	Timeout [acked]	ERROR	EU
+5	OOM [acked]	ERROR	APAC
+-- !result
+UPDATE iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders SET status = 'ARCHIVED' WHERE order_date = '2024-01-01';
+-- result:
+-- !result
+INSERT INTO iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders VALUES
+    (6, 'Gizmo', 500.00, 'PENDING', '2024-01-01');
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders WHERE order_date = '2024-01-01' ORDER BY id;
+-- result:
+1	Widget	100.00	ARCHIVED	2024-01-01
+2	Gadget	200.00	ARCHIVED	2024-01-01
+6	Gizmo	500.00	PENDING	2024-01-01
+-- !result
+drop table iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.events force;
+-- result:
+-- !result
+drop table iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0}.orders force;
+-- result:
+-- !result
+drop database iceberg_upd_part_${uuid0}.iceberg_update_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_upd_part_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_update_partitioned/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

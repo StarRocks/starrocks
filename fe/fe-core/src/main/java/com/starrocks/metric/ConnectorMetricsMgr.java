@@ -50,6 +50,13 @@ public class ConnectorMetricsMgr {
         final ConcurrentHashMap<String, LongCounterMetric> deleteRows = new ConcurrentHashMap<>();
         final ConcurrentHashMap<String, LongCounterMetric> deleteBytes = new ConcurrentHashMap<>();
 
+        // Update metrics (UPDATE/MERGE with file_type label: data, position_delete)
+        final ConcurrentHashMap<String, LongCounterMetric> updateTotal = new ConcurrentHashMap<>();
+        final ConcurrentHashMap<String, LongCounterMetric> updateDurationMs = new ConcurrentHashMap<>();
+        final ConcurrentHashMap<String, LongCounterMetric> updateRows = new ConcurrentHashMap<>();
+        final ConcurrentHashMap<String, LongCounterMetric> updateBytes = new ConcurrentHashMap<>();
+        final ConcurrentHashMap<String, LongCounterMetric> updateFiles = new ConcurrentHashMap<>();
+
         // Compaction metrics
         final ConcurrentHashMap<String, LongCounterMetric> compactionTotal = new ConcurrentHashMap<>();
         final ConcurrentHashMap<String, LongCounterMetric> compactionDurationMs = new ConcurrentHashMap<>();
@@ -75,6 +82,9 @@ public class ConnectorMetricsMgr {
 
     public static final String DELETE_TYPE_POSITION = "position";
     public static final String DELETE_TYPE_METADATA = "metadata";
+
+    public static final String FILE_TYPE_DATA = "data";
+    public static final String FILE_TYPE_POSITION_DELETE = "position_delete";
 
     public static final String COMPACTION_TYPE_MANUAL = "manual";
     public static final String COMPACTION_TYPE_AUTO = "auto";
@@ -238,6 +248,83 @@ public class ConnectorMetricsMgr {
             MetricRepo.addMetric(metric);
             return metric;
         }).increase(bytes);
+    }
+
+    // ======================= Update Metrics =======================
+
+    public static void increaseUpdateTotal(String connectorType, String status, String reason) {
+        String normalizedStatus = normalizeStatus(status);
+        String normalizedReason = normalizeReason(reason);
+
+        ConnectorMetrics m = getOrCreate(connectorType);
+        String key = normalizedStatus + "|" + normalizedReason;
+        m.updateTotal.computeIfAbsent(key, k -> {
+            LongCounterMetric metric = new LongCounterMetric(connectorType + "_update_total",
+                    Metric.MetricUnit.REQUESTS,
+                    "total " + connectorType + " update tasks by status and reason");
+            metric.addLabel(new MetricLabel("status", normalizedStatus));
+            metric.addLabel(new MetricLabel("reason", normalizedReason));
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(1L);
+    }
+
+    public static void increaseUpdateTotalSuccess(String connectorType) {
+        increaseUpdateTotal(connectorType, STATUS_SUCCESS, REASON_NONE);
+    }
+
+    public static void increaseUpdateTotalFail(String connectorType, Throwable throwable) {
+        increaseUpdateTotal(connectorType, STATUS_FAILED, classifyFailReason(throwable));
+    }
+
+    public static void increaseUpdateTotalFail(String connectorType, String errorMessage) {
+        increaseUpdateTotal(connectorType, STATUS_FAILED, classifyFailReason(errorMessage));
+    }
+
+    public static void increaseUpdateDurationMs(String connectorType, long durationMs) {
+        ConnectorMetrics m = getOrCreate(connectorType);
+        m.updateDurationMs.computeIfAbsent("default", k -> {
+            LongCounterMetric metric = new LongCounterMetric(connectorType + "_update_duration_ms_total",
+                    Metric.MetricUnit.MILLISECONDS,
+                    "total duration in milliseconds of " + connectorType + " update operations");
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(durationMs);
+    }
+
+    public static void increaseUpdateRows(String connectorType, long rows) {
+        ConnectorMetrics m = getOrCreate(connectorType);
+        m.updateRows.computeIfAbsent("default", k -> {
+            LongCounterMetric metric = new LongCounterMetric(connectorType + "_update_rows",
+                    Metric.MetricUnit.ROWS,
+                    "total rows affected by " + connectorType + " update operations");
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(rows);
+    }
+
+    public static void increaseUpdateBytes(String connectorType, long bytes, String fileType) {
+        ConnectorMetrics m = getOrCreate(connectorType);
+        m.updateBytes.computeIfAbsent(fileType, k -> {
+            LongCounterMetric metric = new LongCounterMetric(connectorType + "_update_bytes",
+                    Metric.MetricUnit.BYTES,
+                    "total bytes written by " + connectorType + " update operations by file type");
+            metric.addLabel(new MetricLabel("file_type", fileType));
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(bytes);
+    }
+
+    public static void increaseUpdateFiles(String connectorType, long files, String fileType) {
+        ConnectorMetrics m = getOrCreate(connectorType);
+        m.updateFiles.computeIfAbsent(fileType, k -> {
+            LongCounterMetric metric = new LongCounterMetric(connectorType + "_update_files",
+                    Metric.MetricUnit.NOUNIT,
+                    "total files written by " + connectorType + " update operations by file type");
+            metric.addLabel(new MetricLabel("file_type", fileType));
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(files);
     }
 
     // ======================= Compaction Metrics =======================

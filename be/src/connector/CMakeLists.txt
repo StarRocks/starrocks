@@ -38,4 +38,5 @@ ADD_BE_LIB(Connector
         deletion_vector/deletion_vector.cpp
         deletion_vector/deletion_bitmap.cpp
         iceberg_delete_sink.cpp
+        iceberg_row_delta_sink.cpp
 )

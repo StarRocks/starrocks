@@ -1,0 +1,210 @@
+-- name: test_iceberg_update_unpartitioned
+create external catalog iceberg_upd_unp_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+-- result:
+-- !result
+create database iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_update_unpartitioned/${uuid0}/iceberg_update_db_${uuid0}"
+);
+-- result:
+-- !result
+create table iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update (
+    id INT,
+    name STRING,
+    age INT,
+    salary BIGINT
+) PROPERTIES ("format-version" = "2");
+-- result:
+-- !result
+INSERT INTO iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update VALUES
+    (1, 'Alice', 25, 50000),
+    (2, 'Bob', 30, 60000),
+    (3, 'Charlie', 35, 70000),
+    (4, 'David', 28, 55000),
+    (5, 'Eve', 32, 65000);
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+3	Charlie	35	70000
+4	David	28	55000
+5	Eve	32	65000
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'UPDATED' WHERE id = 3;
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+3	UPDATED	35	70000
+4	David	28	55000
+5	Eve	32	65000
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = salary + 10000 WHERE age > 30;
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob	30	60000
+3	UPDATED	35	80000
+4	David	28	55000
+5	Eve	32	75000
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'Bob_v2', age = 31 WHERE id = 2;
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob_v2	31	60000
+3	UPDATED	35	80000
+4	David	28	55000
+5	Eve	32	75000
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = 99999 WHERE age >= 30 AND salary < 70000;
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+-- result:
+1	Alice	25	50000
+2	Bob_v2	31	99999
+3	UPDATED	35	80000
+4	David	28	55000
+5	Eve	32	75000
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'BATCH_UPDATED' WHERE id IN (1, 4);
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+-- result:
+1	BATCH_UPDATED	25	50000
+2	Bob_v2	31	99999
+3	UPDATED	35	80000
+4	BATCH_UPDATED	28	55000
+5	Eve	32	75000
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'GHOST' WHERE id = 999;
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+-- result:
+1	BATCH_UPDATED	25	50000
+2	Bob_v2	31	99999
+3	UPDATED	35	80000
+4	BATCH_UPDATED	28	55000
+5	Eve	32	75000
+-- !result
+INSERT INTO iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update VALUES
+    (6, NULL, 40, 80000),
+    (7, 'Grace', NULL, 58000);
+-- result:
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'WAS_NULL' WHERE name IS NULL;
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id IN (6, 7) ORDER BY id;
+-- result:
+6	WAS_NULL	40	80000
+7	Grace	None	58000
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET age = 0 WHERE age IS NULL;
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id IN (6, 7) ORDER BY id;
+-- result:
+6	WAS_NULL	40	80000
+7	Grace	0	58000
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = 100000 WHERE id = 1;
+-- result:
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = 200000 WHERE id = 1;
+-- result:
+-- !result
+SELECT salary FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id = 1;
+-- result:
+200000
+-- !result
+SELECT count(*) > 1 FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update$snapshots;
+-- result:
+1
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'ALL';
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Update must specify where clause to prevent full table update.')
+-- !result
+create table iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_v1 (
+    id INT, name STRING
+) PROPERTIES ("format-version" = "1");
+-- result:
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_v1 SET name = 'X' WHERE id = 1;
+-- result:
+[REGEX]E: \(1064.*UPDATE is only supported for Iceberg V2 tables.*
+-- !result
+drop table iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_v1 force;
+-- result:
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET nonexistent_col = 1 WHERE id = 1;
+-- result:
+[REGEX]E: \(1064.*do not existing column.*
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET _file = 'fake.parquet' WHERE id = 1;
+-- result:
+[REGEX]E: \(1064.*Updating metadata column.*
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = DEFAULT WHERE id = 3;
+-- result:
+[REGEX]E: \(1064.*DEFAULT value is not supported for Iceberg V2.*
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = 12345 WHERE id = 1;
+-- result:
+-- !result
+SELECT id, salary FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id = 1;
+-- result:
+1	12345
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'SUBQUERY_HIT'
+WHERE id IN (SELECT id FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE age > 35);
+-- result:
+-- !result
+SELECT id, name FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE name = 'SUBQUERY_HIT' ORDER BY id;
+-- result:
+6	SUBQUERY_HIT
+-- !result
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'TO_DELETE' WHERE id = 2;
+-- result:
+-- !result
+DELETE FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE name = 'TO_DELETE';
+-- result:
+-- !result
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id = 2;
+-- result:
+-- !result
+drop table iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update force;
+-- result:
+-- !result
+drop database iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_upd_unp_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_update_unpartitioned/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

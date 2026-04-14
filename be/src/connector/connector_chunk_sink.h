@@ -28,6 +28,7 @@
 namespace starrocks::connector {
 
 class AsyncFlushStreamPoller;
+class SinkMemoryManager;
 class SinkOperatorMemoryManager;
 
 using PartitionKey = std::pair<std::string, std::vector<int8_t>>;
@@ -45,7 +46,7 @@ public:
 
     virtual ~ConnectorChunkSink() = default;
 
-    Status init();
+    virtual Status init();
 
     virtual Status add(const ChunkPtr& chunk);
 
@@ -93,6 +94,11 @@ protected:
 
 struct ConnectorChunkSinkContext {
     virtual ~ConnectorChunkSinkContext() = default;
+
+    // Called by ConnectorSinkOperatorFactory after SinkMemoryManager is created.
+    // Composite sinks (e.g. IcebergRowDeltaSink) override this to receive the
+    // manager and create per-sub-sink child managers during initialization.
+    virtual void set_sink_mem_mgr(SinkMemoryManager* /*mgr*/) {}
 };
 
 class ConnectorChunkSinkProvider {
