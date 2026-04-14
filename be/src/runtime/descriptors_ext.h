@@ -312,4 +312,19 @@ private:
     std::string _jdbc_passwd;
 };
 
+class ADBCTableDescriptor : public TableDescriptor {
+public:
+    ADBCTableDescriptor(const TTableDescriptor& tdesc);
+    std::string debug_string() const override;
+
+    const std::string& adbc_driver_url() const { return _driver_url; }
+    const std::string& adbc_entrypoint() const { return _entrypoint; }
+    const std::map<std::string, std::string>& adbc_options() const { return _adbc_options; }
+
+private:
+    std::string _driver_url;
+    std::string _entrypoint;
+    std::map<std::string, std::string> _adbc_options;
+};
+
 } // namespace starrocks

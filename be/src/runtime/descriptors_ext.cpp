@@ -469,6 +469,24 @@ std::string JDBCTableDescriptor::debug_string() const {
     return out.str();
 }
 
+ADBCTableDescriptor::ADBCTableDescriptor(const TTableDescriptor& tdesc)
+        : TableDescriptor(tdesc) {
+    if (tdesc.__isset.adbcTable) {
+        const auto& t = tdesc.adbcTable;
+        if (t.__isset.driver_url) _driver_url = t.driver_url;
+        if (t.__isset.entrypoint) _entrypoint = t.entrypoint;
+        if (t.__isset.adbc_options) _adbc_options = t.adbc_options;
+    }
+}
+
+std::string ADBCTableDescriptor::debug_string() const {
+    std::stringstream ss;
+    ss << "ADBCTableDescriptor{driver_url=" << _driver_url
+       << " entrypoint=" << _entrypoint
+       << " options_count=" << _adbc_options.size() << "}";
+    return ss.str();
+}
+
 Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl,
                              DescriptorTbl** tbl, int32_t chunk_size) {
     // Only use fragment MemPool when pool is the fragment-level ObjectPool.
@@ -541,6 +559,9 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
             break;
         case TTableType::JDBC_TABLE:
             desc = ALLOC_DESC(JDBCTableDescriptor, tdesc);
+            break;
+        case TTableType::ADBC_TABLE:
+            desc = ALLOC_DESC(ADBCTableDescriptor, tdesc);
             break;
         case TTableType::ODPS_TABLE:
             desc = ALLOC_DESC(OdpsTableDescriptor, tdesc, pool);
