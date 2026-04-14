@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <unordered_map>
 
@@ -177,6 +178,12 @@ public:
     // Release `segment_id`-th segment file's state.
     void release_segment(uint32_t segment_id);
 
+    // Release partial update state (write_columns) for a segment, but keep upserts for Phase 2.
+    void release_segment_partial_state(uint32_t segment_id);
+
+    // Pre-initialize shared state so that load_segment can be called in parallel for different segments.
+    Status prepare_for_parallel(const RowsetUpdateStateParams& params);
+
     // Load `del_id`-th delete file's state.
     Status load_delete(uint32_t del_id, const RowsetUpdateStateParams& params);
 
@@ -186,7 +193,7 @@ public:
     const SegmentPKIteratorPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
     const MutableColumnPtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
 
-    std::size_t memory_usage() const { return _memory_usage; }
+    std::size_t memory_usage() const { return _memory_usage.load(std::memory_order_relaxed); }
 
     std::string to_string() const;
 
@@ -229,7 +236,7 @@ private:
     std::vector<SegmentPKIteratorPtr> _upserts;
     // one for each delete file
     MutableColumns _deletes;
-    size_t _memory_usage = 0;
+    std::atomic<size_t> _memory_usage{0};
     int64_t _tablet_id = 0;
     // Because we can load partial segments when preload, so need vector to track their version.
     std::vector<int64_t> _base_versions;

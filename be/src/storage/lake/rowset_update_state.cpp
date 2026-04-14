@@ -852,6 +852,50 @@ void RowsetUpdateState::release_segment(uint32_t segment_id) {
     _auto_increment_delete_pks[segment_id].reset();
 }
 
+void RowsetUpdateState::release_segment_partial_state(uint32_t segment_id) {
+    // Release write_columns and auto-increment state, but keep _upserts for Phase 2 (_do_update).
+    _memory_usage -= _partial_update_states[segment_id].memory_usage();
+    _partial_update_states[segment_id].reset();
+    _memory_usage -= _auto_increment_partial_update_states[segment_id].memory_usage();
+    _auto_increment_partial_update_states[segment_id].reset();
+    _memory_usage -=
+            _auto_increment_delete_pks[segment_id] ? _auto_increment_delete_pks[segment_id]->memory_usage() : 0;
+    _auto_increment_delete_pks[segment_id].reset();
+}
+
+Status RowsetUpdateState::prepare_for_parallel(const RowsetUpdateStateParams& params) {
+    // Pre-initialize all shared state so that load_segment can be called in parallel.
+    // After this, load_segment's guard checks will skip initialization and go directly
+    // to per-segment logic.
+    if (_rowset_ptr == nullptr) {
+        _rowset_meta_ptr = std::make_unique<const RowsetMetadata>(params.op_write.rowset());
+        _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
+                                               -1 /*unused*/, params.tablet_schema);
+    }
+    TRY_CATCH_BAD_ALLOC({
+        _upserts.resize(_rowset_ptr->num_segments());
+        _base_versions.resize(_rowset_ptr->num_segments());
+        _partial_update_states.resize(_rowset_ptr->num_segments());
+        _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
+        _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
+    });
+    if (_segment_iters.empty()) {
+        vector<uint32_t> pk_columns;
+        pk_columns.reserve(params.tablet_schema->num_key_columns());
+        for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
+            pk_columns.push_back((uint32_t)i);
+        }
+        Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
+    }
+    if (params.op_write.has_txn_meta()) {
+        for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {
+            _column_to_expr_value.insert({entry.first, entry.second});
+        }
+    }
+    return Status::OK();
+}
+
 Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStateParams& params) {
     CHECK_MEM_LIMIT("RowsetUpdateState::load_delete");
     // always one file for now.
