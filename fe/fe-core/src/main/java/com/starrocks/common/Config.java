@@ -491,6 +491,14 @@ public class Config extends ConfigBase {
     public static int loads_history_retained_days = 30;
 
     /**
+     * Number of daily partitions to keep in the {@code _statistics_.rejected_records}
+     * system table. Older partitions are auto-dropped by {@code partition_live_number}.
+     * The TableKeeper daemon reconciles the table's property with this value on each tick.
+     */
+    @ConfField(mutable = true)
+    public static int rejected_records_retained_days = 7;
+
+    /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
     @ConfField
