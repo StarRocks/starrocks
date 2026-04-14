@@ -43,22 +43,19 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
     private MVEpoch epoch;
 
     private transient AtomicReference<JobState> state = new AtomicReference<>(JobState.INIT);
-    private transient MaterializedView view;
 
     MVMaintenanceJob(MaterializedView view) {
         this.jobId = view.getId();
         this.dbId = view.getDbId();
         this.viewId = view.getId();
-        this.view = view;
         this.epoch = new MVEpoch(view.getMvId());
         this.serializedState = JobState.INIT;
         setState(JobState.INIT);
     }
 
-    public void restore() {
+    void restore() {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(dbId, viewId);
         Preconditions.checkState(table != null && table.isMaterializedView());
-        this.view = (MaterializedView) table;
         this.serializedState = JobState.INIT;
         setState(serializedState);
     }
@@ -69,10 +66,6 @@ public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostP
 
     public JobState getState() {
         return state.get();
-    }
-
-    public MaterializedView getView() {
-        return view;
     }
 
     public long getJobId() {

@@ -222,4 +222,31 @@ public class MaterializedViewMgrEditLogTest {
 
         Assertions.assertEquals(MVEpoch.EpochState.COMMITTED, followerMvMgr.getJob(mvId).getEpoch().getState());
     }
+
+    @Test
+    public void testLoadLegacyJobWithMissingTargetMvSkipsJobAndEpochReplay() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
+        db.registerTableUnlocked(mv);
+
+        MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
+        MvId mvId = new MvId(DB_ID, MV_ID);
+        mvMgr.replay(createLegacyJob(mv));
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        mvMgr.save(image.getImageWriter());
+
+        db.dropTable(mv.getName());
+
+        MaterializedViewMgr restoredMvMgr = new MaterializedViewMgr();
+        restoredMvMgr.load(image.getMetaBlockReader());
+
+        Assertions.assertNull(restoredMvMgr.getJob(mvId), "Missing target MV should skip legacy job restore");
+
+        MVEpoch epoch = new MVEpoch(mvId);
+        epoch.setState(MVEpoch.EpochState.COMMITTED);
+        restoredMvMgr.replayEpoch(epoch);
+
+        Assertions.assertNull(restoredMvMgr.getJob(mvId), "Epoch replay should remain a no-op for skipped legacy jobs");
+    }
 }
