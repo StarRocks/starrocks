@@ -313,11 +313,11 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Check if parallel row-mode partial update is applicable.
     int32_t condition_column = _get_condition_column(op_write, *tablet_schema);
     const bool has_condition_update = (condition_column >= 0);
-    const bool is_row_mode_partial_update = op_write.has_txn_meta() && op_write.rewrite_segments_size() > 0 &&
-                                            op_write.rowset().num_rows() > 0;
-    const bool use_parallel_partial_update =
-            config::enable_pk_index_parallel_execution && is_row_mode_partial_update && !has_condition_update &&
-            local_segments > 1 && ExecEnv::GetInstance()->lake_partial_update_thread_pool() != nullptr;
+    const bool is_row_mode_partial_update =
+            op_write.has_txn_meta() && op_write.rewrite_segments_size() > 0 && op_write.rowset().num_rows() > 0;
+    const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution && is_row_mode_partial_update &&
+                                             !has_condition_update && local_segments > 1 &&
+                                             ExecEnv::GetInstance()->lake_partial_update_thread_pool() != nullptr;
 
     if (use_parallel_partial_update) {
         // ==================== Parallel row-mode partial update ====================
@@ -336,8 +336,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
         for (uint32_t i = 0; i < local_segments; i++) {
             auto func = [&, i]() {
-                auto st = state.load_segment(i, params, base_version, true /*resolve conflict*/,
-                                             false /*no need lock*/);
+                auto st =
+                        state.load_segment(i, params, base_version, true /*resolve conflict*/, false /*no need lock*/);
                 if (st.ok()) {
                     st = state.rewrite_segment(i, txn_id, params, &per_seg_replace[i], &per_seg_orphans[i]);
                 }
@@ -412,8 +412,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 auto itr = new_deletes.find(rowset_id + global_segment_id);
                 if (itr != new_deletes.end() && itr->second.size() > 0) {
                     dv_generated_during_merge_update = std::make_shared<DelVector>();
-                    dv_generated_during_merge_update->init(metadata->version(), itr->second.data(),
-                                                           itr->second.size());
+                    dv_generated_during_merge_update->init(metadata->version(), itr->second.data(), itr->second.size());
                     builder->append_delvec(dv_generated_during_merge_update, rowset_id + global_segment_id);
                 }
             } else {
@@ -440,10 +439,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 bool succ = true;
                 ASSIGN_OR_RETURN(succ, async_compact_cb->wait_for(1000 /* ms timeout */));
                 if (succ) {
-                    LOG(INFO) << fmt::format(
-                            "early sst compact finish. tablet {}, txn {}, fileset remain {}, trace {}", tablet->id(),
-                            txn_id, index.current_fileset_index() - current_fileset_start_idx,
-                            async_compact_cb->trace()->MetricsAsJSON());
+                    LOG(INFO) << fmt::format("early sst compact finish. tablet {}, txn {}, fileset remain {}, trace {}",
+                                             tablet->id(), txn_id,
+                                             index.current_fileset_index() - current_fileset_start_idx,
+                                             async_compact_cb->trace()->MetricsAsJSON());
                     async_compact_cb = nullptr;
                 }
             }

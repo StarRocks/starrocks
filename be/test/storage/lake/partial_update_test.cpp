@@ -4013,9 +4013,8 @@ TEST_P(LakePartialUpdateTest, test_parallel_row_mode_partial_update_multi_segmen
 
     // Step 3: Verify correctness - c1 should be updated (c0 * 7),
     // c2 should remain unchanged (c0 * 4).
-    ASSERT_EQ(kChunkSize * kNumSourceWrites, check(version, [](int c0, int c1, int c2) {
-                  return (c0 * 7 == c1) && (c0 * 4 == c2);
-              }));
+    ASSERT_EQ(kChunkSize * kNumSourceWrites,
+              check(version, [](int c0, int c1, int c2) { return (c0 * 7 == c1) && (c0 * 4 == c2); }));
 }
 
 } // namespace starrocks::lake
