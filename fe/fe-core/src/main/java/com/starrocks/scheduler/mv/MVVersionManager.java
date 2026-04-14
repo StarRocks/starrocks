@@ -60,13 +60,13 @@ public class MVVersionManager {
      * @param mvRefreshedPartitions mv refreshed partitions
      * @param refBaseTableIds  mv's ref base table ids
      * @param refTableAndPartitionNames mv's ref base table and partition names
-     * @param tempMvTvrVersionRangeMap temporary tvr version range map for each base table which is used for ivm refresh
+     * @param tvrDeltaToPromote TVR version ranges to promote into the persistent baseTableInfoTvrVersionRangeMap
      */
     public void updateMVVersionInfo(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables,
                                     PCellSortedSet mvRefreshedPartitions,
                                     Set<Long> refBaseTableIds,
                                     Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
-                                    Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
+                                    Map<BaseTableInfo, TvrVersionRange> tvrDeltaToPromote) {
         MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
         MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
         // update materialized view partition to ref base table partition names meta
@@ -83,11 +83,11 @@ public class MVVersionManager {
         if (!isOlapTableRefreshed && !isExternalTableRefreshed) {
             return;
         }
-        if (tempMvTvrVersionRangeMap != null) {
+        if (tvrDeltaToPromote != null) {
             // update the tvr version range map in mv context
             final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
                     refreshContext.getBaseTableInfoTvrVersionRangeMap();
-            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempMvTvrVersionRangeMap.entrySet()) {
+            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tvrDeltaToPromote.entrySet()) {
                 TvrVersionRange versionRange = entry.getValue();
                 if (versionRange == null || versionRange.isEmpty()) {
                     continue;
