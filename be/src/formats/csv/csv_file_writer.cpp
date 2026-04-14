@@ -17,22 +17,14 @@
 #include <boost/algorithm/string.hpp>
 #include <utility>
 
-<<<<<<< HEAD
-=======
-#include "base/utility/defer_op.h"
 #include "column/column_helper.h"
->>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
 #include "common/http/content_type.h"
 #include "csv_escape.h"
 #include "exec/hdfs_scanner_text.h"
 #include "formats/utils.h"
-<<<<<<< HEAD
-        #include "output_stream_file.h"
-=======
-        #include "io/formatted_output_stream_file.h"
-#include "io/formatted_output_stream_string.h"
->>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
-        #include "runtime/current_thread.h"
+#include "output_stream_file.h"
+#include "output_stream_string.h"
+#include "runtime/current_thread.h"
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
 
@@ -219,7 +211,7 @@
                                                 const csv::Converter::Options& options) {
         // Write the field content into a temporary in-memory string buffer, then scan
         // and escape via _write_enclosed_string.
-        io::FormattedOutputStreamString field_buf(256);
+        csv::OutputStreamString field_buf(256);
         RETURN_IF_ERROR(converter->write_string(&field_buf, column, row_num, options));
         RETURN_IF_ERROR(field_buf.finalize()); // flush internal buffer to string
         return _write_enclosed_string(field_buf.as_string());
@@ -282,18 +274,12 @@
         if (_options.contains(CSVWriterOptions::IS_HIVE)) {
             _parsed_options->is_hive = _options[CSVWriterOptions::IS_HIVE] == "true";
         }
-<<<<<<< HEAD
-=======
-        if (_options.contains(CSVWriterOptions::INCLUDE_HEADER)) {
-            _parsed_options->include_header = boost::iequals(_options[CSVWriterOptions::INCLUDE_HEADER], "true");
-        }
         if (_options.contains(CSVWriterOptions::ENCLOSE) && !_options[CSVWriterOptions::ENCLOSE].empty()) {
             _parsed_options->enclose = _options[CSVWriterOptions::ENCLOSE][0];
         }
         if (_options.contains(CSVWriterOptions::ESCAPE) && !_options[CSVWriterOptions::ESCAPE].empty()) {
             _parsed_options->escape = _options[CSVWriterOptions::ESCAPE][0];
         }
->>>>>>> e04e5f18d7 ([Enhancement] Support csv.enclose and csv.escape in INSERT INTO FILES CSV export (#71589))
         return Status::OK();
     }
 
