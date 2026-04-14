@@ -66,7 +66,12 @@ public:
     }
 
     void TearDown() override {
-        auto status = fs::remove_all(config::storage_root_path);
+        // Only remove this test's own subdirectory. Removing the entire
+        // config::storage_root_path would wipe out DataDir's persistent /tmp/
+        // subdirectory (created once at StorageEngine init) and break any later
+        // test that writes local CRM files during compaction (e.g.
+        // LakePrimaryKeyPublishTest.test_individual_index_compaction).
+        auto status = fs::remove_all(_test_dir);
         EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
     }
 

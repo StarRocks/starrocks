@@ -260,6 +260,11 @@ message TxnLogPB {
         repeated PersistentIndexSstableRangePB sst_ranges = 7;
         // The specific table schema used to generate this rowset
         optional TableSchemaKeyPB schema_key = 8;
+        // Parallel to `dels`: whether each del file is shared across tablets.
+        // Populated during tablet split cross-publish so that the del files keep
+        // their shared flag when written into RowsetMetadataPB.del_files. Empty
+        // (default) means all dels are private.
+        repeated bool shared_dels = 9;
     }
 
     message OpCompaction {
