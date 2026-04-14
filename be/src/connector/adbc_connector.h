@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <map>
+#include <string>
+
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -21,6 +24,17 @@
 namespace starrocks {
 
 class ADBCScanner;
+
+// Bundles all connection + query params for an ADBC scan. Mirrors JDBCScanContext.
+struct ADBCScanContext {
+    std::string driver_url;
+    std::string entrypoint;
+    std::string uri;
+    std::string username;
+    std::string password;
+    std::map<std::string, std::string> adbc_options;
+    std::string sql;
+};
 
 namespace connector {
 
