@@ -78,6 +78,9 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             "starmgr_meta_sync_process_time_total", Metric.MetricUnit.SECONDS,
             "The total number of seconds spent on meta sync by StarMgrMetaSyncer");
 
+    // Log a warning when getAllPartitionShardGroupId takes longer than this.
+    private static final long SLOW_COLLECTION_WARN_THRESHOLD_MS = 30_000L;
+
     // make sure the metrics are registered only once
     private static final AtomicBoolean IS_METRIC_REGISTERED = new AtomicBoolean(false);
 
@@ -99,32 +102,55 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
     @VisibleForTesting
     Set<Long> getAllPartitionShardGroupId() {
         HashSet<Long> groupIds = new HashSet<>();
+        long startMs = System.currentTimeMillis();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId);
-            if (db == null) {
-                continue;
-            }
-            if (db.isSystemDatabase()) {
+            if (db == null || db.isSystemDatabase()) {
                 continue;
             }
 
-            Locker locker = new Locker();
-            locker.lockDatabase(db.getId(), LockType.READ);
+            // Snapshot the tables under an INTENTION_SHARED DB lock. IS blocks DROP TABLE
+            // (which takes DB WRITE across the whole remove-from-idToTable -> add-to-recycleBin
+            // sequence in Database#unprotectDropTable) so the snapshot cannot observe the
+            // transient window where a non-force dropped table is in neither place - missing
+            // such a table here would let deleteUnusedShardAndShardGroup erroneously reap its
+            // shard groups and break RECOVER TABLE. IS (unlike READ) does not block concurrent
+            // INTENTION_EXCLUSIVE table writers, so the snapshot stays cheap.
+            List<Table> tables;
+            Locker dbLocker = new Locker();
+            dbLocker.lockDatabase(db.getId(), LockType.INTENTION_SHARED);
             try {
-                for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
-                    if (table.isCloudNativeTableOrMaterializedView()) {
-                        GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getAllPartitionsIncludeRecycleBin((OlapTable) table)
-                                .stream()
-                                .map(Partition::getSubPartitions)
-                                .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
-                                .forEach(groupIds::addAll);
-                    }
-                }
+                tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db);
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                dbLocker.unLockDatabase(db.getId(), LockType.INTENTION_SHARED);
             }
+
+            // For each table, take a table-level READ lock under an INTENTION_SHARED DB lock
+            // so unrelated DB-level shared-lock acquirers are not stalled during the traversal.
+            for (Table table : tables) {
+                if (!table.isCloudNativeTableOrMaterializedView()) {
+                    continue;
+                }
+                long tableId = table.getId();
+                Locker locker = new Locker();
+                locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                try {
+                    GlobalStateMgr.getCurrentState().getLocalMetastore()
+                            .getAllPartitionsIncludeRecycleBin((OlapTable) table)
+                            .stream()
+                            .map(Partition::getSubPartitions)
+                            .flatMap(p -> p.stream().map(PhysicalPartition::getShardGroupIds))
+                            .forEach(groupIds::addAll);
+                } finally {
+                    locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
+                }
+            }
+        }
+        long elapsedMs = System.currentTimeMillis() - startMs;
+        if (elapsedMs > SLOW_COLLECTION_WARN_THRESHOLD_MS) {
+            LOG.warn("getAllPartitionShardGroupId is slow: elapsed={}ms, dbCount={}, groupCount={}",
+                    elapsedMs, dbIds.size(), groupIds.size());
         }
         return groupIds;
     }
@@ -278,6 +304,8 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         // Take this timestamp as reference, all ShardGroups created after this timestamp will be safe for sure.
         long creationExpireTime = System.currentTimeMillis() - Config.shard_group_clean_threshold_sec * 1000L;
 
+        // Keep in mind that the collected shardGroupId may not be complete, all the subsequent operations
+        // should tolerate inaccuracies in the list.
         Set<Long> groupIdFe = getAllPartitionShardGroupId();
         if (groupIdFe.size() > 100) {
             // Be a gentleman, avoid printing a long lists in log line.
