@@ -39,15 +39,10 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
-<<<<<<< HEAD
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.memory.MemoryTrackable;
-=======
-import com.starrocks.common.FeConstants;
-import com.starrocks.memory.MemoryTrackable;
-import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
->>>>>>> fc5770df2e ([BugFix] Display profile START_TIME/END_TIME with session timezone (#71429))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -104,12 +99,6 @@ public class ProfileManager implements MemoryTrackable {
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
-<<<<<<< HEAD
-        public byte[] profileContent;
-        public ProfilingExecPlan plan;
-
-        public List<String> toRow() {
-=======
         public long startTimeMs = -1;
         public long endTimeMs = -1;
         private byte[] profileContent;
@@ -128,7 +117,8 @@ public class ProfileManager implements MemoryTrackable {
                 return null;
             }
             try {
-                return ProfileSerializer.deserialize(profileContent);
+                return RuntimeProfileParser.parseFrom(
+                        CompressionUtils.gzipDecompressString(profileContent));
             } catch (IOException e) {
                 LOG.warn("Failed to deserialize profile: {}", e.getMessage());
                 return null;
@@ -140,8 +130,15 @@ public class ProfileManager implements MemoryTrackable {
          * {@link Config#profile_info_format}.
          */
         public String getProfileString() {
-            RuntimeProfile profile = getRuntimeProfile();
-            return profile != null ? format(profile) : null;
+            if (profileContent == null) {
+                return null;
+            }
+            try {
+                return CompressionUtils.gzipDecompressString(profileContent);
+            } catch (IOException e) {
+                LOG.warn("Failed to deserialize profile: {}", e.getMessage());
+                return null;
+            }
         }
 
         /** Formats {@code profile} per the current {@link Config#profile_info_format}. */
@@ -156,7 +153,6 @@ public class ProfileManager implements MemoryTrackable {
 
         public List<String> toRow(ConnectContext context) {
             ZoneId sessionZone = getSessionZoneId(context);
->>>>>>> fc5770df2e ([BugFix] Display profile START_TIME/END_TIME with session timezone (#71429))
             List<String> res = Lists.newArrayList();
             res.add(infoStrings.get(QUERY_ID));
             res.add(formatTimestamp(startTimeMs, sessionZone));
@@ -199,7 +195,7 @@ public class ProfileManager implements MemoryTrackable {
         element.startTimeMs = parseTimeStringToEpochMs(summaryProfile.getInfoString(START_TIME));
         element.endTimeMs = parseTimeStringToEpochMs(summaryProfile.getInfoString(END_TIME));
         try {
-            element.profileContent = CompressionUtils.gzipCompressString(profileString);
+            element.setProfileContent(CompressionUtils.gzipCompressString(profileString));
         } catch (IOException e) {
             LOG.warn("Compress profile string failed, length: {}, reason: {}",
                     profileString.length(), e.getMessage());
