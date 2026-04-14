@@ -878,14 +878,20 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 auto metadata = std::move(res).value();
                 if (latest_metadata == nullptr) {
                     latest_metadata = metadata;
+                    if (latest_metadata->has_range()) {
+                        is_range_distribution = true;
+                    }
                 }
                 int64_t dummy_file_size = 0;
-                RETURN_IF_ERROR(
-                        collect_garbage_files(*metadata, data_dir, &deleter,
-                                              can_bundle_meta_file_to_be_deleted(versions_and_states[garbage_version])
-                                                      ? nullptr
-                                                      : &dummy_shared_file_deleter,
-                                              &dummy_file_size, TabletRetainInfo()));
+                // For range distribution tablets, always protect shared files in garbage
+                // collection. can_bundle_meta_file_to_be_deleted is unreliable after tablet
+                // split because new split tablets may still reference shared files.
+                const bool allow_delete_shared =
+                        !is_range_distribution &&
+                        can_bundle_meta_file_to_be_deleted(versions_and_states[garbage_version]);
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter,
+                                                      allow_delete_shared ? nullptr : &dummy_shared_file_deleter,
+                                                      &dummy_file_size, TabletRetainInfo()));
                 if (metadata->has_prev_garbage_version()) {
                     garbage_version = metadata->prev_garbage_version();
                 } else {
@@ -895,9 +901,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
 
         if (latest_metadata != nullptr) {
-            if (latest_metadata->has_range()) {
-                is_range_distribution = true;
-            }
             // For range distribution tablets, skip data file deletion entirely.
             // After tablet split, data files in pre-split metadata may be shared with
             // new tablets but not marked as shared (shared flag only exists in the

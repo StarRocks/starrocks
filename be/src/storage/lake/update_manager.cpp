@@ -731,6 +731,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
         new_rows_op.add_del_encryption_metas(op_write.del_encryption_metas(i));
     }
+    // Carry over the per-del shared flag populated by tablet-split cross-publish.
+    // Without this, apply_opwrite(new_rows_op) would drop the flag and the del file
+    // would be written into rowset.del_files with shared=false, exposing it to
+    // premature deletion by vacuum on sibling split tablets.
+    for (int i = 0; i < op_write.shared_dels_size(); i++) {
+        new_rows_op.add_shared_dels(op_write.shared_dels(i));
+    }
     if (new_rows_op.rowset().segments_size() > 0 || new_rows_op.dels_size() > 0) {
         builder->apply_opwrite(new_rows_op, {}, {});
         if (!segment_id_to_add_dels_new_acc.empty()) {
