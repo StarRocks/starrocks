@@ -146,14 +146,13 @@ public class IvmDeltaAggregateRule extends TransformationRule {
 
         // Step 6: Build LEFT OUTER JOIN (intermediate agg ⋈ MV scan)
         // Delta is preserved on the aggregate's child for subsequent iterations.
-        // Use createWithoutTvr for join and MV scan to prevent TVR rules from re-matching.
         LogicalDeltaOperator childDelta = new LogicalDeltaOperator(false, delta.getActionColumn());
-        OptExpression intermediateAggExpr = OptExpression.createWithoutTvr(intermediateAgg,
+        OptExpression intermediateAggExpr = OptExpression.create(intermediateAgg,
                 OptExpression.create(childDelta, aggChild));
         LogicalJoinOperator joinOp = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, eqPredicate);
-        OptExpression joinExpr = OptExpression.createWithoutTvr(joinOp,
+        OptExpression joinExpr = OptExpression.create(joinOp,
                 intermediateAggExpr,
-                OptExpression.createWithoutTvr(mvScan));
+                OptExpression.create(mvScan));
 
         // Step 7: Build state_union project
         Map<ColumnRefOperator, ScalarOperator> projMap = Maps.newHashMap();
@@ -186,7 +185,7 @@ public class IvmDeltaAggregateRule extends TransformationRule {
             projMap.put(actionColumn, ConstantOperator.createTinyInt((byte) 1));
         }
 
-        OptExpression result = OptExpression.createWithoutTvr(new LogicalProjectOperator(projMap), joinExpr);
+        OptExpression result = OptExpression.create(new LogicalProjectOperator(projMap), joinExpr);
         return List.of(result);
     }
 
