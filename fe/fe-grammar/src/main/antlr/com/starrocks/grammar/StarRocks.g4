@@ -3048,7 +3048,6 @@ alterModifyDefaultBuckets
 refreshSchemeDesc
     : REFRESH (IMMEDIATE | DEFERRED)? (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
-    | INCREMENTAL
     | MANUAL)
     ;
 
