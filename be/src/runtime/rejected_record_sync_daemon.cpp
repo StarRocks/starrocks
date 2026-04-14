@@ -14,14 +14,21 @@
 
 #include "runtime/rejected_record_sync_daemon.h"
 
+#include <fmt/format.h>
+
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <system_error>
 
+#include "agent/master_info.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "gen_cpp/HeartbeatService_types.h"
+#include "http/http_client.h"
+#include "http/http_common.h"
+#include "rapidjson/document.h"
 #include "runtime/exec_env.h"
 
 namespace starrocks {
@@ -226,28 +233,72 @@ Status RejectedRecordSyncDaemon::flush_batch(const std::vector<std::string>& fil
 }
 
 Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload) {
-    // TODO(rejected_records Phase 3 follow-up): wire this up to the FE Stream
-    // Load endpoint. Implementation plan:
-    //   1. Locate the master FE via `MasterInfo` (be/src/agent/master_info.h)
-    //      or `BackendServiceClient` -- we need the FE's HTTP host + port.
-    //   2. Build a PUT against
-    //        http://<fe_host>:<fe_http_port>/api/_statistics_/rejected_records/_stream_load
-    //      with headers:
-    //        - Expect: 100-continue
-    //        - format: json
-    //        - strip_outer_array: false (one record per line)
-    //        - enable_merge_commit: true
-    //        - Authorization: Basic <internal service credentials>
-    //   3. Use HttpClient (be/src/http/http_client.h) to issue the PUT.
-    //   4. Check the JSON response for Status=="Success" or "Publish Timeout"
-    //      (the latter is still a successful commit).
-    //
-    // Until that lands this method returns NotSupported so the daemon keeps
-    // local files around for a future binary to pick up. The error is
-    // counted via `_sync_failures` and surfaces in metrics.
-    LOG_EVERY_N(WARNING, 100) << "RejectedRecordSyncDaemon::post_to_stream_load is a stub; "
-                              << payload.size() << " bytes staged locally, awaiting Phase 3 follow-up wiring";
-    return Status::NotSupported("RejectedRecordSyncDaemon::post_to_stream_load is not yet wired");
+    TMasterInfo master_info = get_master_info();
+    if (master_info.network_address.hostname.empty() || master_info.http_port <= 0) {
+        return Status::InternalError(
+                "RejectedRecordSyncDaemon: master FE address not yet known (no heartbeat received?)");
+    }
+
+    // Stream Load PUT path for an internal system table. The FE serves
+    // loads to any table under /api/<db>/<table>/_stream_load; we target
+    // `_statistics_.rejected_records` directly.
+    std::ostringstream url;
+    url << "http://" << master_info.network_address.hostname << ":" << master_info.http_port
+        << "/api/_statistics_/rejected_records/_stream_load";
+
+    HttpClient client;
+    RETURN_IF_ERROR(client.init(url.str()));
+    client.set_method(PUT);
+    client.set_content_type("application/json");
+    client.set_basic_auth(config::rejected_record_sync_user, config::rejected_record_sync_password);
+
+    // Merge-commit so N BEs writing concurrently collapse into one FE
+    // transaction. Format is json-lines (one JSON object per line); the
+    // StarRocks Stream Load parses this when `strip_outer_array=false`
+    // (the default) with `format=json`.
+    client.set_header(HTTP_ENABLE_MERGE_COMMIT, "true");
+    client.set_header(HTTP_FORMAT_KEY, "json");
+    client.set_header(HTTP_STRIP_OUTER_ARRAY, "false");
+    // The FE 307-redirects large PUTs; opt into 100-continue so curl
+    // negotiates before uploading the payload body.
+    client.set_header("Expect", "100-continue");
+    // Follow the redirect with credentials preserved; the FE issues one.
+    client.set_unrestricted_auth(1);
+
+    client.set_payload(payload);
+    client.set_timeout_ms(static_cast<int64_t>(std::max(1, config::rejected_record_sync_post_timeout_sec)) * 1000);
+
+    std::string response;
+    RETURN_IF_ERROR(client.execute(&response));
+
+    long http_status = client.get_http_status();
+    if (http_status < 200 || http_status >= 300) {
+        return Status::InternalError(fmt::format("Stream Load HTTP {} from FE: {}", http_status, response));
+    }
+
+    // The Stream Load response is a JSON object; "Status" is either
+    // "Success" or "Publish Timeout" on a successful commit, and the
+    // latter is still committed data per the existing semantics in
+    // StreamLoadContext.
+    rapidjson::Document doc;
+    if (doc.Parse(response.c_str(), response.size()).HasParseError() || !doc.IsObject() ||
+        !doc.HasMember("Status") || !doc["Status"].IsString()) {
+        return Status::InternalError(
+                fmt::format("Stream Load response from FE is not valid JSON: {}", response));
+    }
+    std::string status = doc["Status"].GetString();
+    if (status == "Success" || status == "Publish Timeout") {
+        return Status::OK();
+    }
+    // The response typically carries a "Message" field with details; bubble
+    // it up so operators see the actual reason in the BE log.
+    std::string message;
+    if (doc.HasMember("Message") && doc["Message"].IsString()) {
+        message = doc["Message"].GetString();
+    }
+    return Status::InternalError(
+            fmt::format("Stream Load for _statistics_.rejected_records rejected: Status={} Message={}",
+                        status, message));
 }
 
 void RejectedRecordSyncDaemon::garbage_collect_stale_files() {

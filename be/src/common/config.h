@@ -570,6 +570,18 @@ CONF_mInt32(rejected_record_local_retention_hours, "24");
 // has verified the table exists and set log_rejected_record_num > 0 on
 // targeted loads.
 CONF_mBool(enable_rejected_record_sync, "false");
+// Credentials the daemon uses for the internal Stream Load against
+// `_statistics_.rejected_records`. Defaults to root / empty password which
+// matches an out-of-the-box StarRocks install; production deployments
+// should override with a dedicated service account that holds exactly
+// INSERT on `_statistics_.rejected_records`.
+CONF_mString(rejected_record_sync_user, "root");
+CONF_mString(rejected_record_sync_password, "");
+// Maximum time the daemon waits for the FE Stream Load endpoint per post.
+// Default is deliberately longer than the default load timeout because
+// merge-commit batches synchronously across multiple BEs and may sit in
+// the FE-side commit queue briefly.
+CONF_mInt32(rejected_record_sync_post_timeout_sec, "60");
 // Whether to execute load channel RPC requests asynchronously, that is,
 // to run RPCs in a separate thread pool instead of within BRPC workers
 CONF_mBool(enable_load_channel_rpc_async, "true");
