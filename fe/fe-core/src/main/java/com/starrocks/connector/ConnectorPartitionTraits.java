@@ -24,6 +24,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.partitiontraits.BenchmarkPartitionTraits;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
@@ -131,10 +132,35 @@ public abstract class ConnectorPartitionTraits {
         return buildWithCache(ctx, null, table);
     }
 
+    /**
+     * Build traits with a pinned version range. Subclasses that support snapshot-aware partition
+     * operations (currently Iceberg) will use the pinned snapshot instead of the live one.
+     * Other connectors store the range but ignore it in their partition methods.
+     */
+    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
+        ConnectorPartitionTraits traits = build(table);
+        if (pinnedVersionRange != null) {
+            traits.setPinnedVersionRange(pinnedVersionRange);
+        }
+        return traits;
+    }
+
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;
+    }
+
+    // When set, subclasses that support snapshot-aware partition operations (e.g. Iceberg)
+    // use this version range instead of the live snapshot. Other connectors ignore it.
+    protected TvrVersionRange pinnedVersionRange;
+
+    public void setPinnedVersionRange(TvrVersionRange range) {
+        this.pinnedVersionRange = range;
+    }
+
+    public TvrVersionRange getPinnedVersionRange() {
+        return pinnedVersionRange;
     }
 
     public Table getTable() {

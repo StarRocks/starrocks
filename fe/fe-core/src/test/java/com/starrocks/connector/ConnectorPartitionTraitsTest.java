@@ -25,6 +25,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.connector.partitiontraits.DefaultTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
@@ -349,5 +350,80 @@ public class ConnectorPartitionTraitsTest {
 
         Set<String> updated = traits.getUpdatedPartitionNames(List.of(baseTableInfo), context);
         Assertions.assertEquals(Set.of(), updated);
+    }
+
+    @Test
+    public void testPinnedVersionRangeDefaultNull() {
+        // Base class default: pinnedVersionRange is null
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(Table.TableType.ICEBERG);
+        Assertions.assertNull(traits.getPinnedVersionRange());
+    }
+
+    @Test
+    public void testPinnedVersionRangeSetOnIcebergTraits(@Mocked org.apache.iceberg.Table nativeTable) {
+        IcebergTable icebergTable = new IcebergTable(0, "name", "iceberg_catalog", "resource_name", "icebergDb",
+                "icebergTable", "",
+                Lists.newArrayList(), nativeTable, Maps.newHashMap());
+        TvrTableSnapshot pinnedSnapshot = TvrTableSnapshot.of(42L);
+
+        // build(table, pinnedRange) should propagate to the traits
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(icebergTable, pinnedSnapshot);
+        Assertions.assertNotNull(traits.getPinnedVersionRange());
+        Assertions.assertEquals(42L, traits.getPinnedVersionRange().to().getVersion());
+    }
+
+    @Test
+    public void testPinnedVersionRangeNullFallsBackToLive(@Mocked org.apache.iceberg.Table nativeTable) {
+        IcebergTable icebergTable = new IcebergTable(0, "name", "iceberg_catalog", "resource_name", "icebergDb",
+                "icebergTable", "",
+                Lists.newArrayList(), nativeTable, Maps.newHashMap());
+
+        // build(table, null) should leave pinnedVersionRange as null
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(icebergTable, null);
+        Assertions.assertNull(traits.getPinnedVersionRange());
+    }
+
+    @Test
+    public void testPinnedVersionRangeIgnoredForNonIceberg() {
+        HiveTable hiveTable = new HiveTable(0, "name", Lists.newArrayList(), "resource_name", "hive_catalog",
+                "hiveDb", "hiveTable", "location", "", 0,
+                Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(), Maps.newHashMap(), null,
+                HiveTable.HiveTableType.MANAGED_TABLE);
+        TvrTableSnapshot pinnedSnapshot = TvrTableSnapshot.of(42L);
+
+        // For non-Iceberg, setPinnedVersionRange is called but getPartitionNames won't use it
+        ConnectorPartitionTraits traits = ConnectorPartitionTraits.build(hiveTable, pinnedSnapshot);
+        // The range is stored on the base class, but Hive's getPartitionNames ignores it
+        Assertions.assertNotNull(traits.getPinnedVersionRange());
+        Assertions.assertTrue(traits instanceof HivePartitionTraits);
+    }
+
+    @Test
+    public void testCachedPartitionTraitsPropagatesPinnedVersionRange(@Mocked org.apache.iceberg.Table nativeTable) {
+        IcebergTable icebergTable = new IcebergTable(0, "name", "iceberg_catalog", "resource_name", "icebergDb",
+                "icebergTable", "",
+                Lists.newArrayList(), nativeTable, Maps.newHashMap());
+
+        // Create inner traits and wrap in CachedPartitionTraits
+        ConnectorPartitionTraits innerTraits = ConnectorPartitionTraits.build(icebergTable);
+        Assertions.assertTrue(innerTraits instanceof IcebergPartitionTraits);
+
+        com.github.benmanes.caffeine.cache.Cache<Object, Object> cache =
+                com.github.benmanes.caffeine.cache.Caffeine.newBuilder().build();
+        com.starrocks.sql.optimizer.QueryMaterializationContext.QueryCacheStats stats =
+                Mockito.mock(com.starrocks.sql.optimizer.QueryMaterializationContext.QueryCacheStats.class);
+        com.starrocks.connector.partitiontraits.CachedPartitionTraits cached =
+                new com.starrocks.connector.partitiontraits.CachedPartitionTraits(
+                        cache, innerTraits, stats, null);
+
+        // Set pinned range on the wrapper
+        TvrTableSnapshot pinnedSnapshot = TvrTableSnapshot.of(99L);
+        cached.setPinnedVersionRange(pinnedSnapshot);
+
+        // Both wrapper and delegate should have the pinned range
+        Assertions.assertNotNull(cached.getPinnedVersionRange());
+        Assertions.assertEquals(99L, cached.getPinnedVersionRange().to().getVersion());
+        Assertions.assertNotNull(innerTraits.getPinnedVersionRange());
+        Assertions.assertEquals(99L, innerTraits.getPinnedVersionRange().to().getVersion());
     }
 }
