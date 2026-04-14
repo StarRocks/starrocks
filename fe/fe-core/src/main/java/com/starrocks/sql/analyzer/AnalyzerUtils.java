@@ -800,32 +800,34 @@ public class AnalyzerUtils {
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
-        return collectAllTableAndViewRelations(parseNode, false);
-    }
-
-    public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode,
-                                                                           boolean showInternalCatalog) {
         if (parseNode == null) {
             return Collections.emptyMap();
         }
         Map<TableName, Relation> allTableAndViewRelations = new LinkedHashMap<>();
-        new TableAndViewRelationsCollector(allTableAndViewRelations, showInternalCatalog).visit(parseNode);
+        new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
         return allTableAndViewRelations;
     }
 
-    public static List<String> collectAllTableAndViewRelationNames(ParseNode parseNode) {
-        return collectAllTableAndViewRelationNames(parseNode, false);
-    }
-
-    public static List<String> collectAllTableAndViewRelationNames(ParseNode parseNode,
-                                                                   boolean showInternalCatalog) {
-        Map<TableName, Relation> allTableAndViewRelations =
-                collectAllTableAndViewRelations(parseNode, showInternalCatalog);
+    public static List<String> collectAllTableAndViewRelationNamesForAudit(ParseNode parseNode) {
+        Map<TableName, Relation> allTableAndViewRelations = collectAllTableAndViewRelations(parseNode);
         List<String> relationNames = new ArrayList<>(allTableAndViewRelations.size());
         for (TableName tableName : allTableAndViewRelations.keySet()) {
-            relationNames.add(tableName.toString());
+            relationNames.add(formatTableNameForAudit(tableName));
         }
         return relationNames;
+    }
+
+    @VisibleForTesting
+    static String formatTableNameForAudit(TableName tableName) {
+        StringBuilder stringBuilder = new StringBuilder();
+        if (tableName.getCatalog() != null) {
+            stringBuilder.append(tableName.getCatalog()).append(".");
+        }
+        if (tableName.getDb() != null) {
+            stringBuilder.append(tableName.getDb()).append(".");
+        }
+        stringBuilder.append(tableName.getTbl());
+        return stringBuilder.toString();
     }
 
     public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {
@@ -1172,11 +1174,9 @@ public class AnalyzerUtils {
     private static class TableAndViewRelationsCollector extends AstTraverser<Void, Void> {
 
         private final Map<TableName, Relation> allTableAndViewRelations;
-        private final boolean showInternalCatalog;
 
-        public TableAndViewRelationsCollector(Map<TableName, Relation> tableRelations, boolean showInternalCatalog) {
+        public TableAndViewRelationsCollector(Map<TableName, Relation> tableRelations) {
             this.allTableAndViewRelations = tableRelations;
-            this.showInternalCatalog = showInternalCatalog;
         }
 
         @Override
@@ -1184,7 +1184,7 @@ public class AnalyzerUtils {
             if (node.isCreateByPolicyRewritten()) {
                 return null;
             }
-            allTableAndViewRelations.put(getCollectedTableName(node.getName()), node);
+            allTableAndViewRelations.put(node.getName(), node);
             return null;
         }
 
@@ -1193,24 +1193,8 @@ public class AnalyzerUtils {
             if (node.isCreateByPolicyRewritten()) {
                 return null;
             }
-            allTableAndViewRelations.put(getCollectedTableName(node.getName()), node);
+            allTableAndViewRelations.put(node.getName(), node);
             return null;
-        }
-
-        private TableName getCollectedTableName(TableName tableName) {
-            if (!showInternalCatalog) {
-                return tableName;
-            }
-            return copyCollectedTableName(tableName);
-        }
-
-        private TableName copyCollectedTableName(TableName tableName) {
-            TableName copied = new TableName(tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
-                    tableName.getPos());
-            if (copied.getCatalog() != null && CatalogMgr.isInternalCatalog(copied.getCatalog())) {
-                copied.setShowInternalCatalog(true);
-            }
-            return copied;
         }
     }
 
