@@ -163,16 +163,18 @@ can `SELECT`; until then, operator-run dashboards should use `root`
 
 ## Limitations
 
-- **Parquet row-level capture is not yet wired.** Loads from `.parquet`
-  files that fail per-row validation do not land in
-  `_statistics_.rejected_records` today; the load-level error message in
-  `information_schema.loads` is the only signal until a follow-up ships
-  Parquet broker-load validation.
-- **Legacy rejected-record files remain.** `ErrorURL` /
-  `tracking_url` still returns a tab-delimited BE-local file alongside
-  the system-table write. The two are intentionally redundant during
-  the rollout; the legacy path will be removed once all consumers
-  migrate.
+- **Parquet full-row capture is not yet wired.** Parquet loads capture
+  the offending column's raw value + column name into a single-column
+  `raw_record` fragment (`error_code='TYPE_MISMATCH'`), not the full
+  row, because Parquet has no broker-load row filter yet. Replay from
+  these fragments is lossy (other columns are missing); until Parquet
+  broker-load validation ships, use the ORC pipeline if you need
+  full-row replay semantics for columnar sources.
+- **`information_schema.loads.rejected_record_path` is deprecated.**
+  The BE-local tab-delimited rejected-record file it used to point at
+  was removed; the column is kept for upgrade compatibility but is
+  always `NULL`. Query `_statistics_.rejected_records` directly by
+  `load_label` or `txn_id` instead.
 - **Second-level delay.** Rejected rows become queryable in the system
   table within `rejected_record_sync_interval_sec` (default 30 s) after
   the load completes, not immediately.

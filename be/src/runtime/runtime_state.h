@@ -268,10 +268,8 @@ public:
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
 
-    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
-
     // Lazily-constructed per-fragment writer that persists rejected rows as
-    // JSON Lines for the Phase 3 sync daemon to ship to
+    // JSON Lines for the sync daemon to ship to
     // `_statistics_.rejected_records`. Returns nullptr when the writer has
     // not been created; callers should go through
     // `RuntimeStateHelper::rejected_record_writer(state)` which handles
@@ -631,10 +629,12 @@ private:
 
     std::mutex _error_log_lock;
 
+    // Guards lazy construction of `_rejected_record_writer`. Used to be
+    // named after the legacy tab-delimited file it guarded; the file is
+    // gone but the mutex keeps the historical name so call sites remain
+    // stable across the deletion.
     std::mutex _rejected_record_lock;
-    std::string _rejected_record_file_path;
-    std::unique_ptr<std::ofstream> _rejected_record_file;
-    // Phase 2 writer. Lazily constructed by RuntimeStateHelper on first
+    // Writer. Lazily constructed by RuntimeStateHelper on first
     // append so enabled-but-never-triggered loads pay no allocation cost.
     std::unique_ptr<RejectedRecordWriter> _rejected_record_writer;
 

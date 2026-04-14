@@ -151,13 +151,15 @@ WHERE target_database = 'mydb'
 
 ## 当前限制
 
-- **Parquet 行级捕获尚未接入。** `.parquet` 文件导入时发生的行级校验
-  失败当前不会落到 `_statistics_.rejected_records`；`information_schema.loads`
-  的导入级错误信息是唯一信号，需要等 Parquet broker-load 校验接入后才能
-  补齐。
-- **遗留拒绝行文件保留。** `ErrorURL` / `tracking_url` 仍然返回 BE
-  本地 tab 分隔文件，与系统表写入并行，以保持上线过渡期兼容。等所有
-  消费者迁移完成后，遗留路径会被删除。
+- **Parquet 全行捕获尚未接入。** Parquet 导入只把**失败列**的原始值与列名
+  写入单列 `raw_record` 片段（`error_code='TYPE_MISMATCH'`），不是整行，
+  因为 Parquet 目前没有 broker-load 行过滤机制。基于该片段回放时其他列
+  会丢失；需要列式源完整回放的场景，请在 Parquet broker-load 校验接入前
+  改用 ORC 管线。
+- **`information_schema.loads.rejected_record_path` 已弃用。** 它此前
+  指向的 BE 本地 tab 分隔拒绝文件已被移除；列本身保留用于升级兼容，取值
+  恒为 `NULL`。改用 `_statistics_.rejected_records`，按 `load_label`
+  或 `txn_id` 直接查询。
 - **秒级延迟。** 导入结束后，拒绝行在 `rejected_record_sync_interval_sec`
   （默认 30 秒）内才在系统表中可查询，并非即时可见。
 

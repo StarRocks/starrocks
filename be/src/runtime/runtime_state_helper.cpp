@@ -80,23 +80,6 @@ Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {
     return Status::OK();
 }
 
-Status RuntimeStateHelper::create_rejected_record_file(RuntimeState* state) {
-    auto rejected_record_absolute_path = state->_exec_env->load_path_mgr()->get_load_rejected_record_absolute_path(
-            "", state->_db, state->_load_label, state->_txn_id, state->_fragment_instance_id);
-    RETURN_IF_ERROR(fs::create_directories(std::filesystem::path(rejected_record_absolute_path).parent_path()));
-
-    state->_rejected_record_file = std::make_unique<std::ofstream>(rejected_record_absolute_path, std::ifstream::out);
-    if (!state->_rejected_record_file->is_open()) {
-        std::stringstream error_msg;
-        error_msg << "Fail to open rejected record file: [" << rejected_record_absolute_path << "].";
-        LOG(WARNING) << error_msg.str();
-        return Status::InternalError(error_msg.str());
-    }
-    LOG(WARNING) << "rejected record file path " << rejected_record_absolute_path;
-    state->_rejected_record_file_path = rejected_record_absolute_path;
-    return Status::OK();
-}
-
 void RuntimeStateHelper::append_error_msg_to_file(RuntimeState* state, const std::string& line,
                                                   const std::string& error_msg, bool is_summary) {
     std::lock_guard<std::mutex> l(state->_error_log_lock);
@@ -139,64 +122,37 @@ void RuntimeStateHelper::append_error_msg_to_file(RuntimeState* state, const std
 
 void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, const std::string& record,
                                                         const std::string& error_msg, const std::string& source) {
-    // Only load job need to write rejected record
+    // Only load jobs produce rejected records. The legacy tab-delimited
+    // BE-local file is gone; this helper now routes every call site
+    // directly at the Phase 2 RejectedRecordWriter, which the Phase 3
+    // sync daemon ships to _statistics_.rejected_records.
     if (state->_query_options.query_type != TQueryType::LOAD) {
         return;
     }
-
-    {
-        std::lock_guard<std::mutex> l(state->_rejected_record_lock);
-
-        // If file havn't been opened, open it here
-        if (state->_rejected_record_file == nullptr) {
-            Status status = RuntimeStateHelper::create_rejected_record_file(state);
-            if (!status.ok()) {
-                LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
-                if (state->_rejected_record_file != nullptr) {
-                    state->_rejected_record_file->close();
-                    state->_rejected_record_file.reset();
-                }
-                return;
-            }
-        }
-        state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
-
-        // TODO(meegoo): custom delimiter
-        (*state->_rejected_record_file) << record << "\t" << error_msg << "\t" << source << std::endl;
+    auto* writer = RuntimeStateHelper::rejected_record_writer(state);
+    if (writer == nullptr) {
+        return;
     }
+    state->_num_log_rejected_rows.fetch_add(1, std::memory_order_relaxed);
 
-    // Fan out every legacy-path rejected row to the Phase 2 RejectedRecordWriter
-    // so the Phase 3 sync daemon can ship them to _statistics_.rejected_records
-    // without requiring each of the 17 legacy call sites to migrate manually.
-    // The writer uses BE-assigned UUIDs so duplicate writes (if a refactored
-    // call site also calls the writer directly) are deduped by the system
-    // table's primary key on (id, created_at).
-    //
-    // `source` is the legacy tab-delimited helper's free-form source string
-    // -- for file loads it is the file name, for INSERT / Routine Load it
-    // may be empty. We wrap whatever we got into a minimal JSON object so
-    // the system table's `source_info` column has a consistent shape.
-    if (auto* writer = RuntimeStateHelper::rejected_record_writer(state); writer != nullptr) {
-        std::string source_info_json;
-        if (!source.empty()) {
-            // Use rapidjson to escape the source string so path components with
-            // quotes or backslashes don't break the JSON. Building a tiny
-            // document is cheaper than a careful hand-rolled escape pass and
-            // keeps this in sync with how the writer's own builders escape
-            // their strings.
-            rapidjson::Document d;
-            d.SetObject();
-            auto& alloc = d.GetAllocator();
-            d.AddMember("source",
-                        rapidjson::Value(source.c_str(), static_cast<rapidjson::SizeType>(source.size()), alloc),
-                        alloc);
-            rapidjson::StringBuffer buf;
-            rapidjson::Writer<rapidjson::StringBuffer> w(buf);
-            d.Accept(w);
-            source_info_json.assign(buf.GetString(), buf.GetSize());
-        }
-        writer->append_raw(record, /*error_code=*/"REJECTED", error_msg, /*error_column=*/"", source_info_json);
+    // `source` is the legacy free-form string (file name for file loads,
+    // empty for INSERT / Routine Load). Wrap it in JSON so the system
+    // table's source_info column has a consistent shape; rapidjson
+    // escapes embedded quotes / backslashes correctly.
+    std::string source_info_json;
+    if (!source.empty()) {
+        rapidjson::Document d;
+        d.SetObject();
+        auto& alloc = d.GetAllocator();
+        d.AddMember("source",
+                    rapidjson::Value(source.c_str(), static_cast<rapidjson::SizeType>(source.size()), alloc),
+                    alloc);
+        rapidjson::StringBuffer buf;
+        rapidjson::Writer<rapidjson::StringBuffer> w(buf);
+        d.Accept(w);
+        source_info_json.assign(buf.GetString(), buf.GetSize());
     }
+    writer->append_raw(record, /*error_code=*/"REJECTED", error_msg, /*error_column=*/"", source_info_json);
 }
 
 RejectedRecordWriter* RuntimeStateHelper::rejected_record_writer(RuntimeState* state) {
