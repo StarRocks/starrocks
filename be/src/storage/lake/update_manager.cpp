@@ -316,8 +316,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     const bool is_row_mode_partial_update = op_write.has_txn_meta() && op_write.rewrite_segments_size() > 0 &&
                                             op_write.rowset().num_rows() > 0;
     const bool use_parallel_partial_update =
-            is_row_mode_partial_update && !has_condition_update && local_segments > 1 &&
-            ExecEnv::GetInstance()->lake_partial_update_thread_pool() != nullptr;
+            config::enable_pk_index_parallel_execution && is_row_mode_partial_update && !has_condition_update &&
+            local_segments > 1 && ExecEnv::GetInstance()->lake_partial_update_thread_pool() != nullptr;
 
     if (use_parallel_partial_update) {
         // ==================== Parallel row-mode partial update ====================
