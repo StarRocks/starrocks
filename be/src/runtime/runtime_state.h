@@ -262,6 +262,17 @@ public:
 
     const std::string& db() const { return _db; }
 
+    // Target table name of the current load. Populated by OlapTableSink on
+    // init so RejectedRecordWriter can stamp rows with the correct
+    // (target_database, target_table) pair. Scanner-phase rejections
+    // inherit whatever the sink set earlier in the fragment's init
+    // sequence; if no sink ran first (rare) this stays empty and the
+    // writer records an empty string, which the FE side treats the
+    // same as NULL.
+    void set_table_name(const std::string& table_name) { _table_name = table_name; }
+
+    const std::string& table_name() const { return _table_name; }
+
     void set_load_label(const std::string& label) { _load_label = label; }
 
     const std::string& load_label() const { return _load_label; }
@@ -732,6 +743,7 @@ private:
     int64_t _txn_id = 0;
     std::string _load_label;
     std::string _db;
+    std::string _table_name;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path

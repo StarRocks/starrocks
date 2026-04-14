@@ -16,10 +16,12 @@
 
 #include <filesystem>
 
+#include "agent/master_info.h"
 #include "base/uid_util.h"
 #include "column/binary_column.h"
 #include "column/column.h"
 #include "common/logging.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
@@ -110,6 +112,32 @@ std::string pick_name(const std::vector<std::string>& col_names, size_t idx) {
         return col_names[idx];
     }
     return positional_name(idx);
+}
+
+// Convert TQueryOptions.load_job_type to the stable string values the
+// `_statistics_.rejected_records.load_type` column's comment enumerates.
+// Returns "UNKNOWN" only when the query is genuinely not a load (e.g.
+// an internal SELECT that happened to set log_rejected_record_num) or
+// the field was not set by the FE.
+std::string resolve_load_type(const TQueryOptions& query_options) {
+    if (!query_options.__isset.load_job_type) {
+        return "UNKNOWN";
+    }
+    switch (query_options.load_job_type) {
+    case TLoadJobType::BROKER:
+        return "BROKER_LOAD";
+    case TLoadJobType::SPARK:
+        return "SPARK_LOAD";
+    case TLoadJobType::INSERT_QUERY:
+    case TLoadJobType::INSERT_VALUES:
+        return "INSERT";
+    case TLoadJobType::STREAM_LOAD:
+        return "STREAM_LOAD";
+    case TLoadJobType::ROUTINE_LOAD:
+        return "ROUTINE_LOAD";
+    default:
+        return "UNKNOWN";
+    }
 }
 
 } // namespace
@@ -212,28 +240,46 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     doc.SetObject();
     auto& alloc = doc.GetAllocator();
 
-    // Assemble the top-level record. Keys match the FE system table
-    // (_statistics_.rejected_records) column names so the Phase 3 sync
-    // daemon can do a column-name-indexed Stream Load.
+    // Populate every column the DDL declares. Keys must match
+    // `_statistics_.rejected_records` column names so merge-commit
+    // Stream Load maps them positionally. Stringy fields go through
+    // rapidjson so embedded quotes / backslashes are escaped uniformly.
+
+    // Identity -- UUID generated here makes at-least-once sync retries
+    // dedup into a single row via the system table's primary key.
     const std::string record_id = generate_uuid_string();
-    rapidjson::Value id_v(record_id.c_str(), static_cast<rapidjson::SizeType>(record_id.size()), alloc);
-    doc.AddMember("id", id_v, alloc);
+    doc.AddMember("id",
+                  rapidjson::Value(record_id.c_str(), static_cast<rapidjson::SizeType>(record_id.size()), alloc),
+                  alloc);
 
+    // Target. target_database is set early in OlapTableSink::init() via
+    // RuntimeState::set_db; target_table alongside via set_table_name.
+    // Scanner-phase rejections inherit whichever value the sink installed.
+    // If neither is set (pure SELECT rejection path, unusual) these stay
+    // empty strings and the FE treats them as nulls.
     const std::string& db_name = _state->db();
-    const std::string& label = _state->load_label();
-    const int64_t txn_id = _state->load_job_id();
-
+    const std::string& tbl_name = _state->table_name();
     doc.AddMember("target_database",
                   rapidjson::Value(db_name.c_str(), static_cast<rapidjson::SizeType>(db_name.size()), alloc), alloc);
-    // target_table and load_type are filled in by the Phase 3 sync daemon
-    // from the load-job metadata; the Scanner/Sink rejection paths do not
-    // universally have the target-table name on hand.
-    doc.AddMember("target_table", rapidjson::Value("", 0, alloc), alloc);
+    doc.AddMember("target_table",
+                  rapidjson::Value(tbl_name.c_str(), static_cast<rapidjson::SizeType>(tbl_name.size()), alloc), alloc);
+
+    // Load context.
+    const std::string& label = _state->load_label();
+    const int64_t txn_id = _state->load_job_id();
+    std::string load_type = resolve_load_type(_state->query_options());
     doc.AddMember("load_label",
                   rapidjson::Value(label.c_str(), static_cast<rapidjson::SizeType>(label.size()), alloc), alloc);
-    doc.AddMember("load_type", rapidjson::Value("UNKNOWN", 7, alloc), alloc);
+    doc.AddMember("load_type",
+                  rapidjson::Value(load_type.c_str(), static_cast<rapidjson::SizeType>(load_type.size()), alloc),
+                  alloc);
     doc.AddMember("txn_id", rapidjson::Value(txn_id), alloc);
+    const std::string& user_name = _state->user();
+    doc.AddMember("user_name",
+                  rapidjson::Value(user_name.c_str(), static_cast<rapidjson::SizeType>(user_name.size()), alloc),
+                  alloc);
 
+    // Error context.
     doc.AddMember("error_code",
                   rapidjson::Value(error_code.c_str(), static_cast<rapidjson::SizeType>(error_code.size()), alloc),
                   alloc);
@@ -245,8 +291,16 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
                   rapidjson::Value(error_column.c_str(), static_cast<rapidjson::SizeType>(error_column.size()), alloc),
                   alloc);
 
+    // Payload.
     add_parsed_json(doc, alloc, "raw_record", raw_record_json);
     add_parsed_json(doc, alloc, "source_info", source_info);
+
+    // Diagnostics.
+    std::optional<int64_t> backend_id = get_backend_id();
+    if (backend_id.has_value()) {
+        doc.AddMember("backend_id", rapidjson::Value(*backend_id), alloc);
+    }
+    // else: leave the column absent; FE Stream Load will treat it as NULL.
 
     rapidjson::StringBuffer buf;
     rapidjson::Writer<rapidjson::StringBuffer> writer(buf);
