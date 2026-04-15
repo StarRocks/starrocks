@@ -55,6 +55,14 @@ AS insert into t2 select * from t1;
 | schedule_interval  | 否      | 定时任务的执行间隔，最小间隔为 10 秒。                                                           |
 | etl_statement      | 是      | 需要创建异步任务的 ETL 语句。StarRocks 当前支持为 [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 和 [INSERT](../INSERT.md) |
 
+## 返回值
+
+- `TaskName`：任务的名称。
+- `Status`：任务的状态。有效值：
+  - `SUBMITTED`：任务已提交。
+  - `REJECTED`：任务已被拒绝。
+  - `FAILED`：任务已失败。
+
 ## 使用说明
 
 该语句会创建一个 Task，表示一个 ETL 语句执行任务的存储模板。您可以通过查询 Information Schema 中的元数据视图 `tasks` 来查看 Task 信息：
