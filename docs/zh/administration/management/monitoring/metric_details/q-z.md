@@ -352,6 +352,18 @@ description: "Alphabetical q - z"
 - 单位：计数
 - 描述：在段打开期间未找到段文件（文件丢失）的总次数。持续增加的值可能表示数据丢失或存储不一致。
 
+## `starrocks_be_staros_shard_info_fallback_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。BE 的 StarOSWorker 因本地缓存中没有所需的 shard 信息（即 FE 在查询 / 合并 / lake 操作引用该 shard 之前尚未将其推送到该 BE）而实际向 starmgr 发起的 RPC（`g_starlet->get_shard_info()`）总次数。仅在 starlet 就绪检查通过且 RPC 实际发出后才计入；starlet 尚未就绪的超时不包含在内。正常情况下该值应接近零。持续或上升的速率是一个强烈信号，表明 FE 端的任务或节点选择正把任务调度到尚未拥有该 shard 的 BE，或者 FE 端的 shard 推送存在滞后。建议告警：单个 BE 在 5 分钟窗口内的速率过高。
+
+## `starrocks_be_staros_shard_info_fallback_failed_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：仅存算分离模式。`starrocks_be_staros_shard_info_fallback_total` 中 starmgr RPC 返回非 OK 状态的子集。可使用比率 `failed_total / fallback_total` 将 starmgr 的瞬时错误与正常的成功回退区分开来进行告警。
+
 ## `starrocks_fe_clone_task_copy_bytes`
 
 - 单位：字节
