@@ -129,7 +129,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     // Try each DN pattern in order, return the first successfully bound DN.
     // Patterns are separated by colon ':'.
     protected String authenticateByPattern(String user, String password) throws Exception {
-        String safeUser = escapeLdapValue(user);
+        String safeUser = escapeDnValue(normalizeUsername(user));
         String[] rawPatterns = ldapBindDNPattern.split(":");
         // Pre-validate all patterns before attempting any bind
         String[] patterns = new String[rawPatterns.length];
@@ -139,6 +139,12 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 throw new AuthenticationException(
                         "Invalid bind DN pattern: '" + patterns[i] + "' does not contain ${USER} placeholder. " +
                         "Each pattern segment must include ${USER} to prevent shared-DN authentication bypass.");
+            }
+            if (!patterns[i].contains("=")) {
+                throw new AuthenticationException(
+                        "Invalid bind DN pattern: '" + patterns[i] + "' is not a valid DN format. " +
+                        "Pattern must produce a Distinguished Name (e.g., 'uid=${USER},ou=People,dc=example,dc=com'). " +
+                        "UPN-style patterns like '${USER}@domain' are not supported.");
             }
         }
         Exception lastException = null;
@@ -270,6 +276,10 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         return src;
     }
 
+    /**
+     * Escape special characters in a value used in an LDAP search filter (RFC 4515).
+     * Prevents LDAP filter injection by escaping: \ * ( ) \0
+     */
     public static String escapeLdapValue(String value) {
         if (value == null) {
             return null;
@@ -280,8 +290,45 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         value = value.replace("(", "\\28");
         value = value.replace(")", "\\29");
         value = value.replace("|", "\\7c");
-        value = value.replace("\\u0000", "\\00");
+        value = value.replace("\u0000", "\\00");
         return value;
+    }
+
+    /**
+     * Escape special characters in a value used in an LDAP Distinguished Name (RFC 4514).
+     * Prevents DN injection by escaping: \ , + " < > ;
+     * and leading space/#, trailing space.
+     */
+    public static String escapeDnValue(String value) {
+        if (value == null) {
+            return null;
+        }
+        StringBuilder sb = new StringBuilder(value.length() + 10);
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '\\':
+                case ',':
+                case '+':
+                case '"':
+                case '<':
+                case '>':
+                case ';':
+                    sb.append('\\').append(c);
+                    break;
+                case '\0':
+                    sb.append("\\00");
+                    break;
+                default:
+                    if ((i == 0 && (c == ' ' || c == '#')) ||
+                            (i == value.length() - 1 && c == ' ')) {
+                        sb.append('\\').append(c);
+                    } else {
+                        sb.append(c);
+                    }
+            }
+        }
+        return sb.toString();
     }
 
     /**

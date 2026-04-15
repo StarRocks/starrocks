@@ -185,8 +185,9 @@ class LDAPAuthProviderTest {
     }
 
     @Test
-    void testAuthenticateByPatternWithAtSign() throws Exception {
-        // AD-style pattern: ${USER}@domain or uid=${USER}@domain
+    void testUPNPatternIsRejected() {
+        // UPN-style pattern (no '=' sign) should be rejected because the result
+        // is not a valid DN, which would break downstream group lookup.
         LDAPAuthProvider provider = new LDAPAuthProvider(
                 "localhost", 389, false,
                 null, null,
@@ -198,8 +199,29 @@ class LDAPAuthProviderTest {
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
+        AuthenticationException ex = Assertions.assertThrows(AuthenticationException.class, () -> {
+            provider.authenticate(authCtx, user, authResponse);
+        });
+        Assertions.assertTrue(ex.getMessage().contains("not a valid DN format"));
+    }
+
+    @Test
+    void testDNPatternWithAtSignInUid() throws Exception {
+        // DN pattern where uid value contains '@' is valid — '@' is a legal
+        // character in DN attribute values, not a DN structural character.
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=${USER}@abc.com,ou=People,dc=test,dc=com");
+
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
         provider.authenticate(authCtx, user, authResponse);
-        Assertions.assertEquals("alice@abc.com", authCtx.getDistinguishedName());
+        Assertions.assertEquals("uid=alice@abc.com,ou=People,dc=test,dc=com", authCtx.getDistinguishedName());
     }
 
     @Test
@@ -238,7 +260,7 @@ class LDAPAuthProviderTest {
     }
 
     @Test
-    void testPatternEscapesSpecialCharacters() throws Exception {
+    void testPatternEscapesDnSpecialCharacters() throws Exception {
         LDAPAuthProvider provider = new LDAPAuthProvider(
                 "localhost", 389, false,
                 null, null,
@@ -246,12 +268,55 @@ class LDAPAuthProviderTest {
                 /* ldapUserDN */ null,
                 "uid=${USER},dc=test,dc=com");
 
+        // DN special characters: , + " < > ; \ should be escaped (RFC 4514)
+        AccessControlContext authCtx = new AccessControlContext();
+        UserIdentity user = UserIdentity.createEphemeralUserIdent("alice,+\"<>;\\bob", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+
+        provider.authenticate(authCtx, user, authResponse);
+        Assertions.assertEquals("uid=alice\\,\\+\\\"\\<\\>\\;\\\\bob,dc=test,dc=com",
+                authCtx.getDistinguishedName());
+    }
+
+    @Test
+    void testPatternEscapesLeadingSpaceAndHash() throws Exception {
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=${USER},dc=test,dc=com");
+
+        // Leading space
+        AccessControlContext authCtx1 = new AccessControlContext();
+        UserIdentity user1 = UserIdentity.createEphemeralUserIdent(" alice", "%");
+        byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
+        provider.authenticate(authCtx1, user1, authResponse);
+        Assertions.assertEquals("uid=\\ alice,dc=test,dc=com", authCtx1.getDistinguishedName());
+
+        // Leading #
+        AccessControlContext authCtx2 = new AccessControlContext();
+        UserIdentity user2 = UserIdentity.createEphemeralUserIdent("#alice", "%");
+        provider.authenticate(authCtx2, user2, authResponse);
+        Assertions.assertEquals("uid=\\#alice,dc=test,dc=com", authCtx2.getDistinguishedName());
+    }
+
+    @Test
+    void testPatternFilterCharsNotEscapedInDn() throws Exception {
+        LDAPAuthProvider provider = new LDAPAuthProvider(
+                "localhost", 389, false,
+                null, null,
+                null, null, null, "uid",
+                /* ldapUserDN */ null,
+                "uid=${USER},dc=test,dc=com");
+
+        // Filter special characters * ( ) | are NOT special in DN values
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice*()|", "%");
         byte[] authResponse = "password\0".getBytes(StandardCharsets.UTF_8);
 
         provider.authenticate(authCtx, user, authResponse);
-        Assertions.assertEquals("uid=alice\\2a\\28\\29\\7c,dc=test,dc=com", authCtx.getDistinguishedName());
+        Assertions.assertEquals("uid=alice*()|,dc=test,dc=com", authCtx.getDistinguishedName());
     }
 
     @Test
