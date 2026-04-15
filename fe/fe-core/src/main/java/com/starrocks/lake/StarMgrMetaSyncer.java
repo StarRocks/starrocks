@@ -29,7 +29,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
@@ -160,24 +159,58 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                                                 boolean isFileBundling) {
         Preconditions.checkNotNull(starOSAgent);
         Map<Long, Set<Long>> shardIdsByBeMap = new HashMap<>();
-        long pickBackendId = -1;
-        // group shards by be
-        for (long shardId : shardIds) {
-            try {
-                if (isFileBundling) {
-                    if (pickBackendId == -1) {
-                        ComputeNode cn = LakeAggregator.chooseAggregatorNode(computeResource);
-                        if (cn == null) {
-                            throw new NoAliveBackendException("No available compute node found for the operation");
-                        }
-                        pickBackendId = cn.getId();
+
+        // Resolve all shard owners in a single batched RPC. The result serves both:
+        // - filebundling: collect candidate aggregator nodes (prefer a node that owns
+        //   at least one shard), then assign all shards to the chosen aggregator.
+        // - non-filebundling: group shards by their primary owner CN for per-node
+        //   tablet deletion.
+        // This avoids N per-shard getPrimaryComputeNodeIdByShard RPCs in either path.
+        Map<Long, List<Long>> shardToNodeIds = null;
+        try {
+            shardToNodeIds = starOSAgent.getAllNodeIdsByShards(
+                    shardIds, computeResource.getWorkerGroupId());
+        } catch (Exception e) {
+            LOG.warn("Failed to batch-resolve shard owners for {} shards, falling back",
+                    shardIds.size(), e);
+        }
+
+        if (isFileBundling) {
+            // Collect candidate aggregator nodes from the batched result, then pick one.
+            Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
+            if (shardToNodeIds != null) {
+                for (List<Long> nodeIds : shardToNodeIds.values()) {
+                    if (nodeIds == null || nodeIds.isEmpty()) {
+                        continue;
                     }
-                } else {
-                    pickBackendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId, computeResource.getWorkerGroupId());
+                    ComputeNode owner = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                            .getBackendOrComputeNode(nodeIds.get(0));
+                    if (owner != null) {
+                        candidateAggregatorNodes.add(owner);
+                    }
                 }
-                shardIdsByBeMap.computeIfAbsent(pickBackendId, k -> Sets.newHashSet()).add(shardId);
-            } catch (StarRocksException ignored1) {
-                // ignore error
+            }
+            ComputeNode cn = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
+            if (cn != null) {
+                shardIdsByBeMap.put(cn.getId(), Sets.newHashSet(shardIds));
+            }
+        } else {
+            // Group shards by their primary owner CN.
+            for (long shardId : shardIds) {
+                try {
+                    long ownerId = -1;
+                    List<Long> nodeIds = (shardToNodeIds != null) ? shardToNodeIds.get(shardId) : null;
+                    if (nodeIds != null && !nodeIds.isEmpty()) {
+                        ownerId = nodeIds.get(0);
+                    } else {
+                        // Batched result missing this shard — fall back to per-shard RPC.
+                        ownerId = starOSAgent.getPrimaryComputeNodeIdByShard(
+                                shardId, computeResource.getWorkerGroupId());
+                    }
+                    shardIdsByBeMap.computeIfAbsent(ownerId, k -> Sets.newHashSet()).add(shardId);
+                } catch (StarRocksException ignored) {
+                    // ignore error
+                }
             }
         }
 

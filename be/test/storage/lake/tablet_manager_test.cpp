@@ -1415,6 +1415,54 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets_capture_delta_versions_
     }
 }
 
+// Verify that pick_local_anchor_tablet_id prefers a tablet id that this worker owns.
+// In file-bundling mode the aggregator derives bundle/txn-log paths from a single
+// tablet id of the batch; using a remote tablet id forces the staros worker to fetch
+// shard info via RPC, so the helper must skip non-local ids and pick a local one.
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_skips_non_local) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("is_tablet_in_worker:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock: tablets 100 and 101 are NOT on this worker; 102 is.
+    SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:2", [](void* arg) {
+        auto* p = static_cast<std::pair<int64_t, bool*>*>(arg);
+        if (p->first == 100 || p->first == 101) {
+            *(p->second) = false;
+        }
+    });
+
+    std::vector<int64_t> candidates{100, 101, 102, 103};
+    EXPECT_EQ(102, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_falls_back_to_first_when_none_local) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("is_tablet_in_worker:2");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Mock: no tablet is on this worker.
+    SyncPoint::GetInstance()->SetCallBack("is_tablet_in_worker:2", [](void* arg) {
+        auto* p = static_cast<std::pair<int64_t, bool*>*>(arg);
+        *(p->second) = false;
+    });
+
+    std::vector<int64_t> candidates{200, 201, 202};
+    // No local tablet available → the helper must still return a usable id (the first).
+    EXPECT_EQ(200, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
+TEST_F(LakeTabletManagerTest, pick_local_anchor_tablet_id_returns_first_when_all_local) {
+    // Without any sync-point override, is_tablet_in_worker returns true by default in
+    // unit tests (g_worker is null), so the first candidate is picked immediately.
+    std::vector<int64_t> candidates{300, 301, 302};
+    EXPECT_EQ(300, _tablet_manager->pick_local_anchor_tablet_id(candidates));
+}
+
 #endif // USE_STAROS
 
 } // namespace starrocks
