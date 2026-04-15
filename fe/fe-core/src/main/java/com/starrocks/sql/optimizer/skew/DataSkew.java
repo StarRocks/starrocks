@@ -71,22 +71,8 @@ public class DataSkew {
         }
     }
 
-<<<<<<< HEAD
-    private record McvSkewInfo(boolean skewed, Optional<Double> mcvSkewFactor, Optional<List<Pair<String, Long>>> mcvs) {
-=======
-    public record SkewCandidates(boolean includeNull,
-                                 List<Pair<String, Long>> mcvs,
-                                 Optional<Double> nullSkewFactor,
-                                 Optional<Double> mcvSkewFactor,
-                                 Optional<Double> maxMcvRatio) {
-        public boolean isSkewed() {
-            return includeNull || (mcvs != null && !mcvs.isEmpty());
-        }
-    }
-
     private record McvSkewInfo(boolean skewed, Optional<Double> mcvSkewFactor, Optional<List<Pair<String, Long>>> mcvs,
                                AdditionalInfo additionalInfo) {
->>>>>>> 5d866fe32d ([Enhancement] Return more information about skew checks (#71376))
         public McvSkewInfo(boolean skewed) {
             this(skewed, Optional.empty(), Optional.empty(), AdditionalInfo.NONE);
         }
