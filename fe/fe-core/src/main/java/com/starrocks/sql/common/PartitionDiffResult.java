@@ -43,20 +43,18 @@ public class PartitionDiffResult {
     public Map<Table, Map<String, Set<String>>> getRefBaseTableMVPartitionMap() {
         return refBaseTableMVPartitionMap;
     }
-<<<<<<< HEAD
-=======
 
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         String refBaseTableMVPartitionMapStr = refBaseTableMVPartitionMap.entrySet()
                 .stream()
-                .map(e -> e.getKey().getName() + "=" + e.getValue().toString())
+                .map(e -> e.getKey().getName() + "=" + e.getValue())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse("");
-        String  refBaseTablePartitionMapStr = refBaseTablePartitionMap.entrySet()
+        String refBaseTablePartitionMapStr = refBaseTablePartitionMap.entrySet()
                 .stream()
-                .map(e -> e.getKey().getName() + "=" + e.getValue().toString())
+                .map(e -> e.getKey().getName() + "=" + e.getValue())
                 .reduce((a, b) -> a + ", " + b)
                 .orElse("");
         sb.append("{")
@@ -67,5 +65,4 @@ public class PartitionDiffResult {
                 .append("}");
         return sb.toString();
     }
->>>>>>> e27916f99f ([BugFix] Fix mv refresh bug with intersected partitions of multi tables (#65920))
 }
