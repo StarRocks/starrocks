@@ -26,11 +26,8 @@
 #include <condition_variable>
 #include <functional>
 
-<<<<<<< HEAD
-#include "common/config.h"
-=======
 #include "base/utility/defer_op.h"
->>>>>>> ae3ed9c5e6 ([Enhancement] Add BE metric for cache-miss shard info fallback in StarOSWorker (#71620))
+#include "common/config.h"
 #include "common/shutdown_hook.h"
 #include "runtime/starrocks_metrics.h"
 
