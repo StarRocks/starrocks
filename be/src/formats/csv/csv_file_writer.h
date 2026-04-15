@@ -27,6 +27,10 @@ struct CSVWriterOptions : FileWriterOptions {
     std::string collection_delim = ",";
     std::string mapkey_delim = ",";
     bool is_hive = false;
+    // 0 = disabled. When set, all non-NULL fields are wrapped with this char.
+    char enclose = 0;
+    // 0 = disabled. Used together with enclose to escape enclose/escape chars inside fields.
+    char escape = 0;
 
     inline static std::string COLUMN_TERMINATED_BY = "column_terminated_by";
     inline static std::string LINE_TERMINATED_BY = "line_terminated_by";
@@ -34,6 +38,8 @@ struct CSVWriterOptions : FileWriterOptions {
     inline static std::string COLLECTION_DELIM = "collection_delim";
     inline static std::string MAPKEY_DELIM = "mapkey_delim";
     inline static std::string IS_HIVE = "is_hive";
+    inline static std::string ENCLOSE = "enclose";
+    inline static std::string ESCAPE = "escape";
 };
 
 // The primary purpose of this class is to support hive + csv. Use with caution in other cases.
@@ -73,6 +79,16 @@ private:
     std::vector<std::pair<std::unique_ptr<csv::Converter>, std::unique_ptr<csv::Converter>>> _column_converters;
 
     Status _write_header();
+
+    // Write a field value enclosed with enclose char, escaping internal enclose and escape
+    // chars. The converter writes into a temporary in-memory buffer, then this method scans
+    // the buffer and writes escaped content to the real output stream.
+    Status _write_enclosed_field(csv::Converter* converter, const Column& column, size_t row_num,
+                                 const csv::Converter::Options& options);
+
+    // Write a string value enclosed with enclose char, escaping internal enclose and escape
+    // chars. Shared by header and field writing paths.
+    Status _write_enclosed_string(const std::string& value);
 };
 
 class CSVFileWriterFactory : public FileWriterFactory {
