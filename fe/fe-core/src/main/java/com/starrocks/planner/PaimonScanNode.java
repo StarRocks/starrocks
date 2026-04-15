@@ -243,8 +243,7 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void splitRawFileScanRangeLocations(RawFile rawFile, @Nullable DeletionFile deletionFile) {
-        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
-        long splitSize = sv.getConnectorMaxSplitSize();
+        long splitSize = ConnectContext.get().getSessionVariable().getConnectorMaxSplitSize();
         long totalSize = rawFile.length();
         long offset = rawFile.offset();
         boolean needSplit = totalSize > splitSize;
