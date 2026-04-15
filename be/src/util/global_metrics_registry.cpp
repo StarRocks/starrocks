@@ -107,6 +107,9 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(pk_index_sst_read_error_total);
     REGISTER_STARROCKS_METRIC(pk_index_sst_write_error_total);
 
+    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_total);
+    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
+
     // clone
     _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
                              &(_fast_metrics->clone_task_inter_node_copy_bytes));
