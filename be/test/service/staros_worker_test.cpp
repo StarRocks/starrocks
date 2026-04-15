@@ -28,8 +28,8 @@
 
 #include "common/config.h"
 #include "common/shutdown_hook.h"
-#include "runtime/starrocks_metrics.h"
-#include "utility/defer_op.h"
+#include "util/defer_op.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
