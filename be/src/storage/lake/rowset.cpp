@@ -23,6 +23,7 @@
 #include "column/datum_convert.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_scan_io_fwd.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -37,6 +38,7 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
@@ -49,6 +51,94 @@
 #include "types/type_descriptor.h"
 
 namespace starrocks::lake {
+
+namespace {
+
+class NonClosingChunkIterator final : public ChunkIterator {
+public:
+    explicit NonClosingChunkIterator(ChunkIteratorPtr child)
+            : ChunkIterator(child->schema(), child->chunk_size()), _child(std::move(child)) {}
+
+    void close() override {}
+
+    size_t merged_rows() const override { return _child->merged_rows(); }
+
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+        RETURN_IF_ERROR(ChunkIterator::init_encoded_schema(dict_maps));
+        return _child->init_encoded_schema(dict_maps);
+    }
+
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+        RETURN_IF_ERROR(ChunkIterator::init_output_schema(unused_output_column_ids));
+        return _child->init_output_schema(unused_output_column_ids);
+    }
+
+protected:
+    Status do_get_next(Chunk* chunk) override { return _child->get_next(chunk); }
+    Status do_get_next(Chunk* chunk, std::vector<uint32_t>* rowid) override { return _child->get_next(chunk, rowid); }
+    Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override {
+        return _child->get_next(chunk, rssid_rowids);
+    }
+
+private:
+    ChunkIteratorPtr _child;
+};
+
+ChunkIteratorPtr make_non_closing_chunk_iterator(const ChunkIteratorPtr& child) {
+    return std::make_shared<NonClosingChunkIterator>(child);
+}
+
+} // namespace
+
+Status prepare_segment_key_pruned_scan_range(const SegmentPtr& segment, const SegmentReadOptions& options,
+                                             const PreparedSegmentPruningStatePtr& pruning_state,
+                                             SparseRangePtr* shared_scan_range) {
+    if (pruning_state == nullptr || !options.short_key_ranges.empty()) {
+        return Status::OK();
+    }
+
+    std::call_once(pruning_state->key_pruned_range_once, [&]() {
+        auto range_or = get_segment_scan_range_by_key_ranges(segment, options.ranges, options.lake_io_opts);
+        if (!range_or.ok()) {
+            pruning_state->key_pruned_range_status = range_or.status();
+            return;
+        }
+        auto pruned_range = std::move(range_or).value();
+        pruning_state->key_pruned_range = std::make_shared<SparseRange<>>(std::move(pruned_range));
+    });
+    RETURN_IF_ERROR(pruning_state->key_pruned_range_status);
+    *shared_scan_range = pruning_state->key_pruned_range;
+    return Status::OK();
+}
+
+Status prepare_segment_static_pruned_scan_range(const Schema& schema, const SegmentPtr& segment,
+                                                const SegmentReadOptions& options,
+                                                const PreparedSegmentPruningStatePtr& pruning_state,
+                                                SparseRangePtr* shared_scan_range) {
+    if (pruning_state == nullptr || !options.short_key_ranges.empty()) {
+        return Status::OK();
+    }
+
+    std::call_once(pruning_state->static_pruned_range_once, [&]() {
+        SegmentReadOptions static_options = options;
+        auto st = prepare_segment_key_pruned_scan_range(segment, static_options, pruning_state,
+                                                        &static_options.shared_key_pruned_scan_range);
+        if (!st.ok()) {
+            pruning_state->static_pruned_range_status = st;
+            return;
+        }
+
+        auto range_or = get_segment_scan_range_after_static_pruning(segment, schema, static_options);
+        if (!range_or.ok()) {
+            pruning_state->static_pruned_range_status = range_or.status();
+            return;
+        }
+        pruning_state->static_pruned_range = std::make_shared<SparseRange<>>(std::move(range_or).value());
+    });
+    RETURN_IF_ERROR(pruning_state->static_pruned_range_status);
+    *shared_scan_range = pruning_state->static_pruned_range;
+    return Status::OK();
+}
 
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
@@ -267,6 +357,31 @@ Status Rowset::add_partial_compaction_segments_info(TxnLogPB_OpCompaction* op_co
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options) {
+    return do_read(schema, options, nullptr, nullptr);
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options,
+                                                     const std::vector<SegmentPtr>& prepared_segments) {
+    return do_read(schema, options, &prepared_segments, nullptr);
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options,
+                                                     const std::vector<SegmentPtr>& prepared_segments,
+                                                     std::vector<ChunkIteratorPtr>* reusable_segment_iterators) {
+    return do_read(schema, options, &prepared_segments, reusable_segment_iterators, nullptr);
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options,
+                                                     const std::vector<SegmentPtr>& prepared_segments,
+                                                     std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
+                                                     std::vector<PreparedSegmentPruningStatePtr>* prepared_segment_pruning_states) {
+    return do_read(schema, options, &prepared_segments, reusable_segment_iterators, prepared_segment_pruning_states);
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, const RowsetReadOptions& options,
+                                                        const std::vector<SegmentPtr>* prepared_segments,
+                                                        std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
+                                                        std::vector<PreparedSegmentPruningStatePtr>* prepared_segment_pruning_states) {
     SegmentReadOptions seg_options;
     if (options.lake_io_opts.fs) {
         seg_options.fs = options.lake_io_opts.fs;
@@ -289,6 +404,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.runtime_range_pruner = options.runtime_range_pruner;
     seg_options.tablet_schema = options.tablet_schema;
     seg_options.lake_io_opts = options.lake_io_opts;
+    if (seg_options.lake_io_opts.fs == nullptr) {
+        seg_options.lake_io_opts.fs = seg_options.fs;
+    }
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.has_preaggregation = options.has_preaggregation;
@@ -364,11 +482,27 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
 
     std::vector<SegmentPtr> segments;
     const std::unordered_set<int>* skip_ptr = skip_segment_idxs.empty() ? nullptr : &skip_segment_idxs;
-    RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+    if (prepared_segments != nullptr) {
+        segments = *prepared_segments;
+        for (int idx : skip_segment_idxs) {
+            if (idx >= 0 && static_cast<size_t>(idx) < segments.size()) {
+                segments[idx] = nullptr;
+            }
+        }
+    } else {
+        RETURN_IF_ERROR(load_segments(&segments, seg_options, nullptr, skip_ptr));
+    }
 
     // Update segments_read_count after filtering
     if (options.stats) {
         options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
+    }
+
+    if (reusable_segment_iterators != nullptr && reusable_segment_iterators->size() < segments.size()) {
+        reusable_segment_iterators->resize(segments.size());
+    }
+    if (prepared_segment_pruning_states != nullptr && prepared_segment_pruning_states->size() < segments.size()) {
+        prepared_segment_pruning_states->resize(segments.size());
     }
 
     for (int i = 0; i < segments.size(); i++) {
@@ -400,18 +534,41 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
         } else {
             seg_options.is_first_split_of_segment = true;
         }
+        seg_options.shared_key_pruned_scan_range = nullptr;
+        seg_options.shared_static_pruned_scan_range = nullptr;
+        if (prepared_segment_pruning_states != nullptr) {
+            auto& pruning_state = (*prepared_segment_pruning_states)[i];
+            if (config::enable_lake_scan_key_pruning_reuse && options.rowid_range_option != nullptr) {
+                RETURN_IF_ERROR(
+                        prepare_segment_key_pruned_scan_range(seg_ptr, seg_options, pruning_state,
+                                                              &seg_options.shared_key_pruned_scan_range));
+            }
+            if (pruning_state != nullptr && pruning_state->static_pruned_range != nullptr) {
+                seg_options.shared_static_pruned_scan_range = pruning_state->static_pruned_range;
+            }
+        }
 
-        auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
-        if (res.status().is_end_of_file()) {
-            continue;
-        }
-        if (!res.ok()) {
-            return res.status();
-        }
-        if (segment_schema != &schema) {
-            segment_iterators.emplace_back(new_projection_iterator(schema, std::move(res).value()));
+        if (reusable_segment_iterators != nullptr) {
+            auto& reusable_iter = (*reusable_segment_iterators)[i];
+            if (reusable_iter == nullptr) {
+                reusable_iter = new_raw_segment_iterator(seg_ptr, *segment_schema, seg_options);
+            } else {
+                RETURN_IF_ERROR(reset_raw_segment_iterator(reusable_iter, seg_options));
+            }
+            segment_iterators.emplace_back(new_projection_iterator(schema, make_non_closing_chunk_iterator(reusable_iter)));
         } else {
-            segment_iterators.emplace_back(std::move(res).value());
+            auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
+            if (res.status().is_end_of_file()) {
+                continue;
+            }
+            if (!res.ok()) {
+                return res.status();
+            }
+            if (segment_schema != &schema) {
+                segment_iterators.emplace_back(new_projection_iterator(schema, std::move(res).value()));
+            } else {
+                segment_iterators.emplace_back(std::move(res).value());
+            }
         }
     }
     if (segment_iterators.size() > 1 && !is_overlapped()) {

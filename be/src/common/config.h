@@ -1066,6 +1066,23 @@ CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
 CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
+// Whether to build exact key-range-pruned physical split tasks for lake scans before generating split morsels.
+// Disable this to fall back to the generic physical split path for A/B comparison.
+CONF_mBool(enable_lake_index_pruned_physical_split, "true");
+
+// Whether to reuse prepared Lake child morsel scan state for physical split siblings within the same chunk source.
+// Disable this to fully fall back to the per-morsel reader construction path for A/B comparison.
+CONF_mBool(enable_lake_scan_child_morsel_reuse, "false");
+
+// Whether Lake child morsel reuse also keeps the TabletReader prepared read state and reader instance alive across
+// physical split siblings. Disable this to compare the current deep reuse path against the earlier chunk-source-level
+// reuse while keeping enable_lake_scan_child_morsel_reuse turned on.
+CONF_mBool(enable_lake_scan_prepared_read_state_reuse, "true");
+
+// Whether Lake child morsel reuse also caches per-segment key-pruned SparseRange results derived from query key ranges,
+// so sibling physical splits on the same segment can skip repeated _lookup_ordinal work. Disable this for A/B testing.
+CONF_mBool(enable_lake_scan_key_pruning_reuse, "false");
+
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 
@@ -1683,6 +1700,10 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");
+// Whether to pass the current SparseRange down to page-level zonemap filtering, so child morsels only inspect the
+// pages overlapping their exact split ranges. Disable this to A/B compare against the historical coarse begin/end
+// envelope behavior.
+CONF_mBool(enable_index_page_level_zonemap_filter_scan_range_pushdown, "true");
 CONF_mBool(enable_index_bloom_filter, "true");
 CONF_mBool(enable_index_bitmap_filter, "true");
 

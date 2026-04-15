@@ -33,10 +33,12 @@
 #include "common/logging.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "storage/chunk_helper.h"
+#include "storage/column_predicate.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/common.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/tablet_schema.h"
@@ -608,6 +610,84 @@ public:
         return params;
     }
 
+    void create_split_test_tablet() {
+        std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
+        std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
+
+        std::vector<int> k1{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41};
+        std::vector<int> v1{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        auto c3 = Int32Column::create();
+        c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+        c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+        c2->append_numbers(k1.data(), k1.size() * sizeof(int));
+        c3->append_numbers(v1.data(), v1.size() * sizeof(int));
+
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+        Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
+
+        VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+
+        {
+            int64_t txn_id = next_id();
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+            ASSERT_OK(writer->open());
+            ASSERT_OK(writer->write(chunk0));
+            ASSERT_OK(writer->write(chunk1));
+            ASSERT_OK(writer->finish());
+            ASSERT_OK(writer->write(chunk0));
+            ASSERT_OK(writer->write(chunk1));
+            ASSERT_OK(writer->finish());
+
+            const auto& files = writer->segments();
+            ASSERT_EQ(2, files.size());
+
+            auto* rowset = _tablet_metadata->add_rowsets();
+            rowset->set_overlapped(true);
+            rowset->set_id(1);
+            rowset->set_num_rows(2 * (chunk0.num_rows() + chunk1.num_rows()));
+            auto* segs = rowset->mutable_segments();
+            auto* segs_size = rowset->mutable_segment_size();
+            for (const auto& file : writer->segments()) {
+                segs->Add()->assign(file.path);
+                segs_size->Add(file.size.value());
+            }
+
+            writer->close();
+        }
+
+        {
+            int64_t txn_id = next_id();
+            ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+            ASSERT_OK(writer->open());
+            ASSERT_OK(writer->write(chunk0));
+            ASSERT_OK(writer->write(chunk1));
+            ASSERT_OK(writer->finish());
+
+            const auto& files = writer->segments();
+            ASSERT_EQ(1, files.size());
+
+            auto* rowset = _tablet_metadata->add_rowsets();
+            rowset->set_overlapped(false);
+            rowset->set_id(2);
+            rowset->set_num_rows(chunk0.num_rows() + chunk1.num_rows());
+            auto* segs = rowset->mutable_segments();
+            auto* segs_size = rowset->mutable_segment_size();
+            for (const auto& file : writer->segments()) {
+                segs->Add()->assign(file.path);
+                segs_size->Add(file.size.value());
+            }
+
+            writer->close();
+        }
+
+        _tablet_metadata->set_version(3);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+    }
+
 protected:
     constexpr static const char* const kTestDirectory = "test_tablet_reader_split";
 
@@ -761,6 +841,72 @@ TEST_F(LakeTabletReaderSpit, test_reader_split) {
 
         reader->close();
     }
+}
+
+TEST_F(LakeTabletReaderSpit, test_static_prepare_gate_skips_low_fanout_segments) {
+    create_split_test_tablet();
+
+    ConfigResetGuard<bool> split_guard(&config::enable_lake_index_pruned_physical_split, true);
+    ConfigResetGuard<bool> prepared_guard(&config::enable_lake_scan_prepared_read_state_reuse, true);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, true, true);
+    auto prepared_state = std::make_shared<TabletReader::PreparedReadState>();
+    reader->set_prepared_read_state(prepared_state);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto params = generate_tablet_reader_params(&scan_range);
+    params.splitted_scan_rows = 32;
+
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+
+    bool has_static_pruned_range = false;
+    for (const auto& rowset_states : prepared_state->rowset_pruning_states) {
+        for (const auto& pruning_state : rowset_states) {
+            has_static_pruned_range = has_static_pruned_range || pruning_state->static_pruned_range != nullptr;
+        }
+    }
+    ASSERT_FALSE(has_static_pruned_range);
+}
+
+TEST_F(LakeTabletReaderSpit, test_static_prepare_populates_cache_for_high_fanout_segments) {
+    create_split_test_tablet();
+
+    ConfigResetGuard<bool> split_guard(&config::enable_lake_index_pruned_physical_split, true);
+    ConfigResetGuard<bool> prepared_guard(&config::enable_lake_scan_prepared_read_state_reuse, true);
+    ConfigResetGuard<bool> zonemap_guard(&config::enable_index_page_level_zonemap_filter, true);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, true, true);
+    auto prepared_state = std::make_shared<TabletReader::PreparedReadState>();
+    reader->set_prepared_read_state(prepared_state);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto params = generate_tablet_reader_params(&scan_range);
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "25"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(pred.get()));
+    params.pred_tree = PredicateTree::create(std::move(root));
+
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(params));
+
+    bool has_static_pruned_range = false;
+    for (const auto& rowset_states : prepared_state->rowset_pruning_states) {
+        for (const auto& pruning_state : rowset_states) {
+            has_static_pruned_range = has_static_pruned_range || pruning_state->static_pruned_range != nullptr;
+        }
+    }
+    ASSERT_TRUE(has_static_pruned_range);
 }
 
 class DISABLED_LakeLoadSegmentParallelTest : public TestBase {

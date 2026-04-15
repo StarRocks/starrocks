@@ -33,6 +33,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/transactions.h"
@@ -1060,6 +1061,45 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_segment_metadata_filter_disable
     ASSERT_EQ(stats.segment_metadata_filtered, 0);
     // All 3 segments should be read
     ASSERT_EQ(stats.segments_read_count, 3);
+}
+
+TEST_F(LakeRowsetSegmentMetadataFilterTest, test_prepare_static_pruned_scan_range_is_cached) {
+    create_rowsets_with_segment_metas();
+
+    ConfigResetGuard<bool> zonemap_guard(&config::enable_index_page_level_zonemap_filter, true);
+
+    auto rowset =
+            std::make_shared<lake::Rowset>(_tablet_mgr.get(), _tablet_metadata, 0, 0 /* compaction_segment_limit */);
+    ASSIGN_OR_ABORT(auto segments, rowset->segments(false));
+    ASSERT_EQ(3, segments.size());
+
+    OlapReaderStatistics stats;
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_ABORT(seg_options.fs, FileSystemFactory::CreateSharedFromString(_tablet_mgr->tablet_root_location(
+                                          _tablet_metadata->id())));
+    seg_options.lake_io_opts.fs = seg_options.fs;
+    seg_options.stats = &stats;
+    seg_options.tablet_schema = _tablet_schema;
+    seg_options.tablet_id = _tablet_metadata->id();
+    seg_options.rowset_id = rowset->metadata().id();
+    seg_options.rowsetid = rowset->rowset_id();
+
+    std::unique_ptr<ColumnPredicate> pred(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "25"));
+    PredicateAndNode root;
+    root.add_child(PredicateColumnNode(pred.get()));
+    seg_options.pred_tree_for_zone_map = PredicateTree::create(std::move(root));
+
+    auto pruning_state = std::make_shared<PreparedSegmentPruningState>();
+    SparseRangePtr static_pruned_range;
+    const auto schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
+    ASSERT_OK(prepare_segment_static_pruned_scan_range(schema, segments[0], seg_options, pruning_state,
+                                                       &static_pruned_range));
+    ASSERT_NE(static_pruned_range, nullptr);
+    ASSERT_EQ(0, static_pruned_range->span_size());
+
+    SparseRangePtr cached_range;
+    ASSERT_OK(prepare_segment_static_pruned_scan_range(schema, segments[0], seg_options, pruning_state, &cached_range));
+    ASSERT_EQ(static_pruned_range.get(), cached_range.get());
 }
 
 // Test: load_segments with skip_segment_idxs in serial mode

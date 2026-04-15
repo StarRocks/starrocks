@@ -147,6 +147,14 @@ protected:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    virtual ChunkSourcePtr _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index) { return nullptr; }
+    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) {
+        if (chunk_source != nullptr) {
+            chunk_source->close(state);
+        }
+    }
+    virtual bool _is_lake_child_reuse_candidate(const Morsel& morsel) const { return false; }
+    void _init_lake_child_reuse_profile_counters();
     Status _trigger_next_scan(RuntimeState* state, int chunk_source_index);
     Status _try_to_trigger_next_scan(RuntimeState* state);
     virtual void _close_chunk_source_unlocked(RuntimeState* state, int index);
@@ -252,6 +260,11 @@ protected:
     // A tablet may be divided into multiple morsels.
     RuntimeProfile::Counter* _morsels_counter = nullptr;
     RuntimeProfile::Counter* _submit_task_counter = nullptr;
+    RuntimeProfile::Counter* _lake_child_reuse_candidate_counter = nullptr;
+    RuntimeProfile::Counter* _lake_child_reuse_no_source_counter = nullptr;
+    RuntimeProfile::Counter* _lake_child_reuse_attempt_counter = nullptr;
+    RuntimeProfile::Counter* _lake_child_reuse_hit_counter = nullptr;
+    RuntimeProfile::Counter* _lake_child_reuse_miss_counter = nullptr;
 
     int64_t _op_pull_chunks = 0;
     int64_t _op_pull_rows = 0;
