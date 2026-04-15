@@ -1334,7 +1334,7 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeRFC4180) {
     };
     std::vector<std::string> column_names = {"id", "name", "val"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1381,7 +1381,7 @@ TEST_F(CSVFileWriterTest, TestEncloseEscapeBackslash) {
     };
     std::vector<std::string> column_names = {"id", "name", "val"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1424,7 +1424,7 @@ TEST_F(CSVFileWriterTest, TestEncloseWithoutEscape) {
     std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
     std::vector<std::string> column_names = {"name"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1464,7 +1464,7 @@ TEST_F(CSVFileWriterTest, TestEncloseWithHeader) {
     // Column name with enclose char inside
     std::vector<std::string> column_names = {"id", "my\"col"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1507,7 +1507,7 @@ TEST_F(CSVFileWriterTest, TestEncloseDisabled) {
     };
     std::vector<std::string> column_names = {"id", "name"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1552,7 +1552,7 @@ TEST_F(CSVFileWriterTest, TestEncloseConstNullableColumn) {
     };
     std::vector<std::string> column_names = {"id", "const_col"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1606,7 +1606,7 @@ TEST_F(CSVFileWriterTest, TestConstColumnWithoutEnclose) {
     };
     std::vector<std::string> column_names = {"id", "const_str"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();
@@ -1653,7 +1653,7 @@ TEST_F(CSVFileWriterTest, TestEncloseConstStringColumn) {
     };
     std::vector<std::string> column_names = {"id", "const_str"};
     auto output_file = std::move(_fs.new_writable_file(_file_path).value());
-    auto output_stream = std::make_unique<io::FormattedOutputStreamFile>(std::move(output_file), 1024);
+    auto output_stream = std::make_unique<csv::OutputStreamFile>(std::move(output_file), 1024);
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
 
     auto writer_options = std::make_shared<formats::CSVWriterOptions>();

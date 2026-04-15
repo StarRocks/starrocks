@@ -575,49 +575,4 @@ public class TableFunctionTableTest {
                     () -> new TableFunctionTable(new ArrayList<>(), properties, new SessionVariable()));
         }
     }
-
-    @Test
-    public void testAutoDetectTypes() throws NoSuchFieldException {
-        Map<String, String> properties = new HashMap<>();
-        properties.put(TableFunctionTable.PROPERTY_PATH, "fake://test/path");
-        properties.put(TableFunctionTable.PROPERTY_FORMAT, "csv");
-
-        Field field = TableFunctionTable.class.getDeclaredField("autoDetectTypes");
-        field.setAccessible(true);
-
-        {
-            // Case 1: default
-            Assertions.assertDoesNotThrow(() -> {
-                TableFunctionTable table = new TableFunctionTable(properties);
-                Assertions.assertTrue((Boolean) field.get(table));
-            });
-        }
-
-        {
-            // Case 2: auto_detect_types = false
-            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "false");
-            Assertions.assertDoesNotThrow(() -> {
-                TableFunctionTable table = new TableFunctionTable(properties);
-                Assertions.assertFalse((Boolean) field.get(table));
-            });
-        }
-
-        {
-            // Case 3: auto_detect_types = true
-            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "true");
-            Assertions.assertDoesNotThrow(() -> {
-                TableFunctionTable table = new TableFunctionTable(properties);
-                Assertions.assertTrue((Boolean) field.get(table));
-            });
-        }
-
-        {
-            // abnormal
-            properties.put(TableFunctionTable.PROPERTY_AUTO_DETECT_TYPES, "notaboolean");
-            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                    "Illegal value of auto_detect_types: notaboolean, only true/false allowed",
-                    () -> new TableFunctionTable(properties)
-            );
-        }
-    }
 }
