@@ -17,9 +17,9 @@
 #include <fmt/format.h>
 
 #include <chrono>
-#include <limits>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <sstream>
 #include <system_error>
 
@@ -77,8 +77,8 @@ void collect_jsonl(const std::string& root, std::vector<std::string>* out) {
     if (!std::filesystem::exists(root, ec) || ec) {
         return;
     }
-    std::filesystem::recursive_directory_iterator it(root,
-                                                     std::filesystem::directory_options::skip_permission_denied, ec);
+    std::filesystem::recursive_directory_iterator it(root, std::filesystem::directory_options::skip_permission_denied,
+                                                     ec);
     if (ec) {
         LOG(WARNING) << "RejectedRecordSyncDaemon: cannot iterate " << root << ": " << ec.message();
         return;
@@ -224,9 +224,8 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
         auto st = post_to_stream_load(payload.str());
         if (!st.ok()) {
             _sync_failures.fetch_add(1, std::memory_order_relaxed);
-            LOG(WARNING) << "RejectedRecordSyncDaemon: post_to_stream_load failed (" << batch.size()
-                         << " files, " << batch_rows << " rows): " << st.message()
-                         << "; leaving files on disk for retry.";
+            LOG(WARNING) << "RejectedRecordSyncDaemon: post_to_stream_load failed (" << batch.size() << " files, "
+                         << batch_rows << " rows): " << st.message() << "; leaving files on disk for retry.";
         } else {
             _records_flushed.fetch_add(batch_rows, std::memory_order_relaxed);
             for (const auto& f : batch) {
@@ -273,10 +272,10 @@ std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
     // the next boot sees a dangling `.syncing.<old-tick>` file and
     // re-includes it (adopt_stale_syncing below).
     const std::string tick_suffix =
-            std::string(kSyncingSuffix) + "." + std::to_string(static_cast<uint64_t>(
-                    std::chrono::duration_cast<std::chrono::nanoseconds>(
-                            std::chrono::steady_clock::now().time_since_epoch())
-                            .count()));
+            std::string(kSyncingSuffix) + "." +
+            std::to_string(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                         std::chrono::steady_clock::now().time_since_epoch())
+                                                         .count()));
 
     std::vector<std::string> candidates;
     for (const auto& sp : _env->store_paths()) {
@@ -382,10 +381,9 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // latter is still committed data per the existing semantics in
     // StreamLoadContext.
     rapidjson::Document doc;
-    if (doc.Parse(response.c_str(), response.size()).HasParseError() || !doc.IsObject() ||
-        !doc.HasMember("Status") || !doc["Status"].IsString()) {
-        return Status::InternalError(
-                fmt::format("Stream Load response from FE is not valid JSON: {}", response));
+    if (doc.Parse(response.c_str(), response.size()).HasParseError() || !doc.IsObject() || !doc.HasMember("Status") ||
+        !doc["Status"].IsString()) {
+        return Status::InternalError(fmt::format("Stream Load response from FE is not valid JSON: {}", response));
     }
     std::string status = doc["Status"].GetString();
     if (status == "Success" || status == "Publish Timeout") {
@@ -397,9 +395,8 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     if (doc.HasMember("Message") && doc["Message"].IsString()) {
         message = doc["Message"].GetString();
     }
-    return Status::InternalError(
-            fmt::format("Stream Load for _statistics_.rejected_records rejected: Status={} Message={}",
-                        status, message));
+    return Status::InternalError(fmt::format(
+            "Stream Load for _statistics_.rejected_records rejected: Status={} Message={}", status, message));
 }
 
 void RejectedRecordSyncDaemon::garbage_collect_stale_files() {

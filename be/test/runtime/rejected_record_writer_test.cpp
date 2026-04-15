@@ -20,11 +20,11 @@
 #include <string>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "rapidjson/document.h"
-#include "base/string/slice.h"
 
 namespace starrocks {
 

@@ -508,8 +508,7 @@ Status ParquetScanner::open_next_reader() {
         // multiplied by 1000, which would have produced microseconds and
         // broken any future TVF that compares the anchor's mtime against
         // the live file's mtime.
-        _conv_ctx.file_mtime_ms =
-                range_desc.__isset.modification_time ? range_desc.modification_time : -1;
+        _conv_ctx.file_mtime_ms = range_desc.__isset.modification_time ? range_desc.modification_time : -1;
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0, _counter);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);

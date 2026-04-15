@@ -36,9 +36,9 @@
 #include "base/utility/pred_guard.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/descriptors.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
+#include "runtime/descriptors.h"
 #include "runtime/rejected_record_writer.h"
 #include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
@@ -328,8 +328,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
                             // is relative to the RecordBatch start (which
                             // is what ctx->current_batch_first_row_in_file
                             // tracks).
-                            ctx->report_error_message(reason, raw_data,
-                                                      static_cast<int64_t>(i - array_start_idx));
+                            ctx->report_error_message(reason, raw_data, static_cast<int64_t>(i - array_start_idx));
                         }
                     }
                 }
@@ -1163,14 +1162,13 @@ LogicalType get_strict_type(ArrowTypeId at) {
 static const int MAX_ERROR_MESSAGE_COUNTER = 100;
 
 void ArrowConvertContext::report_error_message(const std::string& reason, const std::string& raw_data,
-                                                int64_t row_offset_in_array) {
+                                               int64_t row_offset_in_array) {
     if (state == nullptr) return;
     if (error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     error_message_counter += 1;
     const std::string col_name = (current_slot == nullptr) ? "" : current_slot->col_name();
-    std::string error_msg =
-            strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
-                                col_name.empty() ? "null" : col_name, raw_data);
+    std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
+                                                col_name.empty() ? "null" : col_name, raw_data);
     RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);
 
     // Emit a rejected-records anchor. The `raw_record` column stays as
@@ -1200,10 +1198,10 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
         src_doc.SetObject();
         auto& alloc = src_doc.GetAllocator();
         src_doc.AddMember("format", rapidjson::Value("parquet", 7, alloc), alloc);
-        src_doc.AddMember("file",
-                          rapidjson::Value(current_file.c_str(),
-                                           static_cast<rapidjson::SizeType>(current_file.size()), alloc),
-                          alloc);
+        src_doc.AddMember(
+                "file",
+                rapidjson::Value(current_file.c_str(), static_cast<rapidjson::SizeType>(current_file.size()), alloc),
+                alloc);
         if (current_batch_first_row_in_file >= 0 && row_offset_in_array >= 0) {
             int64_t row_in_file = current_batch_first_row_in_file + row_offset_in_array;
             src_doc.AddMember("row_in_file", rapidjson::Value(row_in_file), alloc);
@@ -1218,8 +1216,7 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
         rapidjson::Writer<rapidjson::StringBuffer> src_writer(src_buf);
         src_doc.Accept(src_writer);
 
-        writer->append_from_slices({Slice{raw_data.data(), raw_data.size()}},
-                                   {key},
+        writer->append_from_slices({Slice{raw_data.data(), raw_data.size()}}, {key},
                                    /*error_code=*/"TYPE_MISMATCH", reason, col_name,
                                    std::string(src_buf.GetString(), src_buf.GetSize()));
     }

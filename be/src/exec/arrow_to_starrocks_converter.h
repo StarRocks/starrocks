@@ -71,8 +71,7 @@ struct ArrowConvertContext {
     //   >= 0          -> absolute row index in the file is
     //                    `current_batch_first_row_in_file + row_offset_in_array`
     //                    (only when `current_batch_first_row_in_file >= 0`).
-    void report_error_message(const std::string& reason, const std::string& raw_data,
-                              int64_t row_offset_in_array = -1);
+    void report_error_message(const std::string& reason, const std::string& raw_data, int64_t row_offset_in_array = -1);
 };
 
 // fill null_column's range [column_start_idx, column_start_idx + num_elements) with

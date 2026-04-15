@@ -151,8 +151,7 @@ void RuntimeStateHelper::append_rejected_record_to_file(RuntimeState* state, con
         rapidjson::Document d;
         d.SetObject();
         auto& alloc = d.GetAllocator();
-        d.AddMember("source",
-                    rapidjson::Value(source.c_str(), static_cast<rapidjson::SizeType>(source.size()), alloc),
+        d.AddMember("source", rapidjson::Value(source.c_str(), static_cast<rapidjson::SizeType>(source.size()), alloc),
                     alloc);
         rapidjson::StringBuffer buf;
         rapidjson::Writer<rapidjson::StringBuffer> w(buf);

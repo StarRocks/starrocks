@@ -197,9 +197,9 @@ const std::string& RejectedRecordWriter::resolve_file_path() {
 }
 
 void RejectedRecordWriter::append_from_chunk(const Chunk& chunk, size_t row_idx,
-                                             const std::vector<std::string>& col_names,
-                                             const std::string& error_code, const std::string& error_message,
-                                             const std::string& error_column, const std::string& source_info) {
+                                             const std::vector<std::string>& col_names, const std::string& error_code,
+                                             const std::string& error_message, const std::string& error_column,
+                                             const std::string& source_info) {
     if (row_idx >= chunk.num_rows()) {
         return;
     }
@@ -208,9 +208,9 @@ void RejectedRecordWriter::append_from_chunk(const Chunk& chunk, size_t row_idx,
 }
 
 void RejectedRecordWriter::append_from_slices(const std::vector<Slice>& col_values,
-                                              const std::vector<std::string>& col_names,
-                                              const std::string& error_code, const std::string& error_message,
-                                              const std::string& error_column, const std::string& source_info) {
+                                              const std::vector<std::string>& col_names, const std::string& error_code,
+                                              const std::string& error_message, const std::string& error_column,
+                                              const std::string& source_info) {
     std::string raw_record = build_json_from_slices(col_values, col_names);
     append_serialized(raw_record, error_code, error_message, error_column, source_info);
 }
@@ -248,8 +248,7 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     // Identity -- UUID generated here makes at-least-once sync retries
     // dedup into a single row via the system table's primary key.
     const std::string record_id = generate_uuid_string();
-    doc.AddMember("id",
-                  rapidjson::Value(record_id.c_str(), static_cast<rapidjson::SizeType>(record_id.size()), alloc),
+    doc.AddMember("id", rapidjson::Value(record_id.c_str(), static_cast<rapidjson::SizeType>(record_id.size()), alloc),
                   alloc);
 
     // Target. target_database is set early in OlapTableSink::init() via
@@ -268,8 +267,8 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     const std::string& label = _state->load_label();
     const int64_t txn_id = _state->load_job_id();
     std::string load_type = resolve_load_type(_state->query_options());
-    doc.AddMember("load_label",
-                  rapidjson::Value(label.c_str(), static_cast<rapidjson::SizeType>(label.size()), alloc), alloc);
+    doc.AddMember("load_label", rapidjson::Value(label.c_str(), static_cast<rapidjson::SizeType>(label.size()), alloc),
+                  alloc);
     doc.AddMember("load_type",
                   rapidjson::Value(load_type.c_str(), static_cast<rapidjson::SizeType>(load_type.size()), alloc),
                   alloc);
@@ -294,10 +293,10 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     doc.AddMember("error_code",
                   rapidjson::Value(error_code.c_str(), static_cast<rapidjson::SizeType>(error_code.size()), alloc),
                   alloc);
-    doc.AddMember("error_message",
-                  rapidjson::Value(error_message.c_str(), static_cast<rapidjson::SizeType>(error_message.size()),
-                                   alloc),
-                  alloc);
+    doc.AddMember(
+            "error_message",
+            rapidjson::Value(error_message.c_str(), static_cast<rapidjson::SizeType>(error_message.size()), alloc),
+            alloc);
     doc.AddMember("error_column",
                   rapidjson::Value(error_column.c_str(), static_cast<rapidjson::SizeType>(error_column.size()), alloc),
                   alloc);

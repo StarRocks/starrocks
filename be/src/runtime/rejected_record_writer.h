@@ -18,11 +18,11 @@
 #include <string>
 #include <vector>
 
+#include "base/string/slice.h"
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
-#include "base/string/slice.h"
 
 namespace starrocks {
 
