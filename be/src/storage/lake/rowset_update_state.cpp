@@ -213,13 +213,17 @@ Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateSt
         _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
                                                -1 /*unused*/, params.tablet_schema);
     }
-    TRY_CATCH_BAD_ALLOC({
-        _upserts.resize(_rowset_ptr->num_segments());
-        _base_versions.resize(_rowset_ptr->num_segments());
-        _partial_update_states.resize(_rowset_ptr->num_segments());
-        _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
-        _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
-    });
+    // Idempotent resize: skip if already done by prepare_for_parallel() or a previous call.
+    // This guarantees thread-safety when load_segment is called concurrently for different segments.
+    if (_upserts.size() != _rowset_ptr->num_segments()) {
+        TRY_CATCH_BAD_ALLOC({
+            _upserts.resize(_rowset_ptr->num_segments());
+            _base_versions.resize(_rowset_ptr->num_segments());
+            _partial_update_states.resize(_rowset_ptr->num_segments());
+            _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
+            _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
+        });
+    }
 
     if (_upserts.size() == 0) {
         // Empty rowset
@@ -497,8 +501,13 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
 
     const auto& txn_meta = params.op_write.txn_meta();
-    for (auto& entry : txn_meta.column_to_expr_value()) {
-        _column_to_expr_value.insert({entry.first, entry.second});
+    // Idempotent: skip if already populated by prepare_for_parallel() or a previous call.
+    // Multiple parallel threads may enter here concurrently, but the empty check ensures
+    // only one (or none, if pre-populated) actually mutates the map.
+    if (_column_to_expr_value.empty()) {
+        for (auto& entry : txn_meta.column_to_expr_value()) {
+            _column_to_expr_value.insert({entry.first, entry.second});
+        }
     }
     auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
     // column list that need to read from source segment
@@ -853,14 +862,12 @@ void RowsetUpdateState::release_segment(uint32_t segment_id) {
 }
 
 void RowsetUpdateState::release_segment_partial_state(uint32_t segment_id) {
-    // Release write_columns and auto-increment state, but keep _upserts for Phase 2 (_do_update).
+    // Release write_columns and auto-increment partial state used only by rewrite_segment.
+    // Keep _upserts and _auto_increment_delete_pks for Phase 2 (_do_update + index.erase).
     _memory_usage -= _partial_update_states[segment_id].memory_usage();
     _partial_update_states[segment_id].reset();
     _memory_usage -= _auto_increment_partial_update_states[segment_id].memory_usage();
     _auto_increment_partial_update_states[segment_id].reset();
-    _memory_usage -=
-            _auto_increment_delete_pks[segment_id] ? _auto_increment_delete_pks[segment_id]->memory_usage() : 0;
-    _auto_increment_delete_pks[segment_id].reset();
 }
 
 Status RowsetUpdateState::prepare_for_parallel(const RowsetUpdateStateParams& params) {
