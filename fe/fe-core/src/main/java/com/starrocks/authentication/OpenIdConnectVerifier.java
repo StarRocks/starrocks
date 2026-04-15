@@ -14,6 +14,9 @@
 
 package com.starrocks.authentication;
 
+import com.fasterxml.jackson.core.JsonPointer;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -50,6 +53,8 @@ public class OpenIdConnectVerifier {
     private static final Set<JWSAlgorithm> ALLOWED_ALGORITHMS = Set.of(
             JWSAlgorithm.RS256, JWSAlgorithm.RS384, JWSAlgorithm.RS512,
             JWSAlgorithm.ES256, JWSAlgorithm.ES384, JWSAlgorithm.ES512);
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
      * Verify an OIDC id-token against a cached {@link JWKSource} (the path used by HTTP / Arrow
@@ -108,7 +113,7 @@ public class OpenIdConnectVerifier {
      */
     public static String extractPrincipal(String idToken, String principalFiled) throws AuthenticationException {
         try {
-            String principal = SignedJWT.parse(idToken).getJWTClaimsSet().getStringClaim(principalFiled);
+            String principal = resolveClaimValue(SignedJWT.parse(idToken).getJWTClaimsSet(), principalFiled);
             if (principal == null) {
                 throw new AuthenticationException("Can not get specified principal " + principalFiled)
                         .withReason(AuthFailureReason.CLAIM_MISMATCH);
@@ -195,7 +200,7 @@ public class OpenIdConnectVerifier {
                     .withReason(AuthFailureReason.CLAIM_MISMATCH);
         }
 
-        String jwtUserName = claims.getStringClaim(principalFiled);
+        String jwtUserName = resolveClaimValue(claims, principalFiled);
         if (jwtUserName == null) {
             throw new AuthenticationException("Can not get specified principal " + principalFiled)
                     .withReason(AuthFailureReason.CLAIM_MISMATCH);
@@ -204,5 +209,22 @@ public class OpenIdConnectVerifier {
             throw new AuthenticationException("Login name " + userName + " is not matched to user " + jwtUserName)
                     .withReason(AuthFailureReason.CLAIM_MISMATCH);
         }
+    }
+
+    /**
+     * Resolves a claim value from the JWT claims set.
+     * If {@code principalField} starts with {@code /}, it is treated as an
+     * <a href="https://datatracker.ietf.org/doc/html/rfc6901">RFC 6901 JSON Pointer</a>
+     * and evaluated using Jackson's {@link JsonPointer}. Otherwise, a flat
+     * top-level lookup is performed for backward compatibility.
+     */
+    static String resolveClaimValue(JWTClaimsSet claims, String principalField) throws ParseException {
+        if (!principalField.startsWith("/")) {
+            return claims.getStringClaim(principalField);
+        }
+
+        JsonNode tree = MAPPER.valueToTree(claims.toJSONObject());
+        JsonNode result = tree.at(JsonPointer.compile(principalField));
+        return result.isTextual() ? result.textValue() : null;
     }
 }
