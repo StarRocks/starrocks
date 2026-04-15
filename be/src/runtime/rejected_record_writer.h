@@ -22,7 +22,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "gen_cpp/InternalService_types.h"
-#include "util/slice.h"
+#include "base/string/slice.h"
 
 namespace starrocks {
 

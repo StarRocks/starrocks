@@ -24,7 +24,7 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "rapidjson/document.h"
-#include "util/slice.h"
+#include "base/string/slice.h"
 
 namespace starrocks {
 
