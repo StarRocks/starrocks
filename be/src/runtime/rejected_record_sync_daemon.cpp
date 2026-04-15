@@ -23,9 +23,9 @@
 #include <sstream>
 #include <system_error>
 
-#include "common/system/master_info.h"
 #include "common/config.h"
 #include "common/logging.h"
+#include "common/system/master_info.h"
 #include "gen_cpp/HeartbeatService_types.h"
 #include "http/http_client.h"
 #include "http/http_common.h"
