@@ -309,21 +309,7 @@ public class Utils {
     public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
                                                           long baseVersion, ComputeResource computeResource,
                                                           Map<Long, Double> compactionScores,
-<<<<<<< HEAD
-                                                          Map<Long, Long> tabletRowNum) 
-=======
                                                           Map<Long, Long> tabletRowNum)
-            throws NoAliveBackendException, RpcException {
-        sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
-                tabletRowNum);
-    }
-
-    public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
-                                                          long baseVersion, ComputeResource computeResource,
-                                                          Map<Long, Double> compactionScores,
-                                                          Map<Long, TabletRange> tabletRanges,
-                                                          Map<Long, Long> tabletRowNum)
->>>>>>> d960fffe29 ([Enhancement] Prefer tablet-local aggregator for file-bundle writes (#71613))
             throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (computeResource == null || !warehouseManager.isResourceAvailable(computeResource)) {

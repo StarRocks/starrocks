@@ -421,19 +421,12 @@ public class CompactionScheduler extends Daemon {
         aggRequest.computeNodes = Lists.newArrayList();
         aggRequest.partitionId = partitionId;
 
-<<<<<<< HEAD
-=======
-        // Get parallel compaction configuration from table property
-        // maxParallel > 0 means parallel compaction is enabled
-        int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
-
         // Track the candidate aggregator nodes (those that actually own tablets in the
         // batch). We prefer one of them as aggregator so the BE side can resolve the
         // first tablet id locally through the staros worker cache when deriving the
         // combined_txn_log / bundle_tablet_metadata file path.
         List<ComputeNode> candidateAggregatorNodes = Lists.newArrayList();
 
->>>>>>> d960fffe29 ([Enhancement] Prefer tablet-local aggregator for file-bundle writes (#71613))
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
@@ -459,15 +452,8 @@ public class CompactionScheduler extends Daemon {
             aggRequest.computeNodes.add(nodePB);
         }
 
-<<<<<<< HEAD
-        // 2. pick aggregator node and build lake serivce
-        WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        LakeAggregator aggregator = new LakeAggregator();
-        ComputeNode aggregatorNode = aggregator.chooseAggregatorNode(computeResource);
-=======
         // 2. pick aggregator node and build lake service
         ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
->>>>>>> d960fffe29 ([Enhancement] Prefer tablet-local aggregator for file-bundle writes (#71613))
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
         }

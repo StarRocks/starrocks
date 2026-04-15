@@ -210,17 +210,8 @@ public class AutovacuumDaemon extends FrontendDaemon {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
 
-<<<<<<< HEAD
-            if (fileBundling) {
-                // if enable file bundling, there will be only one node.
-                if (pickNode == null) {
-                    pickNode = LakeAggregator.chooseAggregatorNode(computeResource);
-                }
-            } else {
-                pickNode = warehouseManager.getComputeNodeAssignedToTablet(computeResource, lakeTablet.getId());
-=======
         // Resolve all tablet owners in a single batched RPC. The result serves both:
-        // - enableSharedFileCleanup: collect candidate aggregator nodes (prefer a node
+        // - fileBundling: collect candidate aggregator nodes (prefer a node
         //   that owns at least one tablet), then assign all tablets to the chosen one.
         // - non-shared: assign each tablet to its first alive owner CN.
         // This avoids N per-tablet getComputeNodeAssignedToTablet RPCs in either path.
@@ -234,13 +225,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
             } catch (Exception e) {
                 LOG.warn("Failed to batch-resolve tablet owners for {} tablets, falling back",
                         tablets.size(), e);
->>>>>>> d960fffe29 ([Enhancement] Prefer tablet-local aggregator for file-bundle writes (#71613))
             }
         }
 
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
-        if (enableSharedFileCleanup) {
+        if (fileBundling) {
             // Collect candidate aggregator nodes from the batched result, then pick one.
             Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
             if (shardToNodeIds != null) {
