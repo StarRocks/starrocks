@@ -52,11 +52,22 @@ public:
     bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
 
 private:
-    using CandidateList = std::vector<std::pair<int64_t, LockFreeScanTaskQueue*>>;
+    struct WorkGroupQueueState {
+        explicit WorkGroupQueueState(WorkGroup* workgroup, int num_workers)
+                : workgroup(workgroup), queue(std::make_unique<LockFreeScanTaskQueue>(num_workers)) {}
+
+        WorkGroup* workgroup;
+        std::unique_ptr<LockFreeScanTaskQueue> queue;
+        std::atomic<size_t> num_tasks{0};
+    };
+
+    using CandidateList = std::vector<std::pair<int64_t, WorkGroupQueueState*>>;
 
     void _set_wg_in_queue(const ScanTask& task);
+    void _update_min_wg_entity_on_enqueue(WorkGroup* wg);
+    void _refresh_min_wg_entity();
 
-    LockFreeScanTaskQueue* _get_or_create_wg_queue(WorkGroup* wg);
+    WorkGroupQueueState* _get_or_create_wg_queue(WorkGroup* wg);
     CandidateList _pick_sorted_wgs();
 
     const WorkGroupScanSchedEntity* _sched_entity(const WorkGroup* wg) const;
@@ -72,7 +83,7 @@ private:
     moodycamel::LightweightSemaphore _sema;
 
     mutable std::shared_mutex _wg_queues_mutex;
-    std::unordered_map<WorkGroup*, std::unique_ptr<LockFreeScanTaskQueue>> _wg_queues;
+    std::unordered_map<WorkGroup*, std::unique_ptr<WorkGroupQueueState>> _wg_queues;
 };
 
 } // namespace starrocks::workgroup

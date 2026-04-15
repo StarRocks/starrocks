@@ -161,4 +161,18 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_update_statistics) {
     ASSERT_GT(after, before);
 }
 
+TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_should_yield_refreshes_min_wg_on_enqueue) {
+    constexpr int kNumWorkers = 4;
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+
+    auto* entity2 = const_cast<WorkGroupScanSchedEntity*>(_wg2->scan_sched_entity());
+    entity2->incr_runtime_ns(1'000'000'000L);
+
+    ASSERT_FALSE(queue.should_yield(_wg2.get(), 0));
+
+    queue.force_put(make_wg_task(_wg1, 5));
+
+    ASSERT_TRUE(queue.should_yield(_wg2.get(), 0));
+}
+
 } // namespace starrocks::workgroup

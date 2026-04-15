@@ -47,10 +47,13 @@ bool LockFreeWorkGroupScanTaskQueue::try_offer(ScanTask task) {
     if (task.peak_scan_task_queue_size_counter != nullptr) {
         task.peak_scan_task_queue_size_counter->set(_num_tasks.load(std::memory_order_relaxed));
     }
+    WorkGroup* wg = task.workgroup.get();
     _set_wg_in_queue(task);
-    auto* wg_queue = _get_or_create_wg_queue(task.workgroup.get());
-    wg_queue->try_offer(std::move(task));
+    auto* wg_queue = _get_or_create_wg_queue(wg);
+    wg_queue->queue->try_offer(std::move(task));
+    wg_queue->num_tasks.fetch_add(1, std::memory_order_relaxed);
     _num_tasks.fetch_add(1, std::memory_order_relaxed);
+    _update_min_wg_entity_on_enqueue(wg);
     _sema.signal();
     return true;
 }
@@ -59,10 +62,13 @@ void LockFreeWorkGroupScanTaskQueue::force_put(ScanTask task) {
     if (task.peak_scan_task_queue_size_counter != nullptr) {
         task.peak_scan_task_queue_size_counter->set(_num_tasks.load(std::memory_order_relaxed));
     }
+    WorkGroup* wg = task.workgroup.get();
     _set_wg_in_queue(task);
-    auto* wg_queue = _get_or_create_wg_queue(task.workgroup.get());
-    wg_queue->force_put(std::move(task));
+    auto* wg_queue = _get_or_create_wg_queue(wg);
+    wg_queue->queue->force_put(std::move(task));
+    wg_queue->num_tasks.fetch_add(1, std::memory_order_relaxed);
     _num_tasks.fetch_add(1, std::memory_order_relaxed);
+    _update_min_wg_entity_on_enqueue(wg);
     _sema.signal();
 }
 
@@ -81,8 +87,11 @@ StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take(int worker_id) {
         auto candidates = _pick_sorted_wgs();
         for (auto& [vruntime, wg_queue] : candidates) {
             ScanTask task;
-            bool got = use_token ? wg_queue->try_take(task, worker_id) : wg_queue->try_take(task);
+            bool got = use_token ? wg_queue->queue->try_take(task, worker_id) : wg_queue->queue->try_take(task);
             if (got) {
+                if (wg_queue->num_tasks.fetch_sub(1, std::memory_order_relaxed) == 1) {
+                    _refresh_min_wg_entity();
+                }
                 _num_tasks.fetch_sub(1, std::memory_order_relaxed);
                 return std::move(task);
             }
@@ -116,7 +125,8 @@ size_t LockFreeWorkGroupScanTaskQueue::size() const {
     return _num_tasks.load(std::memory_order_relaxed);
 }
 
-LockFreeScanTaskQueue* LockFreeWorkGroupScanTaskQueue::_get_or_create_wg_queue(WorkGroup* wg) {
+LockFreeWorkGroupScanTaskQueue::WorkGroupQueueState* LockFreeWorkGroupScanTaskQueue::_get_or_create_wg_queue(
+        WorkGroup* wg) {
     {
         std::shared_lock read_lock(_wg_queues_mutex);
         auto it = _wg_queues.find(wg);
@@ -129,33 +139,61 @@ LockFreeScanTaskQueue* LockFreeWorkGroupScanTaskQueue::_get_or_create_wg_queue(W
     if (it != _wg_queues.end()) {
         return it->second.get();
     }
-    auto [inserted_it, ok] = _wg_queues.emplace(wg, std::make_unique<LockFreeScanTaskQueue>(_num_workers));
+    auto [inserted_it, ok] = _wg_queues.emplace(wg, std::make_unique<WorkGroupQueueState>(wg, _num_workers));
     LOG(INFO) << "[SCAN_QUEUE] create per-workgroup LockFreeScanTaskQueue"
               << " sched_entity_type=" << sched_entity_type_to_string(_sched_entity_type) << " wg_id=" << wg->id()
               << " wg_name=" << wg->name() << " num_workers=" << _num_workers;
     return inserted_it->second.get();
 }
 
+void LockFreeWorkGroupScanTaskQueue::_update_min_wg_entity_on_enqueue(WorkGroup* wg) {
+    const auto* entity = _sched_entity(wg);
+    const auto* min_entity = _min_wg_entity.load(std::memory_order_relaxed);
+    while (min_entity == nullptr || entity->vruntime_ns() < min_entity->vruntime_ns()) {
+        if (_min_wg_entity.compare_exchange_weak(min_entity, entity, std::memory_order_relaxed)) {
+            return;
+        }
+    }
+}
+
+void LockFreeWorkGroupScanTaskQueue::_refresh_min_wg_entity() {
+    const WorkGroupScanSchedEntity* min_entity = nullptr;
+    int64_t min_vrt = std::numeric_limits<int64_t>::max();
+
+    std::shared_lock read_lock(_wg_queues_mutex);
+    for (auto& [wg, queue_state] : _wg_queues) {
+        if (queue_state->num_tasks.load(std::memory_order_relaxed) == 0) {
+            continue;
+        }
+        auto* entity = _sched_entity(wg);
+        if (entity->vruntime_ns() < min_vrt) {
+            min_vrt = entity->vruntime_ns();
+            min_entity = entity;
+        }
+    }
+    _min_wg_entity.store(min_entity, std::memory_order_relaxed);
+}
+
 LockFreeWorkGroupScanTaskQueue::CandidateList LockFreeWorkGroupScanTaskQueue::_pick_sorted_wgs() {
     CandidateList candidates;
 
     // Snapshot all workgroup queues under one shared lock acquisition.
-    std::vector<std::pair<WorkGroup*, LockFreeScanTaskQueue*>> snapshot;
+    std::vector<WorkGroupQueueState*> snapshot;
     {
         std::shared_lock read_lock(_wg_queues_mutex);
         snapshot.reserve(_wg_queues.size());
-        for (auto& [wg, queue] : _wg_queues) {
-            if (queue->size() > 0) {
-                snapshot.emplace_back(wg, queue.get());
+        for (auto& [wg, queue_state] : _wg_queues) {
+            if (queue_state->num_tasks.load(std::memory_order_relaxed) > 0) {
+                snapshot.emplace_back(queue_state.get());
             }
         }
     }
 
     // Score by vruntime without holding any lock.
     candidates.reserve(snapshot.size());
-    for (auto& [wg, queue] : snapshot) {
-        int64_t vrt = _sched_entity(wg)->vruntime_ns();
-        candidates.emplace_back(vrt, queue);
+    for (auto* queue_state : snapshot) {
+        int64_t vrt = _sched_entity(queue_state->workgroup)->vruntime_ns();
+        candidates.emplace_back(vrt, queue_state);
     }
 
     std::sort(candidates.begin(), candidates.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
@@ -165,8 +203,8 @@ LockFreeWorkGroupScanTaskQueue::CandidateList LockFreeWorkGroupScanTaskQueue::_p
         // Find the workgroup with minimum vruntime from snapshot.
         const WorkGroupScanSchedEntity* min_entity = nullptr;
         int64_t min_vrt = std::numeric_limits<int64_t>::max();
-        for (auto& [wg, queue] : snapshot) {
-            auto* entity = _sched_entity(wg);
+        for (auto* queue_state : snapshot) {
+            auto* entity = _sched_entity(queue_state->workgroup);
             if (entity->vruntime_ns() < min_vrt) {
                 min_vrt = entity->vruntime_ns();
                 min_entity = entity;
