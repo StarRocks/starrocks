@@ -69,6 +69,7 @@ class WindowSkewTest extends PlanTestBase {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
         }
+
     }
 
     @BeforeEach
@@ -192,8 +193,7 @@ class WindowSkewTest extends PlanTestBase {
         assertContains(plan, "UNION");
         assertContains(plan, "Predicates: [1: p, INT, true] = 1");
         // Ensure that unskewed partition preserves NULLs
-        assertContains(plan, "Predicates: (cast([5: p, INT, true] as VARCHAR(1048576)) != '1') " +
-                "OR ([5: p, INT, true] IS NULL)");
+        assertContains(plan, "Predicates: ([5: p, INT, true] != 1) OR ([5: p, INT, true] IS NULL)");
 
         assertContains(plan,
                 "ANALYTIC\n" +
