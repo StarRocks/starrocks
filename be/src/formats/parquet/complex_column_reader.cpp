@@ -1599,6 +1599,7 @@ public:
         _variant_column->remain_value_column()->append_datum(Datum(output_value));
     }
 
+    // append_bindings processes all materialized bindings for the current row.
     Status append_bindings() const {
         for (size_t i = 0; i < _batch_ctx.materialized_bindings.size(); ++i) {
             const auto& binding = _batch_ctx.materialized_bindings[i];
@@ -1610,9 +1611,10 @@ public:
                 // empty string_view which is not a valid VariantValue.  Use the default null
                 // VariantRowRef so that append_variant_binding_row treats any path lookup on
                 // a missing full-row as null rather than crashing.
-                VariantRowRef full_row = _row_value.empty() ? VariantRowRef() : VariantRowRef(_row_metadata, _row_value);
-                RETURN_IF_ERROR(VariantColumnReader::append_variant_binding_row(
-                        _row, binding, _raw_metadata, full_row, typed_col_dst));
+                VariantRowRef full_row =
+                        _row_value.empty() ? VariantRowRef() : VariantRowRef(_row_metadata, _row_value);
+                RETURN_IF_ERROR(VariantColumnReader::append_variant_binding_row(_row, binding, _raw_metadata, full_row,
+                                                                                typed_col_dst));
             }
         }
         return Status::OK();
@@ -1832,34 +1834,95 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         // One-level only: SCALAR → scalar column, VARIANT → plain VariantColumn (no nested typed_columns).
         typed_columns.emplace_back(ColumnHelper::create_column(binding.type, true));
     }
-    variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
-                                         BinaryColumn::create(), BinaryColumn::create());
-
     NullColumn reconstructed_null_column(num_rows);
     auto& reconstructed_nulls = reconstructed_null_column.get_data();
     bool has_reconstructed_null = false;
 
+    // batch_ctx is built first so has_typed_value_bitmap is available for both code paths.
     VariantReadRangeBatchContext batch_ctx(
             _shredded_fields, materialized_bindings, _shredded_paths, _top_level.root_typed_value_column.get(),
             _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls);
 
-    // Materialize output columns.
-    // - request-all-paths: emit rebuilt top-level metadata/value.
-    // - requested-subset: keep the current row payload as-is; individual bindings are materialized
-    //   from their shredded subtree or via direct raw-row seek when the path is unshredded.
-    VariantReadRangeRowMaterializer materializer(batch_ctx, 0, variant_column);
-    for (size_t i = 0; i < num_rows; ++i) {
-        materializer.set_row(i);
-        ASSIGN_OR_RETURN(bool prepared, materializer.prepare());
-        if (!prepared) {
-            variant_column->append_shredded_null();
-            reconstructed_nulls[i] = 1;
-            has_reconstructed_null = true;
-            continue;
+    // Partition bindings into two groups:
+    //   bulk_indices   – SCALAR bindings whose typed_value_column can be bulk-copied after the loop.
+    //   native_indices – VARIANT bindings that require per-row decode.
+    // Bulk copy is only applicable when there is no root typed value to re-encode and paths are
+    // explicitly requested (not the "all paths" auto-discovery mode).
+    const bool bulk_eligible = _top_level.root_typed_value_column == nullptr && !_shredded_paths.empty();
+    std::vector<size_t> bulk_indices;
+    std::vector<size_t> native_indices;
+    for (size_t bi = 0; bi < materialized_bindings.size(); ++bi) {
+        if (bulk_eligible && materialized_bindings[bi].kind == TopBinding::Kind::SCALAR) {
+            bulk_indices.push_back(bi);
+        } else {
+            native_indices.push_back(bi);
         }
-        materializer.append_top_level_row();
-        RETURN_IF_ERROR(materializer.append_bindings());
-        reconstructed_nulls[i] = 0;
+    }
+
+    // When all bindings are SCALAR (native_indices empty), base payload is never accessed by the
+    // caller (project_variant_leaf_column reads only typed_columns).  Skip the per-row loop
+    // entirely: compute outer-null directly from the raw null bitmaps and has_typed_value_bitmap,
+    // and pass nullptr for metadata/remain so VariantColumn does not check their row counts.
+    if (native_indices.empty()) {
+        // All-SCALAR fast path: skip the per-row loop entirely.
+        // Base payload (metadata/remain) is not needed because the caller reads only typed_columns.
+        // Compute outer-null directly from the raw null bitmaps and has_typed_value_bitmap.
+        variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
+                                             nullptr, nullptr);
+        for (size_t i = 0; i < num_rows; ++i) {
+            const bool has_typed = batch_ctx.has_typed_value_bitmap[i];
+            const Slice ms = metadata_column->get_slice(i);
+            const Slice vs = value_column->get_slice(i);
+            const bool is_null = metadata_nulls[i] || (value_nulls[i] && !has_typed) ||
+                                 ((ms.size == 0 || vs.size == 0) && !has_typed);
+            if (is_null) {
+                reconstructed_nulls[i] = 1;
+                has_reconstructed_null = true;
+            }
+        }
+        // Bulk-populate SCALAR typed_columns.
+        // Each binding's typed_value_column holds the complete batch; bulk-append and then OR in
+        // the outer-null bitmap so rows where the variant row is null become null in the output.
+        for (size_t bi : bulk_indices) {
+            const TopBinding& binding = materialized_bindings[bi];
+            const Column* src = binding.node != nullptr ? binding.node->typed_value_column.get() : nullptr;
+            Column* dst = variant_column->mutable_typed_columns()[bi].get();
+            if (src == nullptr || src->size() != num_rows) {
+                dst->append_nulls(num_rows);
+                continue;
+            }
+            dst->append(*src, 0, num_rows);
+            if (has_reconstructed_null) {
+                auto* nullable_dst = down_cast<NullableColumn*>(dst);
+                auto& dst_null_data = nullable_dst->null_column_raw_ptr()->get_data();
+                for (size_t r = 0; r < num_rows; ++r) {
+                    dst_null_data[r] |= reconstructed_nulls[r];
+                }
+                nullable_dst->update_has_null();
+            }
+        }
+    } else {
+        variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
+                                             BinaryColumn::create(), BinaryColumn::create());
+
+        // Per-row materialization path.
+        // - request-all-paths: emit rebuilt top-level metadata/value.
+        // - requested-subset: keep the current row payload as-is; individual bindings are
+        //   materialized from their shredded subtree or via direct raw-row seek when unshredded.
+        VariantReadRangeRowMaterializer materializer(batch_ctx, 0, variant_column);
+        for (size_t i = 0; i < num_rows; ++i) {
+            materializer.set_row(i);
+            ASSIGN_OR_RETURN(bool prepared, materializer.prepare());
+            if (!prepared) {
+                variant_column->append_shredded_null();
+                reconstructed_nulls[i] = 1;
+                has_reconstructed_null = true;
+                continue;
+            }
+            materializer.append_top_level_row();
+            RETURN_IF_ERROR(materializer.append_bindings());
+            reconstructed_nulls[i] = 0;
+        }
     }
     DCHECK_EQ(variant_column->size(), num_rows)
             << "Variant column size mismatch: expected " << num_rows << ", got " << variant_column->size();

@@ -116,7 +116,15 @@ StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* va
         return Status::NotFound("variant path is not an exact typed leaf");
     }
     if (reader.typed_type_desc() != target_type) {
-        return Status::NotFound("variant typed leaf type does not match target slot type");
+        // VARCHAR / CHAR / VARBINARY / BINARY all share the same physical BinaryColumn
+        // representation (raw bytes).  Allow the fast typed-column path when both the
+        // shredded leaf type and the target type are in this "string-like" family.
+        auto is_string_like = [](LogicalType t) {
+            return t == TYPE_VARCHAR || t == TYPE_CHAR || t == TYPE_VARBINARY || t == TYPE_BINARY;
+        };
+        if (!is_string_like(reader.typed_type_desc().type) || !is_string_like(target_type.type)) {
+            return Status::NotFound("variant typed leaf type does not match target slot type");
+        }
     }
 
     const size_t num_rows = variant_src->size();
@@ -148,25 +156,34 @@ StatusOr<ColumnPtr> build_exact_typed_variant_projection(const VariantColumn* va
     // above; const-non-null has no outer null mask to propagate).
     const bool has_outer_nulls = !variant_src->is_constant() && variant_src->is_nullable() &&
                                  down_cast<const NullableColumn*>(variant_src.get())->has_null();
+
+    // Fast path: no outer nulls to merge.  eff_typed already carries the complete null
+    // structure (rows where the shredded leaf is absent are already null in typed_col).
+    // Clone it directly instead of splitting into data + null and reassembling.
+    if (!has_outer_nulls) {
+        if (eff_typed->is_nullable()) {
+            return eff_typed->clone();
+        }
+        // Typed column is non-nullable (all values present): wrap with an all-zero null mask.
+        return NullableColumn::create(eff_typed->clone(), NullColumn::create(num_rows, 0));
+    }
+
+    // Slow path: merge outer nulls from variant_src into the typed null mask.
     const bool has_typed_nulls = eff_typed->is_nullable() && down_cast<const NullableColumn*>(eff_typed)->has_null();
 
     auto result_null = NullColumn::create(num_rows, 0);
     NullData& result_null_data = result_null->get_data();
 
-    if (has_outer_nulls && has_typed_nulls) {
+    if (has_typed_nulls) {
         const auto outer = down_cast<const NullableColumn*>(variant_src.get())->immutable_null_column_data();
         const auto typed = down_cast<const NullableColumn*>(eff_typed)->immutable_null_column_data();
         for (size_t i = 0; i < num_rows; ++i) {
             result_null_data[i] = outer[i] | typed[i];
         }
-    } else if (has_outer_nulls) {
+    } else {
         const auto outer = down_cast<const NullableColumn*>(variant_src.get())->immutable_null_column_data();
         std::copy(outer.begin(), outer.end(), result_null_data.begin());
-    } else if (has_typed_nulls) {
-        const auto typed = down_cast<const NullableColumn*>(eff_typed)->immutable_null_column_data();
-        std::copy(typed.begin(), typed.end(), result_null_data.begin());
     }
-    // else: no nulls anywhere — result_null stays all-zero.
 
     auto result_data = ColumnHelper::get_data_column(eff_typed)->clone();
     auto result = NullableColumn::create(std::move(result_data), std::move(result_null));
