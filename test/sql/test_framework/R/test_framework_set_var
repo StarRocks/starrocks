@@ -1,0 +1,56 @@
+-- name: test_framework_set_var
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table t1 (c1 int, c2 string) DUPLICATE KEY(c1) DISTRIBUTED BY HASH(c1) PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t1 values (1, 'a'), (2, 'b'), (3, 'c');
+-- result:
+-- !result
+SET_VAR {
+  PROPERTY: [{"enable_late_materialization": "true"}, {"enable_late_materialization": "false"}]
+select * from t1 order by c1;
+-- result:
+1	a
+2	b
+3	c
+-- !result
+select count(*) from t1;
+-- result:
+3
+-- !result
+} END SET_VAR
+drop database test_db_${uuid0};
+-- result:
+-- !result
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table t2 (c1 int, c2 int, c3 string) DUPLICATE KEY(c1) DISTRIBUTED BY HASH(c1) PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t2 values (1, 10, 'x'), (2, 20, 'y'), (3, 30, 'z');
+-- result:
+-- !result
+SET_VAR {
+  PROPERTY: [{"enable_late_materialization": "true", "new_planner_optimize_timeout": "10000"}, {"enable_late_materialization": "false", "new_planner_optimize_timeout": "10000"}]
+select c1, c3 from t2 where c2 > 10 order by c1;
+-- result:
+2	y
+3	z
+-- !result
+select sum(c2) from t2;
+-- result:
+60
+-- !result
+} END SET_VAR
+drop database test_db_${uuid0};
+-- result:
+-- !result

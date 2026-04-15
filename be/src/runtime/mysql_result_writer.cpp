@@ -37,7 +37,6 @@
 #include <column/column_helper.h>
 
 #include "column/chunk.h"
-#include "column/const_column.h"
 #include "column/mysql_row_buffer.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
@@ -45,9 +44,45 @@
 #include "runtime/buffer_control_block.h"
 #include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 #include "types/logical_type.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks {
+
+namespace {
+
+MysqlRowBufferOptions make_mysql_row_buffer_options(const TQueryOptions& query_options) {
+    MysqlRowBufferOptions options;
+    if (query_options.__isset.binary_encoding_format) {
+        switch (query_options.binary_encoding_format) {
+        case TBinaryEncodingFormat::RAW:
+            options.binary_encoding_format = MysqlRowBufferOptions::BinaryEncodingFormat::RAW;
+            break;
+        case TBinaryEncodingFormat::BASE64:
+            options.binary_encoding_format = MysqlRowBufferOptions::BinaryEncodingFormat::BASE64;
+            break;
+        case TBinaryEncodingFormat::HEX:
+        default:
+            options.binary_encoding_format = MysqlRowBufferOptions::BinaryEncodingFormat::HEX;
+            break;
+        }
+    }
+    if (query_options.__isset.binary_encoding_level) {
+        switch (query_options.binary_encoding_level) {
+        case TBinaryEncodingLevel::ALL:
+            options.binary_encoding_level = MysqlRowBufferOptions::BinaryEncodingLevel::ALL;
+            break;
+        case TBinaryEncodingLevel::NESTED:
+        default:
+            options.binary_encoding_level = MysqlRowBufferOptions::BinaryEncodingLevel::NESTED;
+            break;
+        }
+    }
+    return options;
+}
+
+} // namespace
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                      bool is_binary_format, RuntimeProfile* parent_profile)
@@ -66,7 +101,8 @@ Status MysqlResultWriter::init(RuntimeState* state) {
         return Status::InternalError("sinker is NULL pointer.");
     }
 
-    _row_buffer = new (std::nothrow) MysqlRowBuffer(_is_binary_format);
+    _row_buffer =
+            new (std::nothrow) MysqlRowBuffer(_is_binary_format, make_mysql_row_buffer_options(state->query_options()));
 
     if (nullptr == _row_buffer) {
         return Status::InternalError("no memory to alloc.");
@@ -119,6 +155,9 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
                          : column;
+        // Mark BinaryColumns that carry VARBINARY data so that push_binary is
+        // used when they appear inside nested types (ARRAY / MAP / STRUCT).
+        ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
         result_columns.emplace_back(std::move(column));
     }
 
@@ -161,6 +200,7 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
         column = _output_expr_ctxs[i]->root()->type().type == TYPE_TIME
                          ? ColumnHelper::convert_time_column_from_double_to_str(column)
                          : column;
+        ColumnHelper::mark_binary_columns(column, _output_expr_ctxs[i]->root()->type());
         result_columns.emplace_back(std::move(column));
     }
 

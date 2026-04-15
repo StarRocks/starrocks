@@ -18,6 +18,7 @@
 
 #include "base/uid_util.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "runtime/runtime_state.h"
 

@@ -237,6 +237,20 @@ public enum RuleType {
     TF_TVR_JOIN,
     TF_TVR_UNION_ALL,
 
+    // IVM delta/version rewrite rules (unified framework)
+    TF_IVM_DELTA_ICEBERG_SCAN,
+    TF_IVM_DELTA_FILTER,
+    TF_IVM_DELTA_PROJECT,
+    TF_IVM_DELTA_JOIN,
+    TF_IVM_DELTA_AGGREGATE,
+    TF_IVM_DELTA_UNION,
+    TF_IVM_VERSION_ICEBERG_SCAN,
+    TF_IVM_VERSION_FILTER,
+    TF_IVM_VERSION_PROJECT,
+    TF_IVM_VERSION_JOIN,
+    TF_IVM_VERSION_AGGREGATE,
+    TF_IVM_VERSION_UNION,
+
     // The following are implementation rules:
     IMPLEMENTATION_RULES,
     IMP_OLAP_LSCAN_TO_PSCAN,
@@ -314,6 +328,7 @@ public enum RuleType {
     GP_ELIMINATE_OP_WITH_CONSTANT,
     GP_VECTOR_REWRITE,
     GP_TVR_REWRITE,
+    GP_IVM_DELTA_REWRITE,
 
     NUM_RULES;
 

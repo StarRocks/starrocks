@@ -18,10 +18,10 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
-import com.starrocks.sql.common.PartitionNameSetMap;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -121,15 +121,17 @@ public class MVRefreshPartitionSelectorTest {
 
     @Test
     public void testExternalTablePartitionsStatistics() throws Exception {
-        Map<Table, PartitionNameSetMap> externalPartitionMap = new HashMap<>();
-        PartitionNameSetMap partitionMap1 = PartitionNameSetMap.of();
-        partitionMap1.put("p1", Set.of("dt=p1"));
-        partitionMap1.put("p2", Set.of("dt=p2", "dt=p3"));
-        externalPartitionMap.put(mockExternalTable(), partitionMap1);
-        PartitionNameSetMap partitionMap2 = PartitionNameSetMap.of();
-        partitionMap2.put("p1", Set.of("dt=p1"));
-        partitionMap2.put("p2", Set.of("dt=p2"));
-        externalPartitionMap.put(mockExternalTable(), partitionMap2);
+        Map<Table, BaseToMVPartitionMapping> externalPartitionMap = new HashMap<>();
+        Map<String, Set<String>> sourceMapping1 = new HashMap<>();
+        sourceMapping1.put("p1", Set.of("dt=p1"));
+        sourceMapping1.put("p2", Set.of("dt=p2", "dt=p3"));
+        externalPartitionMap.put(mockExternalTable(),
+                BaseToMVPartitionMapping.of(PCellSortedSet.of(), sourceMapping1));
+        Map<String, Set<String>> sourceMapping2 = new HashMap<>();
+        sourceMapping2.put("p1", Set.of("dt=p1"));
+        sourceMapping2.put("p2", Set.of("dt=p2"));
+        externalPartitionMap.put(mockExternalTable(),
+                BaseToMVPartitionMapping.of(PCellSortedSet.of(), sourceMapping2));
 
         MVRefreshPartitionSelector selector = new MVRefreshPartitionSelector(1000, 10000,
                 10, externalPartitionMap);

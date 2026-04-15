@@ -15,6 +15,7 @@
 #include "exec/pipeline/pipeline.h"
 
 #include "exec/pipeline/adaptive/event.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_driver.h"

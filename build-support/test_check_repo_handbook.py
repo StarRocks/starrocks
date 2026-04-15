@@ -220,6 +220,26 @@ class CheckRepoHandbookTest(unittest.TestCase):
                 )
             )
 
+    def test_local_plan_tree_is_ignored_by_checker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo = Path(tmpdir)
+            self._write_sample_repo(repo)
+            (repo / "handbook" / "plans" / "local" / "active").mkdir(parents=True)
+            (repo / "handbook" / "plans" / "local" / "index.md").write_text(
+                textwrap.dedent(
+                    """\
+                    # Local Handbook Plans
+
+                    ## Active Plans
+
+                    - [Scratch](active/scratch.md)
+                    """
+                )
+            )
+            (repo / "handbook" / "plans" / "local" / "active" / "scratch.md").write_text("# Scratch\n")
+
+            self.assertEqual([], MODULE.collect_errors(repo))
+
     def test_ci_pipeline_tracks_handbook_inputs(self) -> None:
         workflow_text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "ci-pipeline.yml").read_text()
 
@@ -234,8 +254,11 @@ class CheckRepoHandbookTest(unittest.TestCase):
         self.assertIn("- 'gensrc/AGENTS.md'", workflow_text)
         self.assertIn("- 'java-extensions/AGENTS.md'", workflow_text)
         self.assertIn("- 'test/AGENTS.md'", workflow_text)
+        self.assertIn("- 'build-support/handbook_plan.py'", workflow_text)
         self.assertIn("- 'build-support/check_repo_handbook.py'", workflow_text)
+        self.assertIn("- 'build-support/test_handbook_plan.py'", workflow_text)
         self.assertIn("- 'build-support/test_check_repo_handbook.py'", workflow_text)
+        self.assertIn("python3 -m unittest build-support/test_handbook_plan.py", workflow_text)
 
     def test_ci_pipeline_branch_tracks_handbook_inputs(self) -> None:
         workflow_text = (
@@ -253,8 +276,11 @@ class CheckRepoHandbookTest(unittest.TestCase):
         self.assertIn("- 'gensrc/AGENTS.md'", workflow_text)
         self.assertIn("- 'java-extensions/AGENTS.md'", workflow_text)
         self.assertIn("- 'test/AGENTS.md'", workflow_text)
+        self.assertIn("- 'build-support/handbook_plan.py'", workflow_text)
         self.assertIn("- 'build-support/check_repo_handbook.py'", workflow_text)
+        self.assertIn("- 'build-support/test_handbook_plan.py'", workflow_text)
         self.assertIn("- 'build-support/test_check_repo_handbook.py'", workflow_text)
+        self.assertIn("python3 -m unittest build-support/test_handbook_plan.py", workflow_text)
 
     def _write_sample_repo(self, repo: Path) -> None:
         (repo / "be" / "src" / "common").mkdir(parents=True)

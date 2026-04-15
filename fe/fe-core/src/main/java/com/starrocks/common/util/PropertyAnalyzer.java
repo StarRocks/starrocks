@@ -236,6 +236,10 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
 
+    // Only used in `INSERT INTO target_table SELECT ... FROM files()`.
+    // When set to true, pushes down the target table schema to files() for schema inference.
+    public static final String PROPERTIES_ENABLE_PUSH_DOWN_SCHEMA = "enable_push_down_schema";
+
     // constraint for rewrite
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
@@ -1119,6 +1123,23 @@ public class PropertyAnalyzer {
             return Boolean.parseBoolean(val);
         }
         return defaultVal;
+    }
+
+    /**
+     * Looks up {@code property} in {@code properties}, parses its value as a strict boolean
+     * (throws {@link SemanticException} for any value other than "true"/"false"), removes the
+     * key from the map, and returns the result. Returns {@code defaultValue} if the key is absent.
+     */
+    public static boolean analyzeBooleanPropStrictly(Map<String, String> properties,
+            String property, boolean defaultValue) throws SemanticException {
+        if (properties == null) {
+            return defaultValue;
+        }
+        String value = properties.remove(property);
+        if (value == null) {
+            return defaultValue;
+        }
+        return parseBooleanStrictly(property, value);
     }
 
     public static boolean analyzeEnablePersistentIndex(Map<String, String> properties) {
@@ -2144,4 +2165,5 @@ public class PropertyAnalyzer {
         }
         return ret;
     }
+
 }

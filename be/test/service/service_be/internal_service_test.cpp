@@ -163,6 +163,7 @@ TEST_F(InternalServiceTest, test_load_diagnose) {
     ASSERT_TRUE(st.message().find("can't find the load channel") != std::string::npos);
 }
 
+#ifdef WITH_STARCACHE
 TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
     BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
 
@@ -218,6 +219,7 @@ TEST_F(InternalServiceTest, test_fetch_datacache_via_brpc) {
         ASSERT_EQ(buffer.const_raw_buf().to_string(), target_value);
     }
 }
+#endif
 
 TEST_F(InternalServiceTest, test_get_load_replica_status) {
     BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());

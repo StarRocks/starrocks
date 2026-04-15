@@ -20,8 +20,9 @@
 #include <queue>
 #include <unordered_map>
 
+#include "base/time/time.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
-#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "mem_tracker_manager.h"
 #include "pipeline_executor_set_manager.h"
@@ -349,12 +350,16 @@ private:
 
 class DefaultWorkGroupInitialization {
 public:
-    DefaultWorkGroupInitialization();
+    DefaultWorkGroupInitialization(WorkGroupManager* workgroup_manager, int64_t max_executor_threads);
 
     // create or renew default group
     std::shared_ptr<WorkGroup> create_default_workgroup();
     // create or renew default mv group
     std::shared_ptr<WorkGroup> create_default_mv_workgroup();
+
+private:
+    WorkGroupManager* _workgroup_manager;
+    int64_t _max_executor_threads;
 };
 
 } // namespace workgroup

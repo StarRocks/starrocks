@@ -238,9 +238,13 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 // Splitting tablet
                 const auto& splitting_tablet_info = resharding_tablet_info.splitting_tablet_info();
                 task_num += splitting_tablet_info.new_tablet_ids_size();
+                int32_t split_count = splitting_tablet_info.new_tablet_ids_size();
+                int32_t split_index = 0;
                 for (auto new_tablet_id : splitting_tablet_info.new_tablet_ids()) {
                     publish_tablet_infos.emplace_back(lake::PublishTabletInfo::SPLITTING_TABLET,
-                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id);
+                                                      splitting_tablet_info.old_tablet_id(), new_tablet_id, split_count,
+                                                      split_index);
+                    split_index++;
                 }
             } else if (resharding_tablet_info.has_merging_tablet_info()) {
                 // Merging tablets
@@ -1162,9 +1166,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         if (is_pk_tablet) {
                             if (accurate_mode) {
                                 // Accurate mode (default): fetch delete vectors from object storage.
-                                // NOTE!! Each segment incurs a remote metadata read - expensive for large tablets.
+                                // Reuses the already-loaded tablet metadata to avoid repeated loads per segment.
                                 num_deletes = static_cast<int64_t>(
-                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset));
+                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
                             } else {
                                 // Approximate mode: prefer the pre-stored num_dels field in rowset
                                 // metadata. This avoids additional I/O while still providing a reasonable estimate.
@@ -1175,7 +1179,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                                     // Fallback for old metadata without num_dels.
                                     num_deletes =
                                             static_cast<int64_t>(_tablet_mgr->update_mgr()->get_rowset_num_deletes(
-                                                    tablet_id, version, rowset));
+                                                    **tablet_metadata, rowset));
                                 }
                             }
                         }

@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -239,6 +240,9 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
+        Assertions.assertNotNull(mvContext.getPartitionTopology());
+        Assertions.assertNotNull(mvContext.getRefreshScope());
+        Assertions.assertTrue(Strings.isNullOrEmpty(taskRun.getStatus().getErrorMessage()));
         assertPlanContains(execPlan, "partitions=6/6");
 
         MockedHiveMetadata mockedHiveMetadata =

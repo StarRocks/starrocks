@@ -35,7 +35,6 @@
 package com.starrocks.rpc;
 
 import com.baidu.jprotobuf.pbrpc.utils.TalkTimeoutController;
-import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
@@ -49,7 +48,6 @@ import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
-import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
 import com.starrocks.proto.PProcessDictionaryCacheResult;
@@ -62,7 +60,6 @@ import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.thrift.TExecPlanFragmentParams;
-import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -299,40 +296,6 @@ public class BackendServiceClient {
             LOG.warn("failed to get file schema, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
-    }
-
-    public Future<PMVMaintenanceTaskResult> submitMVMaintenanceTaskAsync(
-            TNetworkAddress address, TMVMaintenanceTasks tRequest)
-            throws TException, RpcException {
-        PMVMaintenanceTaskRequest pRequest = new PMVMaintenanceTaskRequest();
-        pRequest.setRequest(tRequest);
-
-        Future<PMVMaintenanceTaskResult> resultFuture = null;
-        for (int i = 1; i <= Config.max_query_retry_time && resultFuture == null; ++i) {
-            try {
-                final PBackendService service = BrpcProxy.getBackendService(address);
-                resultFuture = service.submitMVMaintenanceTaskAsync(pRequest);
-            } catch (NoSuchElementException e) {
-                // Retry `RETRY_TIMES`, when NoSuchElementException occurs.
-                if (i >= Config.max_query_retry_time) {
-                    LOG.warn("Submit MV Maintenance Task failed, address={}:{}",
-                            address.getHostname(), address.getPort(), e);
-                    throw new RpcException(address.hostname, e.getMessage());
-                }
-                try {
-                    Thread.sleep(10);
-                } catch (InterruptedException interruptedException) {
-                    Thread.currentThread().interrupt();
-                }
-            } catch (Throwable e) {
-                LOG.warn("Submit MV Maintenance Task got an exception, address={}:{}",
-                        address.getHostname(), address.getPort(), e);
-                throw new RpcException(address.hostname, e.getMessage());
-            }
-        }
-
-        Preconditions.checkState(resultFuture != null);
-        return resultFuture;
     }
 
     public Future<ExecuteCommandResultPB> executeCommand(TNetworkAddress address, ExecuteCommandRequestPB request)

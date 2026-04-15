@@ -17,8 +17,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/http")
 # where to put generated binaries
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/http")
 
-set(WEB_SERVER_FILES
-  download_action.cpp
+set(HTTP_CORE_FILES
   http_headers.cpp
   http_method.cpp
   http_request.cpp
@@ -26,12 +25,24 @@ set(WEB_SERVER_FILES
   http_status.cpp
   http_parser.cpp
   http_stream_channel.cpp
+  ev_http_server.cpp
+)
+
+ADD_BE_LIB(HttpCore ${HTTP_CORE_FILES})
+
+set(HTTP_CLIENT_FILES
+  http_client.cpp
+)
+
+ADD_BE_LIB(HttpClient ${HTTP_CLIENT_FILES})
+target_link_libraries(HttpClient PUBLIC HttpCore FileSystem)
+
+set(WEB_SERVER_FILES
+  download_action.cpp
   web_page_handler.cpp
   monitor_action.cpp
   default_path_handlers.cpp
   utils.cpp
-  ev_http_server.cpp
-  http_client.cpp
   action/health_action.cpp
   action/checksum_action.cpp
   action/greplog_action.cpp
@@ -62,6 +73,7 @@ if(STARROCKS_JIT_ENABLE)
 endif()
 
 ADD_BE_LIB(Webserver ${WEB_SERVER_FILES})
+target_link_libraries(Webserver PUBLIC HttpCore)
 
 # target_link_libraries(Webserver pthread dl Util)
 #ADD_BE_TEST(integer-array-test)

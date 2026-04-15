@@ -34,6 +34,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
@@ -116,7 +117,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
 
     const bool query_ctx_should_exist = t_desc_tbl.__isset.is_cached && t_desc_tbl.is_cached;
     ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id, query_ctx_should_exist));
-    _query_ctx->set_exec_env(exec_env);
+    _query_ctx->set_query_execution_services(&exec_env->query_execution_services());
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
     }
@@ -227,9 +228,11 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     const auto& t_desc_tbl = request.common().desc_tbl;
     auto& wg = _wg;
 
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options, query_globals, exec_env));
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(query_id, fragment_instance_id, query_options,
+                                                                    query_globals,
+                                                                    &exec_env->query_execution_services(), exec_env));
     auto* runtime_state = _fragment_ctx->runtime_state();
+    runtime_state->init_fragment_mem_pool();
     runtime_state->set_enable_pipeline_engine(true);
     runtime_state->set_fragment_ctx(_fragment_ctx.get());
     runtime_state->set_fragment_dict_state(_fragment_ctx->dict_state());
@@ -900,8 +903,9 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
         int64_t prepare_pipeline_driver_time = 0;
 
         int64_t process_mem_bytes = GlobalEnv::GetInstance()->process_mem_tracker()->consumption();
-        size_t num_process_drivers = ExecEnv::GetInstance()->driver_limiter()->num_total_drivers();
+        size_t num_process_drivers = 0;
     } profiler;
+    profiler.num_process_drivers = exec_env->driver_limiter()->num_total_drivers();
 
     DeferOp defer([this, &request, &prepare_success, &profiler]() {
         if (prepare_success) {
@@ -991,6 +995,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
 Status FragmentExecutor::execute(ExecEnv* exec_env) {
     bool prepare_success = false;
+    (void)exec_env;
     DeferOp defer([this, &prepare_success]() {
         if (!prepare_success) {
             _fail_cleanup(true);

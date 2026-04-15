@@ -92,7 +92,8 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     if (timezone != "") {
         query_globals.__set_time_zone(timezone);
     }
-    _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
+    _runtime_state =
+            _pool.add(new RuntimeState(fragment_id, query_options, query_globals, static_cast<ExecEnv*>(nullptr)));
     _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
     _runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
     _runtime_state->init_instance_mem_tracker();
@@ -154,7 +155,7 @@ void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const T
                                               bool diff_case_sensitive) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
     for (auto slot : tuple_desc->slots()) {
-        std::string col_name = slot->col_name();
+        std::string col_name(slot->col_name());
         if (diff_case_sensitive && std::isupper(col_name[0])) {
             std::transform(col_name.begin(), col_name.end(), col_name.begin(), ::tolower);
         } else if (diff_case_sensitive && std::islower(col_name[0])) {

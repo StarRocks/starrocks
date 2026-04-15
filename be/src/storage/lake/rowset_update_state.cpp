@@ -18,6 +18,7 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
@@ -458,8 +459,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->standalone_pk_column()->clone_empty();
     std::vector<uint32_t> delete_idxes;
     const int64* data = nullptr;
-    TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
-                                _auto_increment_partial_update_states[segment_id].write_column->raw_data()));
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_auto_increment_partial_update_states[segment_id].write_column->accept(&visitor));
+    data = reinterpret_cast<const int64*>(visitor.result());
 
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user
@@ -806,8 +808,9 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->standalone_pk_column()->clone_empty();
         std::vector<uint32_t> delete_idxes;
         const int64* data = nullptr;
-        TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
-                                    _auto_increment_partial_update_states[segment_id].write_column->raw_data()));
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(_auto_increment_partial_update_states[segment_id].write_column->accept(&visitor));
+        data = reinterpret_cast<const int64*>(visitor.result());
 
         // just check the rows which are not exist in the previous version
         // because the rows exist in the previous version may contain 0 which are specified by the user

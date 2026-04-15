@@ -16,8 +16,12 @@
 
 #include <chrono>
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
+#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/logconfig.h"
 #include "util/time_guard.h"
@@ -45,6 +49,7 @@ void PipelineDriverPoller::shutdown() {
 }
 
 void PipelineDriverPoller::run_internal() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);
     this->_is_polling_thread_initialized.store(true, std::memory_order_release);
 
     {

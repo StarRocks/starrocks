@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "exec/stream/stream_test.h"
+#include "runtime/runtime_state.h"
 #include "testutil/desc_tbl_helper.h"
 
 namespace starrocks::stream {
@@ -29,7 +30,8 @@ public:
     ~MemStateTableTest() override = default;
 
     void SetUp() override {
-        _runtime_state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        _runtime_state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         _runtime_profile = _runtime_state->runtime_profile();
         _mem_tracker = std::make_unique<MemTracker>();
         std::vector<SlotTypeInfo> src_slots = std::vector<SlotTypeInfo>{

@@ -68,8 +68,8 @@ struct DataTypeTraits<TYPE_SMALLINT> {
 
 template <LogicalType Type>
 class DictPageBuilder final : public PageBuilder {
-    using ValueType = typename CppTypeTraits<Type>::CppType;
-    using ValueCodeType = typename CppTypeTraits<DataTypeTraits<Type>::type>::CppType;
+    using ValueType = StorageCppType<Type>;
+    using ValueCodeType = StorageCppType<DataTypeTraits<Type>::type>;
 
 public:
     explicit DictPageBuilder(const PageBuilderOptions& options);
@@ -100,7 +100,7 @@ public:
     bool all_dict_encoded() const override { return _encoding_type == DICT_ENCODING; }
 
 private:
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
 
     PageBuilderOptions _options;
     bool _finished{false};
@@ -124,7 +124,8 @@ private:
 // but rather the index of the data. In this case, you need to load the data from the dictionary.
 template <LogicalType Type>
 class DictPageDecoder final : public PageDecoder {
-    using ValueType = typename CppTypeTraits<Type>::CppType;
+    using ValueType = StorageCppType<Type>;
+    static_assert(!lt_is_string_or_binary<Type>, "DictPageDecoder does not support string or binary types");
 
 public:
     DictPageDecoder(Slice data);
@@ -150,7 +151,7 @@ public:
     Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
 
 private:
-    enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
+    enum { SIZE_OF_TYPE = StorageCppTypeSize<Type> };
     Slice _data;
     std::unique_ptr<PageDecoder> _data_page_decoder;
     const BitShufflePageDecoder<Type>* _dict_decoder = nullptr;

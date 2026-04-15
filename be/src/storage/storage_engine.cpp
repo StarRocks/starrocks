@@ -45,7 +45,6 @@
 #include <random>
 #include <set>
 
-#include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
@@ -57,6 +56,7 @@
 #include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/util/bthreads/executor.h"
 #include "cumulative_compaction.h"
@@ -728,6 +728,7 @@ void StorageEngine::_start_clean_fd_cache() {
 }
 
 void StorageEngine::compaction_check() {
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     int checker_one_round_sleep_time_s = 1800;
     while (!bg_worker_stopped()) {
         MonotonicStopWatch stop_watch;
@@ -875,6 +876,7 @@ void* StorageEngine::_manual_compaction_thread_callback(void* arg) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
+    SCOPED_SET_MODULE_TYPE(ThreadModuleType::COMPACTION);
     Status status = Status::OK();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         _check_and_run_manual_compaction_task();

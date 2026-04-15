@@ -185,5 +185,7 @@ public class OdpsScanNode extends ScanNode {
         tCloudConfiguration.setCloud_type(TCloudType.ALIYUN);
         tHdfsScanNode.setCloud_configuration(tCloudConfiguration);
         msg.hdfs_scan_node = tHdfsScanNode;
+
+        setConnectorCatalogType(msg);
     }
 }

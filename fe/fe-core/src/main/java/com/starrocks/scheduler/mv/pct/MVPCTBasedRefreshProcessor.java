@@ -26,6 +26,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
@@ -53,7 +54,6 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
-import com.starrocks.sql.common.PCellUtils;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ExecPlan;
@@ -104,7 +104,8 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // check to refresh partitions of mv and base tables
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
             updatePCTToRefreshMetas(taskRunContext);
-            if (PCellUtils.isEmpty(pctMVToRefreshedPartitions)) {
+            PCTRefreshScope refreshScope = mvContext.getRefreshScope();
+            if (refreshScope == null || refreshScope.isEmpty()) {
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
             }
         }
@@ -112,7 +113,9 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // execute the ExecPlan of insert stmt
         InsertStmt insertStmt = null;
         try (Timer ignored = Tracers.watchScope("MVRefreshPrepareRefreshPlan")) {
-            insertStmt = prepareRefreshPlan(pctMVToRefreshedPartitions, pctRefTablePartitionNames);
+            PCTRefreshScope refreshScope = mvContext.getRefreshScope();
+            insertStmt = prepareRefreshPlan(refreshScope.getMvPartitionsToRefresh(),
+                    refreshScope.getRefTablePartitionNames());
         }
         return new ProcessExecPlan(Constants.TaskRunState.SUCCESS, mvContext.getExecPlan(), insertStmt);
     }
@@ -172,7 +175,8 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
                     db.getFullName(), mv.getName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
-        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, mvRefreshPartitioner);
+        PCTPredicateBuilder predicateBuilder = new PCTPredicateBuilder(mvRefreshPartitioner);
+        MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, predicateBuilder);
         try {
             // Analyze and prepare a partition & Rebuild insert statement by
             // considering to-refresh partitions of ref tables/ mv
@@ -315,6 +319,20 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
     public void updateVersionMeta(ExecPlan execPlan,
                                   PCellSortedSet mvRefreshedPartitions,
                                   Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
+        // Only promote TVR checkpoint on the last batch. Intermediate batches pass empty map
+        // to avoid committing TVR before all partitions are refreshed.
+        Map<BaseTableInfo, TvrVersionRange> tvrMap;
+        if (mvContext.hasNextBatchPartition()) {
+            tvrMap = Maps.newHashMap();
+        } else {
+            tvrMap = mv.getRefreshScheme().getAsyncRefreshContext().getTempBaseTableInfoTvrDeltaMap();
+        }
+        updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, tvrMap);
+        // Clear temp map after the last batch promotes TVR, preventing stale data from being
+        // reused by subsequent unrelated refreshes (e.g., user-initiated partial refresh or
+        // explain-time planning that populates the temp map without executing).
+        if (!mvContext.hasNextBatchPartition()) {
+            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaMap();
+        }
     }
 }

@@ -21,6 +21,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/nljoin/nljoin_build_operator.h"
 #include "exec/pipeline/nljoin/nljoin_context.h"
@@ -29,13 +30,13 @@
 #include "exec/pipeline/nljoin/spillable_nljoin_probe_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/runtime_filter/runtime_filter_helper.h"
 #include "exprs/expr_context.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "exprs/literal.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
-#include "runtime/runtime_filter/runtime_filter_helper.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {

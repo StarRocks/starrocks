@@ -17,7 +17,7 @@
 #include "base/types/int128.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_filter.h"
 

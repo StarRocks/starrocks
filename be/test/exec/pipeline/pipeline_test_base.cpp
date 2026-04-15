@@ -93,9 +93,9 @@ void PipelineTestBase::_prepare() {
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
-                                           _request.query_options, _request.query_globals, _exec_env));
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+            _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+            _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     _fragment_ctx->set_workgroup(ExecEnv::GetInstance()->workgroup_manager()->get_default_workgroup());
 
     _fragment_future = _fragment_ctx->finish_future();

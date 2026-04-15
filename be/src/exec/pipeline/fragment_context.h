@@ -25,13 +25,9 @@
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/runtime_filter_types.h"
 #include "exec/pipeline/scan/morsel.h"
-#include "exec/pipeline/schedule/event_scheduler.h"
-#include "exec/pipeline/schedule/observer.h"
-#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_param.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -51,6 +47,8 @@ class FragmentDictState;
 
 namespace pipeline {
 
+class PassThroughChunkBufferGuard;
+
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
@@ -60,6 +58,13 @@ class FragmentContext {
 public:
     FragmentContext();
     ~FragmentContext();
+
+    // Fragment-level shared MemPool — delegates to RuntimeState which owns it.
+    MemPool* fragment_mem_pool() { return _runtime_state ? _runtime_state->fragment_mem_pool() : nullptr; }
+
+    // PMR memory resource — delegates to RuntimeState which owns it.
+    std::pmr::memory_resource* mem_resource() { return _runtime_state ? _runtime_state->mem_resource() : nullptr; }
+
     const TUniqueId& query_id() const { return _query_id; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     const TUniqueId& fragment_instance_id() const { return _fragment_instance_id; }
@@ -236,6 +241,8 @@ private:
     Status _s_status;
 
     DriverLimiter::TokenPtr _driver_token = nullptr;
+
+    std::unique_ptr<PassThroughChunkBufferGuard> _pass_through_chunk_buffer_guard;
 
     query_cache::CacheParam _cache_param;
     bool _enable_cache = false;

@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <unordered_map>
@@ -23,15 +24,19 @@
 #include "base/concurrency/spinlock.h"
 #include "base/hash/hash.h"
 #include "base/hash/hash_std.hpp"
+#include "base/metrics.h"
 #include "base/time/time.h"
 #include "base/uid_util.h"
-#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/spill/query_spill_manager.h"
+#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "gen_cpp/internal_service.pb.h"
+#include "runtime/descriptors_fwd.h"
+#include "runtime/exec_env_fwd.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/profile_report_worker.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state_fwd.h"
@@ -56,7 +61,10 @@ class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
     QueryContext();
     ~QueryContext() noexcept;
-    void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
+    void set_query_execution_services(const QueryExecutionServices* query_execution_services) {
+        _query_execution_services = query_execution_services;
+    }
+    const QueryExecutionServices* query_execution_services() const { return _query_execution_services; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
     TUniqueId query_id() const { return _query_id; }
     int64_t lifetime() { return _lifetime_sw.elapsed_time(); }
@@ -284,9 +292,16 @@ public:
     std::shared_ptr<QueryStatistics> intermediate_query_statistic(int64_t delta_transmitted_bytes);
     // Merged statistic from all executor nodes
     std::shared_ptr<QueryStatistics> final_query_statistic();
+    // Snapshot statistic without requiring final sink (best-effort, used for failure/cancel reporting).
+    std::shared_ptr<QueryStatistics> snapshot_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
     bool is_final_sink() const { return _is_final_sink; }
     void set_final_sink() { _is_final_sink = true; }
+
+    bool mark_audit_statistics_reported() {
+        bool expected = false;
+        return _audit_statistics_reported.compare_exchange_strong(expected, true);
+    }
 
     QueryContextPtr get_shared_ptr() { return shared_from_this(); }
 
@@ -311,7 +326,7 @@ public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
 
 private:
-    ExecEnv* _exec_env = nullptr;
+    const QueryExecutionServices* _query_execution_services = nullptr;
     TUniqueId _query_id;
     MonotonicStopWatch _lifetime_sw;
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
@@ -354,6 +369,7 @@ private:
     std::atomic<int64_t> _delta_cpu_cost_ns = 0;
     std::atomic<int64_t> _delta_scan_rows_num = 0;
     std::atomic<int64_t> _delta_scan_bytes = 0;
+    std::atomic_bool _audit_statistics_reported = false;
 
     struct ScanStats {
         std::atomic<int64_t> total_scan_rows_num = 0;

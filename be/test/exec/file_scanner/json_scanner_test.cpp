@@ -143,11 +143,12 @@ protected:
     }
 
     std::shared_ptr<RuntimeState> create_runtime_state() {
+        ExecEnv* exec_env = ExecEnv::GetInstance();
         TQueryOptions query_options;
         TUniqueId fragment_id;
         TQueryGlobals query_globals;
-        std::shared_ptr<RuntimeState> runtime_state =
-                std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, ExecEnv::GetInstance());
+        std::shared_ptr<RuntimeState> runtime_state = std::make_shared<RuntimeState>(
+                fragment_id, query_options, query_globals, &exec_env->query_execution_services(), exec_env);
         TUniqueId id;
         runtime_state->init_mem_trackers(id);
         return runtime_state;

@@ -34,8 +34,6 @@
 
 #pragma once
 
-#include <column/type_traits.h>
-
 #include <boost/container/flat_set.hpp>
 #include <boost/lexical_cast.hpp>
 #include <cstdint>
@@ -46,6 +44,7 @@
 #include <variant>
 
 #include "base/string/slice.h"
+#include "column/runtime_type_traits.h"
 #include "exec/olap_utils.h"
 #include "exec/scan_node.h"
 #include "gen_cpp/PlanNodes_types.h"

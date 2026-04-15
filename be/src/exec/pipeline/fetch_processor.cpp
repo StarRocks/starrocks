@@ -19,7 +19,6 @@
 #include <mutex>
 #include <vector>
 
-#include "agent/master_info.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -27,6 +26,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
 #include "common/runtime_profile.h"
+#include "common/system/master_info.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/sorting/sorting.h"
 #include "exec/tablet_info.h"

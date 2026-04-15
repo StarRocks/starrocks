@@ -21,7 +21,7 @@
 
 #include "base/utility/defer_op.h"
 #include "column/column_access_path.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/compiler_util.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/runtime_profile.h"
@@ -666,7 +666,8 @@ int OlapScanNode::compute_priority(int32_t num_submitted_tasks) {
 }
 
 bool OlapScanNode::_submit_scanner(TabletScanner* scanner, bool blockable) {
-    PriorityThreadPool* thread_pool = runtime_state()->exec_env()->thread_pool();
+    auto* query_execution_services = runtime_state()->query_execution_services();
+    PriorityThreadPool* thread_pool = query_execution_services->execution->thread_pool;
     int delta = !scanner->keep_priority();
     int32_t num_submit = _scanner_submit_count.fetch_add(delta, std::memory_order_relaxed);
     PriorityThreadPool::Task task;
@@ -845,7 +846,7 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
         field_bytes += type_estimated_overhead_bytes(slot->type().type);
 
         _estimated_scan_row_bytes += field_bytes;
-        if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {
+        if (unused_output_column_set.find(std::string(slot->col_name())) == unused_output_column_set.end()) {
             _estimated_output_row_bytes += field_bytes;
         }
     }

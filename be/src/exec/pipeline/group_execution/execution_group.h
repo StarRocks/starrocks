@@ -15,17 +15,17 @@
 #pragma once
 
 #include <atomic>
+#include <condition_variable>
 #include <cstddef>
 #include <functional>
+#include <mutex>
 #include <unordered_set>
 
-#include "exec/pipeline/fragment_context.h"
+#include "common/status.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
-#include "exec/pipeline/pipeline.h"
-#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_fwd.h"
-#include "runtime/runtime_state.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::pipeline {
 
@@ -85,22 +85,9 @@ public:
     virtual std::string to_string() const = 0;
     void attach_driver_executor(DriverExecutor* executor) { _executor = executor; }
 
-    void count_down_pipeline(RuntimeState* state) {
-        // Cache the member before performing the atomic increment.
-        // This ensures we won't dereference `this` after another thread may
-        // have deleted the object.
-        size_t num_pipelines = _num_pipelines;
-        if (++_num_finished_pipelines == num_pipelines) {
-            state->fragment_ctx()->count_down_execution_group();
-        }
-    }
+    void count_down_pipeline(RuntimeState* state);
 
-    void count_down_epoch_pipeline(RuntimeState* state) {
-        size_t num_pipelines = _num_pipelines;
-        if (++_num_epoch_finished_pipelines == num_pipelines) {
-            state->fragment_ctx()->count_down_epoch_pipeline(state);
-        }
-    }
+    void count_down_epoch_pipeline(RuntimeState* state);
 
     size_t total_logical_dop() const { return _total_logical_dop; }
 

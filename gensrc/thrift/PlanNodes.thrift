@@ -1350,6 +1350,7 @@ struct TConnectorScanNode {
   1: optional string connector_name
   // // Scan node for hdfs
   // 2: optional THdfsScanNode hdfs_scan_node
+  3: optional string catalog_type
 }
 
 // binlog meta column names

@@ -25,6 +25,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/schedule/common.h"
 #include "exec/workgroup/scan_executor.h"
@@ -56,7 +57,7 @@ ScanOperator::ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_
 }
 
 ScanOperator::~ScanOperator() {
-    auto* state = runtime_state();
+    auto* state = get_factory()->runtime_state();
     if (state == nullptr) {
         return;
     }
@@ -95,7 +96,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
 
     if (_scan_node->is_enable_topn_filter_back_pressure()) {
-        if (auto* runtime_filters = runtime_bloom_filters(); runtime_filters != nullptr) {
+        if (auto* runtime_filters = get_factory()->get_runtime_bloom_filters(); runtime_filters != nullptr) {
             auto has_topn_filters =
                     std::any_of(runtime_filters->descriptors().begin(), runtime_filters->descriptors().end(),
                                 [](const auto& e) { return e.second->is_stream_build_filter(); });
@@ -318,7 +319,7 @@ std::tuple<int64_t, bool> ScanOperator::_should_emit_eos(const ChunkPtr& chunk) 
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {
-    const auto* global_rf_collector = runtime_bloom_filters();
+    const auto* global_rf_collector = get_factory()->get_runtime_bloom_filters();
     if (global_rf_collector == nullptr) {
         return 0;
     }
@@ -625,7 +626,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
     // _query_ctx uses lazy initialization, maybe it is not initialized
     // under certain circumstance
     if (query_ctx == nullptr) {
-        query_ctx = state->exec_env()->query_context_mgr()->get(state->query_id());
+        auto* query_execution_services = state->query_execution_services();
+        query_ctx = query_execution_services->runtime->query_context_mgr->get(state->query_id());
         DCHECK(query_ctx != nullptr);
     }
     if (!query_ctx->enable_profile()) {

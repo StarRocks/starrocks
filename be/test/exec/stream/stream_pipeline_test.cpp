@@ -23,6 +23,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
@@ -56,9 +57,9 @@ Status StreamPipelineTest::prepare() {
     _fragment_ctx = _query_ctx->fragment_mgr()->get_or_register(fragment_id);
     _fragment_ctx->set_query_id(query_id);
     _fragment_ctx->set_fragment_instance_id(fragment_id);
-    _fragment_ctx->set_runtime_state(
-            std::make_unique<RuntimeState>(_request.params.query_id, _request.params.fragment_instance_id,
-                                           _request.query_options, _request.query_globals, _exec_env));
+    _fragment_ctx->set_runtime_state(std::make_unique<RuntimeState>(
+            _request.params.query_id, _request.params.fragment_instance_id, _request.query_options,
+            _request.query_globals, &_exec_env->query_execution_services(), _exec_env));
     _fragment_ctx->set_is_stream_pipeline(true);
     _fragment_ctx->set_is_stream_test(true);
 

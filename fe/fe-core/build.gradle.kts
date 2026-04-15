@@ -289,7 +289,15 @@ dependencies {
     implementation("org.slf4j:slf4j-api")
     implementation("org.threeten:threeten-extra:1.7.2")
     implementation("org.xerial.snappy:snappy-java")
-    implementation("software.amazon.awssdk:bundle")
+    implementation("software.amazon.awssdk:glue")
+    implementation("software.amazon.awssdk:dynamodb")
+    implementation("software.amazon.awssdk:kms")
+    implementation("software.amazon.awssdk:s3")
+    implementation("software.amazon.awssdk:s3-transfer-manager")
+    implementation("software.amazon.awssdk:sts")
+    implementation("software.amazon.awssdk:sso")
+    implementation("software.amazon.awssdk:ssooidc")
+    implementation("software.amazon.awssdk:url-connection-client")
     implementation("tools.profiler:async-profiler")
     implementation("com.github.vertical-blank:sql-formatter:2.0.4")
     implementation("at.yawk.lz4:lz4-java")
@@ -299,7 +307,6 @@ dependencies {
     implementation("com.starrocks:jprotobuf-starrocks:${project.ext["jprotobuf-starrocks.version"]}")
     implementation("org.apache.groovy:groovy:4.0.9")
     testImplementation("org.apache.spark:spark-sql_2.12")
-    implementation("software.amazon.awssdk:s3-transfer-manager")
     implementation("net.openhft:zero-allocation-hashing:0.16")
 }
 
@@ -356,12 +363,6 @@ tasks.register<Task>("generateThriftSources") {
     description = "Generates Java source files from Thrift definitions"
     group = "build"
 
-    // Create a special configuration for the thrift compiler rather than using runtime classpath
-    val thriftGenClasspath = configurations.create("thriftGenClasspath")
-    dependencies {
-        thriftGenClasspath("io.github.decster:thrift-java-maven-plugin:0.1.3")
-    }
-
     val protoDir = file("../../gensrc/thrift")
     val outputDir = layout.buildDirectory.get().dir("generated-sources/thrift").asFile
 
@@ -371,24 +372,40 @@ tasks.register<Task>("generateThriftSources") {
         exclude("parquet.thrift")
     }.files
 
-    // Declare inputs (proto files)
+    // Mirror the binary-discovery logic from gensrc/thrift/Makefile:
+    // prefer $STARROCKS_THIRDPARTY/installed/bin/thrift, fall back to "thrift" on PATH.
+    // Resolved at configuration time so Gradle can track it as a task input.
+    val thriftBin: String = run {
+        val tp = System.getenv("STARROCKS_THIRDPARTY")
+        if (tp != null) {
+            val candidate = file("$tp/installed/bin/thrift")
+            if (candidate.exists()) return@run candidate.absolutePath
+        }
+        "thrift"
+    }
+
+    // Declare inputs: proto files and the thrift compiler binary.
+    // Including the binary ensures the task is re-run when the toolchain is upgraded.
     inputs.files(protoFiles)
+    inputs.property("thriftBin", thriftBin)
 
     // Declare output directory
     outputs.dir(outputDir)
 
     doFirst {
         mkdir(outputDir)
-        // Process each proto file individually
-        project.javaexec {
-            classpath = thriftGenClasspath
-            mainClass.set("io.github.decster.ThriftCompiler")
-            // Build arguments list with the output directory and all thrift files
-            val allArgs = mutableListOf("-o", "$outputDir")
-            protoFiles.forEach { file ->
-                allArgs.add(file.absolutePath)
+
+        // Process each thrift file with the native compiler, matching Maven's maven-thrift-plugin args.
+        protoFiles.forEach { thriftFile ->
+            project.exec {
+                commandLine(
+                    thriftBin,
+                    "--gen", "java",
+                    "-out", outputDir.absolutePath,
+                    "-I", protoDir.absolutePath,
+                    thriftFile.absolutePath
+                )
             }
-            args = allArgs
         }
     }
 }

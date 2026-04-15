@@ -16,6 +16,7 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
@@ -49,7 +50,7 @@ void OperatorMemoryResourceManager::to_low_memory_mode() {
 
 size_t OperatorMemoryResourceManager::operator_avaliable_memory_bytes() {
     // TODO: think about multi-operators
-    auto* runtime_state = _op->runtime_state();
+    auto* runtime_state = _op->get_factory()->runtime_state();
     size_t avaliable = runtime_state->spill_mem_table_size() * runtime_state->spill_mem_table_num();
     avaliable = std::max<size_t>(avaliable, runtime_state->spill_operator_min_bytes());
     avaliable = std::min<size_t>(avaliable, runtime_state->spill_operator_max_bytes());

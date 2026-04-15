@@ -53,6 +53,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "util/compression/block_compression.h"

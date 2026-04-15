@@ -110,6 +110,7 @@ public class FunctionSet {
     public static final String DAYNAME = "dayname";
     public static final String DAYOFMONTH = "dayofmonth";
     public static final String DAYOFWEEK = "dayofweek";
+    public static final String DAYOFWEEK_ISO = "dayofweek_iso";
     public static final String DAYOFYEAR = "dayofyear";
     public static final String FROM_DAYS = "from_days";
     public static final String FROM_UNIXTIME = "from_unixtime";
@@ -141,6 +142,7 @@ public class FunctionSet {
     public static final String LOCALTIMESTAMP = "localtimestamp";
 
     public static final String WEEK = "week";
+    public static final String WEEK_ISO = "week_iso";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -259,6 +261,7 @@ public class FunctionSet {
     public static final String INITCAP = "initcap";
     public static final String SUBSTRING_INDEX = "substring_index";
     public static final String FIELD = "field";
+    public static final String HTTP_REQUEST = "http_request";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -786,6 +789,7 @@ public class FunctionSet {
                     .add(UUID_V7)
                     .add(UUID_V7_NUMERIC)
                     .add(SLEEP)
+                    .add(HTTP_REQUEST)
                     .build();
 
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =

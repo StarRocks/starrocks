@@ -17,6 +17,8 @@
 #include <future>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/datum_convert.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_json_flat_fwd.h"
@@ -384,14 +386,32 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
     std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
+    // The parallel tasks capture local variables and |this| by reference.
+    // Must wait for all tasks to complete before returning, otherwise
+    // dangling references to |rs_opts| and |this| cause use-after-free.
+    DeferOp wait_futures([&futures]() {
+        for (auto& future : futures) {
+            if (future.valid()) {
+                future.wait();
+            }
+        }
+    });
     for (auto& rowset : _rowsets) {
         if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
-                    [&, rowset]() { return enhance_error_prompt(rowset->read(schema(), rs_opts)); });
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset]() {
+#ifdef BE_TEST
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                if (!injected_st.ok()) {
+                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                }
+#endif
+                return enhance_error_prompt(rowset->read(schema(), rs_opts));
+            });
 
             auto packaged_func = [task]() { (*task)(); };
             if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));

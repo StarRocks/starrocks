@@ -57,6 +57,9 @@ import com.starrocks.scheduler.mv.pct.MVPCTRefreshListPartitioner;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshNonPartitioner;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshPartitioner;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshRangePartitioner;
+import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
+import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
+import com.starrocks.scheduler.mv.pct.PCTRefreshScopeCalculator;
 import com.starrocks.scheduler.mv.pct.PCTTableSnapshotInfo;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -69,7 +72,6 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellUtils;
-import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PartitionNameSetMap;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.NodePosition;
@@ -104,17 +106,18 @@ public abstract class BaseMVRefreshProcessor {
     protected final MaterializedView mv;
     protected final IMaterializedViewMetricsEntity mvEntity;
     protected final MvTaskRunContext mvContext;
+    protected final MvTaskRunContext.MVRefreshRuntimeState refreshRuntimeState;
     protected final Logger logger;
     // Collect all bases tables of the mv to be updated meta after mv refresh success.
     // format :     table id -> <base table info, snapshot table>
     protected final MVPCTRefreshPartitioner mvRefreshPartitioner;
     protected final MVRefreshParams mvRefreshParams;
+    protected final PCTRefreshScopeCalculator pctRefreshScopeCalculator;
     // current refresh mode, can be changed in the refresh's runtime for `auto` mode
     protected MaterializedView.RefreshMode currentRefreshMode;
 
-    // Collect all base table snapshot infos for the mv which the snapshot infos are kept
-    // and used in the final update meta.
-    protected Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = Maps.newHashMap();
+    // Per-task-run shared snapshot infos bound once from mvContext. Mutate the map contents only.
+    protected final Map<Long, BaseTableSnapshotInfo> snapshotBaseTables;
     // PCT related fields
     protected PCellSortedSet pctMVToRefreshedPartitions = null;
     protected PCellSetMapping pctRefTablePartitionNames = null;
@@ -144,13 +147,16 @@ public abstract class BaseMVRefreshProcessor {
         this.db = db;
         this.mv = mv;
         this.mvContext = mvContext;
+        this.refreshRuntimeState = mvContext.getRefreshRuntimeState();
         this.mvEntity = mvEntity;
         this.logger = MVTraceUtils.getLogger(mv, clazz);
         this.mvRefreshParams = new MVRefreshParams(mv, mvContext.getProperties());
         // prepare mv refresh partitioner
         this.mvRefreshPartitioner = buildMvRefreshPartitioner(mv, mvContext, mvRefreshParams);
         this.currentRefreshMode = refreshMode;
+        this.pctRefreshScopeCalculator = new PCTRefreshScopeCalculator();
         this.isEnableExternalTablePreciseRefresh = isEnableExternalTablePreciseRefresh();
+        this.snapshotBaseTables = refreshRuntimeState.getSnapshotBaseTables();
         // init the refresh mode
         updateTaskRunStatus(status -> {
             status.getMvTaskRunExtraMessage().setRefreshMode(currentRefreshMode.name());
@@ -200,9 +206,10 @@ public abstract class BaseMVRefreshProcessor {
      * @param mvRefreshedPartitions the refreshed partitions of the mv
      * @param refTableAndPartitionNames the refreshed partitions of the base tables
      */
-    public abstract void updateVersionMeta(ExecPlan execPlan,
-                                           PCellSortedSet mvRefreshedPartitions,
-                                           Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames);
+    public void updateVersionMeta(ExecPlan execPlan,
+                                   PCellSortedSet mvRefreshedPartitions,
+                                   Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
+    }
 
     public MVRefreshParams getMvRefreshParams() {
         return mvRefreshParams;
@@ -244,6 +251,10 @@ public abstract class BaseMVRefreshProcessor {
      */
     public TaskRun getNextTaskRun() {
         return nextTaskRun;
+    }
+
+    protected void setSnapshotBaseTables(Map<Long, BaseTableSnapshotInfo> snapshotBaseTables) {
+        refreshRuntimeState.replaceSnapshotBaseTables(snapshotBaseTables);
     }
 
     /**
@@ -398,7 +409,8 @@ public abstract class BaseMVRefreshProcessor {
                             db.getFullName(), mv.getName()));
                 }
                 PCellSortedSet mvCandidatePartition = getPCTMVToRefreshedPartitions(true);
-                baseTableCandidatePartitions = getPCTRefTableRefreshPartitions(mvCandidatePartition);
+                PCTRefreshScope candidateScope = buildPCTRefreshScope(mvCandidatePartition);
+                baseTableCandidatePartitions = candidateScope.getRefTableRefreshPartitions();
             } catch (Exception e) {
                 logger.warn("failed to compute candidate partitions in sync partitions",
                         DebugUtil.getRootStackTrace(e));
@@ -427,7 +439,7 @@ public abstract class BaseMVRefreshProcessor {
     protected boolean syncPartitions() throws AnalysisException, LockTimeoutException {
         final Stopwatch stopwatch = Stopwatch.createStarted();
         // collect base table snapshot infos
-        this.snapshotBaseTables = collectBaseTableSnapshotInfos();
+        setSnapshotBaseTables(collectBaseTableSnapshotInfos());
 
         if (!mvContext.isExplain() && mvRefreshParams.isNonTentativeForce()) {
             // drop existing partitions for force refresh
@@ -466,22 +478,40 @@ public abstract class BaseMVRefreshProcessor {
         }
         // do sync partitions (add or drop partitions) for materialized view
         boolean result = mvRefreshPartitioner.syncAddOrDropPartitions();
+        if (result && mv.isPartitionedTable() && mvContext.getPartitionTopology() == null) {
+            throw new DmlException("Materialized view %s.%s refresh failed: partition topology was not published " +
+                            "after sync partitions succeeded",
+                    db.getFullName(), mv.getName());
+        }
         logger.info("finish sync partitions, cost(ms): {}", stopwatch.elapsed(TimeUnit.MILLISECONDS));
         return result;
     }
 
-    protected void updatePCTToRefreshMetas(TaskRunContext taskRunContext) throws Exception {
-        this.pctMVToRefreshedPartitions = getPCTMVToRefreshedPartitions(false);
-        // ref table of mv : refreshed partition names
-        this.pctRefTableRefreshPartitions = getPCTRefTableRefreshPartitions(pctMVToRefreshedPartitions);
-        // ref table of mv : refreshed partition names
-        this.pctRefTablePartitionNames = PCellSetMapping.of(pctRefTableRefreshPartitions.entrySet().stream()
-                .collect(Collectors.toMap(x -> x.getKey().getName(), Map.Entry::getValue)));
+    /**
+     * Compute PCT partition metadata for the current refresh.
+     *
+     * @param skipBatchFilter if true, skip batch filtering (partition_refresh_number, adaptive, refreshPartitionLimit)
+     *                        and record all detected changed partitions. This is used by IVM where all changed
+     *                        partitions are refreshed via TVR delta regardless of partition_refresh_number.
+     *                        if false, apply batch filtering as in normal PCT execution.
+     */
+    protected void updatePCTToRefreshMetas(TaskRunContext taskRunContext,
+                                           boolean skipBatchFilter) throws Exception {
+        PCellSortedSet mvPartitionsToRefresh = getPCTMVToRefreshedPartitions(false, skipBatchFilter);
+        PCTRefreshScope refreshScope = buildPCTRefreshScope(mvPartitionsToRefresh);
+        mvContext.setRefreshScope(refreshScope);
+        this.pctMVToRefreshedPartitions = refreshScope.getMvPartitionsToRefresh();
+        this.pctRefTableRefreshPartitions = refreshScope.getRefTableRefreshPartitions();
+        this.pctRefTablePartitionNames = refreshScope.getRefTablePartitionNames();
         this.updatePCTBaseTableSnapshotInfos(pctRefTableRefreshPartitions);
         // add a message into information_schema
         this.updatePCTMVToRefreshInfoIntoTaskRun(pctMVToRefreshedPartitions, pctRefTablePartitionNames);
         logger.info("mvToRefreshedPartitions:{}, refTableRefreshPartitions:{}",
                 pctMVToRefreshedPartitions, pctRefTableRefreshPartitions);
+    }
+
+    protected void updatePCTToRefreshMetas(TaskRunContext taskRunContext) throws Exception {
+        updatePCTToRefreshMetas(taskRunContext, false);
     }
 
     /**
@@ -741,17 +771,26 @@ public abstract class BaseMVRefreshProcessor {
     }
 
     /**
-     * @param tentative: if true, it means this is called in the first phase to compute candidate partitions and not the
-     *                 standard phase to get final partitions to refresh.
+     * @param tentative if true, this is a tentative computation for candidate estimation
+     *                  (isForce() returns true to get all partitions, task run status is not updated).
+     *                  if false, this is the final computation for metadata recording.
+     * @param skipBatchFilter if true, skip batch filtering (partition_refresh_number, adaptive, refreshPartitionLimit).
+     *                        This is used by IVM where all changed partitions are refreshed via TVR delta,
+     *                        so PCT metadata should reflect all of them.
      */
     @VisibleForTesting
-    public PCellSortedSet getPCTMVToRefreshedPartitions(boolean tentative) throws AnalysisException, LockTimeoutException {
-        // change mv refresh params if needed
+    public PCellSortedSet getPCTMVToRefreshedPartitions(boolean tentative,
+                                                        boolean skipBatchFilter)
+            throws AnalysisException, LockTimeoutException {
         mvRefreshParams.setIsTentative(tentative);
-
-        final PCellSortedSet mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(snapshotBaseTables);
+        final PCellSortedSet mvToRefreshedPartitions;
+        if (skipBatchFilter) {
+            mvToRefreshedPartitions = mvRefreshPartitioner.detectMVPartitionsToRefresh(snapshotBaseTables);
+        } else {
+            mvToRefreshedPartitions = mvRefreshPartitioner.getMVToRefreshedPartitions(snapshotBaseTables);
+        }
         // update mv extra message
-        if (!mvRefreshParams.isTentative()) {
+        if (!tentative) {
             updateTaskRunStatus(status -> {
                 MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
                 extraMessage.setForceRefresh(mvRefreshParams.isForce());
@@ -762,42 +801,27 @@ public abstract class BaseMVRefreshProcessor {
         return mvToRefreshedPartitions;
     }
 
+    @VisibleForTesting
+    public PCellSortedSet getPCTMVToRefreshedPartitions(boolean tentative)
+            throws AnalysisException, LockTimeoutException {
+        return getPCTMVToRefreshedPartitions(tentative, false);
+    }
+
     /**
      * return to-refreshed base table's table name and partition names mapping
      */
     @VisibleForTesting
     public Map<BaseTableSnapshotInfo, PCellSortedSet> getPCTRefTableRefreshPartitions(PCellSortedSet mvToRefreshedPartitions) {
-        Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames = Maps.newHashMap();
-        Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRefs = mvContext.getMvRefBaseTableIntersectedPartitions();
-        if (mvToBaseNameRefs == null || mvToBaseNameRefs.isEmpty()) {
-            return refTableAndPartitionNames;
-        }
-        for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
-            Table snapshotTable = snapshotInfo.getBaseTable();
-            PCellSortedSet needRefreshTablePartitionNames = null;
-            for (PCellWithName pCell : mvToRefreshedPartitions.getPartitions()) {
-                String mvPartitionName = pCell.name();
-                if (!mvToBaseNameRefs.containsKey(mvPartitionName)) {
-                    continue;
-                }
-                Map<Table, PCellSortedSet> mvToBaseNameRef = mvToBaseNameRefs.get(mvPartitionName);
-                if (mvToBaseNameRef.containsKey(snapshotTable)) {
-                    if (needRefreshTablePartitionNames == null) {
-                        needRefreshTablePartitionNames = PCellSortedSet.of();
-                    }
-                    // The table in this map has related partition with mv
-                    // It's ok to add empty set for a table, means no partition corresponding to this mv partition
-                    needRefreshTablePartitionNames.addAll(mvToBaseNameRef.get(snapshotTable));
-                } else {
-                    logger.info("ref-base-table {} is not found in `mvRefBaseTableIntersectedPartitions` " +
-                            "because of empty update", snapshotTable.getName());
-                }
-            }
-            if (needRefreshTablePartitionNames != null) {
-                refTableAndPartitionNames.put(snapshotInfo, needRefreshTablePartitionNames);
-            }
-        }
-        return refTableAndPartitionNames;
+        return buildPCTRefreshScope(mvToRefreshedPartitions).getRefTableRefreshPartitions();
+    }
+
+    private PCTRefreshScope buildPCTRefreshScope(PCellSortedSet mvPartitionsToRefresh) {
+        return pctRefreshScopeCalculator.buildScope(
+                mvContext.getPartitionTopology(),
+                snapshotBaseTables,
+                mvPartitionsToRefresh,
+                mvRefreshParams.isCompleteRefresh(),
+                !mvRefreshPartitioner.getMVToRefreshPotentialPartitions().isEmpty());
     }
 
     /**
@@ -881,7 +905,9 @@ public abstract class BaseMVRefreshProcessor {
 
     @VisibleForTesting
     public void updatePCTBaseTableSnapshotInfos(Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        Map<Table, PCellSetMapping> baseTableToMvNameRefs = mvContext.getRefBaseTableMVIntersectedPartitions();
+        PCTPartitionTopology partitionTopology = mvContext.getPartitionTopology();
+        Map<Table, PCellSetMapping> baseTableToMvNameRefs =
+                partitionTopology == null ? null : partitionTopology.getRefBaseTableMVIntersectedPartitions();
         // update partition infos for each base table snapshot info
         for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
             if (!(snapshotInfo instanceof PCTTableSnapshotInfo)) {

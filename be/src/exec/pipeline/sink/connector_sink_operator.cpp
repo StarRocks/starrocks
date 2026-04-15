@@ -18,6 +18,7 @@
 #include <utility>
 
 #include "connector/async_flush_stream_poller.h"
+#include "exec/pipeline/fragment_context.h"
 #include "formats/utils.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"

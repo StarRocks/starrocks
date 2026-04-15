@@ -343,6 +343,7 @@ TEST_F(LakeDataSourceTest, get_tablet_schema) {
 
     // 5) Explicitly construct a LakeDataSource and call open().
     starrocks::connector::LakeDataSourceProvider provider(/*scan_node=*/nullptr, plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
 
     TInternalScanRange internal_scan_range;
     internal_scan_range.__set_tablet_id(_tablet_metadata->id());

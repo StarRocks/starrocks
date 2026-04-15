@@ -192,7 +192,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "with cte as (select * from supplier_nullable, unnest(S_ADDRESS)) " +
                 "select * from cte union all select * from cte";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "39: DictDefine(37: S_ADDRESS, [<place-holder>])");
+        assertContains(plan, "40: DictDefine(37: S_ADDRESS, [<place-holder>])");
         connectContext.getSessionVariable().setCboCteReuse(false);
     }
 

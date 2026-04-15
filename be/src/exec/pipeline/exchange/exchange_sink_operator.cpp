@@ -23,8 +23,11 @@
 
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/system/backend_options.h"
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "runtime/bucket_aware_partition.h"
@@ -177,7 +180,8 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
         _is_inited = true;
         return Status::OK();
     }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    auto* query_execution_services = state->query_execution_services();
+    _brpc_stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_brpc_dest_addr);
 
     if (_brpc_stub == nullptr) {
         auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
@@ -346,7 +350,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(
     RuntimeState* state = fragment_ctx->runtime_state();
 
     PassThroughChunkBuffer* pass_through_chunk_buffer =
-            state->exec_env()->stream_mgr()->get_pass_through_chunk_buffer(state->query_id());
+            state->query_execution_services()->runtime->stream_mgr->get_pass_through_chunk_buffer(state->query_id());
 
     _channels.reserve(destinations.size());
     std::vector<int> driver_sequence_per_channel(destinations.size(), 0);
@@ -387,9 +391,9 @@ ExchangeSinkOperator::ExchangeSinkOperator(
 
     _is_pipeline_level_shuffle = is_pipeline_level_shuffle && (_num_shuffles > 1);
 
-    _shuffler = std::make_unique<Shuffler>(runtime_state()->func_version() <= 3, !_is_channel_bound_driver_sequence,
-                                           _part_type, _channels.size(), _num_shuffles_per_channel,
-                                           !bucket_properties.empty());
+    _shuffler = std::make_unique<Shuffler>(get_factory()->runtime_state()->func_version() <= 3,
+                                           !_is_channel_bound_driver_sequence, _part_type, _channels.size(),
+                                           _num_shuffles_per_channel, !bucket_properties.empty());
 }
 
 Status ExchangeSinkOperator::prepare(RuntimeState* state) {

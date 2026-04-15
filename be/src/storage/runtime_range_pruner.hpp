@@ -19,8 +19,8 @@
 #include <utility>
 
 #include "exec/olap_common.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "runtime/global_dict/config.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_in_filter.h"
 #include "storage/column_and_predicate.h"
 #include "storage/column_or_predicate.h"
@@ -53,7 +53,7 @@ struct RuntimeColumnPredicateBuilder {
             using value_type = typename RunTimeTypeLimits<limit_type>::value_type;
             using RangeType = ColumnValueRange<value_type>;
 
-            const std::string& col_name = slot->col_name();
+            const auto col_name = std::string(slot->col_name());
             RangeType full_range(col_name, ltype, RunTimeTypeLimits<ltype>::min_value(),
                                  RunTimeTypeLimits<ltype>::max_value());
             if constexpr (lt_is_decimal<limit_type>) {

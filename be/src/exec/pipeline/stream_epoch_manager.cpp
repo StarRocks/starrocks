@@ -16,7 +16,9 @@
 
 #include <fmt/format.h>
 
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -179,8 +181,7 @@ void StreamEpochManager::count_down_fragment_ctx(RuntimeState* state, FragmentCo
 
     // do epoch report stats
     auto* query_ctx = state->query_ctx();
-    fragment_ctx->workgroup()->executors()->driver_executor()->report_epoch(state->exec_env(), query_ctx,
-                                                                            _finished_fragment_ctxs);
+    fragment_ctx->workgroup()->executors()->driver_executor()->report_epoch(query_ctx, _finished_fragment_ctxs);
 }
 
 const BinlogOffset* StreamEpochManager::_get_epoch_unlock(const TabletId2BinlogOffset& tablet_id_scan_ranges_mapping,

@@ -31,6 +31,7 @@
 #include "exec/spill/serde.h"
 #include "exec/spill/spiller.h"
 #include "exec/workgroup/work_group.h"
+#include "runtime/runtime_state.h"
 #include "runtime/sorted_chunks_merger.h"
 
 namespace starrocks::spill {

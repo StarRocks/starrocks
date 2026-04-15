@@ -66,6 +66,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.StructLikeWrapper;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -268,6 +269,8 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             } else {
                 return buildDeleteFileScanRanges(fileScanTask, partitionId);
             }
+        } catch (StarRocksConnectorException e) {
+            throw e;
         } catch (Exception e) {
             LOG.error("build scan range failed", e);
             throw new StarRocksConnectorException("build scan range failed", e);
@@ -282,6 +285,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             FileContent content = deleteFile.content();
             if (content == FileContent.EQUALITY_DELETES) {
                 continue;
+            }
+
+            if (ContentFileUtil.isDV(deleteFile)) {
+                throw new StarRocksConnectorException(
+                        "Iceberg V3 Deletion Vectors are not supported. " +
+                        "Table contains deletion vector file: " + deleteFile.path());
             }
 
             TIcebergDeleteFile target = new TIcebergDeleteFile();

@@ -1,7 +1,6 @@
 set(EXEC_FILES
         ./agent/agent_task_test.cpp
         ./agent/heartbeat_server_test.cpp
-        ./agent/master_info_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./column/array_column_test.cpp
         ./column/column_view_test.cpp
@@ -60,10 +59,12 @@ set(EXEC_FILES
         ./exec/pipeline/schedule/observer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/pipeline/multi_level_concurrent_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
+        ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
         ./exec/pipeline/exchange_sink_operator_test.cpp
         ./exec/pipeline/sink/export_sink_operator_test.cpp
@@ -187,6 +188,7 @@ set(EXEC_FILES
         ./exprs/min_max_predicate_test.cpp
         ./exprs/table_function/test_list_rowsets.cpp
         ./exprs/dict_expr_test.cpp
+        ./exprs/http_request_functions_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -251,10 +253,8 @@ set(EXEC_FILES
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
         ./http/metrics_action_test.cpp
-        ./http/datacache_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
-        ./http/action/update_config_action_test.cpp
         ./http/action/proc_profile_e2e_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/formatted_output_stream_file_test.cpp
@@ -265,7 +265,6 @@ set(EXEC_FILES
         ./io/fd_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
-        ./io/spill_block_manager_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
@@ -303,7 +302,7 @@ set(EXEC_FILES
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/type_checker_test.cpp
-        ./types/type_checker_xml_loader_test.cpp 
+        ./types/type_checker_xml_loader_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
         ./util/block_compression_test.cpp
@@ -318,6 +317,7 @@ set(EXEC_FILES
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/metrics/file_scan_metrics_test.cpp
+        ./util/metrics/catalog_scan_metrics_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
         ./base/types/int96_test.cpp
@@ -330,9 +330,7 @@ set(EXEC_FILES
         ./util/download_util_test.cpp
         ./util/stack_util_test.cpp
         ./gutil/cpu_test.cc
-        ./gutil/sysinfo-test.cc
         service/backend_base_test.cpp
-        ./service/lake_service_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
         ./service/service_be/internal_service_test.cpp
@@ -341,7 +339,6 @@ set(EXEC_FILES
         ./cache/datacache_metrics_test.cpp
         ./cache/data_cache_hit_rate_counter_test.cpp
         ./cache/mem_cache/page_cache_test.cpp
-        ./cache/peer_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         ./udf/java/java_native_method_test.cpp
         ./udf/java/java_data_converter_test.cpp
@@ -349,7 +346,15 @@ set(EXEC_FILES
         ./util/jvm_metrics_test.cpp
         ./util/llm_cache_test.cpp
         ./util/llm_query_service_test.cpp
+        ./util/network_util_test.cpp
         )
+
+if (NOT APPLE)
+    list(APPEND EXEC_FILES
+        ./gutil/sysinfo-test.cc
+        ./service/lake_service_test.cpp
+    )
+endif ()
 
 if (USE_AVX2)
     set(EXEC_FILES ${EXEC_FILES} ./column/avx_numeric_column_test.cpp)
@@ -363,10 +368,17 @@ add_subdirectory(base)
 add_subdirectory(common)
 add_subdirectory(column)
 add_subdirectory(types)
+add_subdirectory(exec)
 add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
+add_subdirectory(http)
+add_subdirectory(spill)
+
+if (APPLE)
+    set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/src/service/macos_link_stubs.cpp)
+endif ()
 
 add_library(starrocks_test_objs OBJECT ${EXEC_FILES})
 target_link_libraries(starrocks_test_objs PRIVATE StarRocksPCH)
@@ -375,7 +387,7 @@ if (NOT STARROCKS_JIT_ENABLE)
 else()
     SET_TARGET_PROPERTIES(starrocks_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif ()
-add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs>)
+add_executable(starrocks_test test_main.cpp $<TARGET_OBJECTS:starrocks_test_objs> ${TEST_EXTRA_SOURCES})
 
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_test Exprs ExprCore)
@@ -442,6 +454,7 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp
@@ -475,6 +488,7 @@ SET(DW_TEST_FILES
     ./storage/merge_iterator_test.cpp
     ./storage/metadata_util_test.cpp
     ./storage/meta_reader_test.cpp
+    ./storage/non_retryable_load_errors_test.cpp
     ./storage/olap_meta_reader_test.cpp
     ./storage/olap_runtime_range_pruner_test.cpp
     ./storage/options_test.cpp
@@ -565,6 +579,9 @@ SET(DW_TEST_FILES
 )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./http/datacache_action_test.cpp)
+    list(APPEND EXEC_FILES ./http/action/update_config_action_test.cpp)
+    list(APPEND EXEC_FILES ./cache/peer_cache_test.cpp)
     list(APPEND DW_TEST_FILES ./cache/disk_space_monitor_test.cpp)
     list(APPEND DW_TEST_FILES ./cache/disk_cache/starcache_engine_test.cpp)
     list(APPEND DW_TEST_FILES ./cache/disk_cache/block_cache_test.cpp)
@@ -580,7 +597,7 @@ endif ()
 add_library(starrocks_dw_objs OBJECT ${DW_TEST_FILES})
 SET_TARGET_PROPERTIES(starrocks_dw_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 target_link_libraries(starrocks_dw_objs PRIVATE StarRocksPCH)
-add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs>)
+add_executable(starrocks_dw_test test_main.cpp $<TARGET_OBJECTS:starrocks_dw_objs> ${TEST_EXTRA_SOURCES})
 TARGET_LINK_LIBRARIES(starrocks_dw_test ${TEST_LINK_LIBS})
 STARROCKS_FORCE_LOAD_LIBS(starrocks_dw_test Exprs ExprCore)
 

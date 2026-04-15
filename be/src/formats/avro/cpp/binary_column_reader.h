@@ -23,7 +23,7 @@ namespace starrocks::avrocpp {
 
 class BinaryColumnReader final : public ColumnReader {
 public:
-    explicit BinaryColumnReader(const std::string& col_name, const TypeDescriptor& type_desc,
+    explicit BinaryColumnReader(std::string_view col_name, const TypeDescriptor& type_desc,
                                 const cctz::time_zone& timezone)
             : ColumnReader(col_name, type_desc), _timezone(timezone) {}
     ~BinaryColumnReader() override = default;

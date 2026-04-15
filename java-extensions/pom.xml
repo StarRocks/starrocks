@@ -42,7 +42,7 @@
         <jni-connector.version>1.0.0</jni-connector.version>
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
-        <io.netty.version>4.1.128.Final</io.netty.version>
+        <io.netty.version>4.1.132.Final</io.netty.version>
         <protobuf-java.version>3.25.5</protobuf-java.version>
         <nimbusds.version>9.37.2</nimbusds.version>
         <commons-io.version>2.14.0</commons-io.version>
@@ -65,6 +65,77 @@
         <lz4-java.version>1.10.1</lz4-java.version>
         <httpclient5.version>5.4.3</httpclient5.version>
     </properties>
+
+    <profiles>
+        <!-- for custom internal repository -->
+        <profile>
+            <id>custom-env</id>
+            <activation>
+                <property>
+                    <name>env.CUSTOM_MAVEN_REPO</name>
+                </property>
+            </activation>
+
+            <repositories>
+                <repository>
+                    <id>custom-nexus</id>
+                    <url>${env.CUSTOM_MAVEN_REPO}</url>
+                </repository>
+            </repositories>
+
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>custom-nexus</id>
+                    <url>${env.CUSTOM_MAVEN_REPO}</url>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
+
+        <!-- for general repository -->
+        <profile>
+            <id>general-env</id>
+            <activation>
+                <property>
+                    <name>!env.CUSTOM_MAVEN_REPO</name>
+                </property>
+            </activation>
+
+            <repositories>
+                <!-- keep the central repository the first one among all repositories -->
+                <repository>
+                    <id>central</id>
+                    <name>central maven repo https</name>
+                    <url>https://repo.maven.apache.org/maven2/</url>
+                </repository>
+                <!-- for java-cup -->
+                <repository>
+                    <id>cloudera-public</id>
+                    <url>https://repository.cloudera.com/repository/public/</url>
+                </repository>
+                <repository>
+                    <id>cloudera</id>
+                    <url>https://repository.cloudera.com/repository/cloudera-repos/</url>
+                </repository>
+                <!-- for leveldbjni-all-1.8.jar,commons-crypto-1.0.0.jar on aarch64 -->
+                <repository>
+                    <id>kunpeng</id>
+                    <url>https://mirror.iscas.ac.cn/kunpeng/maven/</url>
+                </repository>
+            </repositories>
+
+            <pluginRepositories>
+                <pluginRepository>
+                    <id>central</id>
+                    <url>https://repo.maven.apache.org/maven2/</url>
+                </pluginRepository>
+                <!-- for cup-maven-plugin -->
+                <pluginRepository>
+                    <id>cloudera-public</id>
+                    <url>https://repository.cloudera.com/repository/public/</url>
+                </pluginRepository>
+            </pluginRepositories>
+        </profile>
+    </profiles>
 
     <dependencyManagement>
         <dependencies>
@@ -91,6 +162,14 @@
                 <version>${java-utils.version}</version>
             </dependency>
             <!-- java utils -->
+
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-bom</artifactId>
+                <version>${io.netty.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
 
             <dependency>
                 <groupId>io.netty</groupId>
@@ -490,8 +569,10 @@
 
             <dependency>
                 <groupId>software.amazon.awssdk</groupId>
-                <artifactId>bundle</artifactId>
+                <artifactId>bom</artifactId>
                 <version>${aws-v2-sdk.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/at.yawk.lz4/lz4-java -->

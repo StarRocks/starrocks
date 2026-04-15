@@ -619,7 +619,16 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
             tablet_info.set_min_version(0);
         }
     }
-    auto root_loc = tablet_mgr->tablet_root_location(tablet_infos[0].tablet_id());
+    // Under file-bundling / shared-file-cleanup, FE picks a single aggregator node to
+    // run vacuum for the whole batch and it may not own tablet_infos[0]. Prefer a
+    // locally-owned tablet id as the root-location anchor to avoid a get-shard-info RPC
+    // when downstream fs ops resolve the URI.
+    std::vector<int64_t> candidate_tablet_ids;
+    candidate_tablet_ids.reserve(tablet_infos.size());
+    for (const auto& info : tablet_infos) {
+        candidate_tablet_ids.push_back(info.tablet_id());
+    }
+    auto root_loc = tablet_mgr->tablet_root_location(tablet_mgr->pick_local_anchor_tablet_id(candidate_tablet_ids));
     auto min_retain_version = request.min_retain_version();
     auto grace_timestamp = request.grace_timestamp();
     auto min_active_txn_id = request.min_active_txn_id();
@@ -714,33 +723,23 @@ static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
 }
 
 static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLogPB& log, bool contains_alive_tablets,
-                                        bool is_combined_log, AsyncFileDeleter& deleter,
-                                        const std::unordered_set<std::string>& retained_files) {
+                                        bool is_combined_log, AsyncFileDeleter& deleter) {
     if (log.has_op_write()) {
         const auto& op = log.op_write();
         // Shared segments can be deleted only when we know all tablets in a combined log are being deleted.
         for (int i = 0; i < op.rowset().segments_size(); ++i) {
-            if (retained_files.count(op.rowset().segments(i))) {
-                continue;
-            }
             if (!is_shared_segment(op.rowset(), i) || (is_combined_log && !contains_alive_tablets)) {
                 RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, op.rowset().segments(i))));
             }
         }
         // delete del files
         for (const auto& f : op.dels()) {
-            if (retained_files.count(f)) {
-                continue;
-            }
             RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f)));
         }
     }
     if (log.has_op_compaction()) {
         const auto& op = log.op_compaction();
         for (int i = 0; i < op.output_rowset().segments_size(); ++i) {
-            if (retained_files.count(op.output_rowset().segments(i))) {
-                continue;
-            }
             if (!is_shared_segment(op.output_rowset(), i) || (is_combined_log && !contains_alive_tablets)) {
                 RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, op.output_rowset().segments(i))));
             }
@@ -750,9 +749,6 @@ static Status delete_files_under_txnlog(const std::string& data_dir, const TxnLo
         const auto& op = log.op_schema_change();
         for (const auto& rowset : op.rowsets()) {
             for (int i = 0; i < rowset.segments_size(); ++i) {
-                if (retained_files.count(rowset.segments(i))) {
-                    continue;
-                }
                 if (!is_shared_segment(rowset, i) || (is_combined_log && !contains_alive_tablets)) {
                     RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, rowset.segments(i))));
                 }
@@ -815,12 +811,6 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     // Used to avoid deleting shared files that are shared by multiple tablets.
     AsyncSharedFileDeleter dummy_shared_file_deleter(config::lake_vacuum_min_batch_delete_size);
 
-    // Process metadata BEFORE txn logs to collect retained shared files.
-    // After tablet split, txn logs written before split may not mark files as shared,
-    // while the latest metadata (updated after split) does. Processing metadata first
-    // ensures shared files are collected into retained_files and not accidentally deleted
-    // when processing txn logs.
-    std::unordered_set<std::string> retained_files;
     bool is_range_distribution = false;
 
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
@@ -856,10 +846,14 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
     //
     // we will only delete the bundle segment files and bundle tablet meta when the state is ALL_TABLETS_TO_BE_DELETED
     // and NOT_BUNDLE_TABLET_META.
+    // Prefer a locally-owned tablet id as the anchor so that downstream fs ops on the URI
+    // can resolve the shard from the staros worker cache instead of paying for a
+    // get-shard-info RPC when the vacuum aggregator does not own tablet_ids[0]. The anchor
+    // is independent of `version`, so compute it once before the loop.
+    const int64_t anchor_tablet_id = tablet_mgr->pick_local_anchor_tablet_id(tablet_ids);
     for (auto version : bundle_tablet_versions) {
-        // Get the path of the bundle tablet metadata file for this version
-        // We use the first tablet ID from tablet_ids as a reference to get the location
-        auto path = tablet_mgr->bundle_tablet_metadata_location(*tablet_ids.begin(), version);
+        // Get the path of the bundle tablet metadata file for this version.
+        auto path = tablet_mgr->bundle_tablet_metadata_location(anchor_tablet_id, version);
 
         // Check the state of the bundle tablet metadata for this version
         // This tells us whether all tablets in this bundle are being deleted or not
@@ -900,14 +894,20 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 auto metadata = std::move(res).value();
                 if (latest_metadata == nullptr) {
                     latest_metadata = metadata;
+                    if (latest_metadata->has_range()) {
+                        is_range_distribution = true;
+                    }
                 }
                 int64_t dummy_file_size = 0;
-                RETURN_IF_ERROR(
-                        collect_garbage_files(*metadata, data_dir, &deleter,
-                                              can_bundle_meta_file_to_be_deleted(versions_and_states[garbage_version])
-                                                      ? nullptr
-                                                      : &dummy_shared_file_deleter,
-                                              &dummy_file_size, TabletRetainInfo()));
+                // For range distribution tablets, always protect shared files in garbage
+                // collection. can_bundle_meta_file_to_be_deleted is unreliable after tablet
+                // split because new split tablets may still reference shared files.
+                const bool allow_delete_shared =
+                        !is_range_distribution &&
+                        can_bundle_meta_file_to_be_deleted(versions_and_states[garbage_version]);
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter,
+                                                      allow_delete_shared ? nullptr : &dummy_shared_file_deleter,
+                                                      &dummy_file_size, TabletRetainInfo()));
                 if (metadata->has_prev_garbage_version()) {
                     garbage_version = metadata->prev_garbage_version();
                 } else {
@@ -917,63 +917,54 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
 
         if (latest_metadata != nullptr) {
-            if (latest_metadata->has_range()) {
-                is_range_distribution = true;
-            }
-            const bool allow_delete_shared_files =
-                    can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()]);
-            for (const auto& rowset : latest_metadata->rowsets()) {
-                for (int i = 0; i < rowset.segments_size(); ++i) {
-                    // If the segment file is not shared by other alive tablets, we can delete it directly.
-                    if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
-                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, rowset.segments(i))));
-                    } else {
-                        retained_files.insert(rowset.segments(i));
+            // For range distribution tablets, skip data file deletion entirely.
+            // After tablet split, data files in pre-split metadata may be shared with
+            // new tablets but not marked as shared (shared flag only exists in the
+            // split-version metadata which may have been vacuumed).
+            // Data files will be cleaned up by new tablets' regular vacuum.
+            if (!is_range_distribution) {
+                const bool allow_delete_shared_files =
+                        can_bundle_meta_file_to_be_deleted(versions_and_states[latest_metadata->version()]);
+                for (const auto& rowset : latest_metadata->rowsets()) {
+                    for (int i = 0; i < rowset.segments_size(); ++i) {
+                        if (!is_shared_segment(rowset, i) || allow_delete_shared_files) {
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, rowset.segments(i))));
+                        }
                     }
-                }
-                for (const auto& del_file : rowset.del_files()) {
-                    if (!del_file.shared() || allow_delete_shared_files) {
-                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, del_file.name())));
-                    } else {
-                        retained_files.insert(del_file.name());
-                    }
-                }
-            }
-            if (latest_metadata->has_delvec_meta()) {
-                for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
-                    if (!f.shared() || allow_delete_shared_files) {
-                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
-                    } else {
-                        retained_files.insert(f.name());
-                    }
-                }
-            }
-            if (latest_metadata->has_dcg_meta()) {
-                for (const auto& [_, dcg] : latest_metadata->dcg_meta().dcgs()) {
-                    for (int i = 0; i < dcg.column_files_size(); ++i) {
-                        const bool shared_file = i < dcg.shared_files_size() && dcg.shared_files(i);
-                        if (!shared_file || allow_delete_shared_files) {
-                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, dcg.column_files(i))));
-                        } else {
-                            retained_files.insert(dcg.column_files(i));
+                    for (const auto& del_file : rowset.del_files()) {
+                        if (!del_file.shared() || allow_delete_shared_files) {
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, del_file.name())));
                         }
                     }
                 }
-            }
-            if (latest_metadata->sstable_meta().sstables_size() > 0) {
-                for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
-                    if (!sst.shared() || allow_delete_shared_files) {
-                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, sst.filename())));
-                    } else {
-                        retained_files.insert(sst.filename());
+                if (latest_metadata->has_delvec_meta()) {
+                    for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
+                        if (!f.shared() || allow_delete_shared_files) {
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
+                        }
+                    }
+                }
+                if (latest_metadata->has_dcg_meta()) {
+                    for (const auto& [_, dcg] : latest_metadata->dcg_meta().dcgs()) {
+                        for (int i = 0; i < dcg.column_files_size(); ++i) {
+                            const bool shared_file = i < dcg.shared_files_size() && dcg.shared_files(i);
+                            if (!shared_file || allow_delete_shared_files) {
+                                RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, dcg.column_files(i))));
+                            }
+                        }
+                    }
+                }
+                if (latest_metadata->sstable_meta().sstables_size() > 0) {
+                    for (const auto& sst : latest_metadata->sstable_meta().sstables()) {
+                        if (!sst.shared() || allow_delete_shared_files) {
+                            RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, sst.filename())));
+                        }
                     }
                 }
             }
         }
     }
 
-    // Process txn logs AFTER metadata processing, so that retained_files collected from
-    // shared files in metadata are used to protect files from being accidentally deleted.
     for (const auto& log_name : txn_logs) {
         auto res = tablet_mgr->get_txn_log(join_path(log_dir, log_name), false);
         if (res.status().is_not_found()) {
@@ -985,7 +976,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             // For range distribution tablets, skip deleting data files referenced by txn logs
             // because they may have been applied to new tablets after tablet split.
             if (!is_range_distribution) {
-                RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log_ptr, false, false, deleter, retained_files));
+                RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, *log_ptr, false, false, deleter));
             }
             // delete txnlog
             RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
@@ -1013,8 +1004,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             for (const auto& log : combine_log_ptr->txn_logs()) {
                 if (!is_range_distribution &&
                     std::binary_search(tablet_ids.begin(), tablet_ids.end(), log.tablet_id())) {
-                    RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter,
-                                                              retained_files));
+                    RETURN_IF_ERROR(delete_files_under_txnlog(data_dir, log, contains_alive_tablets, true, deleter));
                 }
             }
             // delete txnlog
@@ -1024,8 +1014,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
     }
 
-    // Delete metadata files last. This ensures that if txn log processing above fails,
-    // metadata files are still available on retry to reconstruct retained_files.
+    // Delete metadata files last.
     for (auto& [tablet_id, versions_and_states] : tablet_versions) {
         for (auto& [version, state] : versions_and_states) {
             if (state == BundleTabletMetaState::NOT_BUNDLE_TABLET_META) {
@@ -1053,7 +1042,10 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
     DCHECK(response != nullptr);
     std::vector<int64_t> tablet_ids(request.tablet_ids().begin(), request.tablet_ids().end());
     std::sort(tablet_ids.begin(), tablet_ids.end());
-    auto root_dir = tablet_mgr->tablet_root_location(tablet_ids[0]);
+    // With file bundling the drop-tablet RPC targets a single aggregator node that may
+    // not own tablet_ids[0]. Pick a locally-owned tablet id as the root-location anchor
+    // so downstream fs ops don't trigger a get-shard-info RPC.
+    auto root_dir = tablet_mgr->tablet_root_location(tablet_mgr->pick_local_anchor_tablet_id(tablet_ids));
     auto st = delete_tablets_impl(tablet_mgr, root_dir, tablet_ids);
     st.to_protobuf(response->mutable_status());
 }

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "exec/stream/aggregate/stream_aggregator.h"
+#include "runtime/runtime_state_fwd.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/desc_tbl_helper.h"
 #include "testutil/exprs_test_helper.h"

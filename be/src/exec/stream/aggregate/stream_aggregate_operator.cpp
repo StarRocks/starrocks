@@ -18,6 +18,7 @@
 #include "exec/stream/aggregate/stream_aggregate_operator.h"
 
 #include "exec/exec_node.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::stream {
 

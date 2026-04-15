@@ -167,11 +167,6 @@ public:
         return _data_column->raw_data();
     }
 
-    uint8_t* mutable_raw_data() override {
-        materialized_nullable();
-        return reinterpret_cast<uint8_t*>(_data_column->mutable_raw_data());
-    }
-
     size_t size() const override {
         if (_state == State::kMaterialized) {
             DCHECK_EQ(_data_column->size(), _null_column->size());
@@ -412,6 +407,11 @@ public:
     }
 
     ColumnPtr& materialized_raw_data_column() {
+        materialized_nullable();
+        return _data_column;
+    }
+
+    const ColumnPtr& materialized_raw_data_column() const {
         materialized_nullable();
         return _data_column;
     }

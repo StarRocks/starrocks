@@ -98,7 +98,8 @@ Status NodeChannel::init(RuntimeState* state) {
         return _err_st;
     }
 
-    _stub = state->exec_env()->brpc_stub_cache()->get_stub(_node_info->host, _node_info->brpc_port);
+    auto* query_execution_services = state->query_execution_services();
+    _stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_node_info->host, _node_info->brpc_port);
     if (_stub == nullptr) {
         _cancelled = true;
         auto msg = fmt::format("Connect {}:{} failed.", _node_info->host, _node_info->brpc_port);

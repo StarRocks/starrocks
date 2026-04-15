@@ -107,6 +107,46 @@ void ColumnHelper::merge_filters(const Columns& columns, Filter* __restrict filt
     }
 }
 
+void ColumnHelper::mark_binary_columns(const ColumnPtr& column, const TypeDescriptor& type) {
+    const Column* data_column = get_data_column(column);
+
+    switch (type.type) {
+    case TYPE_BINARY:
+    case TYPE_VARBINARY: {
+        if (data_column->is_binary()) {
+            auto* binary_column = const_cast<BinaryColumn*>(down_cast<const BinaryColumn*>(data_column));
+            binary_column->set_is_binary_type(true);
+        } else {
+            DCHECK(data_column->is_large_binary());
+            auto* large_binary_column =
+                    const_cast<LargeBinaryColumn*>(down_cast<const LargeBinaryColumn*>(data_column));
+            large_binary_column->set_is_binary_type(true);
+        }
+        break;
+    }
+    case TYPE_STRUCT: {
+        const auto* struct_column = down_cast<const StructColumn*>(data_column);
+        for (size_t i = 0; i < type.children.size(); ++i) {
+            mark_binary_columns(struct_column->get_column_by_idx(i), type.children[i]);
+        }
+        break;
+    }
+    case TYPE_ARRAY: {
+        const auto* array_column = down_cast<const ArrayColumn*>(data_column);
+        mark_binary_columns(array_column->elements_column(), type.children[0]);
+        break;
+    }
+    case TYPE_MAP: {
+        const auto* map_column = down_cast<const MapColumn*>(data_column);
+        mark_binary_columns(map_column->keys_column(), type.children[0]);
+        mark_binary_columns(map_column->values_column(), type.children[1]);
+        break;
+    }
+    default:
+        break;
+    }
+}
+
 void ColumnHelper::merge_two_filters(Filter* __restrict filter, const uint8_t* __restrict selected, bool* all_zero) {
     uint8_t* data = filter->data();
     size_t num_rows = filter->size();
