@@ -197,6 +197,8 @@ struct TBrokerRangeDesc {
     14: optional Types.TCompressionType compression_type
     // CDC envelope format
     15: optional TEnvelopeType envelope
+    // last modification time of the file in milliseconds (epoch), for rejected-record anchors
+    16: optional i64 modification_time
 }
 
 enum TObjectStoreType {

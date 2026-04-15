@@ -66,7 +66,7 @@ public:
     // the first successful append so an enabled-but-never-triggered writer
     // costs only the allocation of this object.
     explicit RejectedRecordWriter(RuntimeState* state);
-    ~RejectedRecordWriter();
+    ~RejectedRecordWriter() = default;
 
     RejectedRecordWriter(const RejectedRecordWriter&) = delete;
     RejectedRecordWriter& operator=(const RejectedRecordWriter&) = delete;

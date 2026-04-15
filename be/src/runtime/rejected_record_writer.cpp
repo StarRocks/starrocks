@@ -17,7 +17,7 @@
 #include <filesystem>
 #include <fstream>
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
 #include "base/uid_util.h"
 #include "column/binary_column.h"
 #include "column/column.h"
@@ -146,8 +146,6 @@ std::string resolve_load_type(const TQueryOptions& query_options) {
 RejectedRecordWriter::RejectedRecordWriter(RuntimeState* state) : _state(state) {
     DCHECK(state != nullptr);
 }
-
-RejectedRecordWriter::~RejectedRecordWriter() = default;
 
 void RejectedRecordWriter::flush() {
     // No-op: every append_serialized call now open-writes-closes the

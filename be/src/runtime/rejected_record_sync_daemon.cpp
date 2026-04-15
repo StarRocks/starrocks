@@ -23,7 +23,7 @@
 #include <sstream>
 #include <system_error>
 
-#include "agent/master_info.h"
+#include "common/system/master_info.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -31,6 +31,7 @@
 #include "http/http_common.h"
 #include "rapidjson/document.h"
 #include "runtime/exec_env.h"
+#include "storage/store_path.h"
 
 namespace starrocks {
 

@@ -1166,7 +1166,8 @@ void ArrowConvertContext::report_error_message(const std::string& reason, const 
     if (state == nullptr) return;
     if (error_message_counter > MAX_ERROR_MESSAGE_COUNTER) return;
     error_message_counter += 1;
-    const std::string col_name = (current_slot == nullptr) ? "" : current_slot->col_name();
+    const std::string col_name =
+            (current_slot == nullptr) ? std::string{} : std::string(current_slot->col_name());
     std::string error_msg = strings::Substitute("file = $0, column = $1, raw data = $2", current_file,
                                                 col_name.empty() ? "null" : col_name, raw_data);
     RuntimeStateHelper::append_error_msg_to_file(state, error_msg, reason);

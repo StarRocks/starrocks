@@ -197,4 +197,9 @@ CONF_Int32(merge_commit_thread_pool_queue_size, "4096");
 
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 
+// rejected records sync daemon (Phase 3 of the rejected_records feature)
+// Guard flag: the daemon only starts shipping rejected-record files to
+// _statistics_.rejected_records when this flag is set to true.
+CONF_mBool(enable_rejected_record_sync, "false");
+
 } // namespace starrocks::config
