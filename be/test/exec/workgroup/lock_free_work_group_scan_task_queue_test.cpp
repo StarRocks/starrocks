@@ -20,6 +20,8 @@
 #include <chrono>
 #include <thread>
 
+#include "base/concurrency/countdown_latch.h"
+#include "common/thread/thread.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 
@@ -173,6 +175,72 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_should_yield_refreshes_min_wg_on
     queue.force_put(make_wg_task(_wg1, 5));
 
     ASSERT_TRUE(queue.should_yield(_wg2.get(), 0));
+}
+
+TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_take_skips_yield_blocked_workgroups) {
+    constexpr int kNumWorkers = 4;
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+
+    auto* manager = ExecEnv::GetInstance()->workgroup_manager();
+    auto& executors_manager = manager->_executors_manager;
+    const bool old_enable_cpu_borrowing = executors_manager._conf.enable_cpu_borrowing;
+    auto& cpu_owner = executors_manager._cpu_owners[0];
+    WorkGroup* old_owner = cpu_owner.raw_wg.load(std::memory_order_relaxed);
+
+    executors_manager._conf.enable_cpu_borrowing = true;
+    cpu_owner.set_wg(_wg1.get());
+    auto token = _wg1->acquire_running_query_token(false).value();
+
+    queue.force_put(make_wg_task(_wg2, 5));
+
+    CountDownLatch started(1);
+    std::atomic<bool> got_task{false};
+    std::atomic<bool> got_cancelled{false};
+    scoped_refptr<Thread> worker;
+    ASSERT_TRUE(Thread::create("test", "yield_blocked_scan_take", [&]() {
+        Thread::current_thread()->set_first_bound_cpuid(0);
+        started.count_down();
+        auto result = queue.take(0);
+        got_task.store(result.ok(), std::memory_order_release);
+        got_cancelled.store(result.status().is_cancelled(), std::memory_order_release);
+    }, &worker).ok());
+
+    started.wait();
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    ASSERT_FALSE(got_task.load(std::memory_order_acquire));
+
+    queue.close();
+    worker->join();
+
+    ASSERT_TRUE(got_cancelled.load(std::memory_order_acquire));
+
+    cpu_owner.set_wg(old_owner);
+    executors_manager._conf.enable_cpu_borrowing = old_enable_cpu_borrowing;
+}
+
+TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_rebases_returning_workgroup_vruntime_on_enqueue) {
+    constexpr int kNumWorkers = 4;
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+
+    auto wg3 = std::make_shared<WorkGroup>("scan_wg3", 30, WorkGroup::DEFAULT_VERSION, 1, 0.5, 10, 1.0,
+                                           WorkGroupType::WG_NORMAL, WorkGroup::DEFAULT_MEM_POOL);
+    auto wg4 = std::make_shared<WorkGroup>("scan_wg4", 40, WorkGroup::DEFAULT_VERSION, 2, 0.5, 10, 1.0,
+                                           WorkGroupType::WG_NORMAL, WorkGroup::DEFAULT_MEM_POOL);
+    wg3 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(wg3);
+    wg4 = ExecEnv::GetInstance()->workgroup_manager()->add_workgroup(wg4);
+
+    auto* entity1 = const_cast<WorkGroupScanSchedEntity*>(wg3->scan_sched_entity());
+    auto* entity2 = const_cast<WorkGroupScanSchedEntity*>(wg4->scan_sched_entity());
+    entity2->incr_runtime_ns(1'000'000'000L);
+
+    int64_t before = entity1->vruntime_ns();
+    queue.force_put(make_wg_task(wg4, 5));
+
+    queue.force_put(make_wg_task(wg3, 5));
+
+    ASSERT_GT(entity1->vruntime_ns(), before);
+    ASSERT_LT(entity1->vruntime_ns(), entity2->vruntime_ns());
 }
 
 } // namespace starrocks::workgroup

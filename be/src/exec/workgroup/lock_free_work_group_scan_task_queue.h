@@ -52,6 +52,8 @@ public:
     bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
 
 private:
+    static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
+
     struct WorkGroupQueueState {
         explicit WorkGroupQueueState(WorkGroup* workgroup, int num_workers)
                 : workgroup(workgroup), queue(std::make_unique<LockFreeScanTaskQueue>(num_workers)) {}
@@ -66,6 +68,7 @@ private:
     void _set_wg_in_queue(const ScanTask& task);
     void _update_min_wg_entity_on_enqueue(WorkGroup* wg);
     void _refresh_min_wg_entity();
+    void _rebase_vruntime_on_first_enqueue(WorkGroup* wg);
 
     WorkGroupQueueState* _get_or_create_wg_queue(WorkGroup* wg);
     CandidateList _pick_sorted_wgs();

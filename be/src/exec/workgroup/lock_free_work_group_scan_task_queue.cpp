@@ -51,7 +51,9 @@ bool LockFreeWorkGroupScanTaskQueue::try_offer(ScanTask task) {
     _set_wg_in_queue(task);
     auto* wg_queue = _get_or_create_wg_queue(wg);
     wg_queue->queue->try_offer(std::move(task));
-    wg_queue->num_tasks.fetch_add(1, std::memory_order_relaxed);
+    if (wg_queue->num_tasks.fetch_add(1, std::memory_order_relaxed) == 0) {
+        _rebase_vruntime_on_first_enqueue(wg);
+    }
     _num_tasks.fetch_add(1, std::memory_order_relaxed);
     _update_min_wg_entity_on_enqueue(wg);
     _sema.signal();
@@ -66,7 +68,9 @@ void LockFreeWorkGroupScanTaskQueue::force_put(ScanTask task) {
     _set_wg_in_queue(task);
     auto* wg_queue = _get_or_create_wg_queue(wg);
     wg_queue->queue->force_put(std::move(task));
-    wg_queue->num_tasks.fetch_add(1, std::memory_order_relaxed);
+    if (wg_queue->num_tasks.fetch_add(1, std::memory_order_relaxed) == 0) {
+        _rebase_vruntime_on_first_enqueue(wg);
+    }
     _num_tasks.fetch_add(1, std::memory_order_relaxed);
     _update_min_wg_entity_on_enqueue(wg);
     _sema.signal();
@@ -85,7 +89,12 @@ StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take(int worker_id) {
 
         // Try ALL workgroups in ascending vruntime order before blocking.
         auto candidates = _pick_sorted_wgs();
+        bool skipped_due_to_yield = false;
         for (auto& [vruntime, wg_queue] : candidates) {
+            if (ExecEnv::GetInstance()->workgroup_manager()->should_yield(wg_queue->workgroup)) {
+                skipped_due_to_yield = true;
+                continue;
+            }
             ScanTask task;
             bool got = use_token ? wg_queue->queue->try_take(task, worker_id) : wg_queue->queue->try_take(task);
             if (got) {
@@ -95,6 +104,11 @@ StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take(int worker_id) {
                 _num_tasks.fetch_sub(1, std::memory_order_relaxed);
                 return std::move(task);
             }
+        }
+
+        if (skipped_due_to_yield) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            continue;
         }
 
         _sema.wait();
@@ -172,6 +186,40 @@ void LockFreeWorkGroupScanTaskQueue::_refresh_min_wg_entity() {
         }
     }
     _min_wg_entity.store(min_entity, std::memory_order_relaxed);
+}
+
+void LockFreeWorkGroupScanTaskQueue::_rebase_vruntime_on_first_enqueue(WorkGroup* wg) {
+    auto* wg_entity = const_cast<WorkGroupScanSchedEntity*>(_sched_entity(wg));
+    const WorkGroupScanSchedEntity* min_entity = nullptr;
+    int64_t min_vruntime_ns = std::numeric_limits<int64_t>::max();
+    size_t num_runnable_wgs = 0;
+    int64_t sum_cpu_weight = 0;
+
+    std::shared_lock read_lock(_wg_queues_mutex);
+    for (auto& [other_wg, queue_state] : _wg_queues) {
+        if (other_wg == wg || queue_state->num_tasks.load(std::memory_order_relaxed) == 0) {
+            continue;
+        }
+        auto* entity = _sched_entity(other_wg);
+        ++num_runnable_wgs;
+        sum_cpu_weight += entity->cpu_weight();
+        if (entity->vruntime_ns() < min_vruntime_ns) {
+            min_vruntime_ns = entity->vruntime_ns();
+            min_entity = entity;
+        }
+    }
+
+    if (min_entity == nullptr || sum_cpu_weight == 0) {
+        return;
+    }
+
+    int64_t ideal_runtime_ns = SCHEDULE_PERIOD_PER_WG_NS * num_runnable_wgs * wg_entity->cpu_weight() / sum_cpu_weight;
+    int64_t new_vruntime_ns = std::min(min_entity->vruntime_ns() - ideal_runtime_ns / 2,
+                                       min_entity->runtime_ns() / int64_t(wg_entity->cpu_weight()));
+    int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
+    if (diff_vruntime_ns > 0) {
+        wg_entity->adjust_runtime_ns(diff_vruntime_ns * wg_entity->cpu_weight());
+    }
 }
 
 LockFreeWorkGroupScanTaskQueue::CandidateList LockFreeWorkGroupScanTaskQueue::_pick_sorted_wgs() {
