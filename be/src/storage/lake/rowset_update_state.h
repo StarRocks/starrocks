@@ -15,6 +15,7 @@
 #pragma once
 
 #include <atomic>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -257,6 +258,10 @@ private:
     OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;
     std::map<string, string> _column_to_expr_value;
+
+    // Protects shared state initialization (_rowset_ptr, per-segment vectors, _segment_iters,
+    // _column_to_expr_value) against concurrent load_segment calls in the parallel path.
+    std::mutex _shared_init_mutex;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

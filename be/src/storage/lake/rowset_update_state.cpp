@@ -208,21 +208,25 @@ static bool should_enable_lazy_load(const RowsetUpdateStateParams& params) {
 Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
                                        bool need_resolve_conflict, bool need_lock) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segment_us");
-    if (_rowset_ptr == nullptr) {
-        _rowset_meta_ptr = std::make_unique<const RowsetMetadata>(params.op_write.rowset());
-        _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
-                                               -1 /*unused*/, params.tablet_schema);
-    }
-    // Idempotent resize: skip if already done by prepare_for_parallel() or a previous call.
-    // This guarantees thread-safety when load_segment is called concurrently for different segments.
-    if (_upserts.size() != _rowset_ptr->num_segments()) {
-        TRY_CATCH_BAD_ALLOC({
-            _upserts.resize(_rowset_ptr->num_segments());
-            _base_versions.resize(_rowset_ptr->num_segments());
-            _partial_update_states.resize(_rowset_ptr->num_segments());
-            _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
-            _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
-        });
+    // Shared state initialization must be serialized across concurrent load_segment calls
+    // in the parallel path. prepare_for_parallel() normally does this single-threaded before
+    // parallel tasks start, but the mutex guarantees correctness even under concurrent init.
+    {
+        std::lock_guard<std::mutex> l(_shared_init_mutex);
+        if (_rowset_ptr == nullptr) {
+            _rowset_meta_ptr = std::make_unique<const RowsetMetadata>(params.op_write.rowset());
+            _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(),
+                                                   _rowset_meta_ptr.get(), -1 /*unused*/, params.tablet_schema);
+        }
+        if (_upserts.size() != _rowset_ptr->num_segments()) {
+            TRY_CATCH_BAD_ALLOC({
+                _upserts.resize(_rowset_ptr->num_segments());
+                _base_versions.resize(_rowset_ptr->num_segments());
+                _partial_update_states.resize(_rowset_ptr->num_segments());
+                _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
+                _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
+            });
+        }
     }
 
     if (_upserts.size() == 0) {
@@ -341,8 +345,12 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     }
     Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
 
-    if (_segment_iters.empty()) {
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
+    {
+        // Serialize segment iterator init against concurrent load_segment calls.
+        std::lock_guard<std::mutex> l(_shared_init_mutex);
+        if (_segment_iters.empty()) {
+            ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
+        }
     }
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
@@ -501,12 +509,13 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     std::vector<ColumnId> read_column_ids = get_read_columns_ids(params.op_write, params.tablet_schema);
 
     const auto& txn_meta = params.op_write.txn_meta();
-    // Idempotent: skip if already populated by prepare_for_parallel() or a previous call.
-    // Multiple parallel threads may enter here concurrently, but the empty check ensures
-    // only one (or none, if pre-populated) actually mutates the map.
-    if (_column_to_expr_value.empty()) {
-        for (auto& entry : txn_meta.column_to_expr_value()) {
-            _column_to_expr_value.insert({entry.first, entry.second});
+    {
+        // Serialize _column_to_expr_value init against concurrent parallel calls.
+        std::lock_guard<std::mutex> l(_shared_init_mutex);
+        if (_column_to_expr_value.empty()) {
+            for (auto& entry : txn_meta.column_to_expr_value()) {
+                _column_to_expr_value.insert({entry.first, entry.second});
+            }
         }
     }
     auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
@@ -872,20 +881,23 @@ void RowsetUpdateState::release_segment_partial_state(uint32_t segment_id) {
 
 Status RowsetUpdateState::prepare_for_parallel(const RowsetUpdateStateParams& params) {
     // Pre-initialize all shared state so that load_segment can be called in parallel.
-    // After this, load_segment's guard checks will skip initialization and go directly
-    // to per-segment logic.
+    // Runs single-threaded before parallel tasks start, but take the mutex anyway for
+    // consistency with the protected init sections in load_segment.
+    std::lock_guard<std::mutex> l(_shared_init_mutex);
     if (_rowset_ptr == nullptr) {
         _rowset_meta_ptr = std::make_unique<const RowsetMetadata>(params.op_write.rowset());
         _rowset_ptr = std::make_unique<Rowset>(params.tablet->tablet_mgr(), params.tablet->id(), _rowset_meta_ptr.get(),
                                                -1 /*unused*/, params.tablet_schema);
     }
-    TRY_CATCH_BAD_ALLOC({
-        _upserts.resize(_rowset_ptr->num_segments());
-        _base_versions.resize(_rowset_ptr->num_segments());
-        _partial_update_states.resize(_rowset_ptr->num_segments());
-        _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
-        _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
-    });
+    if (_upserts.size() != _rowset_ptr->num_segments()) {
+        TRY_CATCH_BAD_ALLOC({
+            _upserts.resize(_rowset_ptr->num_segments());
+            _base_versions.resize(_rowset_ptr->num_segments());
+            _partial_update_states.resize(_rowset_ptr->num_segments());
+            _auto_increment_partial_update_states.resize(_rowset_ptr->num_segments());
+            _auto_increment_delete_pks.resize(_rowset_ptr->num_segments());
+        });
+    }
     if (_segment_iters.empty()) {
         vector<uint32_t> pk_columns;
         pk_columns.reserve(params.tablet_schema->num_key_columns());
@@ -895,7 +907,7 @@ Status RowsetUpdateState::prepare_for_parallel(const RowsetUpdateStateParams& pa
         Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
         ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
     }
-    if (params.op_write.has_txn_meta()) {
+    if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
         for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {
             _column_to_expr_value.insert({entry.first, entry.second});
         }
