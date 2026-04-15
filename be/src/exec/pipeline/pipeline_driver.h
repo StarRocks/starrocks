@@ -52,7 +52,6 @@ class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
 using ConstDriverConsumer = std::function<void(DriverConstRawPtr)>;
-using ConstDriverPredicator = std::function<bool(DriverConstRawPtr)>;
 class DriverQueue;
 
 enum DriverState : uint32_t {
@@ -69,13 +68,11 @@ enum DriverState : uint32_t {
     // io task executed by io threads synchronously, a driver turns to FINISH from PENDING_FINISH after the
     // pending io task's completion.
     PENDING_FINISH = 9,
-    EPOCH_PENDING_FINISH = 10,
-    EPOCH_FINISH = 11,
     // In some cases, the output of SourceOperator::has_output may change frequently, it's better to wait
     // in the working thread other than moving the driver frequently between ready queue and pending queue, which
     // will lead to drastic performance deduction (the "ScheduleTime" in profile will be super high).
     // We can enable this optimization by overriding SourceOperator::is_mutable to return true.
-    LOCAL_WAITING = 12
+    LOCAL_WAITING = 10
 };
 
 [[maybe_unused]] static inline std::string ds_to_string(DriverState ds) {
@@ -100,10 +97,6 @@ enum DriverState : uint32_t {
         return "INTERNAL_ERROR";
     case PENDING_FINISH:
         return "PENDING_FINISH";
-    case EPOCH_PENDING_FINISH:
-        return "EPOCH_PENDING_FINISH";
-    case EPOCH_FINISH:
-        return "EPOCH_FINISH";
     case LOCAL_WAITING:
         return "LOCAL_WAITING";
     }
@@ -186,12 +179,10 @@ enum OperatorStage {
     PREPARED = 1,
     PRECONDITION_NOT_READY = 2,
     PROCESSING = 3,
-    EPOCH_FINISHING = 4,
-    EPOCH_FINISHED = 5,
-    FINISHING = 6,
-    FINISHED = 7,
-    CANCELLED = 8,
-    CLOSED = 9,
+    FINISHING = 4,
+    FINISHED = 5,
+    CANCELLED = 6,
+    CLOSED = 7,
 };
 
 class PipelineDriver {
@@ -430,10 +421,6 @@ public:
         if (sink_operator()->is_finished()) {
             return true;
         }
-        if (source_operator()->is_epoch_finished() || sink_operator()->is_epoch_finished()) {
-            return true;
-        }
-
         // PRECONDITION_BLOCK
         if (_state == DriverState::PRECONDITION_BLOCK) {
             if (is_precondition_block()) {
@@ -473,10 +460,6 @@ public:
         if (sink_operator()->is_finished()) {
             return true;
         }
-        if (source_operator()->is_epoch_finished() || sink_operator()->is_epoch_finished()) {
-            return true;
-        }
-
         if (_state == DriverState::PRECONDITION_BLOCK) {
             if (is_precondition_block()) {
                 return false;
@@ -550,15 +533,6 @@ public:
 
     // Whether the query can be expirable or not.
     virtual bool is_query_never_expired() { return false; }
-    // Whether the driver's state is already `EPOCH_FINISH`.
-    bool is_epoch_finished() { return _state == DriverState::EPOCH_FINISH; }
-    // Whether the driver's state is already `EPOCH_PENDING_FINISH`.
-    bool is_epoch_finishing() { return _state == DriverState::EPOCH_PENDING_FINISH; }
-    // Whether the driver is at finishing state in one epoch. when the driver is in `EPOCH_PENDING_FINISH` state,
-    // use `is_still_epoch_finishing` method to check whether the driver has changed yet.
-    bool is_still_epoch_finishing() {
-        return source_operator()->is_epoch_finishing() || sink_operator()->is_epoch_finishing();
-    }
 
     PipelineObserver* observer() { return &_observer; }
     void assign_observer();
