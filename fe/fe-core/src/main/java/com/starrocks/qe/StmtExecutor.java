@@ -1001,7 +1001,7 @@ public class StmtExecutor {
                     execPlan = generateExecPlan();
                 } catch (Exception e) {
                     LOG.warn("Generate exec plan failed for explain stmt: {}",
-                            SqlCredentialRedactor.redact(parsedStmt.getOrigStmt().originStmt), e);
+                            getRedactedOriginStmtInString(), e);
                 }
                 handleExplainExecPlan(execPlan);
                 return;
@@ -3883,16 +3883,16 @@ public class StmtExecutor {
 
         try {
             String originSql = getQueryDetailSql(parsedStmt);
-            String sql = SqlCredentialRedactor.mayNeedCredentialRedaction(originSql)
-                    ? SqlCredentialRedactor.redact(originSql)
-                    : originSql;
             boolean needEncrypt = AuditEncryptionChecker.needEncrypt(parsedStmt);
+            String sql = originSql;
             if (needEncrypt || Config.enable_sql_desensitize_in_log) {
                 sql = AstToSQLBuilder.toSQL(parsedStmt, FormatOptions.allEnable()
                                 .setColumnSimplifyTableName(false)
                                 .setHideCredential(needEncrypt)
                                 .setEnableDigest(Config.enable_sql_desensitize_in_log))
                         .orElse("this is a desensitized sql");
+            } else if (SqlCredentialRedactor.mayNeedCredentialRedaction(originSql)) {
+                sql = SqlCredentialRedactor.redact(originSql);
             }
 
             boolean isQuery = context.isQueryStmt(parsedStmt);
