@@ -66,8 +66,13 @@ public class MergeIntoPlanner {
         }
 
         IcebergTable icebergTable = (IcebergTable) targetTable;
-        PhysicalPropertySet requiredProperty = IcebergPlannerUtils.createShuffleProperty(icebergTable, outputColumns);
         colNames = mergeIntoStmt.getIcebergColumnOutputNames();
+
+        // Use the 3-arg overload: MERGE wraps all data columns in CASE expressions, causing
+        // ColumnRefOperator names to become "case" instead of the original column name.
+        // The 3-arg overload matches partition columns by the saved column output names.
+        PhysicalPropertySet requiredProperty = IcebergPlannerUtils.createShuffleProperty(
+                icebergTable, outputColumns, colNames);
 
         return createMergePlan(mergeIntoStmt, session, logicalPlan.getRootBuilder().getRoot(),
                 columnRefFactory, outputColumns, colNames, icebergTable, requiredProperty);
@@ -153,4 +158,5 @@ public class MergeIntoPlanner {
         EnforceUniqueNode enforceNode = new EnforceUniqueNode(nodeId, currentRoot, keyColIndices);
         sinkFragment.setPlanRoot(enforceNode);
     }
+
 }

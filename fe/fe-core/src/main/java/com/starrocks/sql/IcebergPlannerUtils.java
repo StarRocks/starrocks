@@ -66,6 +66,42 @@ public class IcebergPlannerUtils {
         return new PhysicalPropertySet(distributionProperty);
     }
 
+    /**
+     * Overload that matches partition columns by explicit column names rather than
+     * ColumnRefOperator.getName(). Needed for MERGE INTO where CASE expressions cause
+     * ColumnRefFactory to assign generic names like "case", losing the original column name.
+     *
+     * @param outputColumnNames the column names from the Analyzer's SELECT list aliases
+     */
+    public static PhysicalPropertySet createShuffleProperty(IcebergTable icebergTable,
+                                                             List<ColumnRefOperator> outputColumns,
+                                                             List<String> outputColumnNames) {
+        if (!icebergTable.isPartitioned()) {
+            return new PhysicalPropertySet();
+        }
+
+        List<String> partitionColNames = icebergTable.getPartitionColumnNames();
+        List<Integer> partitionColumnIds = Lists.newArrayList();
+        for (String partCol : partitionColNames) {
+            for (int i = 0; i < outputColumnNames.size(); i++) {
+                if (outputColumnNames.get(i).equalsIgnoreCase(partCol)) {
+                    partitionColumnIds.add(outputColumns.get(i).getId());
+                    break;
+                }
+            }
+        }
+
+        if (partitionColumnIds.isEmpty()) {
+            return new PhysicalPropertySet();
+        }
+
+        HashDistributionDesc distributionDesc = new HashDistributionDesc(
+                partitionColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
+        DistributionProperty distributionProperty = DistributionProperty.createProperty(
+                DistributionSpec.createHashDistributionSpec(distributionDesc));
+        return new PhysicalPropertySet(distributionProperty);
+    }
+
     public static org.apache.iceberg.expressions.Expression buildIcebergFilterExpr(ExecPlan execPlan) {
         if (execPlan == null || execPlan.getScanNodes() == null) {
             return null;
