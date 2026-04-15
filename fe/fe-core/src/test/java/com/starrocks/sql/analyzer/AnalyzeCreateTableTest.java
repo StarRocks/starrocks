@@ -16,6 +16,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -313,6 +314,34 @@ public class AnalyzeCreateTableTest {
                 "distributed by random buckets 10");
         analyzeFail("create table table1 (col1 char(10) not null, col2 bigint REPLACE_IF_NOT_NULL) " +
                 "engine=olap aggregate key(col1) distributed by random buckets 10");
+    }
+
+    @Test
+    public void testRandomDistributionForAggKeyWithOptInFlag() {
+        boolean original = Config.enable_random_distribution_for_agg_table;
+        try {
+            Config.enable_random_distribution_for_agg_table = true;
+            analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap " +
+                    "aggregate key(col1) distributed by random");
+            analyzeSuccess("create table table1 (col1 char(10) not null, col2 bigint sum) engine=olap " +
+                    "aggregate key(col1) distributed by random buckets 10");
+            // REPLACE-family columns remain rejected even with the flag on: random distribution
+            // would break REPLACE semantics outright.
+            analyzeFail("create table table1 (col1 char(10) not null, col2 bigint replace) engine=olap " +
+                    "aggregate key(col1) distributed by random buckets 10");
+            analyzeFail("create table table1 (col1 char(10) not null, col2 bigint REPLACE_IF_NOT_NULL) " +
+                    "engine=olap aggregate key(col1) distributed by random buckets 10");
+            // Regression guard: non-aggregate key types are still forbidden.
+            analyzeFail("create table table1 (col1 char(10) not null, col2 int) engine=olap primary key(col1) " +
+                    "distributed by random buckets 10");
+            analyzeFail("create table table1 (col1 char(10) not null, col2 int) engine=olap unique key(col1) " +
+                    "distributed by random buckets 10");
+            // Regression guard: duplicate keys with random distribution always succeed.
+            analyzeSuccess("create table table1 (col1 char(10) not null) engine=olap duplicate key(col1) " +
+                    "distributed by random buckets 10");
+        } finally {
+            Config.enable_random_distribution_for_agg_table = original;
+        }
     }
 
     @Test
