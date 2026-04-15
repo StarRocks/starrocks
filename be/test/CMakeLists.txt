@@ -88,10 +88,6 @@ set(EXEC_FILES
         ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
-        ./exec/stream/mem_state_table_test.cpp
-        ./exec/stream/stream_aggregator_test.cpp
-        ./exec/stream/stream_operators_test.cpp
-        ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/hash_variant_test.cpp
