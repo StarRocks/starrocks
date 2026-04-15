@@ -729,7 +729,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     RETURN_IF_ERROR(ThreadPoolBuilder("lake_partial_update")
                             .set_min_threads(0)
                             .set_max_threads(max_thread_count)
-                            .set_max_queue_size(std::numeric_limits<int>::max())
+                            .set_max_queue_size(config::lake_partial_update_thread_pool_queue_size)
                             .build(&_lake_partial_update_thread_pool));
     REGISTER_THREAD_POOL_METRICS(lake_partial_update, _lake_partial_update_thread_pool);
 
