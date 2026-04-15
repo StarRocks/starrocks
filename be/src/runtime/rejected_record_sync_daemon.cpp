@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include <chrono>
+#include <limits>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -178,21 +179,46 @@ void RejectedRecordSyncDaemon::run_one_tick() {
         return;
     }
     const int max_rows = std::max(1, config::rejected_record_sync_max_batch_rows);
+    process_files(files, max_rows);
+    garbage_collect_stale_files();
+}
 
-    // Accumulate rows across files into a single in-memory payload;
-    // commit whenever the row counter reaches the soft cap. This makes
-    // `rejected_record_sync_max_batch_rows` honor its name: oversized
-    // files are still posted in one go (we can't subdivide one source
-    // file across posts because the atomicity unit is the file -- if
-    // the post succeeds we delete the file, if it fails we retry the
-    // whole file next tick) but any accumulation of smaller files is
-    // bounded.
+// Shared read-post-delete loop used by both `run_one_tick` (the
+// production caller, with `max_rows` = configured cap) and
+// `flush_batch` (the test-only caller, with `max_rows = INT_MAX` so
+// the whole list ships as one post). Keeping both callers on the
+// same implementation means any future fix to the
+// accumulate/commit/retry semantics shows up consistently in both
+// paths instead of silently drifting.
+//
+// Contract:
+//   * Files that cannot be opened are immediately removed (keeping
+//     them would make them re-claimable forever without ever being
+//     readable).
+//   * Empty files are swept up in the same way -- the commit deletes
+//     them alongside readable siblings even when the batch as a
+//     whole posts zero rows.
+//   * On a successful post, every source file in that commit is
+//     deleted.
+//   * On a failed post, source files are LEFT on disk. They retain
+//     their `.syncing.<tick>` suffix so scan_once's adopt-stale path
+//     reclaims them on a subsequent tick.
+void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& files, int64_t max_rows) {
     std::ostringstream payload;
     std::vector<std::string> batch;
     int64_t batch_rows = 0;
 
     auto commit = [&]() {
         if (batch.empty()) {
+            return;
+        }
+        if (batch_rows == 0) {
+            // Empty files in the batch -- nothing to post, but do
+            // delete them so they don't get re-scanned forever.
+            for (const auto& f : batch) {
+                remove_file(f);
+            }
+            batch.clear();
             return;
         }
         auto st = post_to_stream_load(payload.str());
@@ -203,9 +229,6 @@ void RejectedRecordSyncDaemon::run_one_tick() {
                          << "; leaving files on disk for retry.";
         } else {
             _records_flushed.fetch_add(batch_rows, std::memory_order_relaxed);
-            // Only delete source files on a successful post; on failure
-            // the `.syncing.<tick>` files remain and the next tick will
-            // re-claim + retry them via scan_once's adopt-stale path.
             for (const auto& f : batch) {
                 remove_file(f);
             }
@@ -239,7 +262,6 @@ void RejectedRecordSyncDaemon::run_one_tick() {
         }
     }
     commit();
-    garbage_collect_stale_files();
 }
 
 std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
@@ -288,37 +310,25 @@ std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
 }
 
 Status RejectedRecordSyncDaemon::flush_batch(const std::vector<std::string>& files) {
-    // Thin wrapper retained for tests that want to exercise the
-    // read-concatenate-post-delete path directly. Production traffic
-    // goes through `run_one_tick`, which caps batch size at
-    // `rejected_record_sync_max_batch_rows` and split-commits larger
-    // backlogs. This entry point ignores the row cap and ships the
-    // whole `files` list as one post.
-    std::ostringstream payload;
-    int64_t row_count = 0;
-    for (const auto& f : files) {
-        std::ifstream in(f);
-        if (!in.is_open()) {
-            LOG(WARNING) << "RejectedRecordSyncDaemon: cannot open " << f << " for reading; skipping.";
-            continue;
-        }
-        std::string line;
-        while (std::getline(in, line)) {
-            if (line.empty()) continue;
-            payload << line << '\n';
-            ++row_count;
-        }
-    }
-    if (row_count == 0) {
-        for (const auto& f : files) {
-            remove_file(f);
-        }
+    // Test entry point. Production traffic goes through `run_one_tick`
+    // which caps each post at `rejected_record_sync_max_batch_rows`
+    // and split-commits oversized backlogs. flush_batch drives the
+    // same underlying `process_files` implementation with an
+    // effectively-infinite cap so the whole `files` list ships as
+    // one post, mirroring the simpler shape that unit tests want.
+    // Keeping both callers on the shared implementation means
+    // accumulate / commit / retry semantics stay in sync.
+    if (files.empty()) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(post_to_stream_load(payload.str()));
-    _records_flushed.fetch_add(row_count, std::memory_order_relaxed);
-    for (const auto& f : files) {
-        remove_file(f);
+    const int64_t prior_failures = _sync_failures.load(std::memory_order_relaxed);
+    process_files(files, std::numeric_limits<int64_t>::max());
+    // process_files updates _sync_failures / _records_flushed directly.
+    // Surface the outcome via this entry point's Status return so the
+    // existing tests that assert on "post failed => non-OK" keep
+    // passing.
+    if (_sync_failures.load(std::memory_order_relaxed) > prior_failures) {
+        return Status::InternalError("RejectedRecordSyncDaemon::flush_batch: post_to_stream_load failed");
     }
     return Status::OK();
 }

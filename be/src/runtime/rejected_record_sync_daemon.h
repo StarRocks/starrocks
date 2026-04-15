@@ -87,10 +87,13 @@ protected:
     // should not rely on it.
     virtual std::vector<std::string> scan_once();
 
-    // Read `files`, concatenate their contents, POST the batch to the FE
-    // Stream Load endpoint, and delete successfully-synced files. Returns
-    // non-OK when the HTTP post fails; the files are left on disk so the
-    // next tick can retry.
+    // Test-only entry to the read-concat-post-delete loop. Drives the
+    // shared `process_files` implementation with an unbounded row cap
+    // so a caller that supplies N files gets a single merge-commit
+    // Stream Load. Returns non-OK iff the underlying post failed (the
+    // `.syncing.<tick>` files are left behind in that case, matching
+    // the production retry-on-next-tick semantics). Production
+    // traffic goes through `run_one_tick` instead.
     virtual Status flush_batch(const std::vector<std::string>& files);
 
     // Post a raw JSON Lines payload to the FE `_statistics_.rejected_records`
@@ -110,6 +113,14 @@ private:
     static void* tick_thread_entry(void* self);
     void tick_loop();
     void run_one_tick();
+
+    // Core read-post-delete loop shared by `run_one_tick` (production,
+    // caps each commit at the configured per-batch row limit) and
+    // `flush_batch` (tests, unbounded so the call ships in one post).
+    // `max_rows` is the soft cap that triggers a commit; the actual
+    // post may contain more rows because a single source file is the
+    // atomicity unit and is never split across posts.
+    void process_files(const std::vector<std::string>& files, int64_t max_rows);
 
     ExecEnv* _env;
     std::promise<bool> _stop;
