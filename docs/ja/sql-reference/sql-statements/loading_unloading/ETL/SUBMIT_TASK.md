@@ -19,7 +19,7 @@ ETL ステートメントを非同期タスクとして送信します。
 - [INSERT](../INSERT.md) （v3.0以降）
 - [CACHE SELECT](../../../../data_source/data_cache_warmup.md) （v3.3以降）
 
-タスクの一覧を表示するには `INFORMATION_SCHEMA.tasks` をクエリし、タスクの実行履歴を表示するには `INFORMATION_SCHEMA.task_runs` をクエリします。詳細については、[Usage Notes](#usage-notes) を参照してください。
+タスクの一覧は `INFORMATION_SCHEMA.tasks` をクエリすることで確認でき、タスクの実行履歴は `INFORMATION_SCHEMA.task_runs` をクエリすることで確認できます。詳細については、[使用上の注意](#使用上の注意)を参照してください。
 
 非同期タスクを削除するには [DROP TASK](DROP_TASK.md) を使用します。
 
@@ -31,6 +31,7 @@ SUBMIT TASK <task_name>
 [PROPERTIES(<"key" = "value"[, ...]>)]
 AS <etl_statement>
 ```
+
 ## PROPERTIES
 
 `session.` プレフィックスを持つセッション変数を追加することで、タスク実行時の接続コンテキスト設定を変更できます。
@@ -55,7 +56,15 @@ AS insert into t2 select * from t1;
 | schedule_interval  | No      | スケジュールされたタスクが実行される間隔。最小間隔は10秒です。          |
 | etl_statement      | Yes     | 非同期タスクとして送信したい ETL ステートメント。StarRocks は現在、[CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) および [INSERT](../../loading_unloading/INSERT.md) の非同期タスクの送信をサポートしています。 |
 
-## Usage notes
+## 戻り値
+
+- `TaskName`: タスクの名前。
+- `Status`: タスクのステータス。有効な値：
+  - `SUBMITTED`: タスクが送信されました。
+  - `REJECTED`: タスクが却下されました。
+  - `FAILED`: タスクが失敗しました。
+
+## 使用上の注意
 
 このステートメントは、ETL ステートメントを実行するタスクを保存するテンプレートである Task を作成します。Task の情報を確認するには、メタデータビュー [`tasks` in Information Schema](../../../information_schema/tasks.md) をクエリします。
 
