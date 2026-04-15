@@ -408,6 +408,8 @@ public class CompactionSchedulerTest {
                 result = node1;
                 systemInfoService.getBackendOrComputeNode(1002L);
                 result = node2;
+            }
+        };
 
         final ComputeNode theAggregatorNode = aggregatorNode;
         new MockUp<LakeAggregator>() {
