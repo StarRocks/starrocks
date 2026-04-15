@@ -291,6 +291,14 @@ public:
     METRIC_DEFINE_INT_COUNTER(pk_index_sst_read_error_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(pk_index_sst_write_error_total, MetricUnit::REQUESTS);
 
+    // StarOS shared-data fallback metrics. Incremented when StarOSWorker issues
+    // a g_starlet->get_shard_info() RPC to starmgr because the local cache did
+    // not have the shard info (i.e. the FE did not push the shard to this BE
+    // before a query referenced it). A high rate is a signal of FE-side
+    // task/node mis-selection or shard push lag.
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(staros_shard_info_fallback_failed_total, MetricUnit::REQUESTS);
+
     // Gauges
     METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(process_thread_num, MetricUnit::NOUNIT);
