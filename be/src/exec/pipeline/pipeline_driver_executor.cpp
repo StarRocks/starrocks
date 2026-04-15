@@ -512,30 +512,6 @@ void GlobalDriverExecutor::_finalize_epoch(DriverRawPtr driver, RuntimeState* ru
     stream_driver->epoch_finalize(runtime_state, state);
 }
 
-void GlobalDriverExecutor::report_epoch(QueryContext* query_ctx, std::vector<FragmentContext*> fragment_ctxs) {
-    DCHECK_LT(0, fragment_ctxs.size());
-    auto params = ExecStateReporter::create_report_epoch_params(query_ctx, fragment_ctxs);
-    // TODO(lism): Check all fragment_ctx's fe_addr are the same.
-    auto fe_addr = fragment_ctxs[0]->fe_addr();
-    auto query_id = query_ctx->query_id();
-    auto report_task = [=]() {
-        auto status = ExecStateReporter::report_epoch(params, fe_addr);
-        if (!status.ok()) {
-            if (status.is_not_found()) {
-                LOG(INFO) << "[Driver] Fail to report epoch exec state due to query not found: query_id="
-                          << print_id(query_id);
-            } else {
-                LOG(WARNING) << "[Driver] Fail to report epoch exec state: query_id=" << print_id(query_id)
-                             << ", status: " << status.to_string();
-            }
-        } else {
-            VLOG(1) << "[Driver] Succeed to report epoch exec state: query_id=" << print_id(query_id);
-        }
-    };
-
-    this->_exec_state_reporter->submit(std::move(report_task));
-}
-
 void GlobalDriverExecutor::iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const {
     _blocked_driver_poller->for_each_driver(call);
 }

@@ -81,7 +81,7 @@ Status StreamEpochManager::start_epoch(ExecEnv* exec_env, const QueryContext* qu
         }
 
         _epoch_info = epoch_info;
-        _finished_fragment_ctxs.clear();
+        _num_finished_fragment_ctxs.store(0, std::memory_order_release);
     }
 
     // Reset epoch state for each fragment ctx
@@ -95,11 +95,10 @@ Status StreamEpochManager::start_epoch(ExecEnv* exec_env, const QueryContext* qu
     return Status::OK();
 }
 
-Status StreamEpochManager::prepare(const MVMaintenanceTaskInfo& maintenance_task_info,
-                                   const std::vector<FragmentContext*>& fragment_ctxs) {
+Status StreamEpochManager::prepare(const std::vector<FragmentContext*>& fragment_ctxs) {
     std::unique_lock<std::shared_mutex> l(_epoch_lock);
-
-    _maintenance_task_info = maintenance_task_info;
+    _enable_resource_group = true;
+    _num_drivers = 0;
 
     // TODO(lism):
     // - Prepare enable_resource_group in FE.
@@ -109,11 +108,6 @@ Status StreamEpochManager::prepare(const MVMaintenanceTaskInfo& maintenance_task
         _num_drivers += fragment_ctx->total_dop();
     }
     return Status::OK();
-}
-
-const MVMaintenanceTaskInfo& StreamEpochManager::maintenance_task_info() const {
-    std::shared_lock<std::shared_mutex> l(_epoch_lock);
-    return _maintenance_task_info;
 }
 
 Status StreamEpochManager::set_finished(ExecEnv* exec_env, const QueryContext* query_ctx) {
@@ -172,16 +166,8 @@ const std::unordered_map<TUniqueId, NodeId2ScanRanges>& StreamEpochManager::frag
     return _fragment_id_to_node_id_scan_ranges;
 }
 
-void StreamEpochManager::count_down_fragment_ctx(RuntimeState* state, FragmentContext* fragment_ctx, size_t val) {
-    _finished_fragment_ctxs.emplace_back(fragment_ctx);
-    bool all_fragment_finished = _finished_fragment_ctxs.size() == _fragment_id_to_node_id_scan_ranges.size();
-    if (!all_fragment_finished) {
-        return;
-    }
-
-    // do epoch report stats
-    auto* query_ctx = state->query_ctx();
-    fragment_ctx->workgroup()->executors()->driver_executor()->report_epoch(query_ctx, _finished_fragment_ctxs);
+void StreamEpochManager::count_down_fragment_ctx(size_t val) {
+    _num_finished_fragment_ctxs.fetch_add(val, std::memory_order_acq_rel);
 }
 
 const BinlogOffset* StreamEpochManager::_get_epoch_unlock(const TabletId2BinlogOffset& tablet_id_scan_ranges_mapping,

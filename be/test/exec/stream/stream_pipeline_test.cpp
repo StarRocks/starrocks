@@ -105,8 +105,7 @@ Status StreamPipelineTest::prepare() {
 
     // prepare epoch manager
     auto stream_epoch_manager = _query_ctx->stream_epoch_manager();
-    MVMaintenanceTaskInfo maintenance_task_info;
-    RETURN_IF_ERROR(stream_epoch_manager->prepare(maintenance_task_info, {_fragment_ctx}));
+    RETURN_IF_ERROR(stream_epoch_manager->prepare({_fragment_ctx}));
 
     return Status::OK();
 }

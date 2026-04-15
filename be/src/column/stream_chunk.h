@@ -55,25 +55,6 @@ struct BinlogOffset {
     int64_t lsn;
 };
 
-class TMVMaintenanceTasks;
-class TMVStartEpochTask;
-
-/**
- *  `MVMaintenanceTaskInfo` contains the basic MV maintenance tasks info for all task types.
- */
-struct MVMaintenanceTaskInfo {
-    int64_t signature;
-    std::string db_name;
-    std::string mv_name;
-    int64_t db_id;
-    int64_t mv_id;
-    int64_t job_id;
-    int64_t task_id;
-    TUniqueId query_id;
-
-    static MVMaintenanceTaskInfo from_maintenance_task(const TMVMaintenanceTasks& maintenance_task);
-};
-
 /**
  * Epoch is an unit of an incremental compute. At the beginning of each incremental compute,
  * an `EpochInfo` will be triggered for each source operator, then the source operator will
@@ -94,8 +75,6 @@ struct EpochInfo {
     int64_t max_scan_rows;
     // Trigger mode
     TriggerMode trigger_mode = PROCESSTIME_OFFSET;
-
-    static EpochInfo from_start_epoch_task(const TMVStartEpochTask& start_epoch);
 
     std::string debug_string() const;
 };
