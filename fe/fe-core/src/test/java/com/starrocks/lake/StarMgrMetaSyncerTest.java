@@ -1579,6 +1579,10 @@ public class StarMgrMetaSyncerTest {
 
         new Expectations(starOSAgent) {
             {
+                starOSAgent.getAllNodeIdsByShards((List<Long>) any, anyLong);
+                result = null;
+                minTimes = 0;
+
                 starOSAgent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = computeNodeId;
 
@@ -1629,6 +1633,10 @@ public class StarMgrMetaSyncerTest {
 
         new Expectations(starOSAgent) {
             {
+                starOSAgent.getAllNodeIdsByShards((List<Long>) any, anyLong);
+                result = null;
+                minTimes = 0;
+
                 starOSAgent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 result = computeNodeId;
 
