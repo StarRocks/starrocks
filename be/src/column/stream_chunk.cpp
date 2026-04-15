@@ -14,31 +14,9 @@
 
 #include "column/stream_chunk.h"
 
-#include "gen_cpp/MVMaintenance_types.h"
+#include <sstream>
 
 namespace starrocks {
-
-MVMaintenanceTaskInfo MVMaintenanceTaskInfo::from_maintenance_task(const TMVMaintenanceTasks& maintenance_task) {
-    MVMaintenanceTaskInfo res;
-    res.signature = maintenance_task.signature;
-    res.db_name = maintenance_task.db_name;
-    res.mv_name = maintenance_task.mv_name;
-    res.db_id = maintenance_task.db_id;
-    res.mv_id = maintenance_task.mv_id;
-    res.job_id = maintenance_task.job_id;
-    res.task_id = maintenance_task.task_id;
-    res.query_id = maintenance_task.query_id;
-    return res;
-}
-
-EpochInfo EpochInfo::from_start_epoch_task(const TMVStartEpochTask& start_epoch) {
-    EpochInfo res;
-    res.epoch_id = start_epoch.epoch.epoch_id;
-    res.txn_id = start_epoch.epoch.txn_id;
-    res.max_exec_millis = start_epoch.max_exec_millis;
-    res.max_scan_rows = start_epoch.max_scan_rows;
-    return res;
-}
 
 std::string EpochInfo::debug_string() const {
     std::stringstream ss;
