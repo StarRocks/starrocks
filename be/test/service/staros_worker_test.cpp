@@ -26,7 +26,7 @@
 #include <condition_variable>
 #include <functional>
 
-#include "base/utility/defer_op.h"
+#include "util/defer_op.h"
 #include "common/config.h"
 #include "common/shutdown_hook.h"
 #include "runtime/starrocks_metrics.h"
