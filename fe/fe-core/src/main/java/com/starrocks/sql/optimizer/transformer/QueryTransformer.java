@@ -37,6 +37,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -51,6 +52,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.type.IntegerType;
@@ -62,6 +64,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator.findOrCreateColumnRefForExpr;
 
 public class QueryTransformer {
@@ -159,8 +162,19 @@ public class QueryTransformer {
                                                           ColumnRefFactory columnRefFactory) {
         List<ColumnRefOperator> outputs = new ArrayList<>();
         for (Expr expression : outputExpressions) {
-            outputs.add((ColumnRefOperator) SqlToScalarOperatorTranslator
-                    .translate(expression, builder.getExpressionMapping(), columnRefFactory));
+            ColumnRefOperator outputColumn = builder.getExpressionMapping().get(expression);
+            if (outputColumn != null) {
+                outputs.add(outputColumn);
+                continue;
+            }
+
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator
+                    .translate(expression, builder.getExpressionMapping(), columnRefFactory);
+            if (!scalarOperator.isColumnRef()) {
+                throw new StarRocksPlannerException("output expression not translate to column reference",
+                        INTERNAL_ERROR);
+            }
+            outputs.add((ColumnRefOperator) scalarOperator);
         }
         return outputs;
     }
@@ -182,6 +196,8 @@ public class QueryTransformer {
         Scope scope = queryBlock.getOrderScope();
         ExpressionMapping outputTranslations = new ExpressionMapping(scope);
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+        Map<Expr, ColumnRefOperator> currentExpressionMappings = Maps.newHashMap();
+        Map<ColumnRefOperator, ScalarOperator> currentConstOperators = Maps.newHashMap();
         List<Expr> outputExprList = Lists.newArrayList(outputExpression);
 
         int outputExprIdx = 0;
@@ -199,6 +215,7 @@ public class QueryTransformer {
 
             if (outputExprInOrderByScope.contains(outputExprIdx)) {
                 outputTranslations.put(expression, columnRefOperator);
+                currentExpressionMappings.put(expression, columnRefOperator);
                 TableName resolveTableName = queryBlock.getResolveTableName();
                 if (expression instanceof SlotRef) {
                     resolveTableName = queryBlock.getRelation().getResolveTableName();
@@ -217,12 +234,19 @@ public class QueryTransformer {
                 if (scope.getRelationFields().resolveFields(alias).size() > 1) {
                     outputTranslations.getExpressionToColumns()
                             .put(new SlotRef(resolveTableName, outputNames.get(outputExprIdx)), columnRefOperator);
+                    currentExpressionMappings.put(new SlotRef(resolveTableName, outputNames.get(outputExprIdx)),
+                            columnRefOperator);
                 } else {
                     outputTranslations.put(alias, columnRefOperator);
+                    currentExpressionMappings.put(alias, columnRefOperator);
                 }
 
             } else {
                 outputTranslations.put(expression, columnRefOperator);
+                currentExpressionMappings.put(expression, columnRefOperator);
+            }
+            if (scalarOperator.isConstant()) {
+                currentConstOperators.put(columnRefOperator, scalarOperator);
             }
             outputExprIdx++;
         }
@@ -251,6 +275,8 @@ public class QueryTransformer {
         outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
         outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
         outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
+        outputTranslations.addExpressionToColumns(currentExpressionMappings);
+        outputTranslations.addColumnRefToConstOperators(currentConstOperators);
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
@@ -265,6 +291,8 @@ public class QueryTransformer {
                 subOpt.getColumnRefToConstOperators());
 
         Map<ColumnRefOperator, ScalarOperator> projections = Maps.newHashMap();
+        Map<Expr, ColumnRefOperator> currentExpressionMappings = Maps.newHashMap();
+        Map<ColumnRefOperator, ScalarOperator> currentConstOperators = Maps.newHashMap();
         for (Expr expression : expressions) {
             Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders = Maps.newHashMap();
             ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(expression,
@@ -277,14 +305,17 @@ public class QueryTransformer {
             ColumnRefOperator columnRefOperator = getOrCreateColumnRefOperator(expression, scalarOperator, projections);
             projections.put(columnRefOperator, scalarOperator);
             outputTranslations.put(expression, columnRefOperator);
+            currentExpressionMappings.put(expression, columnRefOperator);
             if (scalarOperator.isConstant()) {
-                outputTranslations.putConstOperator(columnRefOperator, scalarOperator);
+                currentConstOperators.put(columnRefOperator, scalarOperator);
             }
         }
 
         outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
         outputTranslations.addColumnRefToConstOperators(subOpt.getColumnRefToConstOperators());
         outputTranslations.addGeneratedColumnExprOpToColumnRef(subOpt.getGeneratedColumnExprOpToColumnRef());
+        outputTranslations.addExpressionToColumns(currentExpressionMappings);
+        outputTranslations.addColumnRefToConstOperators(currentConstOperators);
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections, limit);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
@@ -424,7 +455,7 @@ public class QueryTransformer {
     public OptExprBuilder aggregate(OptExprBuilder subOpt,
                                      List<Expr> groupByExpressions, List<FunctionCallExpr> aggregates,
                                      List<List<Expr>> groupingSetsList, List<Expr> groupingFunctionCallExprs) {
-        if (aggregates.isEmpty() && groupByExpressions.isEmpty()) {
+        if (aggregates.isEmpty() && groupByExpressions.isEmpty() && groupingFunctionCallExprs.isEmpty()) {
             return subOpt;
         }
 
@@ -510,6 +541,21 @@ public class QueryTransformer {
                 if (childOp instanceof ColumnRefOperator && !groupByColumnRefs.contains(childOp)) {
                     groupingTranslations.put(childSlot, colRef);
                 }
+            }
+        }
+
+        if (groupingSetsList == null) {
+            for (Expr groupingFunction : groupingFunctionCallExprs) {
+                ColumnRefOperator grouping = columnRefFactory.create(GROUPING, IntegerType.BIGINT, false);
+                groupingTranslations.put(groupingFunction, grouping);
+                groupingTranslations.putConstOperator(grouping, ConstantOperator.createBigint(0));
+            }
+
+            if (!groupingFunctionCallExprs.isEmpty() && groupByColumnRefs.isEmpty() && aggregationsMap.isEmpty()) {
+                CallOperator countRows = SubqueryUtils.createCountRowsOperator();
+                ColumnRefOperator countRowsRef =
+                        columnRefFactory.create(countRows.getFnName(), countRows.getType(), countRows.isNullable());
+                aggregationsMap.put(countRowsRef, countRows);
             }
         }
 
