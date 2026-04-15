@@ -119,7 +119,8 @@ public class ExpressionStatisticCalculator {
                         .setMaxValue(value.getAsDouble());
             } else if (operator.getType().isStringType()) {
                 builder.setMinValue(Double.NEGATIVE_INFINITY) //
-                        .setMaxValue(Double.POSITIVE_INFINITY);
+                        .setMaxValue(Double.POSITIVE_INFINITY) //
+                        .setAverageRowSize(operator.toString().length());
             }
             return builder.build();
         }
