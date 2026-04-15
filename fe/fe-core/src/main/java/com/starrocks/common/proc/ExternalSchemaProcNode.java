@@ -16,7 +16,6 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
@@ -56,16 +55,12 @@ public class ExternalSchemaProcNode implements ProcNodeInterface {
 
         for (Column column : schema) {
             String extraStr = partitionColumns.contains(column.getName()) ? PARTITION_KEY : "";
-            String defaultStr = column.getMetaDefaultValue(Lists.newArrayList());
-            if (defaultStr == null) {
-                defaultStr = DEFAULT_STR;
-            }
             boolean isKey = column.isKey() || primaryKeyColumns.contains(column.getName());
             List<String> rowList = Arrays.asList(column.getName(),
                     column.getType().canonicalName(),
                     column.isAllowNull() ? "Yes" : "No",
                     ((Boolean) isKey).toString(),
-                    defaultStr,
+                    DEFAULT_STR,
                     extraStr,
                     column.getComment());
             result.addRow(rowList);
