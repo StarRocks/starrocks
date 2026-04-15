@@ -2742,9 +2742,11 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             List<ColumnAssignment> assignments =
                     visit(updateCtx.assignmentList().assignment(), ColumnAssignment.class);
             return new MergeWhenMatchedUpdateClause(condition, assignments, createPos(context));
-        } else {
-            // MergeMatchedDeleteContext
+        } else if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeMatchedDeleteContext) {
             return new MergeWhenMatchedDeleteClause(condition, createPos(context));
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp(
+                    "merge matched action: " + action.getClass().getSimpleName()));
         }
     }
 
@@ -2755,10 +2757,7 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
         var action = context.mergeNotMatchedAction();
         if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeNotMatchedInsertStarContext) {
             return new MergeWhenNotMatchedInsertClause(condition, null, null, true, createPos(context));
-        } else {
-            // MergeNotMatchedInsertValuesContext
-            com.starrocks.sql.parser.StarRocksParser.MergeNotMatchedInsertValuesContext valuesCtx =
-                    (com.starrocks.sql.parser.StarRocksParser.MergeNotMatchedInsertValuesContext) action;
+        } else if (action instanceof com.starrocks.sql.parser.StarRocksParser.MergeNotMatchedInsertValuesContext valuesCtx) {
             List<String> cols = null;
             if (valuesCtx.cols != null && !valuesCtx.cols.isEmpty()) {
                 cols = new ArrayList<>();
@@ -2768,6 +2767,9 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
             }
             List<Expr> values = visit(valuesCtx.expressionList().expression(), Expr.class);
             return new MergeWhenNotMatchedInsertClause(condition, cols, values, false, createPos(context));
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedOp(
+                    "merge not matched action: " + action.getClass().getSimpleName()));
         }
     }
 
