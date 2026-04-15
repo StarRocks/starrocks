@@ -717,6 +717,14 @@ This topic introduces the following types of FE configurations:
 - Description: The base DN, which is the point from which the LDAP server starts to search for users' authentication information.
 - Introduced in: -
 
+### `authentication_ldap_simple_bind_dn_pattern`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. For example, `uid=${USER},ou=People,dc=example,dc=com`. For Active Directory, you can use UPN format such as `${USER}@corp.example.com`. Multiple patterns can be separated by colons, and the system will try each pattern in order until one succeeds. When set, the search step is skipped and the system binds directly with the constructed DN.
+
 ### `authentication_ldap_simple_bind_root_dn`
 
 - Default: Empty string
