@@ -39,12 +39,19 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -92,13 +99,63 @@ public class ProfileManager implements MemoryTrackable {
 
     public static class ProfileElement {
         public Map<String, String> infoStrings = Maps.newHashMap();
-        public byte[] profileContent;
+        public long startTimeMs = -1;
+        public long endTimeMs = -1;
+        private byte[] profileContent;
         public ProfilingExecPlan plan;
 
-        public List<String> toRow() {
+        void setProfileContent(byte[] content) {
+            this.profileContent = content;
+        }
+
+        /**
+         * Deserialises the stored binary and returns a {@link RuntimeProfile}
+         * for programmatic analysis (e.g. via {@code ExplainAnalyzer}).
+         */
+        public RuntimeProfile getRuntimeProfile() {
+            if (profileContent == null) {
+                return null;
+            }
+            try {
+                return RuntimeProfileParser.parseFrom(
+                        CompressionUtils.gzipDecompressString(profileContent));
+            } catch (IOException e) {
+                LOG.warn("Failed to deserialize profile: {}", e.getMessage());
+                return null;
+            }
+        }
+
+        /**
+         * Returns the profile formatted as a string according to
+         * {@link Config#profile_info_format}.
+         */
+        public String getProfileString() {
+            if (profileContent == null) {
+                return null;
+            }
+            try {
+                return CompressionUtils.gzipDecompressString(profileContent);
+            } catch (IOException e) {
+                LOG.warn("Failed to deserialize profile: {}", e.getMessage());
+                return null;
+            }
+        }
+
+        /** Formats {@code profile} per the current {@link Config#profile_info_format}. */
+        static String format(RuntimeProfile profile) {
+            switch (Config.profile_info_format) {
+                case "json":
+                    return new RuntimeProfile.JsonProfileFormatter().format(profile, "");
+                default:
+                    return profile.toString();
+            }
+        }
+
+        public List<String> toRow(ConnectContext context) {
+            ZoneId sessionZone = getSessionZoneId(context);
             List<String> res = Lists.newArrayList();
             res.add(infoStrings.get(QUERY_ID));
-            res.add(infoStrings.get(START_TIME));
+            res.add(formatTimestamp(startTimeMs, sessionZone));
             res.add(infoStrings.get(TOTAL_TIME));
             res.add(infoStrings.get(QUERY_STATE));
             String statement = infoStrings.get(SQL_STATEMENT);
@@ -135,8 +192,10 @@ public class ProfileManager implements MemoryTrackable {
         for (String header : PROFILE_HEADERS) {
             element.infoStrings.put(header, summaryProfile.getInfoString(header));
         }
+        element.startTimeMs = parseTimeStringToEpochMs(summaryProfile.getInfoString(START_TIME));
+        element.endTimeMs = parseTimeStringToEpochMs(summaryProfile.getInfoString(END_TIME));
         try {
-            element.profileContent = CompressionUtils.gzipCompressString(profileString);
+            element.setProfileContent(CompressionUtils.gzipCompressString(profileString));
         } catch (IOException e) {
             LOG.warn("Compress profile string failed, length: {}, reason: {}",
                     profileString.length(), e.getMessage());
@@ -204,6 +263,7 @@ public class ProfileManager implements MemoryTrackable {
     }
 
     public List<List<String>> getAllQueries() {
+        ZoneId sessionZone = TimeUtils.getTimeZone().toZoneId();
         List<List<String>> result = Lists.newLinkedList();
         readLock.lock();
         try {
@@ -211,7 +271,13 @@ public class ProfileManager implements MemoryTrackable {
                 Map<String, String> infoStrings = element.infoStrings;
                 List<String> row = Lists.newArrayList();
                 for (String str : PROFILE_HEADERS) {
-                    row.add(infoStrings.get(str));
+                    if (START_TIME.equals(str)) {
+                        row.add(formatTimestamp(element.startTimeMs, sessionZone));
+                    } else if (END_TIME.equals(str)) {
+                        row.add(formatTimestamp(element.endTimeMs, sessionZone));
+                    } else {
+                        row.add(infoStrings.get(str));
+                    }
                 }
                 result.add(0, row);
             }
@@ -295,6 +361,63 @@ public class ProfileManager implements MemoryTrackable {
             return Lists.newArrayList(Pair.create(profileSamples, (long) profileMap.size()));
         } finally {
             readLock.unlock();
+        }
+    }
+
+    /**
+     * Extracts the session timezone from a {@link ConnectContext}.
+     * Falls back to the default session variable timezone if {@code context} is null.
+     */
+    private static ZoneId getSessionZoneId(ConnectContext context) {
+        String tz;
+        if (context != null && context.getSessionVariable() != null) {
+            tz = context.getSessionVariable().getTimeZone();
+        } else {
+            tz = TimeUtils.getSessionTimeZone();
+        }
+        return TimeUtils.getOrSystemTimeZone(tz).toZoneId();
+    }
+
+    /**
+     * Formats an epoch-millis timestamp in the given session timezone with the offset suffix.
+     * e.g. 1704067200000 with Asia/Shanghai -> "2024-01-01 08:00:00 (+08:00)"
+     */
+    static String formatTimestamp(long epochMs, ZoneId sessionZone) {
+        if (epochMs <= 0) {
+            return FeConstants.NULL_STRING;
+        }
+        Instant instant = Instant.ofEpochMilli(epochMs);
+        ZoneOffset offset = sessionZone.getRules().getOffset(instant);
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(sessionZone);
+        return formatter.format(instant) + " (" + offset + ")";
+    }
+
+    private static final DateTimeFormatter STORAGE_FORMATTER =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /**
+     * Parses a time string formatted by {@link TimeUtils#longToTimeStringWithTimeZone}
+     * (e.g. "2024-01-01 08:00:00 (+08:00)") back to epoch milliseconds.
+     * Also accepts the bare format "2024-01-01 08:00:00" for backward compatibility.
+     */
+    private static long parseTimeStringToEpochMs(String timeStr) {
+        if (timeStr == null || timeStr.isEmpty()) {
+            return -1;
+        }
+        try {
+            // Strip timezone suffix " (+08:00)" or " (Z)" if present
+            String timePart = timeStr;
+            ZoneId zone = TimeUtils.DEFAULT_STORAGE_ZONE;
+            int parenIdx = timeStr.indexOf(" (");
+            if (parenIdx > 0) {
+                timePart = timeStr.substring(0, parenIdx);
+                String offsetStr = timeStr.substring(parenIdx + 2, timeStr.length() - 1);
+                zone = ZoneId.of(offsetStr);
+            }
+            LocalDateTime ldt = LocalDateTime.parse(timePart, STORAGE_FORMATTER);
+            return ldt.atZone(zone).toInstant().toEpochMilli();
+        } catch (Exception e) {
+            return -1;
         }
     }
 }
