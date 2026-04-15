@@ -2034,32 +2034,52 @@ public class IcebergMetadata implements ConnectorMetadata {
             updateCommitInfo(rowDelta, context);
         }
 
+        boolean isMerge = extra instanceof IcebergSinkExtra
+                && "MERGE".equals(((IcebergSinkExtra) extra).getOperationType());
+
         try {
             commitWithCleanup(() -> {
                 rowDelta.commit();
                 transaction.commitTransaction();
             }, () -> invalidateCacheAfterCommit(dbName, tableName), dataFiles, dbName, tableName);
 
-            ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
+            if (isMerge) {
+                ConnectorMetricsMgr.increaseIcebergMergeTotal(ConnectorMetricsMgr.STATUS_SUCCESS,
+                        ConnectorMetricsMgr.REASON_NONE);
+                ConnectorMetricsMgr.increaseIcebergMergeBytes(deleteBytes,
+                        ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseIcebergMergeBytes(dataBytes,
+                        ConnectorMetricsMgr.FILE_TYPE_DATA);
+                ConnectorMetricsMgr.increaseIcebergMergeFiles(deleteFileCount,
+                        ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseIcebergMergeFiles(dataFileCount,
+                        ConnectorMetricsMgr.FILE_TYPE_DATA);
+            } else {
+                ConnectorMetricsMgr.increaseUpdateTotalSuccess(ConnectorMetricsMgr.CONNECTOR_ICEBERG);
 
-            Snapshot newSnapshot = nativeTbl.currentSnapshot();
-            if (newSnapshot != null && newSnapshot.summary() != null) {
-                long affectedRows = Long.parseLong(newSnapshot.summary()
-                        .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
-                ConnectorMetricsMgr.increaseUpdateRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, affectedRows);
+                Snapshot newSnapshot = nativeTbl.currentSnapshot();
+                if (newSnapshot != null && newSnapshot.summary() != null) {
+                    long affectedRows = Long.parseLong(newSnapshot.summary()
+                            .getOrDefault(SnapshotSummary.ADDED_POS_DELETES_PROP, "0"));
+                    ConnectorMetricsMgr.increaseUpdateRows(ConnectorMetricsMgr.CONNECTOR_ICEBERG, affectedRows);
+                }
+
+                ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        deleteBytes, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        dataBytes, ConnectorMetricsMgr.FILE_TYPE_DATA);
+                ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        deleteFileCount, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
+                ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        dataFileCount, ConnectorMetricsMgr.FILE_TYPE_DATA);
             }
-
-            ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    deleteBytes, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-            ConnectorMetricsMgr.increaseUpdateBytes(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    dataBytes, ConnectorMetricsMgr.FILE_TYPE_DATA);
-            ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    deleteFileCount, ConnectorMetricsMgr.FILE_TYPE_POSITION_DELETE);
-            ConnectorMetricsMgr.increaseUpdateFiles(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    dataFileCount, ConnectorMetricsMgr.FILE_TYPE_DATA);
         } finally {
-            ConnectorMetricsMgr.increaseUpdateDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
-                    System.currentTimeMillis() - startMs);
+            if (isMerge) {
+                ConnectorMetricsMgr.increaseIcebergMergeDurationMs(System.currentTimeMillis() - startMs);
+            } else {
+                ConnectorMetricsMgr.increaseUpdateDurationMs(ConnectorMetricsMgr.CONNECTOR_ICEBERG,
+                        System.currentTimeMillis() - startMs);
+            }
         }
 
         asyncRefreshOthersFeMetadataCache(dbName, tableName);
@@ -2270,10 +2290,19 @@ public class IcebergMetadata implements ConnectorMetadata {
         private final Set<DataFile> scannedDataFiles;
         private final Set<DeleteFile> appliedDeleteFiles;
         private Expression conflictDetectionFilter;
+        private String operationType = "UPDATE"; // default
 
         public IcebergSinkExtra() {
             this.scannedDataFiles = new HashSet<>();
             this.appliedDeleteFiles = new HashSet<>();
+        }
+
+        public void setOperationType(String operationType) {
+            this.operationType = operationType;
+        }
+
+        public String getOperationType() {
+            return operationType;
         }
 
         public void addScannedDataFiles(Set<DataFile> o) {

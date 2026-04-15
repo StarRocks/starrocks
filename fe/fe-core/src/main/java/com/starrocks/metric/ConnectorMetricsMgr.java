@@ -57,6 +57,13 @@ public class ConnectorMetricsMgr {
         final ConcurrentHashMap<String, LongCounterMetric> updateBytes = new ConcurrentHashMap<>();
         final ConcurrentHashMap<String, LongCounterMetric> updateFiles = new ConcurrentHashMap<>();
 
+        // Merge metrics
+        final ConcurrentHashMap<String, LongCounterMetric> mergeTotal = new ConcurrentHashMap<>();
+        final ConcurrentHashMap<String, LongCounterMetric> mergeDurationMs = new ConcurrentHashMap<>();
+        final ConcurrentHashMap<String, LongCounterMetric> mergeRows = new ConcurrentHashMap<>();
+        final ConcurrentHashMap<String, LongCounterMetric> mergeBytes = new ConcurrentHashMap<>();
+        final ConcurrentHashMap<String, LongCounterMetric> mergeFiles = new ConcurrentHashMap<>();
+
         // Compaction metrics
         final ConcurrentHashMap<String, LongCounterMetric> compactionTotal = new ConcurrentHashMap<>();
         final ConcurrentHashMap<String, LongCounterMetric> compactionDurationMs = new ConcurrentHashMap<>();
@@ -88,6 +95,10 @@ public class ConnectorMetricsMgr {
 
     public static final String COMPACTION_TYPE_MANUAL = "manual";
     public static final String COMPACTION_TYPE_AUTO = "auto";
+
+    public static final String MERGE_TYPE_MATCHED_UPDATE = "matched_update";
+    public static final String MERGE_TYPE_MATCHED_DELETE = "matched_delete";
+    public static final String MERGE_TYPE_NOT_MATCHED_INSERT = "not_matched_insert";
 
     private static ConnectorMetrics getOrCreate(String connectorType) {
         return METRICS_BY_CONNECTOR.computeIfAbsent(connectorType, k -> new ConnectorMetrics());
@@ -321,6 +332,72 @@ public class ConnectorMetricsMgr {
             LongCounterMetric metric = new LongCounterMetric(connectorType + "_update_files",
                     Metric.MetricUnit.NOUNIT,
                     "total files written by " + connectorType + " update operations by file type");
+            metric.addLabel(new MetricLabel("file_type", fileType));
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(files);
+    }
+
+    // ======================= Merge Metrics =======================
+
+    public static void increaseIcebergMergeTotal(String status, String reason) {
+        String normalizedStatus = normalizeStatus(status);
+        String normalizedReason = normalizeReason(reason);
+
+        ConnectorMetrics m = getOrCreate(CONNECTOR_ICEBERG);
+        String key = normalizedStatus + "|" + normalizedReason;
+        m.mergeTotal.computeIfAbsent(key, k -> {
+            LongCounterMetric metric = new LongCounterMetric("iceberg_merge_total",
+                    Metric.MetricUnit.REQUESTS,
+                    "total iceberg merge tasks by status and reason");
+            metric.addLabel(new MetricLabel("status", normalizedStatus));
+            metric.addLabel(new MetricLabel("reason", normalizedReason));
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(1L);
+    }
+
+    public static void increaseIcebergMergeDurationMs(long durationMs) {
+        ConnectorMetrics m = getOrCreate(CONNECTOR_ICEBERG);
+        m.mergeDurationMs.computeIfAbsent("default", k -> {
+            LongCounterMetric metric = new LongCounterMetric("iceberg_merge_duration_ms_total",
+                    Metric.MetricUnit.MILLISECONDS,
+                    "total duration in milliseconds of iceberg merge operations");
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(durationMs);
+    }
+
+    public static void increaseIcebergMergeRows(long rows, String mergeType) {
+        ConnectorMetrics m = getOrCreate(CONNECTOR_ICEBERG);
+        m.mergeRows.computeIfAbsent(mergeType, k -> {
+            LongCounterMetric metric = new LongCounterMetric("iceberg_merge_rows",
+                    Metric.MetricUnit.ROWS,
+                    "total rows affected by iceberg merge operations by merge type");
+            metric.addLabel(new MetricLabel("merge_type", mergeType));
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(rows);
+    }
+
+    public static void increaseIcebergMergeBytes(long bytes, String fileType) {
+        ConnectorMetrics m = getOrCreate(CONNECTOR_ICEBERG);
+        m.mergeBytes.computeIfAbsent(fileType, k -> {
+            LongCounterMetric metric = new LongCounterMetric("iceberg_merge_bytes",
+                    Metric.MetricUnit.BYTES,
+                    "total bytes written by iceberg merge operations by file type");
+            metric.addLabel(new MetricLabel("file_type", fileType));
+            MetricRepo.addMetric(metric);
+            return metric;
+        }).increase(bytes);
+    }
+
+    public static void increaseIcebergMergeFiles(long files, String fileType) {
+        ConnectorMetrics m = getOrCreate(CONNECTOR_ICEBERG);
+        m.mergeFiles.computeIfAbsent(fileType, k -> {
+            LongCounterMetric metric = new LongCounterMetric("iceberg_merge_files",
+                    Metric.MetricUnit.NOUNIT,
+                    "total files written by iceberg merge operations by file type");
             metric.addLabel(new MetricLabel("file_type", fileType));
             MetricRepo.addMetric(metric);
             return metric;
