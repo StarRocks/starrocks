@@ -197,13 +197,17 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_take_skips_yield_blocked_workgro
     std::atomic<bool> got_task{false};
     std::atomic<bool> got_cancelled{false};
     scoped_refptr<Thread> worker;
-    ASSERT_TRUE(Thread::create("test", "yield_blocked_scan_take", [&]() {
-        Thread::current_thread()->set_first_bound_cpuid(0);
-        started.count_down();
-        auto result = queue.take(0);
-        got_task.store(result.ok(), std::memory_order_release);
-        got_cancelled.store(result.status().is_cancelled(), std::memory_order_release);
-    }, &worker).ok());
+    ASSERT_TRUE(Thread::create(
+                        "test", "yield_blocked_scan_take",
+                        [&]() {
+                            Thread::current_thread()->set_first_bound_cpuid(0);
+                            started.count_down();
+                            auto result = queue.take(0);
+                            got_task.store(result.ok(), std::memory_order_release);
+                            got_cancelled.store(result.status().is_cancelled(), std::memory_order_release);
+                        },
+                        &worker)
+                        .ok());
 
     started.wait();
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
