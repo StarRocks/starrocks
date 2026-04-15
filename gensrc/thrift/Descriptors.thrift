@@ -699,6 +699,15 @@ struct TJDBCTable {
     8: optional string jdbc_passwd
 }
 
+struct TADBCTable {
+    // ordinals 1-5 reserved: legacy Flight-SQL-shaped connection fields, removed with the
+    // runtime driver-loader rework. Never recycle these ordinals.
+    6: optional string catalog_name
+    7: optional string driver_url
+    8: optional string entrypoint
+    9: optional map<string, string> adbc_options
+}
+
 // "Union" of all table types.
 struct TTableDescriptor {
   1: required Types.TTableId id
@@ -738,6 +747,9 @@ struct TTableDescriptor {
 
   // Paimon Table schema
   36: optional TPaimonTable paimonTable
+
+  // ADBC Table
+  37: optional TADBCTable adbcTable
 }
 
 struct TDescriptorTable {

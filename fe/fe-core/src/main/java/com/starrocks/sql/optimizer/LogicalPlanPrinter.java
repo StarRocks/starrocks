@@ -466,6 +466,11 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitPhysicalADBCScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "ADBC SCAN");
+        }
+
+        @Override
         public OperatorStr visitPhysicalHiveScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "HIVE SCAN");
         }

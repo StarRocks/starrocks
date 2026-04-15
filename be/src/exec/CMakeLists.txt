@@ -392,6 +392,8 @@ set(EXEC_NON_PIPELINE_FILES
     schema_scanner/schema_applicable_roles_scanner.cpp
     schema_scanner/schema_keywords_scanner.cpp
     schema_scanner/schema_tablet_reshard_jobs_scanner.cpp
+    adbc_scanner.cpp
+    adbc_parallel_reader.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge.cpp

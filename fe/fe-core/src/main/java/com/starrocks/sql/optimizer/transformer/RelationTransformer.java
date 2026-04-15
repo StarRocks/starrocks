@@ -99,6 +99,7 @@ import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalADBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
@@ -777,6 +778,11 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         } else if (Table.TableType.TABLE_FUNCTION.equals(node.getTable().getType())) {
             scanOperator = new LogicalTableFunctionTableScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+        } else if (Table.TableType.ADBC.equals(node.getTable().getType())) {
+            scanOperator =
+                    new LogicalADBCScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                            columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
+                            null, null);
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);

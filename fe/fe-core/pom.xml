@@ -881,6 +881,18 @@ under the License.
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-jdbc</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-driver-jni</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow.adbc</groupId>
+            <artifactId>adbc-driver-manager</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
@@ -1113,6 +1125,8 @@ under the License.
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
+                        --add-opens=java.base/java.nio=ALL-UNNAMED
+                        -Darrow.memory.debug.allocator=true
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>

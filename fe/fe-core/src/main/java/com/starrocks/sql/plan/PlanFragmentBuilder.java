@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.RowPositionDescriptor;
+import com.starrocks.catalog.ADBCTable;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
@@ -53,6 +54,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.BucketProperty;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.planner.ADBCScanNode;
 import com.starrocks.planner.AggregateInfo;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
@@ -158,6 +160,7 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalADBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalBenchmarkScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -2033,6 +2036,47 @@ public class PlanFragmentBuilder {
             scanNode.computeStatistics(optExpression.getStatistics());
             scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
             registerScanNode(node, scanNode, context);
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalADBCScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalADBCScanOperator node = (PhysicalADBCScanOperator) optExpression.getOp();
+
+            context.getDescTbl().addReferencedTable(node.getTable());
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(node.getTable());
+
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
+            }
+            tupleDescriptor.computeMemLayout();
+
+            ADBCScanNode scanNode = new ADBCScanNode(context.getNextNodeId(), tupleDescriptor,
+                    (ADBCTable) node.getTable());
+            currentExecGroup.add(scanNode, true);
+
+            // set predicate
+            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            for (ScalarOperator predicate : predicates) {
+                scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+            }
+
+            scanNode.setLimit(node.getLimit());
+            scanNode.computeColumnsAndFilters();
+            scanNode.computeStatistics(optExpression.getStatistics());
+            scanNode.setScanOptimizeOption(node.getScanOptimizeOption());
+            context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
             context.getFragments().add(fragment);

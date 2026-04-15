@@ -370,6 +370,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_META_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::ADBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::BENCHMARK_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);

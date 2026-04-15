@@ -155,6 +155,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.HUDI,
                     Table.TableType.ICEBERG,
                     Table.TableType.JDBC,
+                    Table.TableType.ADBC,
                     Table.TableType.MYSQL,
                     Table.TableType.PAIMON,
                     Table.TableType.ODPS,

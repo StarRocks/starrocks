@@ -14,6 +14,7 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.connector.adbc.ADBCConnector;
 import com.starrocks.connector.benchmark.BenchmarkConfig;
 import com.starrocks.connector.benchmark.BenchmarkConnector;
 import com.starrocks.connector.config.ConnectorConfig;
@@ -39,6 +40,7 @@ public enum ConnectorType {
     HIVE("hive", HiveConnector.class, null),
     ICEBERG("iceberg", IcebergConnector.class, null),
     JDBC("jdbc", JDBCConnector.class, null),
+    ADBC("adbc", ADBCConnector.class, null),
     HUDI("hudi", HudiConnector.class, null),
     DELTALAKE("deltalake", DeltaLakeConnector.class, null),
     PAIMON("paimon", PaimonConnector.class, null),
@@ -52,6 +54,7 @@ public enum ConnectorType {
             HIVE,
             ICEBERG,
             JDBC,
+            ADBC,
             HUDI,
             DELTALAKE,
             PAIMON,
