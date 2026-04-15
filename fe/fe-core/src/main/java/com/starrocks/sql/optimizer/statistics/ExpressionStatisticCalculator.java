@@ -803,6 +803,8 @@ public class ExpressionStatisticCalculator {
                 return;
             }
             for (final var entry : branchMcv.entrySet()) {
+                // Scale the MCVs to be relative to the output row count. `branchRows` is the absolute count of rows in this
+                // branch which we have to scale to match the output count.
                 long scaled = Math.round((double) entry.getValue() * branchRows / rowCount);
                 if (scaled > 0) {
                     targetMcv.merge(entry.getKey(), scaled, Long::sum);
