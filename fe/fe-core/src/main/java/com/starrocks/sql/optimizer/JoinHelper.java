@@ -30,7 +30,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalNestLoopJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.type.Type;
 
 import java.util.ArrayList;
@@ -73,11 +72,6 @@ public class JoinHelper {
             type = phjo.getJoinType();
             onPredicate = phjo.getOnPredicate();
             hint = phjo.getJoinHint();
-        } else if (join instanceof PhysicalStreamJoinOperator) {
-            PhysicalStreamJoinOperator operator = (PhysicalStreamJoinOperator) join;
-            type = operator.getJoinType();
-            onPredicate = operator.getOnPredicate();
-            hint = operator.getJoinHint();
         } else {
             type = null;
             onPredicate = null;
