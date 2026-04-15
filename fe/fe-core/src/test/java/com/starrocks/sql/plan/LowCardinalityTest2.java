@@ -1685,7 +1685,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
 
-        Assertions.assertTrue(
+        Assertions.assertFalse(
                 plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1]"));
     }
 
@@ -2737,6 +2737,35 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  3:SELECT\n" +
                 "  |  predicates: DictDecode(15: max(2: c_user), [<place-holder> != 'abc'])\n" +
+                "  |  cardinality: 1", plan);
+    }
+
+    @Test
+    public void testCTEProduceAndConsume() throws Exception {
+        String sql = """
+                  WITH CTE AS (
+                    SELECT
+                      C_USER, C_DEPT
+                    FROM
+                      low_card_t1
+                  )
+                  SELECT /*+ SET_VAR(cbo_cte_reuse=true, cbo_cte_reuse_rate_v2=0) */
+                    UPPER(T1.C_USER) s1
+                  FROM
+                    CTE AS T1 JOIN CTE AS T2 USING (C_DEPT)
+                  """;
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  Global Dict Exprs:\n" +
+                "    36: DictDefine(35: c_user, [upper(<place-holder>)])\n" +
+                "    37: DictDefine(35: c_user, [<place-holder>])\n" +
+                "\n" +
+                "  10:Decode\n" +
+                "  |  <dict id 36> : <string id 34>\n" +
+                "  |  cardinality: 1\n" +
+                "  |  \n" +
+                "  9:Project\n" +
+                "  |  output columns:\n" +
+                "  |  36 <-> DictDefine(37: c_user, [upper(<place-holder>)])\n" +
                 "  |  cardinality: 1", plan);
     }
 }

@@ -46,6 +46,8 @@ import com.starrocks.sql.optimizer.base.EquivalentDescriptor;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
@@ -186,6 +188,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private ColumnRefSet disableRewriteStringColumns = new ColumnRefSet();
 
     private final UnionDictionaryManager unionDictionaryManager;
+
+    private final Map<Integer, DecodeInfo> cteDecodeInfo = Maps.newHashMap();
 
     // operators which are the children of Match operator
     private final ColumnRefSet matchChildren = new ColumnRefSet();
@@ -485,7 +489,12 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             context = new DecodeInfo();
             for (int i = 0; i < optExpression.arity(); ++i) {
                 OptExpression child = optExpression.inputAt(i);
-                context.addChildInfo(collectImpl(child, optExpression));
+                DecodeInfo info = collectImpl(child, optExpression);
+                if (child.getOp() instanceof PhysicalCTEProduceOperator produce) {
+                    cteDecodeInfo.put(produce.getCteId(), info);
+                } else {
+                    context.addChildInfo(info);
+                }
             }
         }
 
@@ -522,6 +531,35 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     @Override
     public DecodeInfo visit(OptExpression optExpression, DecodeInfo context) {
         return context.createDecodeInfo();
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalCTEProduce(OptExpression optExpression, DecodeInfo context) {
+        return context.createOutputInfo();
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalCTEConsume(OptExpression optExpression, DecodeInfo context) {
+        PhysicalCTEConsumeOperator consume = optExpression.getOp().cast();
+        context = cteDecodeInfo.get(consume.getCteId());
+        Preconditions.checkNotNull(context);
+        if (context.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+        DecodeInfo info = DecodeInfo.EMPTY;
+        info.inputStringColumns.union(context.outputStringColumns);
+        // Map producer columns to consumer columns (like a projection)
+        for (var entry : consume.getCteOutputColumnRefMap().entrySet()) {
+            ColumnRefOperator consumerCol = entry.getKey();
+            ColumnRefOperator producerCol = entry.getValue();
+
+            if (info.inputStringColumns.contains(producerCol.getId())) {
+                setDefineExpr(consumerCol, producerCol, 1);
+                info.outputStringColumns.union(consumerCol);
+                info.usedStringColumns.union(producerCol);
+            }
+        }
+        return info;
     }
 
     @Override
