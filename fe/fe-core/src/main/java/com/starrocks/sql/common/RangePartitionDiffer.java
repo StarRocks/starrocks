@@ -22,6 +22,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.RangeMap;
 import com.google.common.collect.TreeRangeMap;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
@@ -264,7 +265,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
         for (Map<String, PCell> tRangMap : basePartitionMap.values()) {
             for (Map.Entry<String, PCell> add : tRangMap.entrySet()) {
                 // TODO: we may implement a new `merge` method in `TreeRangeMap` to merge intersected partitions later.
-                Range<PartitionKey> range = ((PRangeCell) add.getValue()).getRange();
+                Range<PartitionKey> range = toNormalizedRange((PRangeCell) add.getValue(), mvPartitionExpr);
                 Map<Range<PartitionKey>, String> intersectedRange = addRanges.subRangeMap(range).asMapOfRanges();
                 if (intersectedRange.isEmpty()) {
                     addRanges.put(range, add.getKey());
@@ -293,6 +294,14 @@ public final class RangePartitionDiffer extends PartitionDiffer {
             }
         }
         return result;
+    }
+
+    private static Range<PartitionKey> toNormalizedRange(PRangeCell pRangeCell, Expr expr) {
+        if (expr == null || expr instanceof SlotRef) {
+            return pRangeCell.getRange();
+        }
+        Range<PartitionKey> convertedRange = SyncPartitionUtils.convertToDatePartitionRange(pRangeCell.getRange());
+        return SyncPartitionUtils.transferRange(convertedRange, expr);
     }
 
     /**

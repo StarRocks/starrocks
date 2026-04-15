@@ -43,4 +43,26 @@ public class PartitionDiffResult {
     public Map<Table, Map<String, Set<String>>> getRefBaseTableMVPartitionMap() {
         return refBaseTableMVPartitionMap;
     }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        String refBaseTableMVPartitionMapStr = refBaseTableMVPartitionMap.entrySet()
+                .stream()
+                .map(e -> e.getKey().getName() + "=" + e.getValue())
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("");
+        String refBaseTablePartitionMapStr = refBaseTablePartitionMap.entrySet()
+                .stream()
+                .map(e -> e.getKey().getName() + "=" + e.getValue())
+                .reduce((a, b) -> a + ", " + b)
+                .orElse("");
+        sb.append("{")
+                .append("refBaseTableMVPartitionMap:[").append(refBaseTableMVPartitionMapStr).append("]")
+                .append(", refBaseTablePartitionMap:[").append(refBaseTablePartitionMapStr).append("]")
+                .append(", mvPartitionToCells:[").append(mvPartitionToCells).append("]")
+                .append(", diff:[").append(diff).append("]")
+                .append("}");
+        return sb.toString();
+    }
 }
