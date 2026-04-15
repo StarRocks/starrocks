@@ -311,16 +311,6 @@ public class Utils {
                                                           Map<Long, Double> compactionScores,
                                                           Map<Long, Long> tabletRowNum)
             throws NoAliveBackendException, RpcException {
-        sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
-                tabletRowNum);
-    }
-
-    public static void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
-                                                          long baseVersion, ComputeResource computeResource,
-                                                          Map<Long, Double> compactionScores,
-                                                          Map<Long, TabletRange> tabletRanges,
-                                                          Map<Long, Long> tabletRowNum)
-            throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (computeResource == null || !warehouseManager.isResourceAvailable(computeResource)) {
             LOG.warn("publish version operation should be successful even if the warehouse is not exist, " +
