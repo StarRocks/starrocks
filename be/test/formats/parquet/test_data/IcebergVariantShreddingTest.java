@@ -317,7 +317,7 @@ public class IcebergVariantShreddingTest {
         System.out.println("Created table with shredding: " + identifier);
 
         List<Record> records = buildRecords(true);
-        long recordCount = writeDataFile(table, spec, records, true);
+        long recordCount = writeDataFile(table, spec, records, true, "data_shredding.parquet");
         System.out.println("Wrote " + recordCount + " records with variant shredding.");
 
         Table refreshed = catalog.loadTable(identifier);
@@ -344,7 +344,7 @@ public class IcebergVariantShreddingTest {
         System.out.println("Created table with sparse shredding: " + identifier);
 
         List<Record> records = buildSparseRecords(true);
-        long recordCount = writeDataFile(table, spec, records, true);
+        long recordCount = writeDataFile(table, spec, records, true, "data_shredding_sparse.parquet");
         System.out.println("Wrote " + recordCount + " records with sparse variant shredding.");
 
         Table refreshed = catalog.loadTable(identifier);
@@ -370,7 +370,7 @@ public class IcebergVariantShreddingTest {
         System.out.println("Created table without shredding: " + identifier);
 
         List<Record> records = buildRecords(true);
-        long recordCount = writeDataFile(table, spec, records, false);
+        long recordCount = writeDataFile(table, spec, records, false, "data_noshredding.parquet");
         System.out.println("Wrote " + recordCount + " records without variant shredding.");
 
         Table refreshed = catalog.loadTable(identifier);
@@ -579,13 +579,13 @@ public class IcebergVariantShreddingTest {
     private static long writeDataFile(Table table,
                                       PartitionSpec spec,
                                       List<Record> records,
-                                      boolean enableShredding) throws IOException {
+                                      boolean enableShredding,
+                                      String outputFileName) throws IOException {
         File dataDir = new File(table.location() + "/data");
         if (!dataDir.exists()) {
             dataDir.mkdirs();
         }
-        String outPath =
-                dataDir + "/data-" + (enableShredding ? "shred" : "noshred") + ".parquet";
+        String outPath = dataDir + "/" + outputFileName;
 
         OutputFile out = org.apache.iceberg.Files.localOutput(new File(outPath));
         long recordCount = 0L;
