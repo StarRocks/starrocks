@@ -34,7 +34,6 @@
 
 #include "exec/exec_factory.h"
 
-#include <fmt/format.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include <sstream>
@@ -69,7 +68,6 @@
 #include "exec/repeat_node.h"
 #include "exec/schema_scan_node.h"
 #include "exec/select_node.h"
-#include "exec/stream/stream_aggregate_node.h"
 #include "exec/table_function_node.h"
 #include "exec/topn_node.h"
 #include "exec/union_node.h"
@@ -346,24 +344,10 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         return Status::OK();
     }
     case TPlanNodeType::STREAM_SCAN_NODE: {
-        TPlanNode new_node = tnode;
-        std::string connector_name;
-        StreamSourceType::type source_type = new_node.stream_scan_node.source_type;
-        switch (source_type) {
-        case StreamSourceType::BINLOG: {
-            connector_name = connector::Connector::BINLOG;
-            break;
-        }
-        default:
-            return Status::InternalError(fmt::format("Stream scan node does not support source type {}", source_type));
-        }
-        new_node.connector_scan_node = make_connector_scan_node(tnode, connector_name);
-        CREATE_NODE(ConnectorScanNode, pool, new_node, descs);
-        return Status::OK();
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
     }
     case TPlanNodeType::STREAM_AGG_NODE: {
-        CREATE_NODE(StreamAggregateNode, pool, tnode, descs);
-        return Status::OK();
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
     }
     case TPlanNodeType::CAPTURE_VERSION_NODE: {
         CREATE_NODE(CaptureVersionNode, pool, tnode, descs);

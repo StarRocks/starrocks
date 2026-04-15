@@ -186,7 +186,6 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
 )
 
 set(PIPELINE_EXTENSIONS_SRCS
-    stream/scan/stream_scan_operator.cpp
     pipeline/nljoin/spillable_nljoin_build_operator.cpp
     pipeline/nljoin/spillable_nljoin_probe_operator.cpp
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
@@ -216,12 +215,6 @@ set(PIPELINE_EXTENSIONS_SRCS
     spill/serde.cpp
     spill/input_stream.cpp
     spill/data_stream.cpp
-    stream/state/mem_state_table.cpp
-    stream/aggregate/agg_state_data.cpp
-    stream/aggregate/agg_group_state.cpp
-    stream/aggregate/stream_aggregator.cpp
-    stream/aggregate/stream_aggregate_operator.cpp
-    stream/stream_aggregate_node.cpp
 )
 
 set(EXEC_NON_PIPELINE_FILES

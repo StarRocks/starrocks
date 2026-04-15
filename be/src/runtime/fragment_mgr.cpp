@@ -432,6 +432,10 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
     RETURN_IF_ERROR(
             GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
+    if (params.__isset.is_stream_pipeline && params.is_stream_pipeline) {
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
+    }
+
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
     std::shared_ptr<FragmentExecState> exec_state;
     {
