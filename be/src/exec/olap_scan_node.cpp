@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <chrono>
-#include <cmath>
 #include <functional>
 #include <memory>
 #include <thread>
@@ -26,7 +25,6 @@
 #include "column/column.h"
 #include "column/column_access_path.h"
 #include "column/column_helper.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/object_pool.h"
@@ -39,6 +37,7 @@
 #include "exec/pipeline/scan/olap_scan_prepare_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "glog/logging.h"
@@ -128,12 +127,8 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         const auto& partition_conjuncts = _olap_scan_node.partition_conjuncts;
         _partition_exprs.resize(partition_conjuncts.size());
         for (int i = 0; i < partition_conjuncts.size(); ++i) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(_pool, partition_conjuncts[i], &_partition_exprs[i], state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, partition_conjuncts[i], &_partition_exprs[i], state));
         }
-
-        // need open in init phase, because it's will used in build morsel queue and start scan phase
-        RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
-        RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
     }
 
     if (tnode.olap_scan_node.__isset.enable_topn_filter_back_pressure &&
@@ -272,7 +267,6 @@ void OlapScanNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
     }
-    Expr::close(this->_partition_exprs, state);
     (void)exec_debug_action(TExecNodePhase::CLOSE);
     _update_status(Status::Cancelled("closed"));
     _result_chunks.shutdown();
@@ -440,11 +434,11 @@ StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc,
     if (column_range.__isset.list_values && !column_range.list_values.empty()) {
         std::vector<ExprContext*> ctxs;
         for (const auto& obj : column_range.list_values) {
-            RETURN_IF_ERROR(Expr::create_expr_tree(obj_pool, obj, &ctxs.emplace_back(), state));
+            RETURN_IF_ERROR(ExprFactory::create_expr_tree(obj_pool, obj, &ctxs.emplace_back(), state));
             DCHECK(ctxs.back()->root()->is_constant());
         }
-        RETURN_IF_ERROR(Expr::prepare(ctxs, state));
-        RETURN_IF_ERROR(Expr::open(ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::prepare(ctxs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(ctxs, state));
 
         auto col = ColumnHelper::create_column(slot_desc->type(), true, false, column_range.list_values.size(), false);
         for (auto* ctx : ctxs) {
@@ -452,7 +446,7 @@ StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc,
             auto cv = ColumnHelper::unpack_and_duplicate_const_column(1, v);
             col->append(*cv, 0, 1);
         }
-        Expr::close(ctxs, state);
+        ExprExecutor::close(ctxs, state);
         return col;
     } else if (column_range.__isset.begin_key && column_range.__isset.end_key) {
         if (slot_desc->type().is_date_type()) {
@@ -471,7 +465,7 @@ StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc,
 #define M(TYPE)                                                                    \
     if (slot_desc->type().type == TYPE) {                                          \
         for (int64_t v = column_range.begin_key; v <= column_range.end_key; v++) { \
-            col->append_datum(Datum((CppTypeTraits<TYPE>::CppType)v));             \
+            col->append_datum(Datum((RunTimeTypeTraits<TYPE>::CppType)v));         \
         }                                                                          \
     }
             APPLY_FOR_ALL_INT_TYPE(M)
@@ -494,7 +488,7 @@ Status OlapScanNode::_prune_scan_ranges(const std::vector<TScanRangeParams>& sca
         return Status::OK();
     }
 
-    std::unordered_map<std::string, SlotDescriptor*> column_name_to_id;
+    phmap::flat_hash_map<std::string, SlotDescriptor*> column_name_to_id;
     auto* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
 
     for (const auto& slot : tuple_desc->slots()) {
@@ -566,9 +560,14 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     // daynamic partition pruning
     std::vector<TScanRangeParams> pruned_scan_ranges;
 
+    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, runtime_state()));
+    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, runtime_state()));
+
     if (!_prune_scan_ranges(scan_ranges, &pruned_scan_ranges).ok()) {
         pruned_scan_ranges = scan_ranges;
     }
+
+    ExprExecutor::close(_partition_exprs, runtime_state());
 
     pipeline::Morsels morsels;
     [[maybe_unused]] bool has_more_morsel = false;
