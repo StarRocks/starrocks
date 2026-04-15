@@ -386,7 +386,14 @@ public class MergeIntoAnalyzer {
                                                  Column col, MergeIntoStmt stmt) {
         if (insertClause.isStar()) {
             // INSERT * — reference source column with same name
+            // Prefer the explicit sourceAlias from the grammar (the (AS? sourceAlias) after USING relation).
+            // If that is null (the common case where the alias is embedded in the relation itself, e.g.
+            // "USING (SELECT ...) AS s"), fall back to the alias stored on the source relation.
             String sourceQualifier = stmt.getSourceAlias();
+            if (sourceQualifier == null && stmt.getSourceRelation() != null
+                    && stmt.getSourceRelation().getAlias() != null) {
+                sourceQualifier = stmt.getSourceRelation().getAlias().getTbl();
+            }
             if (sourceQualifier != null) {
                 return new SlotRef(new TableName(null, null, sourceQualifier), col.getName());
             } else {

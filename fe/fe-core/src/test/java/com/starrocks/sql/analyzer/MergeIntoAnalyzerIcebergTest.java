@@ -65,7 +65,7 @@ public class MergeIntoAnalyzerIcebergTest {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0 AS t " +
                 "USING (SELECT 1 AS id, 'x' AS data, '2024-01-01' AS date) AS s " +
                 "ON t.id = s.id " +
-                "WHEN MATCHED THEN UPDATE SET t.data = s.data";
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
         MergeIntoStmt stmt = parseMerge(sql);
 
         SemanticException exception = assertThrows(SemanticException.class,
@@ -80,7 +80,7 @@ public class MergeIntoAnalyzerIcebergTest {
         String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
                 "USING (SELECT 1 AS id, '2024-02-01' AS date) AS s " +
                 "ON t.id = s.id " +
-                "WHEN MATCHED THEN UPDATE SET t.date = s.date";
+                "WHEN MATCHED THEN UPDATE SET date = s.date";
         MergeIntoStmt stmt = parseMerge(sql);
 
         SemanticException exception = assertThrows(SemanticException.class,
@@ -95,7 +95,7 @@ public class MergeIntoAnalyzerIcebergTest {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
                 "USING (SELECT 1 AS id, 'path' AS _file) AS s " +
                 "ON t.id = s.id " +
-                "WHEN MATCHED THEN UPDATE SET t._file = s._file";
+                "WHEN MATCHED THEN UPDATE SET _file = s._file";
         MergeIntoStmt stmt = parseMerge(sql);
 
         SemanticException exception = assertThrows(SemanticException.class,
@@ -126,7 +126,7 @@ public class MergeIntoAnalyzerIcebergTest {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
                 "ON t.id = s.id " +
-                "WHEN MATCHED THEN UPDATE SET t.data = s.data";
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
         MergeIntoStmt stmt = parseMerge(sql);
 
         assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
@@ -174,7 +174,7 @@ public class MergeIntoAnalyzerIcebergTest {
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
                 "ON t.id = s.id " +
                 "WHEN MATCHED AND s.data = 'delete' THEN DELETE " +
-                "WHEN MATCHED THEN UPDATE SET t.data = s.data " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data " +
                 "WHEN NOT MATCHED THEN INSERT (id, data, date) VALUES (s.id, s.data, s.date)";
         MergeIntoStmt stmt = parseMerge(sql);
 
@@ -197,7 +197,7 @@ public class MergeIntoAnalyzerIcebergTest {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
                 "ON t.id = s.id " +
-                "WHEN MATCHED AND t.data = 'old' THEN UPDATE SET t.data = 'updated' " +
+                "WHEN MATCHED AND t.data = 'old' THEN UPDATE SET data = 'updated' " +
                 "WHEN MATCHED THEN DELETE";
         MergeIntoStmt stmt = parseMerge(sql);
 
@@ -205,7 +205,7 @@ public class MergeIntoAnalyzerIcebergTest {
 
         assertNotNull(stmt.getTable());
         assertNotNull(stmt.getQueryStatement());
-        assertEquals(3, stmt.getWhenClauses().size());
+        assertEquals(2, stmt.getWhenClauses().size());
     }
 
     @Test
@@ -247,7 +247,7 @@ public class MergeIntoAnalyzerIcebergTest {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
                 "USING (SELECT id, data, date FROM iceberg0.unpartitioned_db.t0_v2 WHERE id > 100) AS src " +
                 "ON t.id = src.id " +
-                "WHEN MATCHED THEN UPDATE SET t.data = src.data";
+                "WHEN MATCHED THEN UPDATE SET data = src.data";
         MergeIntoStmt stmt = parseMerge(sql);
 
         assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
@@ -267,7 +267,7 @@ public class MergeIntoAnalyzerIcebergTest {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
                 "ON t.id = s.id " +
-                "WHEN MATCHED THEN UPDATE SET t.data = s.data";
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
         MergeIntoStmt stmt = parseMerge(sql);
 
         MergeIntoAnalyzer.analyze(stmt, connectContext);
@@ -290,7 +290,7 @@ public class MergeIntoAnalyzerIcebergTest {
         String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
                 "ON t.id = s.id " +
-                "WHEN MATCHED THEN UPDATE SET t.data = s.data";
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
         MergeIntoStmt stmt = parseMerge(sql);
 
         assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
