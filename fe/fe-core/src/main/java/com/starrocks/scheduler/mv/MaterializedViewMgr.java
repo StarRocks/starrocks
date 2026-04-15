@@ -32,7 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manage FE-side MV compatibility metadata such as legacy maintenance job replay/state
- * and MV timeliness tracking.
+ * and MV timeliness tracking. Legacy jobs are replay-only metadata and do not restore
+ * a live MaterializedView handle.
  */
 public class MaterializedViewMgr {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMgr.class);
@@ -46,16 +47,7 @@ public class MaterializedViewMgr {
      * Replay from journal
      */
     public void replay(MVMaintenanceJob job) throws IOException {
-        try {
-            job.restore();
-            // NOTE: job's view is not serialized, cannot use it directly!
-            MvId mvId = new MvId(job.getDbId(), job.getViewId());
-            jobMap.put(mvId, job);
-            LOG.info("Replay MV maintenance jobs: {}", job);
-        } catch (Exception e) {
-            LOG.warn("Replay MV maintenance job failed: {}", job);
-            LOG.warn("Failed to replay MV maintenance job", e);
-        }
+        restoreAndTrackJob(job, "journal");
     }
 
     /**
@@ -97,11 +89,20 @@ public class MaterializedViewMgr {
 
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         reader.readCollection(MVMaintenanceJob.class, mvMaintenanceJob -> {
-            // NOTE: job's view is not serialized, cannot use it directly!
-            MvId mvId = new MvId(mvMaintenanceJob.getDbId(), mvMaintenanceJob.getViewId());
-            mvMaintenanceJob.restore();
-            jobMap.put(mvId, mvMaintenanceJob);
+            restoreAndTrackJob(mvMaintenanceJob, "image");
         });
+    }
+
+    private void restoreAndTrackJob(MVMaintenanceJob job, String source) {
+        try {
+            job.restore();
+            MvId mvId = new MvId(job.getDbId(), job.getViewId());
+            jobMap.put(mvId, job);
+            LOG.info("Replay legacy MV maintenance job from {}: {}", source, job);
+        } catch (Exception e) {
+            LOG.warn("Skip legacy MV maintenance job from {} because target MV could not be restored: {}", source, job);
+            LOG.warn("Failed to restore legacy MV maintenance job from {}", source, e);
+        }
     }
 
     public MVTimelinessMgr getMvTimelinessMgr() {
