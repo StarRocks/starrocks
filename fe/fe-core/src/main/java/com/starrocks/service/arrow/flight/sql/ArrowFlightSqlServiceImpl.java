@@ -946,7 +946,7 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
     private static Schema buildPlaceholderSchema() {
         return new Schema(Lists.newArrayList(
-                ArrowUtils.convertToArrowType(com.starrocks.type.IntegerType.INT, "result", true)));
+                ArrowUtils.convertToArrowType(com.starrocks.catalog.Type.INT, "result", true)));
     }
 
     public static Schema buildSchema(ExecPlan execPlan) {
