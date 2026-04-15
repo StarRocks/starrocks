@@ -138,6 +138,7 @@ public class MergeIntoPlanner {
         dataSink.init();
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
+        icebergSinkExtra.setOperationType("MERGE");
         org.apache.iceberg.expressions.Expression filterExpr = IcebergPlannerUtils.buildIcebergFilterExpr(execPlan);
         if (filterExpr != null) {
             icebergSinkExtra.setConflictDetectionFilter(filterExpr);

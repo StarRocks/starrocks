@@ -28,7 +28,9 @@ Status EnforceUniqueOperator::prepare(RuntimeState* state) {
 
 void EnforceUniqueOperator::close(RuntimeState* state) {
     _output_chunk.reset();
-    _seen.clear();
+    // Force deallocation (clear() retains backing storage)
+    decltype(_seen){}.swap(_seen);
+    decltype(_path_ids){}.swap(_path_ids);
     Operator::close(state);
 }
 
@@ -59,8 +61,10 @@ Status EnforceUniqueOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
         return Status::OK();
     }
 
-    // We expect exactly 2 key columns: file_path (string) and row_position (int64).
-    DCHECK_EQ(_unique_key_col_indices.size(), 2);
+    if (_unique_key_col_indices.size() != 2) {
+        return Status::RuntimeError("EnforceUniqueOperator expects exactly 2 key columns, got " +
+                                    std::to_string(_unique_key_col_indices.size()));
+    }
 
     auto file_path_col = chunk->get_column_by_index(_unique_key_col_indices[0]);
     auto row_pos_col = chunk->get_column_by_index(_unique_key_col_indices[1]);
@@ -91,10 +95,18 @@ Status EnforceUniqueOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 
         Slice path_slice = file_path_data->get_slice(i);
         int64_t pos = row_pos_data[i];
-        auto key = std::make_pair(path_slice.to_string(), pos);
 
-        auto [_, inserted] = _seen.insert(std::move(key));
-        if (!inserted) {
+        // Intern file path: assign a compact ID to each unique path string.
+        // Most chunks share the same few file paths, so this avoids millions
+        // of identical string copies in the seen-set.
+        auto [it, inserted_path] = _path_ids.try_emplace(path_slice.to_string(), _next_path_id);
+        if (inserted_path) {
+            _next_path_id++;
+        }
+        int32_t path_id = it->second;
+
+        auto key = std::make_pair(path_id, pos);
+        if (!_seen.insert(key).second) {
             return Status::RuntimeError(
                     "Each target row should be matched by at most one source row, "
                     "but a target row in file '" +

@@ -29,6 +29,11 @@ namespace starrocks::pipeline {
 // push_chunk returns a RuntimeError. Otherwise, the chunk is passed through
 // unchanged. This is used by the MERGE INTO planner to ensure that each target
 // row is matched by at most one source row.
+//
+// File paths are interned to avoid per-row string copies: a side map assigns
+// a compact integer ID to each unique path, and the seen-set stores (path_id, pos)
+// pairs instead of (string, int64). This reduces memory from ~40 bytes/entry to
+// 12 bytes/entry for the common case of many rows per file.
 class EnforceUniqueOperator final : public Operator {
 public:
     EnforceUniqueOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
@@ -52,15 +57,20 @@ public:
 
 private:
     struct PairHash {
-        std::size_t operator()(const std::pair<std::string, int64_t>& p) const {
-            auto h1 = std::hash<std::string>{}(p.first);
-            auto h2 = std::hash<int64_t>{}(p.second);
-            return h1 ^ (h2 * 2654435761u);
+        std::size_t operator()(const std::pair<int32_t, int64_t>& p) const {
+            // Combine two integers with good avalanche properties (boost hash_combine pattern)
+            std::size_t seed = std::hash<int32_t>{}(p.first);
+            seed ^= std::hash<int64_t>{}(p.second) + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+            return seed;
         }
     };
 
     const std::vector<int32_t> _unique_key_col_indices;
-    phmap::flat_hash_set<std::pair<std::string, int64_t>, PairHash> _seen;
+    // Intern table: file path string -> compact integer ID
+    phmap::flat_hash_map<std::string, int32_t> _path_ids;
+    int32_t _next_path_id = 0;
+    // Seen set: (path_id, row_position) — 12 bytes per entry instead of ~40+
+    phmap::flat_hash_set<std::pair<int32_t, int64_t>, PairHash> _seen;
     ChunkPtr _output_chunk;
     bool _input_finished = false;
 };

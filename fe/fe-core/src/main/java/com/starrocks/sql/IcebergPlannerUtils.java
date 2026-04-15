@@ -40,30 +40,10 @@ public class IcebergPlannerUtils {
 
     public static PhysicalPropertySet createShuffleProperty(IcebergTable icebergTable,
                                                              List<ColumnRefOperator> outputColumns) {
-        if (!icebergTable.isPartitioned()) {
-            return new PhysicalPropertySet();
-        }
-
-        List<String> partitionColNames = icebergTable.getPartitionColumnNames();
-        List<Integer> partitionColumnIds = Lists.newArrayList();
-        for (String partCol : partitionColNames) {
-            for (ColumnRefOperator outputCol : outputColumns) {
-                if (outputCol.getName().equalsIgnoreCase(partCol)) {
-                    partitionColumnIds.add(outputCol.getId());
-                    break;
-                }
-            }
-        }
-
-        if (partitionColumnIds.isEmpty()) {
-            return new PhysicalPropertySet();
-        }
-
-        HashDistributionDesc distributionDesc = new HashDistributionDesc(
-                partitionColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
-        DistributionProperty distributionProperty = DistributionProperty.createProperty(
-                DistributionSpec.createHashDistributionSpec(distributionDesc));
-        return new PhysicalPropertySet(distributionProperty);
+        List<String> names = outputColumns.stream()
+                .map(ColumnRefOperator::getName)
+                .collect(java.util.stream.Collectors.toList());
+        return createShuffleProperty(icebergTable, outputColumns, names);
     }
 
     /**

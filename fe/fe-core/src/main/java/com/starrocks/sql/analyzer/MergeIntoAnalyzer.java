@@ -164,22 +164,30 @@ public class MergeIntoAnalyzer {
         selectList.addItem(new SelectListItem(
                 new SlotRef(targetSlotTableName, IcebergTable.ROW_POSITION), IcebergTable.ROW_POSITION));
 
+        // Pre-classify WHEN clauses once (avoid re-classifying per column)
+        List<MergeWhenClause> matchedClauses = new ArrayList<>();
+        List<MergeWhenClause> notMatchedClauses = new ArrayList<>();
+        for (MergeWhenClause clause : stmt.getWhenClauses()) {
+            if (clause.isMatched()) {
+                matchedClauses.add(clause);
+            } else {
+                notMatchedClauses.add(clause);
+            }
+        }
+
         // Data columns
         List<Column> dataColumns = icebergTable.getBaseSchema().stream()
                 .filter(col -> !col.isHidden())
                 .toList();
         for (Column col : dataColumns) {
-            Expr dataExpr = buildDataColumnCaseExpr(stmt, col, targetSlotTableName);
+            Expr dataExpr = buildDataColumnCaseExpr(
+                    stmt, col, targetSlotTableName, matchedClauses, notMatchedClauses);
             selectList.addItem(new SelectListItem(dataExpr, col.getName()));
         }
 
         // op_code CASE expression
-        try {
-            Expr opCodeExpr = buildOpCodeCaseExpr(stmt, targetSlotTableName);
-            selectList.addItem(new SelectListItem(opCodeExpr, "op_code"));
-        } catch (Exception e) {
-            throw new SemanticException("Failed to build op_code expression", e);
-        }
+        Expr opCodeExpr = buildOpCodeCaseExpr(stmt, targetSlotTableName);
+        selectList.addItem(new SelectListItem(opCodeExpr, "op_code"));
 
         // ---- BUILD FROM: source LEFT OUTER JOIN target ON merge_condition ----
 
@@ -256,18 +264,9 @@ public class MergeIntoAnalyzer {
      * - If no NOT MATCHED clause: NullLiteral
      */
     private static Expr buildDataColumnCaseExpr(MergeIntoStmt stmt, Column col,
-                                                TableName targetSlotTableName) {
-        // Separate matched and not-matched clauses
-        List<MergeWhenClause> matchedClauses = new ArrayList<>();
-        List<MergeWhenClause> notMatchedClauses = new ArrayList<>();
-        for (MergeWhenClause clause : stmt.getWhenClauses()) {
-            if (clause.isMatched()) {
-                matchedClauses.add(clause);
-            } else {
-                notMatchedClauses.add(clause);
-            }
-        }
-
+                                                TableName targetSlotTableName,
+                                                List<MergeWhenClause> matchedClauses,
+                                                List<MergeWhenClause> notMatchedClauses) {
         // Build matched branch expression
         Expr matchedExpr = buildMatchedDataExpr(matchedClauses, col, targetSlotTableName);
 
