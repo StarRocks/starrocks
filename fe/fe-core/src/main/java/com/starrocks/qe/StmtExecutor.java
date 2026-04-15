@@ -77,12 +77,10 @@ import com.starrocks.common.Version;
 import com.starrocks.common.profile.RawScopedTimer;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.ProfilingExecPlan;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.RuntimeProfileParser;
 import com.starrocks.common.util.SqlCredentialRedactor;
 import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.TimeUtils;
@@ -413,12 +411,15 @@ public class StmtExecutor {
     private RuntimeProfile buildTopLevelProfile() {
         RuntimeProfile profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
-        summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(context.getStartTime()));
+        summaryProfile.addInfoString(ProfileManager.START_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(context.getStartTime(), profileZone));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - context.getStartTime();
-        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+        summaryProfile.addInfoString(ProfileManager.END_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(currentTimestamp, profileZone));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
@@ -1575,6 +1576,9 @@ public class StmtExecutor {
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
+        // Capture the session timezone now so that the async profile task uses the same zone
+        // as START_TIME (the context may change before the async task runs).
+        java.time.ZoneId profileZoneForAsync = TimeUtils.getTimeZone().toZoneId();
 
         long profileCollectStartTime = System.currentTimeMillis();
         long startTime = context.getStartTime();
@@ -1594,7 +1598,8 @@ public class StmtExecutor {
             // Update TotalTime to include the Profile Collect Time and the time to build the profile.
             long now = System.currentTimeMillis();
             long totalTimeMs = now - startTime;
-            summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(now));
+            summaryProfile.addInfoString(ProfileManager.END_TIME,
+                    TimeUtils.longToTimeStringWithTimeZone(now, profileZoneForAsync));
             summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
             if (retryIndex > 0) {
                 summaryProfile.addInfoString(ProfileManager.RETRY_TIMES, Integer.toString(retryIndex + 1));
@@ -2158,7 +2163,7 @@ public class StmtExecutor {
                             "you can set it off by using  set enable_short_circuit=false");
         }
         handleExplainStmt(ExplainAnalyzer.analyze(profileElement.plan,
-                RuntimeProfileParser.parseFrom(CompressionUtils.gzipDecompressString(profileElement.profileContent)),
+                profileElement.getRuntimeProfile(),
                 planNodeIds, context.getSessionVariable().getColorExplainOutput()));
     }
 

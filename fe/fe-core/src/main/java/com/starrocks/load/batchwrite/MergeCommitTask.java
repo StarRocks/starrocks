@@ -628,11 +628,12 @@ public class MergeCommitTask extends AbstractStreamLoadTask implements Runnable 
         try {
             RuntimeProfile profile = new RuntimeProfile("Load");
             RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+            java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
             summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
             summaryProfile.addInfoString(ProfileManager.START_TIME,
-                    TimeUtils.longToTimeString(loadTimeTrace.createTimeMs));
+                    TimeUtils.longToTimeStringWithTimeZone(loadTimeTrace.createTimeMs, profileZone));
             summaryProfile.addInfoString(ProfileManager.END_TIME,
-                    TimeUtils.longToTimeString(loadTimeTrace.endTimeMs.get()));
+                    TimeUtils.longToTimeStringWithTimeZone(loadTimeTrace.endTimeMs.get(), profileZone));
             summaryProfile.addInfoString(ProfileManager.TOTAL_TIME,
                     DebugUtil.getPrettyStringMs(loadTimeTrace.totalCostMs()));
             summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Load");

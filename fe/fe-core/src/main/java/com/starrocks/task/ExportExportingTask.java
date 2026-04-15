@@ -192,12 +192,15 @@ public class ExportExportingTask extends PriorityLeaderTask {
     private void initProfile() {
         profile = new RuntimeProfile("Query");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
+        java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, String.valueOf(job.getId()));
-        summaryProfile.addInfoString(ProfileManager.START_TIME, TimeUtils.longToTimeString(job.getStartTimeMs()));
+        summaryProfile.addInfoString(ProfileManager.START_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(job.getStartTimeMs(), profileZone));
 
         long currentTimestamp = System.currentTimeMillis();
         long totalTimeMs = currentTimestamp - job.getStartTimeMs();
-        summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(currentTimestamp));
+        summaryProfile.addInfoString(ProfileManager.END_TIME,
+                TimeUtils.longToTimeStringWithTimeZone(currentTimestamp, profileZone));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, "Query");
