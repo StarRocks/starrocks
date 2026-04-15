@@ -53,6 +53,15 @@ keywords: ['huan cun']
   WHERE NAME LIKE "%starlet_star_cache_disk_size_percent% or %datacache_disk_size%";
   ```
 
+## 检查查询是否命中 Data Cache
+
+您可以通过分析 Query Profile 中的以下指标来检查查询是否命中 Data Cache：
+
+- `CompressedBytesReadRemote`：系统从远程存储系统读取的数据大小。
+- `IOTimeRemote`：系统从远程存储系统读取数据所花费的 I/O 时间。
+
+如果这些值不为零，则表明该查询未命中 Data Cache，系统必须从远程存储系统读取数据。
+
 ## 监控 Data Cache
 
 StarRocks 提供了多种监控 Data Cache 的指标。
