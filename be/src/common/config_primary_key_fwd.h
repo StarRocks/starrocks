@@ -74,6 +74,10 @@ CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.
 CONF_mInt64(pk_index_parallel_execution_min_rows, "16384");
 
+// Max threads for lake partial update segment-level parallelism.
+// <= 0 means use CPU core count. Runtime on/off is controlled by enable_pk_index_parallel_execution.
+CONF_Int32(lake_partial_update_thread_pool_max_threads, "0");
+
 // The maximum number of memtables for pk index in shared-data mode.
 CONF_mInt32(pk_index_memtable_max_count, "2");
 
