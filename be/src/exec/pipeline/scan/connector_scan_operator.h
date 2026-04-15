@@ -105,7 +105,7 @@ public:
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
-    connector::ConnectorType connector_type();
+    connector::ConnectorType connector_type() const;
 
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
@@ -135,8 +135,12 @@ public:
 
 private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
+    bool _is_lake_child_reuse_candidate(const Morsel& morsel) const override;
+    ChunkSourcePtr _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index) override;
+    void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) override;
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
+    std::vector<ChunkSourcePtr> _reusable_chunk_sources;
 };
 
 class ConnectorChunkSource : public ChunkSource {
@@ -149,6 +153,10 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    bool can_reuse_with(const Morsel& morsel) const override;
+    bool can_reuse_after_finish() const override;
+    Status reset_morsel(RuntimeState* state, MorselPtr&& morsel) override;
+    void release_for_reuse(RuntimeState* state) override;
     const std::string get_custom_coredump_msg() const override;
 
     bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }

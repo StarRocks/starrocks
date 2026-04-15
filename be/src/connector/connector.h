@@ -80,6 +80,11 @@ public:
     // Called frequently, don't do heavy work
     virtual const std::string get_custom_coredump_msg() const { return ""; }
     virtual void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {}
+    virtual bool can_reuse_with(const pipeline::ScanMorsel& morsel) const { return false; }
+    virtual Status reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) {
+        return Status::NotSupported("data source reuse is not supported");
+    }
+    virtual void release_for_reuse(RuntimeState* state) {}
 
     struct Profile {
         int mem_alloc_failed_count;
