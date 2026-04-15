@@ -55,6 +55,11 @@ Status TenAnnIndexBuilderProxy::init() {
         // build and write index
         _index_builder = tenann::IndexFactory::CreateBuilderFromMeta(meta_copy);
         _index_builder->index_writer()->SetIndexCache(tenann::IndexCache::GetGlobalInstance());
+        // Bound the per-builder row buffer (no-op for builders that don't buffer).
+        // Tunable via BE config vector_index_build_flush_threshold_rows; lower it
+        // when BE memory is tight, set 0 to disable intermediate flushing.
+        _index_builder->SetFlushThresholdRows(
+                static_cast<size_t>(config::vector_index_build_flush_threshold_rows));
         // Use tenann file writer for remote FS (S3/HDFS) in shared-data mode
         if (_file_writer != nullptr) {
             _index_builder->index_writer()->SetFileWriter(
