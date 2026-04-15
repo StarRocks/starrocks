@@ -225,6 +225,17 @@ void RejectedRecordWriter::append_raw(const std::string& raw_text, const std::st
 void RejectedRecordWriter::append_serialized(const std::string& raw_record_json, const std::string& error_code,
                                              const std::string& error_message, const std::string& error_column,
                                              const std::string& source_info) {
+    // Single enforcement point for the user-configured cap
+    // (`log_rejected_record_num`). Entry paths that already check
+    // enable_log_rejected_record() before calling still pass through
+    // here cheaply; paths that forget to check (e.g. Parquet's
+    // ArrowConvertContext, which previously only observed its own
+    // hard-coded MAX_ERROR_MESSAGE_COUNTER for error-log throttling)
+    // now honour the user's limit automatically.
+    if (!_state->enable_log_rejected_record()) {
+        return;
+    }
+
     rapidjson::Document doc;
     doc.SetObject();
     auto& alloc = doc.GetAllocator();
@@ -263,10 +274,21 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
                   rapidjson::Value(load_type.c_str(), static_cast<rapidjson::SizeType>(load_type.size()), alloc),
                   alloc);
     doc.AddMember("txn_id", rapidjson::Value(txn_id), alloc);
+    // user_name: RuntimeState::_user is only populated on query paths
+    // that explicitly stash the submitting user (StreamLoad's internal
+    // executor does; Broker/Routine Load and INSERT fragments do not
+    // plumb the identity down to the BE plan fragment at all today).
+    // Writing an empty string would make consumers think the load had
+    // no user, which is actively misleading; leave the JSON key absent
+    // so Stream Load writes NULL and operators can recover the user
+    // by joining _statistics_.rejected_records.load_label against
+    // information_schema.loads.user when needed.
     const std::string& user_name = _state->user();
-    doc.AddMember("user_name",
-                  rapidjson::Value(user_name.c_str(), static_cast<rapidjson::SizeType>(user_name.size()), alloc),
-                  alloc);
+    if (!user_name.empty()) {
+        doc.AddMember("user_name",
+                      rapidjson::Value(user_name.c_str(), static_cast<rapidjson::SizeType>(user_name.size()), alloc),
+                      alloc);
+    }
 
     // Error context.
     doc.AddMember("error_code",
@@ -317,7 +339,6 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     out.write(buf.GetString(), buf.GetSize());
     out.put('\n');
     out.close();
-    _records_written.fetch_add(1, std::memory_order_relaxed);
 
     // Single counter-increment site for the entire feature. All paths
     // that eventually reach the writer -- legacy

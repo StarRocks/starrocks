@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include <atomic>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -102,17 +101,14 @@ public:
     void append_raw(const std::string& raw_text, const std::string& error_code, const std::string& error_message,
                     const std::string& error_column, const std::string& source_info);
 
-    // Number of records successfully written by this writer. Mainly used
-    // by tests; the authoritative counter is `RuntimeState::_num_log_rejected_rows`.
-    int64_t records_written() const { return _records_written.load(std::memory_order_relaxed); }
-
     // Absolute path of the backing JSON Lines file, or empty string if the
-    // file has not been opened yet. The sync daemon (Phase 3) will pick up
-    // files from this path.
+    // path has not been resolved yet. The sync daemon picks up files
+    // under this path's directory tree by `.jsonl` suffix.
     const std::string& file_path() const { return _file_path; }
 
-    // Flush any buffered data to disk. Automatic on destruction; callers
-    // rarely need to call this directly.
+    // Flush any buffered data to disk. No-op since every append
+    // open-writes-closes, retained for callers that defensively flush
+    // at fragment teardown.
     void flush();
 
     // --- JSON builders ---
@@ -162,7 +158,6 @@ private:
     std::string _file_path;
     bool _path_resolved = false;
     bool _path_resolve_failed = false;
-    std::atomic<int64_t> _records_written{0};
 };
 
 } // namespace starrocks

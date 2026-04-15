@@ -74,7 +74,10 @@ The most useful columns for day-to-day triage:
 
 - `raw_record` (JSON) – the offending row, keyed by column name
 - `error_code`, `error_message`, `error_column` – why the row was rejected
-- `load_label`, `load_type`, `txn_id`, `user_name` – who produced it
+- `load_label`, `load_type`, `txn_id` – who produced it. `user_name` is
+  left NULL on Broker/Routine/INSERT loads (the BE plan fragment does
+  not receive the submitting user today); join
+  `_statistics_.loads_history` by `load_label` to recover it
 - `source_info` (JSON) – file + line for file loads, topic/partition/offset for Routine Load
 - `created_at` – partition key; always filter on this first
 

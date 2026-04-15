@@ -66,7 +66,10 @@ keywords: ['rejected', 'records', 'max_filter_ratio', '回放']
 
 - `raw_record`（JSON）— 被拒绝的行，以列名为键
 - `error_code`、`error_message`、`error_column` — 拒绝原因
-- `load_label`、`load_type`、`txn_id`、`user_name` — 谁产生的
+- `load_label`、`load_type`、`txn_id` — 谁产生的。`user_name` 在
+  Broker / Routine / INSERT 导入时为 NULL（BE 执行分片拿不到提交者
+  身份）；需要用户信息请按 `load_label` JOIN
+  `_statistics_.loads_history` 恢复
 - `source_info`（JSON）— 文件导入是 `file`+`line`，Routine Load 是
   `topic`/`partition`/`offset`
 - `created_at` — 分区键；查询时优先用它过滤
