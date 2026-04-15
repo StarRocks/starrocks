@@ -1272,53 +1272,6 @@ TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets) {
     }
 }
 
-TEST_F(LakeTabletManagerTest, capture_tablet_and_rowsets_capture_delta_versions_disabled) {
-    auto old_capture_tablet_and_rowsets_config = config::experimental_enable_lake_capture_tablet_and_rowsets;
-    DeferOp defer([old_capture_tablet_and_rowsets_config]() {
-        config::experimental_enable_lake_capture_tablet_and_rowsets = old_capture_tablet_and_rowsets_config;
-    });
-    config::experimental_enable_lake_capture_tablet_and_rowsets = false;
-
-    starrocks::TabletMetadata metadata;
-    auto schema = metadata.mutable_schema();
-    schema->set_id(1);
-    auto tablet_id = next_id();
-    metadata.set_id(tablet_id);
-    metadata.set_version(1);
-    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
-
-    metadata.set_version(2);
-    auto rowset_meta_pb2 = metadata.add_rowsets();
-    rowset_meta_pb2->set_id(2);
-    rowset_meta_pb2->set_overlapped(false);
-    rowset_meta_pb2->set_data_size(1024);
-    rowset_meta_pb2->set_num_rows(5);
-    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
-
-    metadata.set_version(3);
-    auto rowset_meta_pb3 = metadata.add_rowsets();
-    rowset_meta_pb3->set_id(3);
-    rowset_meta_pb3->set_overlapped(false);
-    rowset_meta_pb3->set_data_size(1024);
-    rowset_meta_pb3->set_num_rows(5);
-    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
-
-    {
-        auto res = _tablet_manager->capture_tablet_and_rowsets(tablet_id, 1, 3);
-        EXPECT_TRUE(res.status().is_not_supported());
-    }
-
-    {
-        auto res = _tablet_manager->capture_tablet_and_rowsets(tablet_id, 2, 3);
-        EXPECT_TRUE(res.status().is_not_supported());
-    }
-
-    {
-        auto res = _tablet_manager->capture_tablet_and_rowsets(tablet_id, 0, 3);
-        EXPECT_TRUE(res.status().is_not_supported());
-    }
-}
-
 // Verify that pick_local_anchor_tablet_id prefers a tablet id that this worker owns.
 // In file-bundling mode the aggregator derives bundle/txn-log paths from a single
 // tablet id of the batch; using a remote tablet id forces the staros worker to fetch

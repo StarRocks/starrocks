@@ -421,10 +421,6 @@ public class CompactionScheduler extends Daemon {
         aggRequest.computeNodes = Lists.newArrayList();
         aggRequest.partitionId = partitionId;
 
-        // Get parallel compaction configuration from table property
-        // maxParallel > 0 means parallel compaction is enabled
-        int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
-
         // Track the candidate aggregator nodes (those that actually own tablets in the
         // batch). We prefer one of them as aggregator so the BE side can resolve the
         // first tablet id locally through the staros worker cache when deriving the

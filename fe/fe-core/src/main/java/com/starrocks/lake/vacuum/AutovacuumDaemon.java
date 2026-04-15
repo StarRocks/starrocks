@@ -212,7 +212,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         ComputeResource computeResource = warehouseManager.getBackgroundComputeResource(table.getId());
 
         // Resolve all tablet owners in a single batched RPC. The result serves both:
-        // - enableSharedFileCleanup: collect candidate aggregator nodes (prefer a node
+        // - fileBundling: collect candidate aggregator nodes (prefer a node
         //   that owns at least one tablet), then assign all tablets to the chosen one.
         // - non-shared: assign each tablet to its first alive owner CN.
         // This avoids N per-tablet getComputeNodeAssignedToTablet RPCs in either path.
@@ -231,7 +231,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         SystemInfoService clusterInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
-        if (enableSharedFileCleanup) {
+        if (fileBundling) {
             // Collect candidate aggregator nodes from the batched result, then pick one.
             Set<ComputeNode> candidateAggregatorNodes = Sets.newHashSet();
             if (shardToNodeIds != null) {
