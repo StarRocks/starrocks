@@ -60,9 +60,6 @@ AS insert into t2 select * from t1;
 | schedule_interval  | No      | スケジュールされたタスクが実行される間隔。最小間隔は10秒です。          |
 | etl_statement      | Yes     | 非同期タスクとして送信したい ETL ステートメント。StarRocks は現在、[CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) および [INSERT](../../loading_unloading/INSERT.md) の非同期タスクの送信をサポートしています。 |
 
-<<<<<<< HEAD
-## Usage notes
-=======
 ## 戻り値
 
 - `TaskName`: タスクの名前。
@@ -72,7 +69,6 @@ AS insert into t2 select * from t1;
   - `FAILED`: タスクが失敗しました。
 
 ## 使用上の注意
->>>>>>> 6d633b4937 ([Doc] Add Return Desc for SUBMIT TASK (#71650))
 
 このステートメントは、ETL ステートメントを実行するタスクを保存するテンプレートである Task を作成します。Task の情報を確認するには、メタデータビュー [`tasks` in Information Schema](../../../information_schema/tasks.md) をクエリします。
 
