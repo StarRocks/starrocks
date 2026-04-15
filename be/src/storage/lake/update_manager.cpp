@@ -901,6 +901,25 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
     return num_dels;
 }
 
+size_t UpdateManager::get_rowset_num_deletes(const TabletMetadata& metadata, const RowsetMetadataPB& rowset_meta) {
+    size_t num_dels = 0;
+    LakeIOOptions lake_io_opts;
+    lake_io_opts.fill_data_cache = false;
+    for (int i = 0; i < rowset_meta.segments_size(); i++) {
+        DelVector delvec;
+        uint32_t segment_id = rowset_meta.id() + i;
+        auto st = lake::get_del_vec(_tablet_mgr, metadata, segment_id, false /*fill_cache*/, lake_io_opts, &delvec);
+        if (!st.ok()) {
+            LOG(WARNING) << "get_rowset_num_deletes: error get del vector"
+                         << " tablet_id=" << metadata.id() << " metadata_version=" << metadata.version()
+                         << " segment_id=" << segment_id << " status=" << st;
+            continue;
+        }
+        num_dels += delvec.cardinality();
+    }
+    return num_dels;
+}
+
 bool UpdateManager::_use_light_publish_primary_compaction(int64_t tablet_id, int64_t txn_id) {
     // Is config enable ?
     if (!config::enable_light_pk_compaction_publish) {

@@ -975,9 +975,9 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                         if (is_pk_tablet) {
                             if (accurate_mode) {
                                 // Accurate mode (default): fetch delete vectors from object storage.
-                                // NOTE!! Each segment incurs a remote metadata read - expensive for large tablets.
+                                // Reuses the already-loaded tablet metadata to avoid repeated loads per segment.
                                 num_deletes = static_cast<int64_t>(
-                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(tablet_id, version, rowset));
+                                        _tablet_mgr->update_mgr()->get_rowset_num_deletes(**tablet_metadata, rowset));
                             } else {
                                 // Approximate mode: prefer the pre-stored num_dels field in rowset
                                 // metadata. This avoids additional I/O while still providing a reasonable estimate.
@@ -988,7 +988,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                                     // Fallback for old metadata without num_dels.
                                     num_deletes =
                                             static_cast<int64_t>(_tablet_mgr->update_mgr()->get_rowset_num_deletes(
-                                                    tablet_id, version, rowset));
+                                                    **tablet_metadata, rowset));
                                 }
                             }
                         }

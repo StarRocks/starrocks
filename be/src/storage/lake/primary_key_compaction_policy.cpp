@@ -114,8 +114,6 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         return rowset_indexes;
     }
     std::vector<RowsetCandidate> rowset_vec;
-    const auto tablet_id = tablet_metadata->id();
-    const auto tablet_version = tablet_metadata->version();
     const int64_t compaction_data_size_threshold =
             static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
     // 1. generate rowset candidate vector
@@ -127,7 +125,7 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
         if (rowset_pb.has_num_dels()) {
             stat.num_dels = rowset_pb.num_dels();
         } else {
-            stat.num_dels = mgr->get_rowset_num_deletes(tablet_id, tablet_version, rowset_pb);
+            stat.num_dels = mgr->get_rowset_num_deletes(*tablet_metadata, rowset_pb);
         }
         rowset_vec.emplace_back(&rowset_pb, stat, i);
     }
