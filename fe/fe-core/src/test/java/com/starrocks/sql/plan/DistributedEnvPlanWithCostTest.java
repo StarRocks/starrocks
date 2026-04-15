@@ -82,11 +82,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 " WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
                 "THEN l_shipdate ELSE NULL END, 3))), 2) ELSE NULL END) from lineitem";
         String plan = getCostExplain(sql);
-<<<<<<< HEAD
-        assertContains(plan, "concat-->[-Infinity, Infinity, 0.7037037037037036, 3.0, 412.0] ESTIMATE");
-=======
-        assertContains(plan, "CONCAT-->[-Infinity, Infinity, 0.7037037037037036, 3.0, 411.8] ESTIMATE");
->>>>>>> aa84bbdf31 ([Enhancement] Fix missing statistics propagation for unary functions (#71087))
+        assertContains(plan, "concat-->[-Infinity, Infinity, 0.7037037037037036, 3.0, 411.8] ESTIMATE");
     }
 
     @Test
