@@ -87,8 +87,6 @@ public:
 
     void count_down_pipeline(RuntimeState* state);
 
-    void count_down_epoch_pipeline(RuntimeState* state);
-
     size_t total_logical_dop() const { return _total_logical_dop; }
 
     size_t total_active_driver_size();
@@ -111,7 +109,6 @@ protected:
     // will be inited in prepare_pipelines
     size_t _total_logical_dop{};
     std::atomic<size_t> _num_finished_pipelines{};
-    std::atomic<size_t> _num_epoch_finished_pipelines{};
     size_t _num_pipelines{};
     DriverExecutor* _executor;
     PipelineRawPtrs _pipelines;
