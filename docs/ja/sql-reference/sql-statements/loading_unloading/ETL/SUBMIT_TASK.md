@@ -19,11 +19,7 @@ ETL ステートメントを非同期タスクとして送信します。
 - [INSERT](../INSERT.md) （v3.0以降）
 - [CACHE SELECT](../../../../data_source/data_cache_warmup.md) （v3.3以降）
 
-<<<<<<< HEAD
-タスクの一覧を表示するには `INFORMATION_SCHEMA.tasks` をクエリし、タスクの実行履歴を表示するには `INFORMATION_SCHEMA.task_runs` をクエリします。詳細については、[Usage Notes](#usage-notes) を参照してください。
-=======
 タスクの一覧は `INFORMATION_SCHEMA.tasks` をクエリすることで確認でき、タスクの実行履歴は `INFORMATION_SCHEMA.task_runs` をクエリすることで確認できます。詳細については、[使用上の注意](#使用上の注意)を参照してください。
->>>>>>> 6d633b4937 ([Doc] Add Return Desc for SUBMIT TASK (#71650))
 
 非同期タスクを削除するには [DROP TASK](DROP_TASK.md) を使用します。
 
