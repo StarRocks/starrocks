@@ -273,7 +273,10 @@ public class ColocateTableIndex implements Writable {
                     if (!isReplay && !colocateRangeMgr.containsColocateGroup(groupId.grpId)) {
                         long packShardGroupId = GlobalStateMgr.getCurrentState()
                                 .getStarOSAgent().createShardGroup(
-                                        dbId, tbl.getId(), 0, 0, PlacementPolicy.PACK);
+                                        dbId, tbl.getId(),
+                                        0 /* partitionId: not partition-specific */,
+                                        0 /* indexId: not index-specific */,
+                                        PlacementPolicy.PACK);
                         colocateRangeMgr.initColocateGroup(groupId.grpId, packShardGroupId);
                     }
                 } else if (distributionInfo instanceof HashDistributionInfo) {
