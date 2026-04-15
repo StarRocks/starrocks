@@ -51,6 +51,15 @@ You can configure Data Cache using the following CN(BE) configuration items:
   SHOW COMPUTE NODES;
   ```
 
+## Check whether a query hits Data Cache
+
+You can check whether a query hits Data Cache by analyzing the following metrics in the query profile:
+
+- `CompressedBytesReadRemote`: the size of data that the system reads from the remote storage system.
+- `IOTimeRemote`: the I/O time that the system spent on reading data from the remote storage system.
+
+If these values are not zero, it implies that the query has missed the data cache and the system has to read data from the remote storage system.
+
 ## Monitor Data Cache
 
 StarRocks provides various metrics that monitor Data Cache.
