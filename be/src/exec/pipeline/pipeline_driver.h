@@ -482,6 +482,12 @@ public:
                 return false;
             }
             mark_precondition_ready();
+            // In the event scheduler, we avoid calling check_short_circuit inside check_is_ready.
+            // Because check_short_circuit may trigger cascading recursive calls such as set_finished.
+            // It will increase scheduler complexity (like call set finished in unknown thread).
+            // Instead, we directly return true after the precondition block state changes.
+            // The check is performed in driver::process.
+            return true;
         }
 
         // OUTPUT_FULL
