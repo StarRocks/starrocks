@@ -3752,7 +3752,7 @@ public class PlanFragmentBuilder {
             projectMap.putAll(consume.getCteOutputColumnRefMap());
             consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
             consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
-            consumeFragment.setQueryGlobalDictExprs(cteFragment.getQueryGlobalDictExprs());
+            consumeFragment.setQueryGlobalDictExprs(getGlobalDictsExprs(consume.getGlobalDictsExpr(), context));
             consumeFragment.setLoadGlobalDicts(cteFragment.getLoadGlobalDicts());
 
             // add filter node
