@@ -88,7 +88,8 @@ public final class ShowStmtToSelectStmtConverter {
             "query_rewrite_status",
             "creator",
             "last_refresh_process_time",
-            "last_refresh_job_id"
+            "last_refresh_job_id",
+            "last_refresh_time"
     );
 
     private static final Map<String, String> MATERIALIZED_VIEW_ALIAS_MAP = ImmutableMap.of(
