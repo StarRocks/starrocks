@@ -40,6 +40,20 @@ TEST_F(InternalServiceTest, test_get_info_timeout_invalid) {
     ASSERT_TRUE(st.is_time_out());
 }
 
+TEST_F(InternalServiceTest, test_submit_mv_maintenance_task_not_supported) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    PMVMaintenanceTaskRequest request;
+    PMVMaintenanceTaskResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+
+    service.submit_mv_maintenance_task(&cntl, &request, &response, &closure);
+
+    auto st = Status(response.status());
+    ASSERT_TRUE(st.is_not_supported());
+    ASSERT_TRUE(st.message().find("Legacy incremental MV maintenance is no longer supported") != std::string::npos);
+}
+
 TEST_F(InternalServiceTest, test_tablet_writer_add_chunks_via_http) {
     BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
     {
