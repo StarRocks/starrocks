@@ -155,7 +155,7 @@ arrow_flight_port = 9419
 
 #### Configure Arrow Flight Proxy (Optional)
 
-If your BE nodes are not directly accessible from client applications, (for example, when deployed in private networks or Kubernetes environments), you can enable the Arrow Flight proxy feature on the FE to route data from BE nodes through the FE.
+If your BE nodes are not directly accessible from client applications (for example, when deployed in private networks or Kubernetes environments), you can enable the Arrow Flight proxy feature on the FE to route data from BE nodes through the FE.
 
 The proxy feature is controlled by two global variables: 
 
@@ -174,7 +174,7 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 
 :::note
 
-- The proxy feature is enabled by default, which may result in 8-10% lower throughput compared to direct BE connections. If your clients have direct network access to BE nodes, you can disable the proxy to achieve optimal performance: `SET GLOBAL arrow_flight_proxy_enabled = false;`
+- The proxy feature is enabled by default, which may result in 8-10% lower throughput compared to direct BE connections. If your clients have direct network access to BE nodes, or you have limited memory resources on the FE side, you can disable the proxy to achieve optimal performance: `SET GLOBAL arrow_flight_proxy_enabled = false;`.
 - When `arrow_flight_proxy` is empty, tickets will automatically route through the FE node that the client initially connected to.
 - **Important**: The `arrow_flight_proxy` and `arrow_flight_proxy_enabled` settings should be configured globally using `SET GLOBAL`. Session-level settings are not supported.
 - **Session restart required**: Changing the proxy settings only affects new sessions. Existing Arrow Flight SQL sessions will continue using their original settings until they reconnect.
