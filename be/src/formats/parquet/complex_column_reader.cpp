@@ -1859,11 +1859,14 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         }
     }
 
-    // When all bindings are SCALAR (native_indices empty), base payload is never accessed by the
-    // caller (project_variant_leaf_column reads only typed_columns).  Skip the per-row loop
-    // entirely: compute outer-null directly from the raw null bitmaps and has_typed_value_bitmap,
-    // and pass nullptr for metadata/remain so VariantColumn does not check their row counts.
-    if (native_indices.empty()) {
+    // When there is at least one binding and all bindings are SCALAR (native_indices empty),
+    // base payload is never accessed by the caller (project_variant_leaf_column reads only
+    // typed_columns). Skip the per-row loop entirely: compute outer-null directly from the raw
+    // null bitmaps and has_typed_value_bitmap, and omit metadata/remain from the output schema.
+    //
+    // Keep the zero-binding case on the generic path below so plain VARIANT files (or batches
+    // where no shredded binding is materialized) still preserve top-level metadata/value.
+    if (!materialized_bindings.empty() && native_indices.empty()) {
         // All-SCALAR fast path: skip the per-row loop entirely.
         // Base payload (metadata/remain) is not needed because the caller reads only typed_columns.
         // Compute outer-null directly from the raw null bitmaps and has_typed_value_bitmap.
