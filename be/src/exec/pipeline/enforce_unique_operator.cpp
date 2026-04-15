@@ -1,0 +1,119 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "exec/pipeline/enforce_unique_operator.h"
+
+#include "column/binary_column.h"
+#include "column/column_helper.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+
+namespace starrocks::pipeline {
+
+Status EnforceUniqueOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Operator::prepare(state));
+    return Status::OK();
+}
+
+void EnforceUniqueOperator::close(RuntimeState* state) {
+    _output_chunk.reset();
+    _seen.clear();
+    Operator::close(state);
+}
+
+bool EnforceUniqueOperator::has_output() const {
+    return _output_chunk != nullptr;
+}
+
+bool EnforceUniqueOperator::need_input() const {
+    return !_input_finished && _output_chunk == nullptr;
+}
+
+bool EnforceUniqueOperator::is_finished() const {
+    return _input_finished && _output_chunk == nullptr;
+}
+
+Status EnforceUniqueOperator::set_finishing(RuntimeState* state) {
+    _input_finished = true;
+    return Status::OK();
+}
+
+StatusOr<ChunkPtr> EnforceUniqueOperator::pull_chunk(RuntimeState* state) {
+    return std::move(_output_chunk);
+}
+
+Status EnforceUniqueOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    size_t num_rows = chunk->num_rows();
+    if (num_rows == 0) {
+        return Status::OK();
+    }
+
+    // We expect exactly 2 key columns: file_path (string) and row_position (int64).
+    DCHECK_EQ(_unique_key_col_indices.size(), 2);
+
+    auto file_path_col = chunk->get_column_by_index(_unique_key_col_indices[0]);
+    auto row_pos_col = chunk->get_column_by_index(_unique_key_col_indices[1]);
+
+    // Determine if columns are nullable
+    const NullableColumn* file_path_nullable = nullptr;
+    const NullableColumn* row_pos_nullable = nullptr;
+    if (file_path_col->is_nullable()) {
+        file_path_nullable = down_cast<const NullableColumn*>(file_path_col.get());
+    }
+    if (row_pos_col->is_nullable()) {
+        row_pos_nullable = down_cast<const NullableColumn*>(row_pos_col.get());
+    }
+
+    // Get the underlying data columns (unwrap nullable/const)
+    const auto* file_path_data = ColumnHelper::get_binary_column(file_path_col.get());
+    const auto* row_pos_data_col = ColumnHelper::get_data_column(row_pos_col.get());
+    const auto* row_pos_data = down_cast<const FixedLengthColumn<int64_t>*>(row_pos_data_col)->get_data().data();
+
+    for (size_t i = 0; i < num_rows; ++i) {
+        // Skip rows where any key column is null
+        if (file_path_nullable != nullptr && file_path_nullable->is_null(i)) {
+            continue;
+        }
+        if (row_pos_nullable != nullptr && row_pos_nullable->is_null(i)) {
+            continue;
+        }
+
+        Slice path_slice = file_path_data->get_slice(i);
+        int64_t pos = row_pos_data[i];
+        auto key = std::make_pair(path_slice.to_string(), pos);
+
+        auto [_, inserted] = _seen.insert(std::move(key));
+        if (!inserted) {
+            return Status::RuntimeError(
+                    "Each target row should be matched by at most one source row, "
+                    "but a target row in file '" +
+                    path_slice.to_string() + "' at position " + std::to_string(pos) +
+                    " was matched by more than one source row");
+        }
+    }
+
+    _output_chunk = chunk;
+    return Status::OK();
+}
+
+Status EnforceUniqueOperatorFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(OperatorFactory::prepare(state));
+    return Status::OK();
+}
+
+void EnforceUniqueOperatorFactory::close(RuntimeState* state) {
+    OperatorFactory::close(state);
+}
+
+} // namespace starrocks::pipeline
