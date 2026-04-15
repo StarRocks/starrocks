@@ -140,16 +140,14 @@ protected:
         MockChunkSink* data_sink;
     };
 
-    SinkWithMocks create_row_delta_sink_with_mocks(int32_t op_code_index = 3, int32_t data_column_start_index = 2,
-                                                   int32_t data_column_count = 1) {
+    SinkWithMocks create_row_delta_sink_with_mocks(int32_t op_code_index = 3) {
         auto delete_sink = std::make_unique<MockChunkSink>(_runtime_state.get());
         auto data_sink = std::make_unique<MockChunkSink>(_runtime_state.get());
         auto* delete_ptr = delete_sink.get();
         auto* data_ptr = data_sink.get();
 
         auto row_delta_sink = std::make_unique<IcebergRowDeltaSink>(std::move(delete_sink), std::move(data_sink),
-                                                                    op_code_index, data_column_start_index,
-                                                                    data_column_count, nullptr, _runtime_state.get());
+                                                                    op_code_index, nullptr, _runtime_state.get());
 
         return {std::move(row_delta_sink), delete_ptr, data_ptr};
     }
