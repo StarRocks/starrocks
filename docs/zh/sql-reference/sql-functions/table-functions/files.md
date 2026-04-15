@@ -142,13 +142,15 @@ Parquet 格式示例：
 
 如果此项设置为 `true`：
 
-- 对于 DATETIME 类型，系统使用 `INT96` 编码。
 - 对于 DECIMAL 类型，系统使用 `fixed_len_byte_array` 编码。
+- 对于 DATETIME 类型，系统使用 `INT96` 编码。
 
 如果此项设置为 `false`：
 
-- 对于 DATETIME 类型，系统使用 `INT64` 编码。
 - 对于 DECIMAL 类型，系统使用 `INT32` 或 `INT64` 编码。
+- 对于 DATETIME 类型，系统使用 `INT64` 编码。
+  - **即时语义**：如果 Parquet TIMESTAMP 类型的 `isAdjustedToUTC` 设置为 `true`，系统将输出一个已转换为 UTC 的时间戳。每个值都能在时间轴上唯一标识一个特定时刻，并可转换为特定时区。
+  - **本地语义**：如果 Parquet TIMESTAMP 类型的 `isAdjustedToUTC` 设置为 `false`，系统将输出一个表示本地时区中的年、月、日、时、分、秒及亚秒的时间戳，无论具体哪个时区被视为本地时区。此类值始终以相同方式显示，无论当前生效的本地时区为何，且无法标识时间轴上的特定时刻。
 
 :::note
 
