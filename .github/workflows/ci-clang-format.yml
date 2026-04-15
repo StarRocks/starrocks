@@ -59,6 +59,11 @@ jobs:
           BASE_REPO: ${{ github.repository }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
+          if git grep -l '^<<<<<<<' -- be/src be/test 2>/dev/null | grep -q .; then
+            echo "Merge conflict markers found; skipping clang-format."
+            exit 0
+          fi
+
           fetched_files=(
             "build-support/format_changed_files.py"
             "build-support/run_clang_format.py"
