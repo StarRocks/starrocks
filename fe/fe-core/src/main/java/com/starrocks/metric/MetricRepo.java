@@ -915,6 +915,9 @@ public final class MetricRepo {
                 @Override
                 public Long getValueLeader() {
                     ComputeNode cn = infoService.getComputeNode(cnId);
+                    if (cn == null) {
+                        return 0L;
+                    }
                     String workerAddr = cn.getHost() + ":" + cn.getStarletPort();
                     return starOsAgent.getWorkerTabletNum(workerAddr);
                 }
