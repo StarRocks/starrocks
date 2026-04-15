@@ -256,6 +256,64 @@ TEST_P(LakeDuplicateKeyCompactionTest, test_empty_tablet) {
     ASSERT_EQ(0, read(version));
 }
 
+// Regression test for SIGFPE in compaction when rowset metadata reports
+// num_rows=0 but the underlying physical segments still contain readable
+// rows. This simulates the state after an online tablet split where sub-tablet
+// metadata inherits zeroed stats while the shared physical segments remain
+// populated. Before the fix, the divide-by-zero in progress.update triggered
+// a crash; after the fix, the guards skip the progress update and compaction
+// completes normally.
+TEST_P(LakeDuplicateKeyCompactionTest, test_zero_num_rows_no_crash) {
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize * 3, read(version));
+
+    // Simulate post-split metadata inconsistency: zero the per-rowset stats
+    // while leaving the physical segments intact.
+    {
+        ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto mutated = std::make_shared<TabletMetadata>(*tablet_metadata);
+        for (auto& rowset : *mutated->mutable_rowsets()) {
+            rowset.set_num_rows(0);
+            rowset.set_data_size(0);
+        }
+        mutated->set_version(version + 1);
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*mutated));
+        version++;
+    }
+
+    auto txn_id = next_id();
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
+    check_task(task);
+    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
+    EXPECT_EQ(100, task_context->progress.value());
+}
+
 class LakeDuplicateKeyOverlapSegmentsCompactionTest : public LakeCompactionTest {
 public:
     LakeDuplicateKeyOverlapSegmentsCompactionTest() : LakeCompactionTest(kTestDirectory) {
