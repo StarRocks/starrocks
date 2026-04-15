@@ -1897,10 +1897,9 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
         zonemap_scan_range = &coarse_scan_range;
     }
 
-    ASSIGN_OR_RETURN(auto hit_row_ranges,
-                     _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{_opts.pred_tree_for_zone_map,
-                                                                                _column_iterators, _del_predicates,
-                                                                                del_columns, zonemap_scan_range}));
+    ASSIGN_OR_RETURN(auto hit_row_ranges, _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
+                                                  _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates,
+                                                  del_columns, zonemap_scan_range}));
     if (hit_row_ranges.has_value()) {
         zm_range &= hit_row_ranges.value();
     }
