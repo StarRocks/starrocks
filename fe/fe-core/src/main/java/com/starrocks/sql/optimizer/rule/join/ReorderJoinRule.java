@@ -72,8 +72,9 @@ public class ReorderJoinRule extends Rule {
             }
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
             if (joinOperator.isInnerOrCrossJoin()) {
+                boolean separateFromProjectionBoundary = MultiJoinNode.hasFromTwoChildProjectionBoundary(root);
                 // For A inner join (B inner join C), we only think A is root tree
-                if (!findNewRoot) {
+                if (!findNewRoot || separateFromProjectionBoundary) {
                     findNewRoot = true;
                     results.add(Pair.create(root, Pair.create(parent, childIdx)));
                 }

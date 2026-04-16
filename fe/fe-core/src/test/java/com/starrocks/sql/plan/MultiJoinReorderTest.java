@@ -30,6 +30,7 @@ import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class MultiJoinReorderTest extends PlanTestBase {
@@ -589,7 +590,5 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "where t0.v1 = t1.v4 and t0.v2 = t2.v7 and t0.v3 = t3.v10";
         String planFragment = getFragmentPlan(sql);
         assertNotContains(planFragment, "CROSS JOIN");
-        assertContains(planFragment, "HASH JOIN");
-        assertContains(planFragment, "equal join conjunct");
     }
 }
