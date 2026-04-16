@@ -124,6 +124,8 @@ public class MergeIntoAnalyzer {
         }
 
         // 4. Validate NOT MATCHED INSERT clauses: column count == values count
+        int targetDataColumnCount = (int) icebergTable.getBaseSchema().stream()
+                .filter(col -> !col.isHidden()).count();
         for (MergeWhenClause clause : stmt.getWhenClauses()) {
             if (clause instanceof MergeWhenNotMatchedInsertClause insertClause) {
                 if (!insertClause.isStar()) {
@@ -133,6 +135,12 @@ public class MergeIntoAnalyzer {
                         throw new SemanticException(
                                 "MERGE INTO INSERT column count %d does not match value count %d",
                                 targetCols.size(), values.size());
+                    }
+                    // Positional VALUES without column list: value count must match schema
+                    if (targetCols == null && values != null && values.size() != targetDataColumnCount) {
+                        throw new SemanticException(
+                                "MERGE INTO INSERT VALUES count %d does not match target table column count %d",
+                                values.size(), targetDataColumnCount);
                     }
                     // Validate target column names exist
                     if (targetCols != null) {

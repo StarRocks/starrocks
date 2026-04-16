@@ -168,6 +168,11 @@ public class MergeIntoPlanner {
      * Build conflict detection filter from the TARGET table's IcebergScanNode, not the first
      * Iceberg scan found. In MERGE, the source may also be an Iceberg table, and the generic
      * buildIcebergFilterExpr() picks the first scan it finds — which could be the source.
+     *
+     * We identify the target scan by {@code isUsedForDelete() == true}, which is set by
+     * PlanFragmentBuilder when the output contains _file/_pos metadata columns. This works
+     * even for self-merges where both scans reference the same native table, because only
+     * the target side outputs delete-path metadata.
      */
     private static org.apache.iceberg.expressions.Expression buildTargetIcebergFilterExpr(
             ExecPlan execPlan, IcebergTable targetTable) {
@@ -176,19 +181,17 @@ public class MergeIntoPlanner {
         }
 
         for (PlanNode node : execPlan.getScanNodes()) {
-            if (node instanceof com.starrocks.planner.IcebergScanNode scanNode) {
-                // Match by native table identity — same underlying Iceberg table object
-                if (scanNode.getIcebergTable().getNativeTable() == targetTable.getNativeTable()) {
-                    var predicate = scanNode.getIcebergJobPlanningPredicate();
-                    var nativeSchema = scanNode.getIcebergTable().getNativeTable().schema();
-                    if (predicate == null || nativeSchema == null) {
-                        return null;
-                    }
-                    var icebergContext = new com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr
-                            .IcebergContext(nativeSchema.asStruct());
-                    return new com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr()
-                            .convert(java.util.Collections.singletonList(predicate), icebergContext);
+            if (node instanceof com.starrocks.planner.IcebergScanNode scanNode
+                    && scanNode.isUsedForDelete()) {
+                var predicate = scanNode.getIcebergJobPlanningPredicate();
+                var nativeSchema = scanNode.getIcebergTable().getNativeTable().schema();
+                if (predicate == null || nativeSchema == null) {
+                    return null;
                 }
+                var icebergContext = new com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr
+                        .IcebergContext(nativeSchema.asStruct());
+                return new com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr()
+                        .convert(java.util.Collections.singletonList(predicate), icebergContext);
             }
         }
         return null;
