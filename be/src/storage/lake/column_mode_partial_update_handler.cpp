@@ -533,7 +533,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
 bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id,
                                                      const TabletMetadata& metadata, MetaFileBuilder* builder) {
-    if (metadata.dcg_meta().dcgs().empty()) {
+    const bool has_dcg = !metadata.dcg_meta().dcgs().empty();
+    const bool has_idg = metadata.has_idg_meta() && !metadata.idg_meta().idgs().empty();
+    if (!has_dcg && !has_idg) {
         return false;
     }
     std::unordered_set<uint32_t> input_rowsets; // all rowsets that have been compacted
@@ -549,19 +551,38 @@ bool CompactionUpdateConflictChecker::conflict_check(const TxnLogPB_OpCompaction
             }
         }
     }
-    // 2. find out if these segments have been updated
+    // 2. find out if these segments have been updated (DCG) or had indexes
+    //    added (IDG) since the compaction started. Either race forces the
+    //    compaction to land as an "with_conflict" no-op so the newer delta
+    //    is preserved.
     for (uint32_t segment : input_segments) {
-        auto dcg_ver_iter = metadata.dcg_meta().dcgs().find(segment);
-        if (dcg_ver_iter != metadata.dcg_meta().dcgs().end()) {
-            for (int64_t ver : dcg_ver_iter->second.versions()) {
-                if (ver > op_compaction.compact_version()) {
-                    // conflict happens
-                    builder->apply_opcompaction_with_conflict(op_compaction);
-                    LOG(INFO) << fmt::format(
-                            "PK compaction conflict with partial column update, tablet_id: {} txn_id: {} "
-                            "op_compaction: {}",
-                            metadata.id(), txn_id, op_compaction.ShortDebugString());
-                    return true;
+        if (has_dcg) {
+            auto dcg_ver_iter = metadata.dcg_meta().dcgs().find(segment);
+            if (dcg_ver_iter != metadata.dcg_meta().dcgs().end()) {
+                for (int64_t ver : dcg_ver_iter->second.versions()) {
+                    if (ver > op_compaction.compact_version()) {
+                        builder->apply_opcompaction_with_conflict(op_compaction);
+                        LOG(INFO) << fmt::format(
+                                "PK compaction conflict with partial column update, tablet_id: {} txn_id: {} "
+                                "op_compaction: {}",
+                                metadata.id(), txn_id, op_compaction.ShortDebugString());
+                        return true;
+                    }
+                }
+            }
+        }
+        if (has_idg) {
+            auto idg_ver_iter = metadata.idg_meta().idgs().find(segment);
+            if (idg_ver_iter != metadata.idg_meta().idgs().end()) {
+                for (const auto& entry : idg_ver_iter->second.entries()) {
+                    if (entry.has_version() && entry.version() > op_compaction.compact_version()) {
+                        builder->apply_opcompaction_with_conflict(op_compaction);
+                        LOG(INFO) << fmt::format(
+                                "Compaction conflict with ADD INDEX fast path, tablet_id: {} txn_id: {} "
+                                "op_compaction: {}",
+                                metadata.id(), txn_id, op_compaction.ShortDebugString());
+                        return true;
+                    }
                 }
             }
         }

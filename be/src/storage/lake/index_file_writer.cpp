@@ -14,8 +14,8 @@
 
 #include "storage/lake/index_file_writer.h"
 
+#include "base/coding.h"
 #include "fs/fs.h"
-#include "util/coding.h"
 
 namespace starrocks::lake {
 
