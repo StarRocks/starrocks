@@ -76,11 +76,11 @@ public class MultiJoinNode {
     public static MultiJoinNode toMultiJoinNode(OptExpression node) {
         LinkedHashSet<OptExpression> atoms = new LinkedHashSet<>();
         List<ScalarOperator> predicates = new ArrayList<>();
-        Map<ColumnRefOperator, ScalarOperator> expressionMap = new HashMap<>();
+        Map<ColumnRefOperator, ScalarOperator> proMap = new HashMap<>();
 
-        flattenJoinNode(node, atoms, predicates, expressionMap, true);
+        flattenJoinNode(node, atoms, predicates, proMap, true);
 
-        return new MultiJoinNode(atoms, predicates, expressionMap);
+        return new MultiJoinNode(atoms, predicates, proMap);
     }
 
     private static void flattenJoinNode(OptExpression node, LinkedHashSet<OptExpression> atoms,
@@ -131,7 +131,7 @@ public class MultiJoinNode {
         predicates.addAll(Utils.extractConjuncts(joinPredicate));
     }
 
-    static boolean hasFromTwoChildProjectionBoundary(OptExpression node) {
+    static boolean hasProjectRelyOnTwoChildren(OptExpression node) {
         if (!(node.getOp() instanceof LogicalJoinOperator)) {
             return false;
         }
@@ -149,7 +149,10 @@ public class MultiJoinNode {
         });
     }
 
+    // multi join node tree's root can have projection that rely on two children
+    // since projection's output won't be used by any atom of this join tree
+    // so it's safe to reorder this join tree
     private static boolean hasUnsafeProjectionForJoinReorder(OptExpression node, boolean isMultiJoinRoot) {
-        return !isMultiJoinRoot && hasFromTwoChildProjectionBoundary(node);
+        return !isMultiJoinRoot && hasProjectRelyOnTwoChildren(node);
     }
 }
