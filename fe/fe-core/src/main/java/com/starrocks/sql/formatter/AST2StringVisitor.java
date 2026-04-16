@@ -1559,6 +1559,9 @@ public class AST2StringVisitor implements AstVisitorExtendInterface<String, Void
                     strBuilder.append(")");
                 }
                 break;
+            case GROUP_BY_ALL:
+                strBuilder.append("ALL");
+                break;
             default:
                 break;
         }

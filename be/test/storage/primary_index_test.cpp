@@ -232,7 +232,7 @@ void test_binary_pk(int key_size) {
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_col).ok());
 
     std::map<std::string, uint64_t> current_index_stat;
-    auto* keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    auto keys = pk_col->immutable_data();
     for (int i = 0; i < pk_col->size(); i++) {
         current_index_stat[hexdump(keys[i].data, keys[i].size)] = i;
     }
@@ -243,7 +243,7 @@ void test_binary_pk(int key_size) {
         pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(1, 0, *pk_col).ok());
-    keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    keys = pk_col->immutable_data();
     for (int i = 0; i < pk_col->size(); i++) {
         current_index_stat[hexdump(keys[i].data, keys[i].size)] = (((uint64_t)1) << 32) + i;
     }
@@ -254,7 +254,7 @@ void test_binary_pk(int key_size) {
         pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(2, 0, *pk_col).ok());
-    keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    keys = pk_col->immutable_data();
     for (int i = 0; i < pk_col->size(); i++) {
         current_index_stat[hexdump(keys[i].data, keys[i].size)] = (((uint64_t)2) << 32) + i;
     }

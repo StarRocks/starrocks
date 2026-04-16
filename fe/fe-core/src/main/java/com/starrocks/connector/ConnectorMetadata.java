@@ -207,6 +207,15 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Get partition info at a specific snapshot identified by the request context.
+     * Default implementation ignores the context and falls back to the live-snapshot variant.
+     */
+    default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                              ConnectorMetadatRequestContext requestContext) {
+        return getPartitions(table, partitionNames);
+    }
+
+    /**
      * Get statistics for the table.
      *
      * @param session           optimizer context

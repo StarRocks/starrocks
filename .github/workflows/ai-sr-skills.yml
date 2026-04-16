@@ -4,12 +4,9 @@ on:
   pull_request_target:
     branches:
       - main
-      - "branch*"
     types:
       - opened
       - reopened
-      - edited
-      - synchronize
 
 concurrency:
   group: AI-SR-SKILLS-${{ github.event.number }}
@@ -22,10 +19,25 @@ jobs:
   assign-reviewer:
     runs-on: [self-hosted, normal]
     continue-on-error: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
     if: >
-      (github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.action == 'edited') &&
+      github.event.action == 'opened' &&
       !startsWith(github.head_ref, 'mergify/')
     steps:
       - name: Assign PR Reviewer
         run: |
-          /var/local/env/tools/claude -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" || true
+          echo "=== DEBUG ==="
+          echo "PR: ${{ github.event.number }}"
+          echo "ACTION: ${{ github.event.action }}"
+          echo "BASE_REF: ${{ github.base_ref }}"
+          echo "HEAD_REF: ${{ github.head_ref }}"
+          echo "CLAUDE_CODE_OAUTH_TOKEN length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
+          echo "GITHUB_TOKEN length: ${#GITHUB_TOKEN}"
+          echo "=== RUN ==="
+          docker exec -i -u claudeuser \
+            -e GITHUB_TOKEN="${GITHUB_TOKEN}" \
+            -e CLAUDE_CODE_OAUTH_TOKEN="${CLAUDE_CODE_OAUTH_TOKEN}" \
+            claude-cli claude --dangerously-skip-permissions \
+            -p "/starrocks-assign-pr-reviewer https://github.com/${{ github.repository }}/pull/${{ github.event.number }}" || true

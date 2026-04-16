@@ -14,7 +14,6 @@
 
 #include "connector/connector.h"
 
-#include "connector/binlog_connector.h"
 #include "connector/es_connector.h"
 #include "connector/file_connector.h"
 #include "connector/hive_connector.h"
@@ -27,6 +26,7 @@
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
 #include "exec/runtime_filter/runtime_filter_helper.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::connector {
 
@@ -69,7 +69,6 @@ public:
         cm->put(Connector::CACHE_STATS, std::make_unique<CacheStatsConnector>());
         cm->put(Connector::FILE, std::make_unique<FileConnector>());
         cm->put(Connector::LAKE, std::make_unique<LakeConnector>());
-        cm->put(Connector::BINLOG, std::make_unique<BinlogConnector>());
 #ifndef __APPLE__
         cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
 #endif

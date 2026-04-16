@@ -2359,8 +2359,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
     public static long statistic_predicate_columns_persist_interval_sec = 60L;
 
-    @ConfField(mutable = true, comment = "The TTL of predicate columns, it would not be considered as predicate " +
-            "columns after this period")
+    @ConfField(mutable = true, comment = "The TTL of predicate columns in hours; entries older than this are " +
+            "removed by vacuum. A negative value (e.g. -1) disables predicate column vacuum.")
     public static long statistic_predicate_columns_ttl_hours = 24;
 
     @ConfField(mutable = true, comment = "Enable predicate columns collection. If disabled, predicate columns " +
@@ -3072,7 +3072,8 @@ public class Config extends ConfigBase {
     /**
      * fe sync with star mgr meta interval in seconds
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "The interval in seconds at which StarMgrMetaSyncer runs periodical" +
+            " metadata synchronization between FE and StarMgr in a shared-data cluster.")
     public static long star_mgr_meta_sync_interval_sec = 600L;
 
     /**

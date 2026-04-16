@@ -200,33 +200,6 @@ public class JobSpecTest extends SchedulerTestBase {
     }
 
     @Test
-    public void testFromMVMaintenanceJobSpec() throws Exception {
-        // Prepare input arguments.
-        String sql = "select * from lineitem";
-        ExecPlan execPlan = getExecPlan(sql);
-
-        TUniqueId queryId = new TUniqueId(2, 3);
-        connectContext.setExecutionId(queryId);
-        UUID lastQueryId = new UUID(4L, 5L);
-        connectContext.setLastQueryId(lastQueryId);
-        DescriptorTable descTable = new DescriptorTable();
-        List<PlanFragment> fragments = execPlan.getFragments();
-        List<ScanNode> scanNodes = execPlan.getScanNodes();
-
-        JobSpec jobSpec = JobSpec.Factory.fromMVMaintenanceJobSpec(
-                connectContext, fragments, scanNodes, descTable.toThrift(), execPlan);
-
-        // Check created jobSpec.
-        Assertions.assertEquals(queryId, jobSpec.getQueryId());
-        Assertions.assertEquals(lastQueryId.toString(), jobSpec.getQueryGlobals().getLast_query_id());
-        Assertions.assertEquals(TQueryType.SELECT, jobSpec.getQueryOptions().getQuery_type());
-        Assertions.assertTrue(jobSpec.isEnablePipeline());
-        Assertions.assertTrue(jobSpec.isEnableStreamPipeline());
-        Assertions.assertFalse(jobSpec.isBlockQuery());
-        Assertions.assertEquals(QUERY_RESOURCE_GROUP, jobSpec.getResourceGroup());
-    }
-
-    @Test
     public void testFromBrokerLoadJobSpec() throws Exception {
         // Prepare input arguments.
         String sql = "insert into lineitem select * from lineitem";

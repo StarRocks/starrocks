@@ -142,13 +142,15 @@ Parquet 格式示例：
 
 如果此项设置为 `true`：
 
-- 对于 DATETIME 类型，系统使用 `INT96` 编码。
 - 对于 DECIMAL 类型，系统使用 `fixed_len_byte_array` 编码。
+- 对于 DATETIME 类型，系统使用 `INT96` 编码。
 
 如果此项设置为 `false`：
 
-- 对于 DATETIME 类型，系统使用 `INT64` 编码。
 - 对于 DECIMAL 类型，系统使用 `INT32` 或 `INT64` 编码。
+- 对于 DATETIME 类型，系统使用 `INT64` 编码。
+  - **即时语义**：如果 Parquet TIMESTAMP 类型的 `isAdjustedToUTC` 设置为 `true`，系统将输出一个已转换为 UTC 的时间戳。每个值都能在时间轴上唯一标识一个特定时刻，并可转换为特定时区。
+  - **本地语义**：如果 Parquet TIMESTAMP 类型的 `isAdjustedToUTC` 设置为 `false`，系统将输出一个表示本地时区中的年、月、日、时、分、秒及亚秒的时间戳，无论具体哪个时区被视为本地时区。此类值始终以相同方式显示，无论当前生效的本地时区为何，且无法标识时间轴上的特定时刻。
 
 :::note
 
@@ -926,7 +928,12 @@ unload_data_param ::=
     "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
     "partition_by" = "<column_name> [, ...]",
     "single" = { "true" | "false" } ,
-    "target_max_file_size" = "<int>"
+    "target_max_file_size" = "<int>",
+    "csv.column_separator" = "<column_separator>",
+    "csv.row_delimiter" = "<row_delimiter>",
+    "csv.include_header" = { "true" | "false" },
+    "csv.enclose" = "<enclose_character>",
+    "csv.escape" = "<escape_character>"
 ```
 
 | **Key**          | **Required** | **Description**                                              |
@@ -935,6 +942,11 @@ unload_data_param ::=
 | `partition_by`     | No           | 用于将数据文件分区到不同存储路径的列列表。多个列用逗号（,）分隔。`FILES()` 提取指定列的键/值信息，并将数据文件存储在具有提取键/值对的存储路径下。有关进一步说明，请参见示例 7。 |
 | `single`           | No           | 是否将数据导出到单个文件。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果导出数据量超过 512 MB，数据将存储在多个文件中。</li></ul>                  |
 | `target_max_file_size` | No           | 要导出的批次中每个文件的最大大小（此值仅为系统尽力达成的目标，不代表实际结果）。单位：字节。默认值：1073741824（1 GB）。当要导出的数据大小超过此值时，数据将被分割成多个文件，并且每个文件的大小不会显著超过此值。引入于 v3.2.7。 |
+| `csv.column_separator` | No       | CSV 格式导出文件中使用的列分隔符。默认值：`\t`。仅在 `format` 为 `csv` 时生效。                           |
+| `csv.row_delimiter` | No          | CSV 格式导出文件中使用的行分隔符。默认值：`\n`。仅在 `format` 为 `csv` 时生效。                          |
+| `csv.include_header` | No         | 是否在 CSV 格式导出文件的首行输出列名。有效值：`true`、`false`（默认）。仅在 `format` 为 `csv` 时生效。 |
+| `csv.enclose`      | No           | CSV 格式导出文件中用于包裹每个字段值的字符。指定该参数后，所有非 NULL 字段值将被该字符包裹，字段值内出现的 enclose/escape 字符将使用 `csv.escape` 字符进行转义。NULL 值输出为 `\N`，不进行包裹。类型：单字节 ASCII 字符。多字符或多字节（非 ASCII）的值会被语义层拒绝。默认值：`NONE`（禁用）。仅在 `format` 为 `csv` 时生效。 |
+| `csv.escape`       | No           | 用于转义 enclose 字符和 escape 字符自身的字符。类型：单字节 ASCII 字符。多字符或多字节（非 ASCII）的值会被语义层拒绝。默认值：`NONE`。常见组合：<ul><li>`"csv.enclose"="\""`, `"csv.escape"="\""`：RFC 4180 风格（双引号重复）。</li><li>`"csv.enclose"="\""`, `"csv.escape"="\\"`：反斜杠转义风格。</li></ul>**注意**<br />将 RFC 4180 双引号重复格式的输出（即 `escape` 与 `enclose` 相同）重新导入到 StarRocks 时，读端只需设置 `csv.enclose`，不要设置 `csv.escape`。StarRocks 的 CSV reader 通过其 ENCLOSE 状态原生处理双引号重复。 |
 
 ## 示例
 

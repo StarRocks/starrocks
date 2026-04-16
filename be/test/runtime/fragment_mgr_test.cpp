@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
 #include <utility>
 
 #include "base/testutil/assert.h"
@@ -149,6 +150,19 @@ TEST_F(FragmentMgrTest, CancelWithoutAdd) {
     params.params.fragment_instance_id.__set_hi(100);
     params.params.fragment_instance_id.__set_lo(200);
     ASSERT_TRUE(mgr.cancel(params.params.fragment_instance_id).ok());
+}
+
+TEST_F(FragmentMgrTest, RejectLegacyStreamPipeline) {
+    FragmentMgr mgr(ExecEnv::GetInstance());
+    TExecPlanFragmentParams params;
+    params.params.fragment_instance_id = TUniqueId();
+    params.params.fragment_instance_id.__set_hi(101);
+    params.params.fragment_instance_id.__set_lo(201);
+    params.__set_is_stream_pipeline(true);
+
+    Status st = mgr.exec_plan_fragment(params);
+    ASSERT_TRUE(st.is_not_supported()) << st;
+    ASSERT_NE(st.message().find("Legacy incremental MV maintenance is no longer supported"), std::string::npos);
 }
 
 TEST_F(FragmentMgrTest, ProfileReportWorkerUsesInjectedServices) {

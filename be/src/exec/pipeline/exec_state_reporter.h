@@ -21,7 +21,6 @@
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService_types.h"
-#include "gen_cpp/MVMaintenance_types.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks {
@@ -47,12 +46,6 @@ public:
 
     Status update_max_threads(int max_threads);
     Status update_priority_max_threads(int max_threads);
-
-    // STREAM MV
-    static TMVMaintenanceTasks create_report_epoch_params(const QueryContext* query_ctx,
-                                                          const std::vector<FragmentContext*>& fragment_ctxs);
-
-    static Status report_epoch(const TMVMaintenanceTasks& params, const TNetworkAddress& fe_addr);
 
 public:
     // Accessors exposed only for unit tests (via the friend declaration above).

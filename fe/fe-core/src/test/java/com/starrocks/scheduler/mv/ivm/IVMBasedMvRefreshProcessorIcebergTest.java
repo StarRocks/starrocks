@@ -690,6 +690,13 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             Assertions.assertFalse(tempTvr.isEmpty(),
                     "tempBaseTableInfoTvrDeltaMap should contain pending TVR for subsequent batches");
 
+            // Verify owner is set during intermediate batches
+            String intermediateOwner = intermediateMv.getRefreshScheme()
+                    .getAsyncRefreshContext()
+                    .getTempTvrOwnerStartTaskRunId();
+            Assertions.assertNotNull(intermediateOwner,
+                    "Owner should be set during intermediate batches");
+
             // Execute remaining batches
             while (nextTaskRun != null) {
                 initAndExecuteTaskRun(nextTaskRun);
@@ -718,6 +725,52 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Assertions.assertTrue(checkpoint instanceof TvrTableSnapshot);
         Assertions.assertEquals(2L, checkpoint.to().getVersion(),
                 "TVR checkpoint should point to version 2");
+
+        // Verify owner is cleared after all batches complete
+        String finalOwner = finalMv.getRefreshScheme()
+                .getAsyncRefreshContext()
+                .getTempTvrOwnerStartTaskRunId();
+        Assertions.assertNull(finalOwner,
+                "Owner should be cleared after all batches complete and TVR is promoted");
+    }
+
+    /**
+     * Verify that after single-batch IVM→PCT fallback, the frozen TVR in
+     * tempBaseTableInfoTvrDeltaMap matches the snapshot that PCT synced to (Bug A fix).
+     * Owner should be cleared after TVR promotion on the single batch.
+     */
+    @Test
+    public void testFallbackTvrOwnerLifecycleSingleBatch() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto");
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        // Run: IVM fails → fallback to PCT (single batch, unpartitioned MV)
+        MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
+        MVHybridBasedRefreshProcessor hybrid =
+                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+
+        // After single-batch completes: TVR promoted, owner cleared
+        MaterializedView refreshedMv = getMv("test_mv1");
+        MaterializedView.AsyncRefreshContext ctx = refreshedMv.getRefreshScheme().getAsyncRefreshContext();
+
+        // TVR should be promoted
+        Map<BaseTableInfo, TvrVersionRange> finalCheckpoint = ctx.getBaseTableInfoTvrVersionRangeMap();
+        Assertions.assertFalse(finalCheckpoint.isEmpty(),
+                "TVR should be promoted after single-batch fallback");
+        Assertions.assertEquals(2L, finalCheckpoint.values().iterator().next().to().getVersion(),
+                "TVR should match the PCT-synced snapshot version");
+
+        // Owner should be cleared (single batch = first batch = last batch)
+        Assertions.assertNull(ctx.getTempTvrOwnerStartTaskRunId(),
+                "Owner should be cleared after single-batch TVR promotion");
+
+        // Temp map should be cleared
+        Assertions.assertTrue(ctx.getTempBaseTableInfoTvrDeltaMap().isEmpty(),
+                "Temp TVR map should be cleared after promotion");
     }
 
     /**

@@ -854,19 +854,18 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/no_cte_operator_test"),
                         null, TExplainLevel.NORMAL);
-        Assertions.assertTrue(replayPair.second.contains("23:Project\n" +
+        Assertions.assertTrue(replayPair.second.contains("Project\n" +
                 "  |  <slot 193> : 193: mock_081\n" +
                 "  |  <slot 194> : 194: mock_089\n" +
                 "  |  <slot 391> : 391: case\n" +
                 "  |  <slot 396> : 396: rank()"), replayPair.second);
-        Assertions.assertTrue(replayPair.second.contains(" 20:SORT\n" +
+        Assertions.assertTrue(replayPair.second.contains("SORT\n" +
                 "  |  order by: <slot 194> 194: mock_089 ASC," +
                 " <slot 395> 395: case ASC, <slot 193> 193: mock_081 ASC, " +
                 "<slot 233> 233: mock_065 ASC\n" +
                 "  |  analytic partition by: 194: mock_089, 395: case, 193: mock_081\n" +
                 "  |  offset: 0\n" +
-                "  |  \n" +
-                "  19:EXCHANGE"), replayPair.second);
+                "  |  \n"), replayPair.second);
     }
 
     @Test

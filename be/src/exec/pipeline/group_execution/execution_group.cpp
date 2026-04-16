@@ -50,13 +50,6 @@ void ExecutionGroup::count_down_pipeline(RuntimeState* state) {
     }
 }
 
-void ExecutionGroup::count_down_epoch_pipeline(RuntimeState* state) {
-    size_t num_pipelines = _num_pipelines;
-    if (++_num_epoch_finished_pipelines == num_pipelines) {
-        state->fragment_ctx()->count_down_epoch_pipeline(state);
-    }
-}
-
 Status NormalExecutionGroup::prepare_pipelines(RuntimeState* state) {
     for (auto& pipeline : _pipelines) {
         RETURN_IF_ERROR(pipeline->prepare(state));

@@ -24,6 +24,7 @@
 #include "base/simd/simd.h"
 #include "column/array_column.h"
 #include "column/column_hash.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
@@ -143,6 +144,21 @@ StatusOr<ColumnPtr> ArrayFunctions::array_append([[maybe_unused]] FunctionContex
     return result;
 }
 
+// Columns that represent nested/collection types (Array, Map, Struct).
+// These have no primitive ValueType; use uint8_t as a placeholder.
+template <typename T>
+inline constexpr bool is_nested_column_v =
+        std::is_same_v<T, ArrayColumn> || std::is_same_v<T, MapColumn> || std::is_same_v<T, StructColumn>;
+
+// Columns that compare elements via Column::equals() rather than raw pointer equality.
+// Includes all nested types plus JsonColumn.
+template <typename T>
+inline constexpr bool column_uses_equals_v = is_nested_column_v<T> || std::is_same_v<T, JsonColumn>;
+
+// Value type for element comparison: nested columns have no primitive ValueType, use uint8_t.
+template <typename T>
+using column_value_t = std::conditional_t<is_nested_column_v<T>, uint8_t, typename T::ValueType>;
+
 class ArrayRemoveImpl {
 public:
     static StatusOr<ColumnPtr> evaluate(const ColumnPtr& array, const ColumnPtr& element) {
@@ -166,10 +182,7 @@ private:
 
         result_offsets.reserve(num_array);
 
-        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
-                                                     std::is_same_v<MapColumn, ElementColumn> ||
-                                                     std::is_same_v<StructColumn, ElementColumn>,
-                                             uint8_t, typename ElementColumn::ValueType>;
+        using ValueType = column_value_t<ElementColumn>;
 
         auto offsets_ptr = offsets_data.data();
         [[maybe_unused]] auto is_null = [](const NullColumn::ImmContainer& null_map, size_t idx) -> bool {
@@ -180,6 +193,21 @@ private:
         if constexpr (ConstTarget) {
             targets_col = down_cast<const ConstColumn*>(&targets)->data_column().get();
         }
+
+        [[maybe_unused]] auto elements_data = [&] {
+            if constexpr (column_uses_equals_v<ElementColumn>) {
+                return (const ValueType*)nullptr;
+            } else {
+                return elements.immutable_data();
+            }
+        }();
+        [[maybe_unused]] auto targets_data = [&] {
+            if constexpr (column_uses_equals_v<ElementColumn>) {
+                return (const ValueType*)nullptr;
+            } else {
+                return down_cast<const ElementColumn*>(targets_col)->immutable_data();
+            }
+        }();
 
         uint32_t result_offset = 0;
         for (size_t i = 0; i < num_array; i++) {
@@ -228,23 +256,16 @@ private:
                 }
 
                 uint8_t found = 0;
-                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn> ||
-                              std::is_same_v<JsonColumn, ElementColumn>) {
+                if constexpr (column_uses_equals_v<ElementColumn>) {
                     if constexpr (ConstTarget) {
                         found = elements.equals(offset + j, *targets_col, 0);
                     } else {
                         found = elements.equals(offset + j, targets, i);
                     }
                 } else if constexpr (ConstTarget) {
-                    [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
-                    auto targets_ptr = (const ValueType*)(targets.raw_data());
-                    auto& first_target = *targets_ptr;
-                    found = (elements_ptr[offset + j] == first_target);
+                    found = (elements_data[offset + j] == targets_data[0]);
                 } else {
-                    [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
-                    auto targets_ptr = (const ValueType*)(targets.raw_data());
-                    found = (elements_ptr[offset + j] == targets_ptr[i]);
+                    found = (elements_data[offset + j] == targets_data[i]);
                 }
 
                 if (found == 1) {
@@ -527,10 +548,7 @@ private:
 
         auto* result_ptr = result->get_data().data();
 
-        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
-                                                     std::is_same_v<MapColumn, ElementColumn> ||
-                                                     std::is_same_v<StructColumn, ElementColumn>,
-                                             uint8_t, typename ElementColumn::ValueType>;
+        using ValueType = column_value_t<ElementColumn>;
 
         auto offsets_ptr = offsets.immutable_data().data();
 
@@ -542,6 +560,21 @@ private:
         if constexpr (ConstTarget) {
             targets_col = down_cast<const ConstColumn*>(&targets)->data_column().get();
         }
+
+        [[maybe_unused]] auto elements_data = [&] {
+            if constexpr (column_uses_equals_v<ElementColumn>) {
+                return (const ValueType*)nullptr;
+            } else {
+                return elements.immutable_data();
+            }
+        }();
+        [[maybe_unused]] auto targets_data = [&] {
+            if constexpr (column_uses_equals_v<ElementColumn>) {
+                return (const ValueType*)nullptr;
+            } else {
+                return down_cast<const ElementColumn*>(targets_col)->immutable_data();
+            }
+        }();
 
         for (size_t i = 0; i < result_size; i++) {
             size_t offset = ConstElement ? offsets_ptr[0] : offsets_ptr[i];
@@ -574,23 +607,16 @@ private:
                     }
                 }
 
-                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn> ||
-                              std::is_same_v<JsonColumn, ElementColumn>) {
+                if constexpr (column_uses_equals_v<ElementColumn>) {
                     if (ConstTarget) {
                         found = elements.equals(offset + j, *targets_col, 0);
                     } else {
                         found = elements.equals(offset + j, targets, i);
                     }
                 } else if constexpr (ConstTarget) {
-                    auto elements_ptr = (const ValueType*)(elements.raw_data());
-                    auto targets_ptr = (const ValueType*)(targets.raw_data());
-                    auto& first_target = *targets_ptr;
-                    found = (elements_ptr[offset + j] == first_target);
+                    found = (elements_data[offset + j] == targets_data[0]);
                 } else {
-                    auto elements_ptr = (const ValueType*)(elements.raw_data());
-                    auto targets_ptr = (const ValueType*)(targets.raw_data());
-                    found = (elements_ptr[offset + j] == targets_ptr[i]);
+                    found = (elements_data[offset + j] == targets_data[i]);
                 }
                 if (found) {
                     position = j + 1;
@@ -739,14 +765,25 @@ private:
                            const ElementColumn& targets, uint32 target_start, uint32 target_end,
                            const NullColumn::ImmContainer& null_map_elements,
                            const NullColumn::ImmContainer& null_map_targets) {
-        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
-                                                     std::is_same_v<MapColumn, ElementColumn> ||
-                                                     std::is_same_v<StructColumn, ElementColumn>,
-                                             uint8_t, typename ElementColumn::ValueType>;
+        using ValueType = column_value_t<ElementColumn>;
 
         [[maybe_unused]] auto is_null = [](const NullColumn::ImmContainer null_map, size_t idx) -> bool {
             return null_map[idx] != 0;
         };
+        [[maybe_unused]] auto elements_data = [&] {
+            if constexpr (column_uses_equals_v<ElementColumn>) {
+                return (const ValueType*)nullptr;
+            } else {
+                return elements.immutable_data();
+            }
+        }();
+        [[maybe_unused]] auto targets_data = [&] {
+            if constexpr (column_uses_equals_v<ElementColumn>) {
+                return (const ValueType*)nullptr;
+            } else {
+                return targets.immutable_data();
+            }
+        }();
         for (size_t i = target_start; i < target_end; i++) {
             bool null_target = false;
             if constexpr (NullableTarget) {
@@ -782,14 +819,10 @@ private:
                     continue;
                 }
                 //[null, x*, x] - [null, x*, x]
-                if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
-                              std::is_same_v<StructColumn, ElementColumn> ||
-                              std::is_same_v<JsonColumn, ElementColumn>) {
+                if constexpr (column_uses_equals_v<ElementColumn>) {
                     found = (elements.equals(j, targets, i) == 1);
                 } else {
-                    auto elements_ptr = (const ValueType*)(elements.raw_data());
-                    auto targets_ptr = (const ValueType*)(targets.raw_data());
-                    found = (elements_ptr[j] == targets_ptr[i]);
+                    found = (elements_data[j] == targets_data[i]);
                 }
                 if (found) {
                     if constexpr (Any) {
@@ -816,13 +849,24 @@ private:
                                const ElementColumn& targets, uint32 target_start, uint32 target_end,
                                const NullColumn::ImmContainer& null_map_elements,
                                const NullColumn::ImmContainer& null_map_targets) {
-        using ValueType = std::conditional_t<std::is_same_v<ArrayColumn, ElementColumn> ||
-                                                     std::is_same_v<MapColumn, ElementColumn> ||
-                                                     std::is_same_v<StructColumn, ElementColumn>,
-                                             uint8_t, typename ElementColumn::ValueType>;
+        using ValueType = column_value_t<ElementColumn>;
         [[maybe_unused]] auto is_null = [](const NullColumn::ImmContainer& null_map, size_t idx) -> bool {
             return null_map[idx] != 0;
         };
+        [[maybe_unused]] auto elements_data = [&] {
+            if constexpr (column_uses_equals_v<ElementColumn>) {
+                return (const ValueType*)nullptr;
+            } else {
+                return elements.immutable_data();
+            }
+        }();
+        [[maybe_unused]] auto targets_data = [&] {
+            if constexpr (column_uses_equals_v<ElementColumn>) {
+                return (const ValueType*)nullptr;
+            } else {
+                return targets.immutable_data();
+            }
+        }();
         if (element_end - element_start < target_end - target_start) {
             return false;
         }
@@ -855,15 +899,10 @@ private:
                 } else if (null_target || null_element) {
                     found = false;
                 } else {
-                    if constexpr (std::is_same_v<ArrayColumn, ElementColumn> ||
-                                  std::is_same_v<MapColumn, ElementColumn> ||
-                                  std::is_same_v<StructColumn, ElementColumn> ||
-                                  std::is_same_v<JsonColumn, ElementColumn>) {
+                    if constexpr (column_uses_equals_v<ElementColumn>) {
                         found = (elements.equals(k, targets, i) == 1);
                     } else {
-                        auto elements_ptr = (const ValueType*)(elements.raw_data());
-                        auto targets_ptr = (const ValueType*)(targets.raw_data());
-                        found = (elements_ptr[k] == targets_ptr[i]);
+                        found = (elements_data[k] == targets_data[i]);
                     }
                 }
                 if (found) {

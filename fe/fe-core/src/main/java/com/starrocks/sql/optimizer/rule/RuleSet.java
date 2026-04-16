@@ -57,9 +57,6 @@ import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.UnionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaAggregateRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaFilterRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaIcebergScanRule;
@@ -512,12 +509,6 @@ public class RuleSet {
 
     public List<Rule> getImplementRules() {
         return implementRules;
-    }
-
-    public void addRealtimeMVRules() {
-        this.implementRules.add(StreamJoinImplementationRule.getInstance());
-        this.implementRules.add(StreamAggregateImplementationRule.getInstance());
-        this.implementRules.add(StreamScanImplementationRule.getInstance());
     }
 
     public void addHashJoinImplementationRule() {
