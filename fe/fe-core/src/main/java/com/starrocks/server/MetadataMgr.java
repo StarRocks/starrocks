@@ -871,6 +871,23 @@ public class MetadataMgr {
         return new ArrayList<>();
     }
 
+    /**
+     * Get partition info at a specific snapshot identified by the request context.
+     */
+    public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames,
+                                             ConnectorMetadatRequestContext requestContext) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPartitions(table, partitionNames, requestContext);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
     public SerializedMetaSpec getSerializedMetaSpec(String catalogName, String dbName, String tableName, long snapshotId,
                                                     String serializedPredicate, MetadataTableType type) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);

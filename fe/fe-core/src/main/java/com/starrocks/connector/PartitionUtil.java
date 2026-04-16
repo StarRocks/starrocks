@@ -33,6 +33,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -251,6 +252,15 @@ public class PartitionUtil {
         return ConnectorPartitionTraits.build(table).getPartitionNames();
     }
 
+    /**
+     * Get partition names at a specific pinned snapshot. For Iceberg tables, partition enumeration
+     * uses the pinned snapshot ID instead of currentSnapshot(). For non-Iceberg tables, falls back
+     * to the live variant.
+     */
+    public static List<String> getPartitionNames(Table table, TvrVersionRange pinnedVersionRange) {
+        return ConnectorPartitionTraits.build(table, pinnedVersionRange).getPartitionNames();
+    }
+
     // use partitionValues to filter partitionNames
     // eg. partitionNames: [p1=1/p2=2, p1=1/p2=3, p1=2/p2=2, p1=2/p2=3]
     //     partitionValues: [empty, 2]
@@ -318,10 +328,28 @@ public class PartitionUtil {
      *
      * @param table           : the ref base table of materialized view
      * @param partitionColumn : the ref base table's partition column which mv's partition derives
+     * @param pinnedVersionRange if non-null, uses this snapshot for Iceberg; if null, uses live snapshot.
      */
+    public static PCellSortedSet getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr,
+                                                      TvrVersionRange pinnedVersionRange)
+            throws StarRocksException {
+        return ConnectorPartitionTraits.build(table, pinnedVersionRange)
+                .getPartitionKeyRange(partitionColumn, partitionExpr);
+    }
+
     public static PCellSortedSet getPartitionKeyRange(Table table, Column partitionColumn, Expr partitionExpr)
             throws StarRocksException {
-        return ConnectorPartitionTraits.build(table).getPartitionKeyRange(partitionColumn, partitionExpr);
+        return getPartitionKeyRange(table, partitionColumn, partitionExpr, null);
+    }
+
+    /**
+     * Get partition cells, optionally at a pinned snapshot.
+     * @param pinnedVersionRange if non-null, uses this snapshot for Iceberg; if null, uses live snapshot.
+     */
+    public static PCellSortedSet getPartitionCells(Table table, List<Column> partitionColumns,
+                                                   TvrVersionRange pinnedVersionRange)
+            throws StarRocksException {
+        return ConnectorPartitionTraits.build(table, pinnedVersionRange).getPartitionCells(partitionColumns);
     }
 
     /**
@@ -329,7 +357,7 @@ public class PartitionUtil {
      */
     public static PCellSortedSet getPartitionCells(Table table, List<Column> partitionColumns)
             throws StarRocksException {
-        return ConnectorPartitionTraits.build(table).getPartitionCells(partitionColumns);
+        return getPartitionCells(table, partitionColumns, null);
     }
 
     // check the partitionColumn exist in the partitionColumns
