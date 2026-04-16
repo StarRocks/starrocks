@@ -527,7 +527,7 @@ This topic introduces the following types of FE configurations:
 - Default: 600
 - Type: Long
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: The interval at which FE runs the periodical metadata synchronization with StarMgr in a shared-data cluster.
 - Introduced in: -
 
