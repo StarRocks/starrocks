@@ -315,10 +315,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     const bool has_condition_update = (condition_column >= 0);
     const bool is_row_mode_partial_update =
             op_write.has_txn_meta() && op_write.rewrite_segments_size() > 0 && op_write.rowset().num_rows() > 0;
-    const bool use_parallel_partial_update =
-            config::enable_pk_index_parallel_execution && is_row_mode_partial_update && !has_condition_update &&
-            local_segments > 1 && use_cloud_native_pk_index(*metadata) &&
-            ExecEnv::GetInstance()->lake_partial_update_thread_pool() != nullptr;
+    const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution &&
+                                             is_row_mode_partial_update && local_segments > 1 &&
+                                             use_cloud_native_pk_index(*metadata);
 
     if (use_parallel_partial_update) {
         // ==================== Parallel row-mode partial update ====================
@@ -367,13 +366,31 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         }
         _update_state_cache.update_object_size(state_entry, state.memory_usage());
 
-        // Phase 2: Sequential PK index update (same as normal upsert, unchanged).
+        // Phase 2: Sequential PK index update (same logic as serial path).
         for (uint32_t local_id = 0; local_id < local_segments; ++local_id) {
+            std::shared_ptr<DelVector> dv_generated_during_merge_update;
             uint32_t global_segment_id = rowset_segment_ids[local_id];
             TRACE_COUNTER_SCOPE_LATENCY_US("update_index_latency_us");
             DCHECK(state.upserts(local_id) != nullptr);
-            RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
-                                       op_write.ssts_size() > 0, use_cloud_native_pk_index(*metadata)));
+            if (!has_condition_update) {
+                RETURN_IF_ERROR(_do_update(rowset_id, global_segment_id, state.upserts(local_id), index, &new_deletes,
+                                           op_write.ssts_size() > 0, use_cloud_native_pk_index(*metadata)));
+            } else if (op_write.ssts_size() > 0) {
+                RETURN_IF_ERROR(_do_update_with_condition_parallel(params, rowset_id, global_segment_id,
+                                                                   condition_column, state.upserts(local_id), index,
+                                                                   &new_deletes));
+                auto itr = new_deletes.find(rowset_id + global_segment_id);
+                if (itr != new_deletes.end() && itr->second.size() > 0) {
+                    dv_generated_during_merge_update = std::make_shared<DelVector>();
+                    dv_generated_during_merge_update->init(metadata->version(), itr->second.data(),
+                                                           itr->second.size());
+                    builder->append_delvec(dv_generated_during_merge_update, rowset_id + global_segment_id);
+                }
+            } else {
+                RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, global_segment_id, condition_column,
+                                                          state.upserts(local_id)->standalone_pk_column(), index,
+                                                          &new_deletes));
+            }
             if (state.auto_increment_deletes(local_id) != nullptr) {
                 RETURN_IF_ERROR(index.erase(metadata, *state.auto_increment_deletes(local_id), &new_deletes,
                                             del_rebuild_rssid));
@@ -386,7 +403,27 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 delvec_page_pb.set_version(metadata->version());
                 RETURN_IF_ERROR(index.ingest_sst(op_write.ssts(local_id), op_write.sst_ranges(local_id),
                                                  rowset_id + global_segment_id, metadata->version(), delvec_page_pb,
-                                                 nullptr));
+                                                 dv_generated_during_merge_update));
+            }
+            if (async_compact_cb) {
+                TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
+                bool succ = true;
+                ASSIGN_OR_RETURN(succ, async_compact_cb->wait_for(1000 /* ms timeout */));
+                if (succ) {
+                    LOG(INFO) << fmt::format(
+                            "early sst compact finish. tablet {}, txn {}, fileset remain {}, trace {}", tablet->id(),
+                            txn_id, index.current_fileset_index() - current_fileset_start_idx,
+                            async_compact_cb->trace()->MetricsAsJSON());
+                    async_compact_cb = nullptr;
+                }
+            }
+            if (async_compact_cb == nullptr && !has_condition_update &&
+                index.current_fileset_index() - current_fileset_start_idx >=
+                        config::pk_index_early_sst_compaction_threshold) {
+                TRACE_COUNTER_INCREMENT("early_sst_compact_times", 1);
+                ASSIGN_OR_RETURN(async_compact_cb,
+                                 index.early_sst_compact(ExecEnv::GetInstance()->parallel_compact_mgr(), _tablet_mgr,
+                                                         metadata, current_fileset_start_idx + 1 /* new fileset*/));
             }
         }
     } else {
