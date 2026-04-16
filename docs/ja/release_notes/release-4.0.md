@@ -26,7 +26,7 @@ displayed_sidebar: docs
 
 ## 4.0.9
 
-リリース日：2026 年 4 月 8 日
+リリース日：2026 年 4 月 16 日
 
 ### 動作変更
 
@@ -50,6 +50,8 @@ displayed_sidebar: docs
 - エラー状態に陥って通常の手段では削除できない同期マテリアライズドビューに対する Force Drop 回復メカニズムを追加しました。[#70029](https://github.com/StarRocks/starrocks/pull/70029)
 
 ### バグ修正
+
+以下の問題を修正しました：
 
 - プロファイルの `START_TIME` と `END_TIME` がセッションのタイムゾーンで表示されなかった問題を修正しました。[#71429](https://github.com/StarRocks/starrocks/pull/71429)
 - `PushDownAggregateRewriter` が CASE-WHEN/IF 式を処理する際に共有オブジェクトが変更される問題を修正しました。この問題によりクエリ結果が不正になることがありました。[#71309](https://github.com/StarRocks/starrocks/pull/71309)
