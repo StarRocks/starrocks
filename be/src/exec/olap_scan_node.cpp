@@ -443,6 +443,10 @@ StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc,
         auto col = ColumnHelper::create_column(slot_desc->type(), true, false, column_range.list_values.size(), false);
         for (auto* ctx : ctxs) {
             ASSIGN_OR_RETURN(ColumnPtr v, ctx->root()->evaluate_const(ctx));
+            if (v->only_null()) {
+                col->append_nulls(1);
+                continue;
+            }
             auto cv = ColumnHelper::unpack_and_duplicate_const_column(1, v);
             col->append(*cv, 0, 1);
         }
@@ -458,6 +462,9 @@ StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc,
             for (JulianDate date = lower_julian; date <= upper_julian; date++) {
                 col->append_datum(Datum(DateValue{date}));
             }
+            if (column_range.__isset.has_null && column_range.has_null) {
+                col->append_nulls(1);
+            }
             return col;
         } else if (slot_desc->type().is_integer_type()) {
             size_t size = column_range.end_key - column_range.begin_key + 1;
@@ -470,6 +477,9 @@ StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc,
     }
             APPLY_FOR_ALL_INT_TYPE(M)
 #undef M
+            if (column_range.__isset.has_null && column_range.has_null) {
+                col->append_nulls(1);
+            }
             return col;
         } else {
             DCHECK(false) << "Unsupported partition column range, column name: " << column_range.column_name;

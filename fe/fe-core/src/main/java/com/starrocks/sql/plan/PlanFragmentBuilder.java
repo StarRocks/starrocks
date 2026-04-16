@@ -116,6 +116,7 @@ import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.planner.UnionNode;
+import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -1058,6 +1059,9 @@ public class PlanFragmentBuilder {
                     return List.of();
                 }
 
+                // NULL values are placed in the partition whose lower bound is MINVALUE
+                boolean isNullPartition = keyRange.lowerEndpoint().isMinValue();
+
                 for (int i = 0; i < partitionCols.size(); i++) {
                     if (!usedPartitionCols.contains(partitionCols.get(i))) {
                         continue;
@@ -1086,6 +1090,11 @@ public class PlanFragmentBuilder {
 
                     kr.setColumn_type(TypeSerializer.toThrift(partitionCols.get(i).getType().getPrimitiveType()));
                     kr.setColumn_name(partitionCols.get(i).getName());
+
+                    if (isNullPartition) {
+                        kr.setHas_null(true);
+                    }
+
                     if (partitionValues > session.getDynamicPartitionPruneValuesLimit()) {
                         continue;
                     }

@@ -113,6 +113,7 @@ struct TKeyRange {
   3: required Types.TPrimitiveType column_type
   4: required string column_name
   5: optional list<Exprs.TExpr> list_values
+  6: optional bool has_null
 }
 
 // The information contained in subclasses of ScanNode captured in two separate
