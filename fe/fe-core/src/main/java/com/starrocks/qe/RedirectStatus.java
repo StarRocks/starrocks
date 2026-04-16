@@ -132,6 +132,7 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -651,6 +652,11 @@ public class RedirectStatus {
 
         @Override
         public RedirectStatus visitDeleteStatement(DeleteStmt statement, Void context) {
+            return RedirectStatus.FORWARD_WITH_SYNC;
+        }
+
+        @Override
+        public RedirectStatus visitMergeIntoStatement(MergeIntoStmt statement, Void context) {
             return RedirectStatus.FORWARD_WITH_SYNC;
         }
 

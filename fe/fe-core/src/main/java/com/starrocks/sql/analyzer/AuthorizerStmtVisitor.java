@@ -146,6 +146,7 @@ import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MergeIntoStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -367,6 +368,43 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), tableName.getTbl());
         }
+        TableName tableNameForSelect = TableName.fromTableRef(tableRef);
+        checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(tableNameForSelect));
+        return null;
+    }
+
+    @Override
+    public Void visitMergeIntoStatement(MergeIntoStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            throw new SemanticException("Table ref is null");
+        }
+        TableName tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                tableRef.getTableName(), tableRef.getPos());
+
+        // MERGE INTO requires INSERT, UPDATE, and DELETE privileges on the target table
+        try {
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.INSERT);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
+        try {
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.UPDATE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
+        try {
+            Authorizer.checkTableAction(context, tableName, PrivilegeType.DELETE);
+        } catch (AccessDeniedException e) {
+            AccessDeniedException.reportAccessDenied(tableName.getCatalog(),
+                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), tableName.getTbl());
+        }
+
         TableName tableNameForSelect = TableName.fromTableRef(tableRef);
         checkSelectTableAction(context, statement.getQueryStatement(), Lists.newArrayList(tableNameForSelect));
         return null;
