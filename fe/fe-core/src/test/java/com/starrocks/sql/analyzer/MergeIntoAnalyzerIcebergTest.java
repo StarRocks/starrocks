@@ -300,4 +300,58 @@ public class MergeIntoAnalyzerIcebergTest {
         assertNotNull(stmt.getQueryStatement());
         assertNotNull(stmt.getIcebergColumnOutputNames());
     }
+
+    // ---- Positional INSERT VALUES tests ----
+
+    @Test
+    public void testMergePositionalInsertValuesSuccess() {
+        // INSERT VALUES without column list — values in schema order (id, data, date)
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 99 AS id, 'new' AS data, '2024-06-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.data, s.date)";
+        MergeIntoStmt stmt = parseMerge(sql);
+        assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+    }
+
+    @Test
+    public void testMergePositionalInsertValuesTooFew() {
+        // INSERT VALUES with fewer values than target columns — should fail
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 99 AS id, 'new' AS data) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.data)";
+        MergeIntoStmt stmt = parseMerge(sql);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertTrue(ex.getMessage().contains("does not match target table column count"),
+                "Error should mention column count mismatch: " + ex.getMessage());
+    }
+
+    @Test
+    public void testMergePositionalInsertValuesTooMany() {
+        // INSERT VALUES with more values than target columns — should fail
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 99 AS id, 'new' AS data, '2024-01-01' AS date, 'extra' AS x) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.data, s.date, s.x)";
+        MergeIntoStmt stmt = parseMerge(sql);
+        SemanticException ex = assertThrows(SemanticException.class,
+                () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertTrue(ex.getMessage().contains("does not match target table column count"),
+                "Error should mention column count mismatch: " + ex.getMessage());
+    }
+
+    // ---- Self-merge test ----
+
+    @Test
+    public void testSelfMergeSuccess() {
+        // MERGE INTO t USING t — self-merge should analyze successfully
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING iceberg0.unpartitioned_db.t0_v2 AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        MergeIntoStmt stmt = parseMerge(sql);
+        assertDoesNotThrow(() -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+    }
 }

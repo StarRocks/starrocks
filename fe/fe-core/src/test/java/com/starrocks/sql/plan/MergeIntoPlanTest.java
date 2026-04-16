@@ -183,4 +183,42 @@ public class MergeIntoPlanTest extends PlanTestBase {
         assertTrue(sinkFragment.getSink() instanceof IcebergRowDeltaSink,
                 "NOT MATCHED INSERT MERGE should use IcebergRowDeltaSink");
     }
+
+    @Test
+    public void testSelfMergePlanGeneratesSuccessfully() throws Exception {
+        // Self-merge: MERGE INTO t USING t — both scans are the same table.
+        // Verify the plan generates successfully (conflict filter should use
+        // the target scan identified by isUsedForDelete, not the source scan).
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING iceberg0.unpartitioned_db.t0_v2 AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertNotNull(execPlan);
+
+        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
+        assertTrue(explainString.contains("ENFORCE UNIQUE"),
+                "Self-merge should contain ENFORCE UNIQUE node");
+        assertTrue(explainString.contains("ICEBERG ROW DELTA SINK"),
+                "Self-merge should produce ICEBERG ROW DELTA SINK");
+        // Should have two IcebergScanNode instances (one for source, one for target)
+        int scanCount = explainString.split("IcebergScanNode").length - 1;
+        assertTrue(scanCount >= 2,
+                "Self-merge should have at least 2 IcebergScanNodes, found: " + scanCount);
+    }
+
+    @Test
+    public void testMergePlanPositionalInsertValues() throws Exception {
+        // INSERT VALUES without column list — positional mapping to schema order
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 99 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED THEN INSERT VALUES (s.id, s.data, s.date)";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertNotNull(execPlan);
+
+        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
+        assertTrue(explainString.contains("ICEBERG ROW DELTA SINK"),
+                "Positional INSERT MERGE should produce ICEBERG ROW DELTA SINK");
+    }
 }
