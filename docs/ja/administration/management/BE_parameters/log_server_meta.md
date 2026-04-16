@@ -73,7 +73,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: String
 - 単位: -
 - 変更可能: はい (v3.3.0、v3.2.7、v3.1.12 から)
-- 説明: システムログエントリが分類される重大度レベル。 有効な値: INFO、WARN、ERROR、FATAL。この項目は v3.3.0、v3.2.7、v3.1.12 以降、動的設定に変更されました。
+- 説明: システムログエントリが分類される重大度レベル。 有効な値: INFO、WARNING、ERROR、FATAL。この項目は v3.3.0、v3.2.7、v3.1.12 以降、動的設定に変更されました。
 - 導入バージョン: -
 
 ### sys_log_roll_mode
