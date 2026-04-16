@@ -150,7 +150,7 @@ TEST(RawBytesVisitorTest, VisitBinaryColumn) {
 
     ASSERT_OK(col->accept(&visitor));
     // Pointer must be exactly the column's underlying flat-bytes buffer.
-    EXPECT_EQ(visitor.result(), col->raw_bytes());
+    ASSERT_EQ(visitor.result(), col->raw_bytes());
 
     // Sanity-check the buffer contents: "helloworld" laid out contiguously.
     const auto* bytes = visitor.result();
@@ -167,7 +167,7 @@ TEST(RawBytesVisitorTest, VisitLargeBinaryColumn) {
 
     ASSERT_OK(col->accept(&visitor));
     // Pointer must be exactly the column's underlying flat-bytes buffer.
-    EXPECT_EQ(visitor.result(), col->raw_bytes());
+    ASSERT_EQ(visitor.result(), col->raw_bytes());
 
     const auto* bytes = visitor.result();
     EXPECT_EQ(memcmp(bytes, "hello", 5), 0);
