@@ -1052,8 +1052,6 @@ PROPERTIES
   );
   ```
 
-<<<<<<< HEAD
-=======
 - If you choose the Workload Identity authentication method, run a command like below:
 
   ```SQL
@@ -1069,23 +1067,6 @@ PROPERTIES
   );
   ```
 
-- If you choose REST catalog with vended credential, run a command like below:
-
-  ```SQL
-  CREATE EXTERNAL CATALOG polaris_azure
-  PROPERTIES (   
-      "type"  =  "iceberg",   
-      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
-      "iceberg.catalog.type"  =  "rest",
-      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
-      "iceberg.catalog.security" = "oauth2",
-      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
-      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
-      "iceberg.catalog.warehouse" = "iceberg_catalog"
-  );
-  ```
-
->>>>>>> 0c7b2f1392 ([Doc] Add ADLS2 Workload Identity Doc (#71798))
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
