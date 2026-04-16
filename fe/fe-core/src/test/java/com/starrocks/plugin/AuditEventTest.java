@@ -17,6 +17,8 @@ package com.starrocks.plugin;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.Arrays;
+
 public class AuditEventTest {
     @Test
     public void testAuditEvent() {
@@ -36,7 +38,9 @@ public class AuditEventTest {
                 .setDigest("digest")
                 .setErrorCode("errorCode")
                 .setIsQuery(true)
-                .setWarehouse("wh");
+                .setWarehouse("wh")
+                .setQueriedRelations(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"))
+                ;
         AuditEvent event = builder.build();
 
         Assertions.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
@@ -54,6 +58,8 @@ public class AuditEventTest {
         Assertions.assertEquals("errorCode", event.errorCode);
         Assertions.assertEquals(true, event.isQuery);
         Assertions.assertEquals("wh", event.warehouse);
+        Assertions.assertEquals(Arrays.asList("default_catalog.db.tbl", "default_catalog.db.view1"),
+                event.queriedRelations);
         Assertions.assertEquals(100, event.writeClientTimeMs);
     }
 }
