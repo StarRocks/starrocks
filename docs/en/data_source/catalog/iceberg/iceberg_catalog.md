@@ -1105,7 +1105,7 @@ PROPERTIES
   );
   ```
 
-- If you choose the Managed Identity authentication method, run a command like below:
+- If you choose the Workload Identity authentication method, run a command like below:
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
