@@ -462,3 +462,70 @@ WITH BROKER
     "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
 );
 ```
+
+### Workload Identity
+
+From v3.5.10 onwards, StarRocks supports Azure Workload Identity as an authentication method when accessing Azure Data Lake Storage Gen2. This authentication method is designed for workloads running inside Azure (for example, AKS pods) where the compute identity is federated with an Azure AD application via a projected token file, avoiding the need to store long-lived credentials.
+
+To use Workload Identity authentication, the following Azure-side setup is required before proceeding:
+
+- Enable the Azure Workload Identity webhook on your AKS cluster (or equivalent).
+- Create a federated identity credential linking your Kubernetes service account to an Azure AD application or user-assigned managed identity.
+- Annotate the Kubernetes pod/service account so that the webhook injects the token projection. The token file will appear at the path configured in `azure.adls2.oauth2_token_file` (commonly `/var/run/secrets/azure/tokens/azure-identity-token`).
+- Grant the Azure AD identity the necessary RBAC role on the storage account (for example, Storage Blob Data Reader or Storage Blob Data Contributor).
+
+#### External catalog
+
+Configure `azure.adls2.oauth2_token_file`, `azure.adls2.oauth2_tenant_id`, and `azure.adls2.oauth2_client_id` as follows in the [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) statement:
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_azure
+PROPERTIES
+(
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```
+
+#### File external table
+
+Configure `azure.adls2.oauth2_token_file`, `azure.adls2.oauth2_tenant_id`, `azure.adls2.oauth2_client_id`, and the file path (`path`) as follows in the [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) statement:
+
+```SQL
+CREATE EXTERNAL TABLE external_table_azure
+(
+    id varchar(65500),
+    attributes map<varchar(100), varchar(2000)>
+) 
+ENGINE=FILE
+PROPERTIES
+(
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
+    "format" = "ORC",
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```
+
+#### Broker Load
+
+Configure `azure.adls2.oauth2_token_file`, `azure.adls2.oauth2_tenant_id`, `azure.adls2.oauth2_client_id`, and the file path (`DATA INFILE`) as follows in the [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) statement:
+
+```SQL
+LOAD LABEL test_db.label000
+(
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
+    INTO TABLE target_table
+    FORMAT AS "parquet"
+)
+WITH BROKER
+(
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```
