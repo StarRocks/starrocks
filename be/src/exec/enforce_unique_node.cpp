@@ -46,6 +46,11 @@ StatusOr<pipeline::OpFactories> EnforceUniqueNode::decompose_to_pipeline(pipelin
     using namespace pipeline;
 
     ASSIGN_OR_RETURN(auto ops, _children[0]->decompose_to_pipeline(context));
+    // Correctness barrier (not a performance optimization): the default overload passes
+    // num_receivers=1, which funnels all upstream drivers into a single pipeline driver.
+    // This is required because EnforceUniqueOperator maintains a per-instance hash set
+    // of seen (file, pos) keys — splitting across multiple drivers would allow duplicates
+    // that land on different drivers to escape detection.
     ops = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops);
 
     auto factory = std::make_shared<EnforceUniqueOperatorFactory>(context->next_operator_id(), id(),

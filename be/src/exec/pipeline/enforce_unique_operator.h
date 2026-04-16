@@ -84,6 +84,11 @@ public:
     ~EnforceUniqueOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
+        // Correctness: the seen-set is per-operator-instance. Splitting across multiple
+        // drivers would let duplicates slip through undetected. The decompose_to_pipeline
+        // path guarantees num_receivers=1 via local passthrough exchange; assert here so
+        // a future refactor cannot silently break this invariant.
+        DCHECK_EQ(degree_of_parallelism, 1);
         return std::make_shared<EnforceUniqueOperator>(this, _id, _plan_node_id, driver_sequence,
                                                        _unique_key_col_indices);
     }
