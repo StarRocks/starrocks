@@ -23,9 +23,11 @@
 #include "common/config_exec_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "exprs/expr_factory.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/add_index_schema_change.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/meta_file.h"
@@ -614,34 +616,87 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
 // =============================================================================
 // ADD INDEX fast path (lake-only).
 //
-// Skeleton entry point only. The full implementation will:
-//   1) Validate request (indexes_to_add types ∈ {bloom/ngram/bitmap/GIN},
-//      columns exist and are not short-key/sort-key, PK columns excluded
-//      on PK tables, etc.). On validation failure, fall back to
-//      do_process_alter_tablet so the alter still completes via the
-//      regular rewrite path.
-//   2) For each rowset.segment, submit a per-segment index-build task via
-//      SegmentTaskRunner against ExecEnv->agent_server()->
-//      get_lake_schema_change_thread_pool() with concurrency
-//      config::lake_schema_change_per_tablet_parallelism.
-//   3) Each task: open column iterators on the requested columns
-//      (fill_data_cache=false); for each (col,index_type) build via existing
-//      BloomFilterIndexWriter / BitmapIndexWriter / NgramBloomFilterIndexWriter
-//      / InvertedWriter into a single .idx file (gen_idx_filename(txn_id))
-//      with default WritableFileOptions (skip_fill_local_cache=false, so
-//      writes populate local cache, mirroring DCG .cols behaviour).
-//   4) Append IndexFileFooterPB and finalize. Collect IndexDeltaGroupEntryPB
-//      under an OpAddIndex; put_txn_log to commit.
+// Validates the request, translates indexes_to_add (column names, driven by
+// the FE catalog schema) into TabletIndexPB (column unique IDs, BE-side),
+// and delegates per-segment IDG construction to AddIndexSchemaChange.
 //
-// Until the full implementation lands, this returns Status::NotSupported so
-// that BEs advertising the only_add_index thrift field still degrade safely
-// if FE incorrectly routes traffic here. FE is expected to gate fast-path
-// dispatch behind its own classifier (LakeTableAddIndexJob).
+// On validation failure (e.g. column not found, unsupported index type for
+// this phase), falls back to do_process_alter_tablet so the alter still
+// completes via the regular rewrite path. This is defence-in-depth: FE's
+// SchemaChangeIndexFastPathClassifier should already have filtered out
+// ineligible alters before setting only_add_index=true.
 Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& request) {
-    LOG(INFO) << "ADD INDEX fast path requested but not yet implemented; "
-              << "falling back to regular schema change. tablet="
-              << request.new_tablet_id;
-    return do_process_alter_tablet(request);
+    if (!request.__isset.indexes_to_add || request.indexes_to_add.empty()) {
+        LOG(WARNING) << "ADD INDEX fast path called with empty indexes_to_add; "
+                     << "falling back to regular schema change. tablet=" << request.new_tablet_id;
+        return do_process_alter_tablet(request);
+    }
+    if (!request.__isset.txn_id) {
+        return Status::InvalidArgument("txn_id not set for ADD INDEX fast path");
+    }
+
+    const int64_t alter_version = request.alter_version;
+    ASSIGN_OR_RETURN(auto base_tablet, _tablet_manager->get_tablet(request.base_tablet_id, alter_version));
+    ASSIGN_OR_RETURN(auto new_tablet, _tablet_manager->get_tablet(request.new_tablet_id, 1));
+
+    auto new_schema = new_tablet.get_schema();
+    if (new_schema == nullptr) {
+        return Status::InternalError("new tablet has null schema");
+    }
+
+    // Translate each TOlapTableIndex into TabletIndexPB. TOlapTableIndex
+    // carries column *names* (driven by FE catalog), and TabletIndexPB uses
+    // *unique IDs*. Resolve via new_schema since the new tablet already
+    // carries the post-alter schema.
+    std::vector<TabletIndexPB> indexes_to_build;
+    indexes_to_build.reserve(request.indexes_to_add.size());
+    for (const auto& tix : request.indexes_to_add) {
+        if (!tix.__isset.index_type) {
+            return Status::InvalidArgument("TOlapTableIndex has no index_type");
+        }
+        TabletIndexPB pb;
+        if (tix.__isset.index_id) pb.set_index_id(tix.index_id);
+        if (tix.__isset.index_name) pb.set_index_name(tix.index_name);
+        auto converted = TabletIndex::convert_index_type_from_thrift(tix.index_type);
+        if (!converted.ok()) return converted.status();
+        pb.set_index_type(*converted);
+        if (!tix.__isset.columns || tix.columns.empty()) {
+            return Status::InvalidArgument(strings::Substitute("index $0 has no columns", pb.index_name()));
+        }
+        for (const auto& col_name : tix.columns) {
+            auto ordinal = new_schema->field_index(col_name);
+            if (ordinal >= new_schema->num_columns()) {
+                LOG(WARNING) << "ADD INDEX fast path: column " << col_name << " not found in new schema; "
+                             << "falling back to regular schema change. tablet=" << request.new_tablet_id;
+                return do_process_alter_tablet(request);
+            }
+            pb.add_col_unique_id(new_schema->column(ordinal).unique_id());
+        }
+        indexes_to_build.push_back(std::move(pb));
+    }
+
+    // Build IDG per segment and assemble the OpAddIndex.
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(request.new_tablet_id);
+    txn_log->set_txn_id(request.txn_id);
+    auto* op_add_index = txn_log->mutable_op_add_index();
+
+    AddIndexSchemaChange sc(_tablet_manager, request.txn_id, base_tablet, new_tablet, std::move(indexes_to_build),
+                            alter_version);
+    auto run_st = sc.run(op_add_index);
+    if (!run_st.ok()) {
+        // Any build failure (e.g. unsupported index type for this phase)
+        // falls back to the regular schema-change path. The partially
+        // written .idx files become orphans under the txn abort branch.
+        LOG(WARNING) << "ADD INDEX fast path failed: " << run_st << "; falling back to regular schema change. "
+                     << "tablet=" << request.new_tablet_id;
+        return do_process_alter_tablet(request);
+    }
+
+    LOG(INFO) << "ADD INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id
+              << " segment_entries=" << op_add_index->segment_entries_size()
+              << " new_indexes=" << op_add_index->new_indexes_size();
+    return _tablet_manager->put_txn_log(std::move(txn_log));
 }
 
 // =============================================================================
