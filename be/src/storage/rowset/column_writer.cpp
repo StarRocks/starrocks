@@ -962,13 +962,12 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     } else {
         bin_col = down_cast<const BinaryColumn*>(&column);
     }
-    const auto& datas = bin_col->immutable_data();
     for (size_t i = 0; i < row_count; i++) {
         // skip string length check if it is null
         if (null != nullptr && null[i] == DATUM_NULL) {
             continue;
         }
-        Slice slice = datas[i];
+        Slice slice = bin_col->get_slice(i);
         if (slice.get_size() > limit) {
             return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}", slice.get_size(),
                                                        limit, slice.to_string()));
