@@ -46,11 +46,10 @@
 namespace starrocks::pipeline {
 
 PipelineBuilderContext::PipelineBuilderContext(FragmentContext* fragment_context, size_t degree_of_parallelism,
-                                               size_t sink_dop, bool is_stream_pipeline)
+                                               size_t sink_dop)
         : _fragment_context(fragment_context),
           _degree_of_parallelism(degree_of_parallelism),
           _data_sink_dop(sink_dop),
-          _is_stream_pipeline(is_stream_pipeline),
           _enable_group_execution(fragment_context->enable_group_execution()) {
     // init the default execution group
     _execution_groups.emplace_back(ExecutionGroupBuilder::create_normal_exec_group());

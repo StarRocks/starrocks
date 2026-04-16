@@ -46,7 +46,6 @@ using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
 class Operator {
     friend class PipelineDriver;
-    friend class StreamPipelineDriver;
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
@@ -199,33 +198,6 @@ public:
 
     void set_prepare_time(int64_t cost_ns);
     void set_local_prepare_time(int64_t cost_ns);
-
-    // INCREMENTAL MV Methods
-    //
-    // The operator will run periodically which is triggered by FE from PREPARED to EPOCH_FINISHED in one Epoch,
-    // and then reentered into PREPARED state by `reset_epoch` at the next new Epoch.
-    //
-    //                          `reset_epoch`
-    //    ┌───────────────────────────────────────────────────────┐
-    //    │                                                       │
-    //    │                                                       │
-    //    │                                                       │
-    //    ▼                                                       │
-    //  PREPARED ────► PROCESSING ───► EPOCH_FINISHING ──► EPOCH_FINISHED ───► FINISHING ──► FINISHED ────►[CANCELED] ────► CLOSED
-
-    // Mark whether the operator is finishing in one Epoch, `epoch_finishing` is the
-    // state that one operator starts finishing like `is_finishing`.
-    virtual bool is_epoch_finishing() const { return false; }
-    // Mark whether the operator is finished in one Epoch, `epoch_finished` is the
-    // state that one operator finished and not be scheduled again like `is_finished`.
-    virtual bool is_epoch_finished() const { return false; }
-    // Called when the operator's input has been finished, and the operator(self) starts
-    // epoch finishing.
-    virtual Status set_epoch_finishing(RuntimeState* state) { return Status::OK(); }
-    // Called when the operator(self) has been finished.
-    virtual Status set_epoch_finished(RuntimeState* state) { return Status::OK(); }
-    // Called when the new Epoch starts at first to reset operator's internal state.
-    virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
     // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
     virtual void set_execute_mode(int performance_level) {}

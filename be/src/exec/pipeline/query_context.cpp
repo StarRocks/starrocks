@@ -58,7 +58,6 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
-    _stream_epoch_manager = std::make_shared<StreamEpochManager>();
     _lifetime_sw.start();
 }
 

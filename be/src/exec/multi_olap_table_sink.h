@@ -184,16 +184,6 @@ public:
      */
     RuntimeProfile* profile() override;
 
-    /**
-     * @brief Resets the epoch of the MultiOlapTableSink.
-     * 
-     * This method is called to reset the epoch of the sink.
-     * 
-     * @param state The runtime state.
-     * @return The status of the epoch reset operation.
-     */
-    Status reset_epoch(RuntimeState* state);
-
     void set_profile(RuntimeProfile* profile) override;
 
 private:

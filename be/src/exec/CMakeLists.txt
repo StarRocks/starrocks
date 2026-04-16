@@ -189,8 +189,6 @@ set(PIPELINE_EXTENSIONS_SRCS
     pipeline/nljoin/spillable_nljoin_build_operator.cpp
     pipeline/nljoin/spillable_nljoin_probe_operator.cpp
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
-    pipeline/stream_epoch_manager.cpp
-    pipeline/stream_pipeline_driver.cpp
     pipeline/hashjoin/spillable_hash_join_build_operator.cpp
     pipeline/hashjoin/spillable_hash_join_probe_operator.cpp
     pipeline/adaptive/collect_stats_sink_operator.cpp

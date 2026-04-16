@@ -1194,14 +1194,4 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
     }
 }
 
-Status OlapTableSink::reset_epoch(RuntimeState* state) {
-    pipeline::StreamEpochManager* stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
-    DCHECK(stream_epoch_manager);
-    _txn_id = stream_epoch_manager->epoch_info().txn_id;
-    _channels.clear();
-    _node_channels.clear();
-    _failed_channels.clear();
-    return Status::OK();
-}
-
 } // namespace starrocks

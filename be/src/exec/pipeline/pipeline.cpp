@@ -21,7 +21,6 @@
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/schema_scan_operator.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -64,27 +63,18 @@ void Pipeline::instantiate_drivers(RuntimeState* state) {
     auto* query_ctx = state->query_ctx();
     auto* fragment_ctx = state->fragment_ctx();
     auto workgroup = fragment_ctx->workgroup();
-    auto is_stream_pipeline = fragment_ctx->is_stream_pipeline();
 
     size_t dop = degree_of_parallelism();
 
     VLOG_ROW << "Pipeline " << to_readable_string() << " parallel=" << dop
-             << " is_stream_pipeline=" << is_stream_pipeline
              << " fragment_instance_id=" << print_id(fragment_ctx->fragment_instance_id());
 
     setup_pipeline_profile(state);
     _drivers.reserve(dop);
     for (size_t i = 0; i < dop; ++i) {
         auto&& operators = create_operators(dop, i);
-        DriverPtr driver = nullptr;
-        if (is_stream_pipeline) {
-            driver = std::make_shared<StreamPipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
+        DriverPtr driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
                                                             fragment_ctx->next_driver_id());
-
-        } else {
-            driver = std::make_shared<PipelineDriver>(std::move(operators), query_ctx, fragment_ctx, this,
-                                                      fragment_ctx->next_driver_id());
-        }
 
         if (state->enable_event_scheduler()) {
             driver->assign_observer();
@@ -143,24 +133,6 @@ void Pipeline::setup_drivers_profile(const DriverPtr& driver) {
             });
         }
     }
-}
-
-void Pipeline::count_down_epoch_finished_driver(RuntimeState* state) {
-    bool all_drivers_finished = ++_num_epoch_finished_drivers == _drivers.size();
-    if (all_drivers_finished) {
-        _execution_group->count_down_epoch_pipeline(state);
-    }
-}
-
-Status Pipeline::reset_epoch(RuntimeState* state) {
-    _num_epoch_finished_drivers = 0;
-    for (const auto& driver : drivers()) {
-        DCHECK_EQ(driver->driver_state(), pipeline::DriverState::EPOCH_FINISH);
-        DCHECK(down_cast<pipeline::StreamPipelineDriver*>(driver.get()));
-        auto* stream_driver = down_cast<pipeline::StreamPipelineDriver*>(driver.get());
-        RETURN_IF_ERROR(stream_driver->reset_epoch(state));
-    }
-    return Status::OK();
 }
 
 struct OutputAmplificationAddCalculator {

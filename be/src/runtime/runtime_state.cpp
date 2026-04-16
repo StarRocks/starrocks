@@ -334,11 +334,4 @@ int64_t RuntimeState::get_load_mem_limit() const {
     return 0;
 }
 
-Status RuntimeState::reset_epoch() {
-    std::lock_guard<std::mutex> l(_tablet_infos_lock);
-    _tablet_commit_infos.clear();
-    _tablet_fail_infos.clear();
-    return Status::OK();
-}
-
 } // end namespace starrocks

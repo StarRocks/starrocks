@@ -93,6 +93,9 @@ namespace starrocks {
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
+static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params);
+static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params);
+
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
@@ -347,6 +350,10 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
             return;
         }
     }
+    if (Status status = reject_legacy_stream_pipeline(*t_batch_requests); !status.ok()) {
+        status.to_protobuf(response->mutable_status());
+        return;
+    }
 
     bool is_pipeline = t_batch_requests->common_param.__isset.is_pipeline && t_batch_requests->common_param.is_pipeline;
     if (!is_pipeline) {
@@ -529,6 +536,25 @@ static void copy_result_from_thrift_to_protobuf(const TExecPlanFragmentResult& t
     }
 }
 
+static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params) {
+    if (params.__isset.is_stream_pipeline && params.is_stream_pipeline) {
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
+    }
+    return Status::OK();
+}
+
+static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params) {
+    if (params.__isset.common_param) {
+        RETURN_IF_ERROR(reject_legacy_stream_pipeline(params.common_param));
+    }
+    if (params.__isset.unique_param_per_instance) {
+        for (const auto& unique_param : params.unique_param_per_instance) {
+            RETURN_IF_ERROR(reject_legacy_stream_pipeline(unique_param));
+        }
+    }
+    return Status::OK();
+}
+
 template <typename T>
 void PInternalServiceImplBase<T>::get_load_replica_status(google::protobuf::RpcController* controller,
                                                           const PLoadReplicaStatusRequest* request,
@@ -550,6 +576,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+    RETURN_IF_ERROR(reject_legacy_stream_pipeline(t_request));
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;

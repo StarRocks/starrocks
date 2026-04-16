@@ -97,8 +97,6 @@ public:
 
     ObjectPool* pool() { return _pool; }
 
-    Status reset_epoch(RuntimeState* state);
-
     TabletSinkProfile* ts_profile() const { return _ts_profile; }
 
     const PLoadChannelProfileConfig& load_channel_profile_config() const { return _load_channel_profile_config; }

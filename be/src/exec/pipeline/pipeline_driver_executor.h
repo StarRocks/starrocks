@@ -60,10 +60,6 @@ public:
 
     virtual void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const = 0;
 
-    virtual size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) = 0;
-
-    virtual size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const = 0;
-
     virtual void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) = 0;
 
 protected:
@@ -87,9 +83,6 @@ public:
 
     void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const override;
 
-    size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) override;
-    size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const override;
-
     void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override;
 
     ExecStateReporter* exec_state_reporter() { return _exec_state_reporter.get(); }
@@ -101,8 +94,6 @@ private:
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                                    ObjectPool* obj_pool);
-
-    void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
 private:
     // The maximum duration that a driver could stay in local_driver_queue

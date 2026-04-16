@@ -147,16 +147,6 @@ public:
 
     void finish_source() { _finished_source_number++; }
 
-    void epoch_finish(RuntimeState* state) {
-        if (incr_epoch_finished_sinker() == _sink_number) {
-            for (auto* source : _source->get_sources()) {
-                static_cast<void>(source->set_epoch_finishing(state));
-            }
-            // reset the number to be reused in the next epoch.
-            _epoch_finished_sinker = 0;
-        }
-    }
-
     const std::string& name() const { return _name; }
 
     bool need_input() const;
@@ -165,8 +155,6 @@ public:
     int32_t decr_sinker() { return _sink_number--; }
 
     int32_t source_dop() const { return _source->get_sources().size(); }
-
-    int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
 
     size_t get_memory_usage() const { return _memory_manager->get_memory_usage(); }
     size_t get_peak_memory_usage() const { return _memory_manager->get_peak_memory_usage(); }
@@ -190,9 +178,6 @@ protected:
     std::atomic<int32_t> _sink_number = 0;
     std::atomic<int32_t> _finished_source_number = 0;
     LocalExchangeSourceOperatorFactory* _source;
-
-    // Stream MV
-    std::atomic<int32_t> _epoch_finished_sinker = 0;
 
 private:
     Observable _sink_observable;
