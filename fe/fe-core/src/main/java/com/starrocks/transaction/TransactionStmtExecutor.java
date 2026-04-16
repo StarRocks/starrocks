@@ -185,7 +185,6 @@ public class TransactionStmtExecutor {
 
         try {
             if (transactionState.getDbId() == 0) {
-                transactionState.setDbId(database.getId());
                 // BEGIN binds the transaction's compute resource from the session at BEGIN time.
                 // When the session warehouse at BEGIN was the default warehouse (i.e. the user
                 // did not explicitly choose a warehouse before BEGIN), allow the first DML's
@@ -193,7 +192,11 @@ public class TransactionStmtExecutor {
                 // correctly. Otherwise, require the session warehouse (possibly modified by hint)
                 // to match the already-bound warehouse; any mismatch is rejected explicitly to
                 // avoid silently overriding the user's explicit choice.
+                //
+                // Resolve before mutating dbId so a mismatch error leaves the transaction state
+                // untouched and a subsequent retry behaves identically to the first attempt.
                 resolveTxnComputeResource(context.getCurrentComputeResource(), transactionState);
+                transactionState.setDbId(database.getId());
                 DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getDatabaseTransactionMgr(database.getId());
                 databaseTransactionMgr.upsertTransactionState(transactionState);
@@ -251,8 +254,10 @@ public class TransactionStmtExecutor {
         TransactionState transactionState = explicitTxnState.getTransactionState();
 
         if (transactionState.getDbId() == 0) {
-            transactionState.setDbId(dbId);
+            // Resolve before mutating dbId so a mismatch error leaves the transaction state
+            // untouched and a subsequent retry behaves identically to the first attempt.
             resolveTxnComputeResource(context.getCurrentComputeResource(), transactionState);
+            transactionState.setDbId(dbId);
             DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getDatabaseTransactionMgr(dbId);
             databaseTransactionMgr.upsertTransactionState(transactionState);
