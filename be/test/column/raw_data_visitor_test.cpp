@@ -155,9 +155,6 @@ TEST(RawBytesVisitorTest, VisitBinaryColumn) {
     const auto* bytes = visitor.result();
     EXPECT_EQ(memcmp(bytes, "hello", 5), 0);
     EXPECT_EQ(memcmp(bytes + 5, "world", 5), 0);
-
-    // Confirm it is NOT the Slice cache (raw_data() pointer)
-    EXPECT_NE(visitor.result(), col->raw_data());
 }
 
 // LargeBinaryColumn is BinaryColumnBase<uint64_t>; same flat-bytes semantics as BinaryColumn.
@@ -173,9 +170,6 @@ TEST(RawBytesVisitorTest, VisitLargeBinaryColumn) {
     const auto* bytes = visitor.result();
     EXPECT_EQ(memcmp(bytes, "hello", 5), 0);
     EXPECT_EQ(memcmp(bytes + 5, "world", 5), 0);
-
-    // Confirm it is NOT the Slice cache (raw_data() pointer)
-    EXPECT_NE(visitor.result(), col->raw_data());
 }
 
 TEST(RawBytesVisitorTest, VisitNullableColumn) {

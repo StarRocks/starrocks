@@ -46,7 +46,7 @@ void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t c
     const size_t orig_size = datas.size();
     raw::stl_vector_resize_uninitialized(&datas, orig_size + count);
 
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    const T* src_data = reinterpret_cast<const T*>(down_cast<const FixedLengthColumnBase&>(src).raw_data());
     strings::memcpy_inlined(datas.data() + orig_size, src_data + offset, count * sizeof(T));
 }
 
@@ -61,7 +61,7 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     raw::stl_vector_resize_uninitialized(&datas, orig_size + size);
     auto* dest_data = datas.data() + orig_size;
 
-    const T* src_data = reinterpret_cast<const T*>(src.raw_data());
+    const T* src_data = reinterpret_cast<const T*>(down_cast<const FixedLengthColumnBase&>(src).raw_data());
     SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 

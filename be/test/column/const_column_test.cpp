@@ -78,9 +78,6 @@ PARALLEL_TEST(ConstColumnTest, test_basic) {
     column->append_default();
     ASSERT_EQ(101, column->size());
 
-    auto data = reinterpret_cast<const int32_t*>(column->raw_data());
-    ASSERT_EQ(data[0], 2020);
-
     int num = 10;
     ASSERT_EQ(-1, column->append_numbers(&num, sizeof(num)));
 

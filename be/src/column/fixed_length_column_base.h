@@ -76,7 +76,7 @@ public:
 
     bool is_timestamp() const override { return IsTimestamp<ValueType>; }
 
-    const uint8_t* raw_data() const override { return reinterpret_cast<const uint8_t*>(immutable_data().data()); }
+    const uint8_t* raw_data() const { return reinterpret_cast<const uint8_t*>(immutable_data().data()); }
     const uint8_t* raw_bytes() const { return raw_data(); }
 
     uint8_t* mutable_raw_data() {
