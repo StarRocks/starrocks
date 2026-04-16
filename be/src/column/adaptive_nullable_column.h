@@ -159,12 +159,6 @@ public:
             __builtin_unreachable();
         }
         }
-        return true;
-    }
-
-    const uint8_t* raw_data() const override {
-        materialized_nullable();
-        return _data_column->raw_data();
     }
 
     size_t size() const override {

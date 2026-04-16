@@ -77,11 +77,6 @@ size_t MapColumn::capacity() const {
     return _offsets->capacity() - 1;
 }
 
-const uint8_t* MapColumn::raw_data() const {
-    DCHECK(false) << "Don't support map column raw_data";
-    return nullptr;
-}
-
 size_t MapColumn::byte_size(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
     const auto offsets = _offsets->immutable_data();

@@ -68,11 +68,6 @@ public:
 
     bool is_object() const override { return true; }
 
-    const uint8_t* raw_data() const override {
-        DCHECK(false) << "Don't support object column raw_data";
-        return nullptr;
-    }
-
     size_t size() const override { return _pool.size(); }
 
     size_t capacity() const override { return _pool.capacity(); }
