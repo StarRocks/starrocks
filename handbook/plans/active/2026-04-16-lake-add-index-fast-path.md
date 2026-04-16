@@ -44,6 +44,10 @@ Commits in chronological order:
    BloomFilterOptions parsing from TabletIndexPB.index_properties +
    compaction post-publish IDG cleanup + FE classifier hook in
    SchemaChangeHandler + FE UT for SchemaChangeIndexFastPathClassifier.
+10. FE LakeTableIndexFastPathJobBase + LakeTableAddIndexJob +
+    LakeTableDropIndexJob (abstract-base + 2 concrete subclasses);
+    SchemaChangeHandler dispatch via tryBuildLakeAddIndexJob /
+    tryBuildLakeDropIndexJob; FE UT for Job construction + copyForPersist.
 
 ## Decision Log
 
@@ -76,17 +80,18 @@ Commits in chronological order:
   a single .idx file), so this is a larger follow-up. Intentionally out
   of scope per current direction.
 
-### FE Job classes
-- LakeTableAddIndexJob / LakeTableDropIndexJob: end-to-end FE Job that
-  emits AlterReplicaTask with `setOnlyAddIndex(...)` /
-  `setOnlyDropIndex(...)`. Needs ~400 lines duplicating AlterJobV2
-  lifecycle (pending → waiting-txn → running → finished + persist /
-  replay). Skipping shadow-index creation since the fast path mutates
-  base tablets in place.
-- SchemaChangeHandler dispatch: currently only logs the classifier
-  decision and falls through to the regular path (commit 9). Once the
-  Job classes exist, replace the log with `return new
-  LakeTableAddIndexJob(...)` / `return new LakeTableDropIndexJob(...)`.
+### FE Job classes (LANDED in commit 10)
+- `LakeTableIndexFastPathJobBase` (~350 lines) covers the full AlterJobV2
+  lifecycle (runPendingJob → runWaitingTxnJob → runRunningJob →
+  runFinishedRewritingJob + cancelImpl / getInfo / replay / publishVersion).
+- `LakeTableAddIndexJob` (~130 lines) and `LakeTableDropIndexJob` (~150
+  lines) plug in `populateAlterRequest` (fast-path flag) and
+  `applyCatalogMutation` (add/remove `Index` on the table, flip
+  `is_bf_column` on NGRAMBF target columns).
+- SchemaChangeHandler dispatch: `tryBuildLakeAddIndexJob` /
+  `tryBuildLakeDropIndexJob` helpers run under the classifier gate; any
+  unexpected build failure falls through to the regular schema-change
+  path so we fail safe.
 
 ### Owner-wrapper leak (FIXED in commit 7)
 
