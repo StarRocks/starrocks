@@ -964,7 +964,7 @@ public abstract class BaseMVRefreshProcessor {
     public void updatePCTMeta(ExecPlan execPlan,
                               PCellSortedSet mvRefreshedPartitions,
                               Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
-                              Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
+                              Map<BaseTableInfo, TvrVersionRange> tvrDeltaToPromote) {
         // check
         Table mv = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), this.mv.getId());
         if (mv == null) {
@@ -997,7 +997,7 @@ public abstract class BaseMVRefreshProcessor {
         MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
         try {
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
-                    refBaseTableIds, refTableAndPartitionNames, tempMvTvrVersionRangeMap);
+                    refBaseTableIds, refTableAndPartitionNames, tvrDeltaToPromote);
         } catch (Exception e) {
             logger.warn("update final meta failed after mv refreshed:", DebugUtil.getRootStackTrace(e));
             throw e;

@@ -329,7 +329,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // reused by subsequent unrelated refreshes (e.g., user-initiated partial refresh or
         // explain-time planning that populates the temp map without executing).
         if (!mvContext.hasNextBatchPartition()) {
-            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaMap();
+            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
         }
     }
 }
