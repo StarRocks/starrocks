@@ -1019,4 +1019,16 @@ public class RoutineLoadJobTest {
             Assertions.assertEquals(errorMsg, routineLoadJob.getPauseReason());
         }
     }
+
+    @Test
+    public void testRoutineLoadEnvelope() throws StarRocksException {
+        Map<String, String> jobProperties = Maps.newHashMap();
+        jobProperties.put(CreateRoutineLoadStmt.FORMAT, "json");
+        jobProperties.put(CreateRoutineLoadStmt.ENVELOPE, CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM);
+
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+        Deencapsulation.setField(routineLoadJob, "jobProperties", jobProperties);
+
+        Assertions.assertEquals(CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM, routineLoadJob.getEnvelope());
+    }
 }

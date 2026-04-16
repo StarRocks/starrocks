@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 #include <rapidjson/document.h>
 
+#include <cstring>
 #include <string>
 
 #include "base/testutil/assert.h"
@@ -1040,6 +1041,44 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
     ASSERT_EQ(2, ctx->num_refs());
     ASSERT_TRUE(ctx->lock.try_lock());
     ctx->lock.unlock();
+}
+
+TEST_F(TransactionStreamLoadActionTest, on_header_invalid_envelope) {
+    TransactionStreamLoadAction action(&_env);
+    auto ctx = new StreamLoadContext(&_env);
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "invalid_envelope";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HTTP_ENVELOPE, "custom");
+
+    ASSERT_EQ(-1, action.on_header(&request));
+
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("INVALID_ARGUMENT", doc["Status"].GetString());
+    ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), "Unknown envelope type: custom"));
 }
 
 TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {

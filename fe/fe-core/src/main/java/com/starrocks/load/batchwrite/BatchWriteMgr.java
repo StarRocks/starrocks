@@ -14,6 +14,8 @@
 
 package com.starrocks.load.batchwrite;
 
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -22,6 +24,8 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.thrift.TEnvelopeType;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.warehouse.Utils;
@@ -206,6 +210,18 @@ public class BatchWriteMgr extends FrontendDaemon {
             status.setError_msgs(Collections.singletonList(
                     String.format("Failed to build stream load info, error: %s", e.getMessage())));
             return new Pair<>(status, null);
+        }
+
+        if (streamLoadInfo.getEnvelope() == TEnvelopeType.DEBEZIUM) {
+            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(tableId.getDbName(), tableId.getTableName());
+            if (table instanceof OlapTable && ((OlapTable) table).getKeysType() != KeysType.PRIMARY_KEYS) {
+                TStatus status = new TStatus();
+                status.setStatus_code(TStatusCode.INVALID_ARGUMENT);
+                status.setError_msgs(Collections.singletonList(
+                        "envelope=debezium is only supported on PRIMARY KEY tables"));
+                return new Pair<>(status, null);
+            }
         }
 
         Integer batchWriteIntervalMs = params.getBatchWriteIntervalMs().orElse(null);

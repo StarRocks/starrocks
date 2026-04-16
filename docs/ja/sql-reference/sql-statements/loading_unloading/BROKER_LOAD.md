@@ -660,6 +660,10 @@ StarRocks は v3.2.3 以降、JSON データのロードをサポートしてい
 
   JSON データファイルからロードしたい JSON データのルート要素。マッチドモードを使用して JSON データをロードする場合にのみ、このパラメータを指定する必要があります。このパラメータの値は有効な JsonPath 文字列です。デフォルトでは、このパラメータの値は空であり、JSON データファイルのすべてのデータがロードされることを示します。詳細については、このトピックの「[Load JSON data using matched mode with root element specified](#load-json-data-using-matched-mode-with-root-element-specified)」セクションを参照してください。
 
+- envelope
+
+  JSON データの CDC エンベロープ形式を指定します。有効な値: `debezium`。デフォルト: 未設定（エンベロープなし）。`debezium` に設定すると、StarRocks は各 JSON メッセージを Debezium CDC イベントとして解析します。メッセージには `op` フィールド（`c`=insert、`u`=update、`d`=delete、`r`=スナップショット読み取り）と、`after` フィールド（c/u/r）または `before` フィールド（d）が含まれている必要があります。`payload` が `null` の tombstone メッセージはスキップされます。`format` が `json` の場合にのみ指定でき、`json_root` または `strip_outer_array` と同時に使用することはできません。
+
 JSON データをロードする際、各 JSON オブジェクトのサイズが 4 GB を超えないように注意してください。JSON データファイル内の個々の JSON オブジェクトが 4 GB を超える場合、「This parser can't support a document that big.」というエラーが報告されます。
 
 <LoadWarehouse />

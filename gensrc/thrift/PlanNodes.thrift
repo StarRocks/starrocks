@@ -161,6 +161,12 @@ enum TFileFormatType {
     FORMAT_AVRO = 11,
 }
 
+// CDC envelope format for JSON data
+enum TEnvelopeType {
+    NONE = 0,
+    DEBEZIUM = 1,
+}
+
 // One broker range information.
 struct TBrokerRangeDesc {
     1: required Types.TFileType file_type
@@ -185,6 +191,8 @@ struct TBrokerRangeDesc {
     12: optional string jsonpaths
     13: optional string json_root
     14: optional Types.TCompressionType compression_type
+    // CDC envelope format
+    15: optional TEnvelopeType envelope
 }
 
 enum TObjectStoreType {

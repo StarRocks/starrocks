@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -54,6 +55,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.LabelName;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PartitionRef;
@@ -519,6 +521,69 @@ public class KafkaRoutineLoadJobTest {
     }
 
     @Test
+    public void testSerializationJsonWithEnvelope(@Mocked GlobalStateMgr globalStateMgr,
+                                                  @Injectable Database database,
+                                                  @Injectable OlapTable table) throws StarRocksException {
+        CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
+        Map<String, String> jobProperties = createRoutineLoadStmt.getJobProperties();
+        jobProperties.put("format", "json");
+        jobProperties.put("json_root", "");
+        jobProperties.put("strip_outer_array", "false");
+        jobProperties.put("envelope", CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM);
+        jobProperties.put("timezone", "Asia/Shanghai");
+        createRoutineLoadStmt.checkJobProperties();
+
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
+        List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
+        for (String s : kafkaPartitionString.split(",")) {
+            partitionIdToOffset.add(new Pair<>(Integer.valueOf(s), 0L));
+        }
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
+        long dbId = 1L;
+        long tableId = 2L;
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                minTimes = 0;
+                result = table;
+                database.getId();
+                minTimes = 0;
+                result = dbId;
+                table.getId();
+                minTimes = 0;
+                result = tableId;
+                table.isOlapOrCloudNativeTable();
+                minTimes = 0;
+                result = true;
+                table.getKeysType();
+                minTimes = 0;
+                result = KeysType.PRIMARY_KEYS;
+                globalStateMgr.getSqlParser();
+                minTimes = 0;
+                result = new SqlParser(AstBuilder.getInstance());
+            }
+        };
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties) throws
+                    StarRocksException {
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        KafkaRoutineLoadJob job = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+        Assertions.assertEquals(CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM, job.getEnvelope());
+        Assertions.assertTrue(job.jobPropertiesToSql()
+                .contains("\"" + CreateRoutineLoadStmt.ENVELOPE + "\"=\"" + CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM + "\""));
+    }
+
+    @Test
     public void testGetStatistic() {
         RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(job, "receivedBytes", 10);
@@ -729,6 +794,43 @@ public class KafkaRoutineLoadJobTest {
         
         // Verify: Should return empty map as fallback
         Assertions.assertTrue(result.isEmpty());
+    }
+
+    @Test
+    public void testFromCreateStmtEnvelopeDebeziumRequiresPrimaryKeyTable(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Injectable Database database,
+            @Injectable OlapTable table) {
+        CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
+        RoutineLoadDesc routineLoadDesc = new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
+        Deencapsulation.setField(createRoutineLoadStmt, "format", "json");
+        Deencapsulation.setField(createRoutineLoadStmt, "envelope", "debezium");
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                minTimes = 0;
+                result = table;
+                database.getId();
+                minTimes = 0;
+                result = 1L;
+                table.getId();
+                minTimes = 0;
+                result = 2L;
+                table.isOlapOrCloudNativeTable();
+                minTimes = 0;
+                result = true;
+                table.getKeysType();
+                result = KeysType.DUP_KEYS;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "envelope=debezium is only supported on PRIMARY KEY tables",
+                () -> KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt));
     }
 
     @Test

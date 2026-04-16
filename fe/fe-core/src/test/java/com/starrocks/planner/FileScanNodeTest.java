@@ -22,6 +22,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
@@ -624,5 +627,40 @@ public class FileScanNodeTest {
         ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "The valid bytes length for 'row delimiter' is [1, 50]",
                 () -> scanNode.init(descTable));
+    }
+
+    @Test
+    public void testEnvelopeDebeziumRequiresPrimaryKeyTable(@Injectable OlapTable table)
+            throws StarRocksException {
+        new Expectations() {{
+            table.getKeysType();
+            result = KeysType.DUP_KEYS;
+        }};
+
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1");
+        DataDescription desc = new DataDescription("testTable", null, files,
+                Lists.newArrayList("c1"), null, null, "json", false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        fileGroups.add(brokerFileGroup);
+
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        fileStatusesList.add(Lists.newArrayList());
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode",
+                fileStatusesList, 1, WarehouseManager.DEFAULT_RESOURCE);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+
+        LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+        jsonOptions.envelope = LoadStmt.ENVELOPE_DEBEZIUM;
+        scanNode.setJSONOptions(jsonOptions);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "envelope=debezium is only supported on PRIMARY KEY tables",
+                scanNode::finalizeStats);
     }
 }

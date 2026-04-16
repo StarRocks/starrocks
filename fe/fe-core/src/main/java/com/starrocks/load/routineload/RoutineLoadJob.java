@@ -420,6 +420,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             } else {
                 jobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, "false");
             }
+            if (!Strings.isNullOrEmpty(stmt.getEnvelope())) {
+                jobProperties.put(CreateRoutineLoadStmt.ENVELOPE, stmt.getEnvelope());
+            }
         } else if (stmt.getFormat().equals("avro")) {
             jobProperties.put(CreateRoutineLoadStmt.FORMAT, "avro");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
@@ -431,6 +434,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         } else {
             throw new StarRocksException("Invalid format type.");
         }
+
         taskConsumeSecond = stmt.getTaskConsumeSecond();
         taskTimeoutSecond = stmt.getTaskTimeoutSecond();
 
@@ -719,6 +723,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public String getJsonRoot() {
         String value = jobProperties.get(CreateRoutineLoadStmt.JSONROOT);
+        if (value == null) {
+            return "";
+        }
+        return value;
+    }
+
+    public String getEnvelope() {
+        String value = jobProperties.get(CreateRoutineLoadStmt.ENVELOPE);
         if (value == null) {
             return "";
         }
@@ -1756,6 +1768,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         sb.append("\"").append(CreateRoutineLoadStmt.JSONROOT).append("\"=\"");
         sb.append(getJsonRoot()).append("\",\n");
+
+        if (!Strings.isNullOrEmpty(getEnvelope())) {
+            sb.append("\"").append(CreateRoutineLoadStmt.ENVELOPE).append("\"=\"");
+            sb.append(getEnvelope()).append("\",\n");
+        }
 
         sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
         sb.append(isStrictMode()).append("\",\n");

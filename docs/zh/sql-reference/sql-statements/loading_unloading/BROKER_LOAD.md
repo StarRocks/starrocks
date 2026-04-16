@@ -721,6 +721,10 @@ StarRocks 自 3.2.3 版本起支持导入 JSON 格式的数据，相关参数如
 
   用于指定待导入 JSON 数据的根元素。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为合法的 JsonPath 字符串。默认值为空，表示会导入整个 JSON 数据文件的数据。具体请参见本文提供的示例“[导入数据并指定 JSON 根节点](#指定-json-根节点使用匹配模式导入数据)”。
 
+- envelope
+
+  指定 JSON 数据的 CDC Envelope 格式。有效值：`debezium`。默认不设置（无 Envelope 包装）。设置为 `debezium` 时，StarRocks 将每条 JSON 消息解析为 Debezium CDC 事件，消息中须包含 `op` 字段（`c`=insert、`u`=update、`d`=delete、`r`=快照读取）以及 `after` 字段（c/u/r 操作）或 `before` 字段（d 操作），用于承载实际行数据。`payload` 为 `null` 的 tombstone 消息将被跳过。只能在 `format` 为 `json` 时指定，不能与 `json_root` 或 `strip_outer_array` 同时使用。
+
 另外，导入 JSON 格式的数据时，需要注意单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
 
 <LoadWarehouse />

@@ -534,6 +534,52 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testAnalyzeEnvelopeConfig() throws Exception {
+        String brokerProps = "\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:9092\",\"kafka_topic\" = \"topic_0\"";
+
+        String validSql = "CREATE ROUTINE LOAD db0.routine_load_envelope ON t1 "
+                + "PROPERTIES(\"format\" = \"json\", \"envelope\" = \"debezium\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt validStmt = (CreateRoutineLoadStmt) SqlParser.parse(validSql, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(validStmt, connectContext);
+        Assertions.assertEquals(CreateRoutineLoadStmt.ENVELOPE_DEBEZIUM, validStmt.getEnvelope());
+
+        String invalidEnvelopeSql = "CREATE ROUTINE LOAD db0.routine_load_envelope_invalid ON t1 "
+                + "PROPERTIES(\"format\" = \"json\", \"envelope\" = \"custom\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt invalidEnvelopeStmt = (CreateRoutineLoadStmt) SqlParser.parse(invalidEnvelopeSql, 32).get(0);
+        SemanticException invalidEnvelopeException = Assertions.assertThrows(SemanticException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(invalidEnvelopeStmt, connectContext));
+        Assertions.assertTrue(invalidEnvelopeException.getMessage().contains("Unknown envelope type: custom"));
+
+        String nonJsonSql = "CREATE ROUTINE LOAD db0.routine_load_envelope_csv ON t1 "
+                + "PROPERTIES(\"format\" = \"csv\", \"envelope\" = \"debezium\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt nonJsonStmt = (CreateRoutineLoadStmt) SqlParser.parse(nonJsonSql, 32).get(0);
+        SemanticException nonJsonException = Assertions.assertThrows(SemanticException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(nonJsonStmt, connectContext));
+        Assertions.assertTrue(nonJsonException.getMessage().contains("envelope can only be specified when format is json"));
+
+        String jsonRootSql = "CREATE ROUTINE LOAD db0.routine_load_envelope_root ON t1 "
+                + "PROPERTIES(\"format\" = \"json\", \"envelope\" = \"debezium\", \"json_root\" = \"$.records\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt jsonRootStmt = (CreateRoutineLoadStmt) SqlParser.parse(jsonRootSql, 32).get(0);
+        SemanticException jsonRootException = Assertions.assertThrows(SemanticException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(jsonRootStmt, connectContext));
+        Assertions.assertTrue(jsonRootException.getMessage().contains("json_root cannot be specified when envelope is set"));
+
+        String stripOuterArraySql = "CREATE ROUTINE LOAD db0.routine_load_envelope_array ON t1 "
+                + "PROPERTIES(\"format\" = \"json\", \"envelope\" = \"debezium\", \"strip_outer_array\" = \"true\") "
+                + "FROM KAFKA(" + brokerProps + ");";
+        CreateRoutineLoadStmt stripOuterArrayStmt =
+                (CreateRoutineLoadStmt) SqlParser.parse(stripOuterArraySql, 32).get(0);
+        SemanticException stripOuterArrayException = Assertions.assertThrows(SemanticException.class,
+                () -> CreateRoutineLoadAnalyzer.analyze(stripOuterArrayStmt, connectContext));
+        Assertions.assertTrue(stripOuterArrayException.getMessage()
+                .contains("strip_outer_array cannot be specified when envelope is set"));
+    }
+
+    @Test
     public void testKafkaOffset() {
         String jobName = "job1";
         String dbName = "db1";
