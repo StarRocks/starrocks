@@ -85,7 +85,7 @@ static Status valid_input_vector(const ArrayColumn& input_column, const size_t i
     }
 
     const size_t num_rows = input_column.size();
-    const auto* offsets = reinterpret_cast<const uint32_t*>(input_column.offsets().raw_data());
+    const auto& offsets = input_column.offsets().immutable_data();
     RawDataVisitor rv;
     RETURN_IF_ERROR(input_column.elements().accept(&rv));
     const auto* nums = reinterpret_cast<const float*>(rv.result());
