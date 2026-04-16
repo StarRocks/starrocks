@@ -461,3 +461,70 @@ WITH BROKER
     "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
 );
 ```
+
+### ワークロード ID
+
+v3.5.10 以降、StarRocks は Azure Data Lake Storage Gen2 へのアクセスにおける認証方法として Azure ワークロード ID (Workload Identity) をサポートしています。この認証方法は、Azure 内で実行されるワークロード（AKS ポッドなど）向けに設計されており、プロジェクションされたトークンファイルを介してコンピューティング ID を Azure AD アプリケーションとフェデレーションすることで、長期有効な認証情報の保存を不要にします。
+
+ワークロード ID 認証を使用するには、続行する前に以下の Azure 側の設定が必要です。
+
+- AKS クラスター（または同等のもの）で Azure ワークロード ID ウェブフックを有効にします。
+- Kubernetes サービスアカウントを Azure AD アプリケーションまたはユーザー割り当てのマネージド ID にリンクするフェデレーション ID 資格情報を作成します。
+- Webhook がトークンプロジェクションを注入できるように、Kubernetes ポッド/サービスアカウントにアノテーションを付与します。トークンファイルは、`azure.adls2.oauth2_token_file` で設定されたパス（通常は `/var/run/secrets/azure/tokens/azure-identity-token`）に生成されます。
+- ストレージアカウントに対して、Azure AD ID に必要な RBAC ロール（例: Storage Blob Data Reader または Storage Blob Data Contributor）を付与します。
+
+#### External catalog
+
+`azure.adls2.oauth2_token_file`、`azure.adls2.oauth2_tenant_id`、および `azure.adls2.oauth2_client_id` を [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) ステートメントで次のように設定します。
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_azure
+PROPERTIES
+(
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```
+
+#### ファイル外部テーブル
+
+`azure.adls2.oauth2_token_file`、`azure.adls2.oauth2_tenant_id`、`azure.adls2.oauth2_client_id`、およびファイルパス (`path`) を [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) ステートメントで次のように設定します。
+
+```SQL
+CREATE EXTERNAL TABLE external_table_azure
+(
+    id varchar(65500),
+    attributes map<varchar(100), varchar(2000)>
+) 
+ENGINE=FILE
+PROPERTIES
+(
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
+    "format" = "ORC",
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```
+
+#### Broker Load
+
+`azure.adls2.oauth2_token_file`、`azure.adls2.oauth2_tenant_id`、`azure.adls2.oauth2_client_id`、およびファイルパス (`DATA INFILE`) を [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) ステートメントで次のように設定します。
+
+```SQL
+LOAD LABEL test_db.label000
+(
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
+    INTO TABLE target_table
+    FORMAT AS "parquet"
+)
+WITH BROKER
+(
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```

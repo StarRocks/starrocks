@@ -372,6 +372,22 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
   | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
+
 ###### Azure Data Lake Storage Gen1
 
 如果选择 Data Lake Storage Gen1 作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
@@ -738,6 +754,21 @@ PROPERTIES
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>" 
+  );
+  ```
+
+- 如果基于 Workload Identity 进行认证和鉴权，可以按如下创建 Hive Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
   );
   ```
 
