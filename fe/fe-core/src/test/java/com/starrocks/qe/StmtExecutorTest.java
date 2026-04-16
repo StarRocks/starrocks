@@ -262,140 +262,110 @@ public class StmtExecutorTest {
     }
 
     @Test
-    public void testGetRedactedOriginStmtInStringSkipsRedactionForPlainSql() {
-        StatementBase stmt = SqlParser.parseSingleStatement(
+    public void testGetRedactedOriginStmtInStringScenarios() {
+        // Case 1: Plain SQL should be returned as-is.
+        StatementBase plainStmt = SqlParser.parseSingleStatement(
                 "SELECT * FROM t0 WHERE id = 1",
                 SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), stmt);
+        StmtExecutor plainExecutor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), plainStmt);
+        String plainResult = plainExecutor.getRedactedOriginStmtInString();
+        Assertions.assertEquals("SELECT * FROM t0 WHERE id = 1", plainResult);
 
-        String result = executor.getRedactedOriginStmtInString();
-        Assertions.assertEquals("SELECT * FROM t0 WHERE id = 1", result);
-    }
-
-    @Test
-    public void testGetRedactedOriginStmtInStringWithFilesCredentials() {
-        StatementBase stmt = SqlParser.parseSingleStatement(
+        // Case 2: INSERT ... SELECT FROM FILES should redact both key and secret.
+        StatementBase insertSelectFilesStmt = SqlParser.parseSingleStatement(
                 "INSERT INTO t0 SELECT * FROM FILES(" +
                         "\"path\"=\"s3://bucket/data.parquet\", " +
                         "\"format\"=\"parquet\", " +
                         "\"aws.s3.access_key\"=\"AKIA_STMT_EXECUTOR\", " +
                         "\"aws.s3.secret_key\"=\"STMT_EXECUTOR_SECRET\")",
                 SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), stmt);
+        StmtExecutor insertSelectFilesExecutor =
+                new StmtExecutor(UtFrameUtils.createDefaultCtx(), insertSelectFilesStmt);
+        String insertSelectFilesRedacted = insertSelectFilesExecutor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(insertSelectFilesRedacted.contains("AKIA_STMT_EXECUTOR"));
+        Assertions.assertFalse(insertSelectFilesRedacted.contains("STMT_EXECUTOR_SECRET"));
+        Assertions.assertTrue(insertSelectFilesRedacted.contains("***"));
 
-        String redacted = executor.getRedactedOriginStmtInString();
-        Assertions.assertFalse(redacted.contains("AKIA_STMT_EXECUTOR"));
-        Assertions.assertFalse(redacted.contains("STMT_EXECUTOR_SECRET"));
-        Assertions.assertTrue(redacted.contains("***"));
-    }
-
-    @Test
-    public void testGetRedactedOriginStmtInStringRedactsFilesCredentials() {
-        StatementBase stmt = SqlParser.parseSingleStatement(
+        // Case 3: SELECT FROM FILES should redact secret.
+        StatementBase selectFilesStmt = SqlParser.parseSingleStatement(
                 "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
                         "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
                 SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), stmt);
-
-        String redacted = executor.getRedactedOriginStmtInString();
-        Assertions.assertFalse(redacted.contains("RETRY_SECRET"));
-        Assertions.assertTrue(redacted.contains("***"));
+        StmtExecutor selectFilesExecutor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), selectFilesStmt);
+        String selectFilesRedacted = selectFilesExecutor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(selectFilesRedacted.contains("RETRY_SECRET"));
+        Assertions.assertTrue(selectFilesRedacted.contains("***"));
     }
 
     @Test
-    public void testBuildTopLevelProfileContainsSqlStatementInfo() {
+    public void testBuildTopLevelProfileSqlStatementScenarios() {
         new MockUp<WarehouseManager>() {
             @Mock
             public String getWarehouseComputeResourceName(ComputeResource computeResource) {
                 return "default_warehouse";
             }
         };
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        ConnectContext.threadLocalInfo.set(ctx);
-        StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
-        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
-        RuntimeProfile summaryProfile = profile.getChild("Summary");
-        String sqlInProfile = summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
-        Assertions.assertNotNull(sqlInProfile);
-        Assertions.assertFalse(sqlInProfile.contains("***"),
+
+        // Case 1: Plain SELECT should not be changed.
+        ConnectContext plainCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(plainCtx);
+        StatementBase plainStmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor plainExecutor = new StmtExecutor(plainCtx, plainStmt);
+        RuntimeProfile plainProfile = Deencapsulation.invoke(plainExecutor, "buildTopLevelProfile");
+        RuntimeProfile plainSummaryProfile = plainProfile.getChild("Summary");
+        String plainSqlInProfile = plainSummaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(plainSqlInProfile);
+        Assertions.assertFalse(plainSqlInProfile.contains("***"),
                 "Plain SELECT should skip credential redaction in profile SQL");
-    }
 
-    @Test
-    public void testBuildTopLevelProfileAuditEncryptBranchRedactsCredentials() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
-                return "default_warehouse";
-            }
-        };
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        ConnectContext.threadLocalInfo.set(ctx);
-        StatementBase stmt = SqlParser.parseSingleStatement(
+        // Case 2: Audit-encrypt path should redact password.
+        ConnectContext encryptCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(encryptCtx);
+        StatementBase encryptStmt = SqlParser.parseSingleStatement(
                 "CREATE USER 'u1' IDENTIFIED BY 'secret'",
                 SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        StmtExecutor encryptExecutor = new StmtExecutor(encryptCtx, encryptStmt);
+        RuntimeProfile encryptProfile = Deencapsulation.invoke(encryptExecutor, "buildTopLevelProfile");
+        RuntimeProfile encryptSummaryProfile = encryptProfile.getChild("Summary");
+        String encryptSqlInProfile = encryptSummaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(encryptSqlInProfile);
+        Assertions.assertFalse(encryptSqlInProfile.contains("secret"));
+        Assertions.assertTrue(encryptSqlInProfile.contains("***"));
 
-        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
-        RuntimeProfile summaryProfile = profile.getChild("Summary");
-        String sqlInProfile = summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
-        Assertions.assertNotNull(sqlInProfile);
-        Assertions.assertFalse(sqlInProfile.contains("secret"));
-        Assertions.assertTrue(sqlInProfile.contains("***"));
-    }
-
-    @Test
-    public void testBuildTopLevelProfileDesensitizeBranchUsesDigestSql() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
-                return "default_warehouse";
-            }
-        };
+        // Case 3: Desensitize path should digest literals.
         boolean oldDesensitize = Config.enable_sql_desensitize_in_log;
         Config.enable_sql_desensitize_in_log = true;
         try {
-            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-            ConnectContext.threadLocalInfo.set(ctx);
-            StatementBase stmt = SqlParser.parseSingleStatement(
+            ConnectContext desensitizeCtx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(desensitizeCtx);
+            StatementBase desensitizeStmt = SqlParser.parseSingleStatement(
                     "SELECT * FROM t0 WHERE k1 = 12345",
                     SqlModeHelper.MODE_DEFAULT);
-            StmtExecutor executor = new StmtExecutor(ctx, stmt);
-
-            RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
-            RuntimeProfile summaryProfile = profile.getChild("Summary");
-            String sqlInProfile = summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
-            Assertions.assertNotNull(sqlInProfile);
-            Assertions.assertFalse(sqlInProfile.contains("12345"),
+            StmtExecutor desensitizeExecutor = new StmtExecutor(desensitizeCtx, desensitizeStmt);
+            RuntimeProfile desensitizeProfile = Deencapsulation.invoke(desensitizeExecutor, "buildTopLevelProfile");
+            RuntimeProfile desensitizeSummaryProfile = desensitizeProfile.getChild("Summary");
+            String desensitizedSqlInProfile = desensitizeSummaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+            Assertions.assertNotNull(desensitizedSqlInProfile);
+            Assertions.assertFalse(desensitizedSqlInProfile.contains("12345"),
                     "Digest mode should desensitize SQL literals in profile");
         } finally {
             Config.enable_sql_desensitize_in_log = oldDesensitize;
         }
-    }
 
-    @Test
-    public void testBuildTopLevelProfileCredentialMarkerBranchRedactsFilesSecret() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
-                return "default_warehouse";
-            }
-        };
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        ConnectContext.threadLocalInfo.set(ctx);
-        StatementBase stmt = SqlParser.parseSingleStatement(
+        // Case 4: Credential marker path should redact FILES secret.
+        ConnectContext markerCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(markerCtx);
+        StatementBase markerStmt = SqlParser.parseSingleStatement(
                 "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
                         "\"aws.s3.secret_key\"=\"PROFILE_SECRET\")",
                 SqlModeHelper.MODE_DEFAULT);
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
-
-        RuntimeProfile profile = Deencapsulation.invoke(executor, "buildTopLevelProfile");
-        RuntimeProfile summaryProfile = profile.getChild("Summary");
-        String sqlInProfile = summaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
-        Assertions.assertNotNull(sqlInProfile);
-        Assertions.assertFalse(sqlInProfile.contains("PROFILE_SECRET"));
-        Assertions.assertTrue(sqlInProfile.contains("***"));
+        StmtExecutor markerExecutor = new StmtExecutor(markerCtx, markerStmt);
+        RuntimeProfile markerProfile = Deencapsulation.invoke(markerExecutor, "buildTopLevelProfile");
+        RuntimeProfile markerSummaryProfile = markerProfile.getChild("Summary");
+        String markerSqlInProfile = markerSummaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(markerSqlInProfile);
+        Assertions.assertFalse(markerSqlInProfile.contains("PROFILE_SECRET"));
+        Assertions.assertTrue(markerSqlInProfile.contains("***"));
     }
 
     @Test
