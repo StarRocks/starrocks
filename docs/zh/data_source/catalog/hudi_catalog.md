@@ -224,7 +224,7 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
 | ------------------------------- | -------- | ------------------------------------------------------------ |
 | aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
 | aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
-| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。            ｜
+| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。|
 
 ##### 兼容 S3 协议的对象存储
 
@@ -337,6 +337,22 @@ Hudi Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
   | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -702,6 +718,21 @@ PROPERTIES
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>" 
+  );
+  ```
+
+- 如果基于 Workload Identity 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hudi",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
   );
   ```
 

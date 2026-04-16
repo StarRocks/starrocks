@@ -679,6 +679,22 @@ Iceberg クラスターのストレージとして Data Lake Storage Gen2 を選
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
+- ワークロード ID 認証方法を選択する場合、`StorageCredentialParams` を次のように構成します:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  次の表は、`StorageCredentialParams` で構成する必要があるパラメータを説明しています。
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | Azure ワークロード ID ウェブフックによってポッドにマッピングされた、OAuth2 トークンファイルへの絶対ファイルパス。 |
+  | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID です。                    |
+  | azure.adls2.oauth2_client_id            | Yes          | ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。 |
+
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -993,7 +1009,7 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen2
 
-- マネージドアイデンティティ認証方法を選択した場合、次のようなコマンドを実行します。
+- マネージド ID 認証方法を選択した場合、次のようなコマンドを実行します。
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -1034,6 +1050,21 @@ PROPERTIES
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  );
+  ```
+
+- ワークロード ID 認証方法を選択した場合、次のようなコマンドを実行します。
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
   );
   ```
 
