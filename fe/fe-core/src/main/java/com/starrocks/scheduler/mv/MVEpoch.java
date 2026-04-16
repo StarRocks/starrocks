@@ -15,39 +15,16 @@
 
 package com.starrocks.scheduler.mv;
 
-import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.thrift.TMVEpoch;
-import com.starrocks.transaction.TabletCommitInfo;
-import com.starrocks.transaction.TabletFailInfo;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicLong;
-import javax.validation.constraints.NotNull;
 
 /**
- * The incremental maintenance of MV consists of epochs, whose lifetime is defined as:
- * 1. Triggered by transaction publish
- * 2. Acquire the last-committed binlog LSN and latest binlog LSN
- * 3. Start a transaction for incremental maintaining the MV
- * 4. Schedule task executor to consume binlog since last-committed, and apply these changes to MV
- * 5. Commit the transaction to make is visible to user
- * 6. Commit the binlog consumption LSN(be atomic with transaction commitment to make)
+ * Compatibility metadata for a legacy incremental MV maintenance epoch.
  */
 public class MVEpoch implements Writable {
-
-    private static final Logger LOG = LogManager.getLogger(MVEpoch.class);
-
     @SerializedName("dbId")
     private long dbId;
     @SerializedName("mvId")
@@ -61,15 +38,6 @@ public class MVEpoch implements Writable {
     @SerializedName("commitTimeMilli")
     private long commitTimeMilli;
 
-    // Ephemeral states
-    private transient long txnId;
-
-    private transient List<TabletCommitInfo> commitInfos = new ArrayList<>();
-
-    private transient List<TabletFailInfo> failedInfos = new ArrayList<>();
-
-    private transient AtomicLong numEpochFinished = new AtomicLong(0);
-
     public MVEpoch(MvId mv) {
         this.dbId = mv.getDbId();
         this.mvId = mv.getId();
@@ -78,103 +46,6 @@ public class MVEpoch implements Writable {
         this.binlogState = new BinlogConsumeStateVO();
     }
 
-    public static MVEpoch readEpoch(DataInput input) throws IOException {
-        MVEpoch epoch = GsonUtils.GSON.fromJson(Text.readString(input), MVEpoch.class);
-        return epoch;
-    }
-
-    @NotNull
-    public List<TabletCommitInfo> getCommitInfos() {
-        return commitInfos;
-    }
-
-    public List<TabletFailInfo> getFailedInfos() {
-        return failedInfos;
-    }
-
-    public void onReady() {
-        // TODO: Remove this later.
-        Preconditions.checkState(state.equals(EpochState.INIT));
-        this.state = EpochState.READY;
-    }
-
-    public boolean onSchedule() {
-        if (state.equals(EpochState.READY)) {
-            this.state = EpochState.RUNNING;
-            this.startTimeMilli = System.currentTimeMillis();
-            return true;
-        }
-        return false;
-    }
-
-    public void onCommitting() {
-        Preconditions.checkState(state.equals(EpochState.RUNNING));
-        this.state = EpochState.COMMITTING;
-    }
-
-    public void onCommitted(BinlogConsumeStateVO binlogState) {
-        Preconditions.checkState(state.equals(EpochState.COMMITTING));
-        this.state = EpochState.COMMITTED;
-        this.binlogState = binlogState;
-        this.commitTimeMilli = System.currentTimeMillis();
-    }
-
-    public void onFailed() {
-        this.state = EpochState.FAILED;
-    }
-
-    public void reset() {
-        Preconditions.checkState(state.equals(EpochState.COMMITTING) ||
-                state.equals(EpochState.COMMITTED) ||
-                state.equals(EpochState.FAILED));
-        this.state = EpochState.INIT;
-        this.commitInfos.clear();
-        this.failedInfos.clear();
-        numEpochFinished.set(0);
-    }
-
-    public long getNumEpochFinished() {
-        return numEpochFinished.get();
-    }
-
-    public void onEpochReport(List<TabletCommitInfo> commitInfos, List<TabletFailInfo> failInfos) {
-        LOG.info("onEpochReport: {}", this);
-        synchronized (this) {
-            this.commitInfos.addAll(commitInfos);
-            this.failedInfos.addAll(failInfos);
-        }
-        this.numEpochFinished.incrementAndGet();
-        LOG.info("onEpochReport done: {}", this);
-    }
-
-    public TMVEpoch toThrift() {
-        TMVEpoch res = new TMVEpoch();
-        // TODO(murphy) generate an epoch id instead of txn id
-        res.setEpoch_id(txnId);
-        res.setTxn_id(txnId);
-        res.setStart_ts(startTimeMilli);
-
-        return res;
-    }
-
-    /*
-     *          txnPublish       onSchedule
-     * ┌────────┐      ┌────────┐     ┌───────────┐           ┌────────┐
-     * │  INIT  ├──────┤ READY  ├────►│ RUNNING   ├──────────►│ FAILED │
-     * └────────┘      └────────┘     └─────┬─────┘           └────────┘
-     *     ▲                                │                     ▲
-     *     │                                │   executed          │
-     *     │                                │                     │
-     *     │                          ┌─────▼─────┐               │
-     *     │                          │ COMMITTING├───────────────┤
-     *     │                          └─────┬─────┘               │
-     *     │                                │                     │
-     *     │                                │   onTxnCommitted    │
-     *     │                                │                     │
-     *     │         reset            ┌─────▼─────┐               │
-     *     └──────────────────────────┤ COMMITTED ├───────────────┘
-     *                                └───────────┘
-     */
     public enum EpochState {
         // Wait for data
         INIT,
@@ -239,14 +110,6 @@ public class MVEpoch implements Writable {
         this.commitTimeMilli = commitTimeMilli;
     }
 
-    public long getTxnId() {
-        return txnId;
-    }
-
-    public void setTxnId(long txnId) {
-        this.txnId = txnId;
-    }
-
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -256,14 +119,17 @@ public class MVEpoch implements Writable {
             return false;
         }
         MVEpoch mvEpoch = (MVEpoch) o;
-        return mvId == mvEpoch.mvId &&
-                commitTimeMilli == mvEpoch.commitTimeMilli && txnId == mvEpoch.txnId && state == mvEpoch.state &&
+        return dbId == mvEpoch.dbId
+                && mvId == mvEpoch.mvId
+                && startTimeMilli == mvEpoch.startTimeMilli
+                && commitTimeMilli == mvEpoch.commitTimeMilli
+                && state == mvEpoch.state &&
                 Objects.equals(binlogState, mvEpoch.binlogState);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(mvId, state, binlogState, txnId);
+        return Objects.hash(dbId, mvId, state, binlogState, startTimeMilli, commitTimeMilli);
     }
 
     @Override
@@ -275,8 +141,6 @@ public class MVEpoch implements Writable {
                 ", binlogState=" + binlogState +
                 ", startTimeMilli=" + startTimeMilli +
                 ", commitTimeMilli=" + commitTimeMilli +
-                ", txnId=" + txnId +
-                ", numEpochFinished=" + numEpochFinished +
                 '}';
     }
 }
