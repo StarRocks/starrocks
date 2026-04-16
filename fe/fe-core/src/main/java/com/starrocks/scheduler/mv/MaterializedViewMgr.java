@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
@@ -27,13 +26,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.planner.OlapTableSink;
-import com.starrocks.planner.PlanFragment;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
-import com.starrocks.sql.common.UnsupportedException;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,7 +38,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Manage FE-side MV compatibility metadata such as legacy maintenance job replay/state
@@ -128,92 +119,6 @@ public class MaterializedViewMgr {
         Text.writeString(output, json);
         checksum ^= data.jobList.size();
         return checksum;
-    }
-
-    /**
-     * Prepare maintenance work for materialized view
-     * 1. Create Intermediate Materialized Table(IMT)
-     * 2. Store metadata of Job in metastore
-     * 3. Create job for MV maintenance
-     * 4. Compute physical topology of MV job
-     */
-    void prepareMaintenanceWork(CreateMaterializedViewStatement stmt,
-                                MaterializedView view,
-                                ExecPlan execPlan,
-                                ColumnRefFactory columnRefFactory)
-            throws DdlException {
-        if (!view.getRefreshScheme().isIncremental()) {
-            return;
-        }
-
-        try {
-            if (jobMap.get(view.getMvId()) != null) {
-                throw new DdlException("MV already existed");
-            }
-            // Prepare the table sink for exec-plan
-            PlanFragment sinkFragment = execPlan.getTopFragment();
-            OlapTableSink tableSink = (OlapTableSink) sinkFragment.getSink();
-            tableSink.setDstTable(view);
-            tableSink.setPartitionIds(view.getAllPartitionIds());
-
-            // Create the job but not execute it
-            MVMaintenanceJob job = new MVMaintenanceJob(view, execPlan);
-            // TODO(murphy) atomic persist the meta of MV (IMT, MaintenancePlan) along with materialized view
-            AtomicBoolean jobExist = new AtomicBoolean(false);
-            GlobalStateMgr.getCurrentState().getEditLog().logMVJobState(job, wal -> {
-                if (jobMap.putIfAbsent(view.getMvId(), job) != null) {
-                    jobExist.set(true);
-                }
-            });
-            if (!jobExist.get()) {
-                IMTCreator.createIMT(stmt, view, execPlan, columnRefFactory);
-            }
-            LOG.info("create the maintenance job for MV: {}", view.getName());
-        } catch (Exception e) {
-            jobMap.remove(view.getMvId());
-            LOG.warn("prepare MV {} failed, ", view.getName(), e);
-        }
-    }
-
-    /**
-     * Stop the maintenance job for MV after dropped
-     */
-    public void stopMaintainMV(MaterializedView view) {
-        MaterializedView.MvRefreshScheme refreshScheme = view.getRefreshScheme();
-        if (refreshScheme != null && !refreshScheme.isIncremental()) {
-            return;
-        }
-        MVMaintenanceJob job = getJob(view.getMvId());
-        if (job == null) {
-            LOG.warn("MV job not exists {}", view.getName());
-            return;
-        }
-        job.stopJob();
-        jobMap.remove(view.getMvId());
-        LOG.info("Remove maintenance job for mv: {}", view.getName());
-    }
-
-    /**
-     * Re-Schedule the MV maintenance job
-     * 1. Tablet migration
-     * 2. Cluster rescale
-     * 3. Temporary failure happens(FE or BE)
-     */
-    public void reScheduleMaintainMV(MvId mvId) {
-        throw UnsupportedException.unsupportedException("re-schedule mv job is not supported");
-    }
-
-    /**
-     * Rebuild the maintenance job for critical changes
-     * 1. Schema change of MV (should be optimized later)
-     * 2. Binlog lost
-     * 3. Base table schema change (should be optimized later)
-     */
-    public void rebuildMaintainMV(MaterializedView view) {
-        if (!view.getRefreshScheme().isIncremental()) {
-            return;
-        }
-        throw UnsupportedException.unsupportedException("rebuild mv job is not supported");
     }
 
     protected MVMaintenanceJob getJob(MvId mvId) {
