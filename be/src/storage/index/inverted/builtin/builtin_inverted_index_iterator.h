@@ -14,8 +14,6 @@
 
 #pragma once
 
-<<<<<<< HEAD
-=======
 #include <CLucene.h>
 
 #include <memory>
@@ -23,7 +21,6 @@
 
 #include "base/string/slice.h"
 #include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
->>>>>>> d4ef26409a ([BugFix] Align builtin inverted MATCH_ALL/MATCH_ANY tokenization with parser settings (#71617))
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "util/slice.h"
