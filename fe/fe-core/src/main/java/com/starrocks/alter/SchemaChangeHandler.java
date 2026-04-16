@@ -2093,6 +2093,29 @@ public class SchemaChangeHandler extends AlterHandler {
         if (olapTable == null) {
             throw new DdlException("olapTable is null");
         }
+        // Lake-only ADD/DROP INDEX fast path classifier hook.
+        //
+        // When the alter is eligible (cloud-native table, only CreateIndexClause
+        // or DropIndexClause, supported index types per
+        // SchemaChangeIndexFastPathClassifier), the design is to construct a
+        // dedicated LakeTableAddIndexJob / LakeTableDropIndexJob that emits
+        // AlterReplicaTask with onlyAddIndex / onlyDropIndex set. The BE
+        // pipeline is fully wired to consume those tasks (see
+        // SchemaChangeHandler::do_process_add_index_only on BE), but the FE
+        // Job classes are intentionally deferred to a focused follow-up
+        // because they require duplicating ~400 lines of AlterJobV2
+        // lifecycle for which we have no build/test feedback in the current
+        // environment. Until then, the classifier just emits a structured
+        // log so the existence of the eligible alter is observable, and the
+        // alter falls through to the regular schema-change path (which
+        // remains correct, just slower).
+        if (SchemaChangeIndexFastPathClassifier.shouldUseAddIndexFastPath(olapTable, alterClauses)) {
+            LOG.info("ADD INDEX fast path eligible for table {}; falling through to regular path "
+                    + "(LakeTableAddIndexJob not yet wired)", olapTable.getName());
+        } else if (SchemaChangeIndexFastPathClassifier.shouldUseDropIndexFastPath(olapTable, alterClauses)) {
+            LOG.info("DROP INDEX fast path eligible for table {}; falling through to regular path "
+                    + "(LakeTableDropIndexJob not yet wired)", olapTable.getName());
+        }
         boolean fastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
         //for multi add colmuns clauses
         IntSupplier colUniqueIdSupplier = new IntSupplier() {

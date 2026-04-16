@@ -516,10 +516,66 @@ Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMap
 template <bool is_original_bf>
 Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
                                   const IndexReadOptions& opts) {
-    RETURN_IF_ERROR(_load_bloom_filter_index(opts));
-    SparseRange<> bf_row_ranges;
+    // Lake ADD INDEX fast-path for NGRAMBF: if the IDG loader has an
+    // active entry for this (segment, col_unique_id, NGRAMBF), open a
+    // transient BloomFilterIndexReader from the .idx file. Holders are
+    // kept on this function's stack so they outlive the iterator without
+    // needing a virtual destructor on BloomFilterIndexIterator.
+    //
+    // The "original" bloom filter (is_original_bf=true) is driven by the
+    // table property `bloom_filter_columns`, not by CreateIndexClause, so
+    // it never lives in IDG and stays on the existing footer-embedded path.
+    std::unique_ptr<RandomAccessFile> idg_file_holder;
+    std::unique_ptr<BloomFilterIndexReader> idg_reader_holder;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
-    RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+
+    bool used_idg = false;
+    if (!is_original_bf && opts.idg_loader != nullptr) {
+        TabletSegmentId tsid(opts.tablet_id, opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status load_st = opts.idg_loader->load(tsid, opts.query_version, &list);
+        if (load_st.ok() && !list.empty()) {
+            for (const auto& e : list) {
+                bool match = false;
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id == opts.col_unique_id && k.index_type == IndexType::NGRAMBF) {
+                        match = true;
+                        break;
+                    }
+                }
+                if (!match) continue;
+
+                // Resolve .idx path under the segment directory and parse footer.
+                const std::string& seg_path = _segment->file_name();
+                auto pos = seg_path.find_last_of('/');
+                std::string idx_path = (pos == std::string::npos) ? e.index_file
+                                                                  : seg_path.substr(0, pos + 1) + e.index_file;
+                ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
+                ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(idx_path));
+
+                lake::IndexFileReader idx_reader;
+                RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
+                const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, IndexType::NGRAMBF);
+                if (meta == nullptr || !meta->has_bloom_filter_index()) {
+                    return Status::Corruption("IDG entry references missing bloom filter in .idx file");
+                }
+                IndexReadOptions sub_opts = opts;
+                sub_opts.read_file = idg_file_holder->stream().get();
+                idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
+                ASSIGN_OR_RETURN(bool /*first_load*/,
+                                 idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
+                RETURN_IF_ERROR(idg_reader_holder->new_iterator(sub_opts, &bf_iter));
+                used_idg = true;
+                break;
+            }
+        }
+    }
+
+    if (!used_idg) {
+        RETURN_IF_ERROR(_load_bloom_filter_index(opts));
+        RETURN_IF_ERROR(_bloom_filter_index->new_iterator(opts, &bf_iter));
+    }
+    SparseRange<> bf_row_ranges;
     size_t range_size = row_ranges->size();
     // get covered page ids
     std::set<int32_t> page_ids;

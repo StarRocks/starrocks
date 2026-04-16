@@ -595,6 +595,31 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
         }
     });
 
+    // Delete IDG entries for input segments. The output segment(s) inherit
+    // the index via tablet_schema.table_indices: the standard column writer
+    // builds bitmap (column.has_bitmap_index()) / NGRAMBF (need_bloom_filter
+    // + tablet_index[NGRAMBF]) inline into the new segment footer because
+    // the schema already declares the index. So once the input rssids are
+    // unreachable, their IDG payload is dead and the .idx files become
+    // orphans for vacuum.
+    if (_tablet_meta->has_idg_meta()) {
+        auto idgs = _tablet_meta->mutable_idg_meta()->mutable_idgs();
+        using T_IDG = std::decay_t<decltype(*idgs)>;
+        int idg_erase_cnt = delete_from_protobuf_map<T_IDG>(idgs, delete_delvec_sids, [&](const T_IDG& gc_map) {
+            for (const auto& each : gc_map) {
+                for (const auto& entry : each.second.entries()) {
+                    if (!entry.has_index_file() || entry.index_file().empty()) continue;
+                    FileMetaPB file_meta;
+                    file_meta.set_name(entry.index_file());
+                    if (entry.has_file_size()) file_meta.set_size(entry.file_size());
+                    if (entry.has_shared_file()) file_meta.set_shared(entry.shared_file());
+                    _tablet_meta->mutable_orphan_files()->Add(std::move(file_meta));
+                }
+            }
+        });
+        (void)idg_erase_cnt;
+    }
+
     // remove compacted sst
     remove_compacted_sst(op_compaction);
 

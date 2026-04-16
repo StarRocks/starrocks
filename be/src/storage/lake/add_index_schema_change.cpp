@@ -38,10 +38,13 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/bitmap_index_writer.h"
+#include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/segment.h"
+#include "storage/tablet_index.h"
 #include "storage/tablet_schema.h"
 #include "storage/types.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks::lake {
 
@@ -325,16 +328,51 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     }
 
     // Bloom / NGRAMBF options. `index_properties` on TabletIndexPB is a
-    // free-form JSON string; we parse the well-known knobs on a best-effort
-    // basis (fpp, case_sensitive, gram_num) and fall back to defaults
-    // otherwise, so a minimal TabletIndexPB still produces a valid index.
+    // serialized JSON map produced by TabletIndex::to_schema_pb (FE side).
+    // Parse it through TabletIndex so we honor the same key names the
+    // existing column-writer path consumes (bloom_filter_fpp, gram_num,
+    // case_sensitive). Missing keys fall back to BloomFilterOptions
+    // defaults so a minimal TabletIndexPB still produces a valid index.
     BloomFilterOptions bf_opts;
     if (index_type == IndexType::NGRAMBF) {
         bf_opts.use_ngram = true;
-        bf_opts.gram_num = 4; // default; FE passes gram size via properties
-        // (property parsing is out of scope for this minimal slice; a
-        // follow-up should read ix.index_properties() properly)
-        (void)ix;
+    }
+    if (ix.has_index_properties() && !ix.index_properties().empty()) {
+        TabletIndex tmp;
+        if (auto st = tmp.init_from_pb(ix); st.ok()) {
+            const auto& props = tmp.index_properties();
+            auto get_str = [&](const std::string& key) -> std::string {
+                auto it = props.find(key);
+                return it == props.end() ? std::string() : it->second;
+            };
+            // Common spellings used across StarRocks DDL.
+            std::string fpp_str = get_str("bloom_filter_fpp");
+            if (fpp_str.empty()) fpp_str = get_str("fpp");
+            if (!fpp_str.empty()) {
+                try {
+                    bf_opts.fpp = std::stod(fpp_str);
+                } catch (const std::exception&) {
+                    // Ignore malformed input; defaults remain in effect.
+                }
+            }
+            std::string gram_str = get_str("gram_num");
+            if (!gram_str.empty()) {
+                try {
+                    bf_opts.gram_num = static_cast<size_t>(std::stoul(gram_str));
+                } catch (const std::exception&) {
+                    // Ignore.
+                }
+            }
+            std::string cs_str = get_str("case_sensitive");
+            if (!cs_str.empty()) {
+                bf_opts.case_sensitive = (cs_str == "true" || cs_str == "1");
+            }
+        }
+    }
+    if (bf_opts.use_ngram && bf_opts.gram_num == 0) {
+        // gram_num is required when use_ngram is true; fall back to a sane
+        // default rather than failing builder creation downstream.
+        bf_opts.gram_num = 4;
     }
 
     auto type_info = get_type_info(column);

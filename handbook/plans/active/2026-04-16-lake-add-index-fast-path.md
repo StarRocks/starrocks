@@ -40,6 +40,10 @@ Commits in chronological order:
 7. Owner-wrapped bitmap iterator (leak fix) + docs (EN/ZH) + BE UTs
    (index_file_writer_reader_test, index_delta_group_loader_test).
 8. AddIndexSchemaChange extended to BLOOM_FILTER / NGRAMBF builder.
+9. NGRAMBF read path (ColumnReader::bloom_filter prefers IDG) +
+   BloomFilterOptions parsing from TabletIndexPB.index_properties +
+   compaction post-publish IDG cleanup + FE classifier hook in
+   SchemaChangeHandler + FE UT for SchemaChangeIndexFastPathClassifier.
 
 ## Decision Log
 
@@ -66,24 +70,23 @@ Commits in chronological order:
 ## Remaining Work
 
 ### BE
-- ColumnReader IDG-aware bloom_filter read path: the
-  `ColumnReader::bloom_filter<is_original_bf>` method filters row-ranges
-  with predicates during scan. Need to open a transient
-  BloomFilterIndexReader from the .idx file when IDG is active, analogous
-  to `_new_idg_backed_bitmap_index_iterator`. The builder side is done;
-  this is read-only wiring.
 - GIN: InvertedWriter outputs to a per-column directory; IDG entry's
   `index_file` should point at the directory name; reader-side bridge
   needed. Shape differs from bitmap/bloom (file layout is a directory, not
-  a single .idx file), so this is a larger follow-up.
-- index_properties parsing for BloomFilterOptions (gram_num / fpp /
-  case_sensitive). Currently uses BloomFilterOptions defaults with
-  `use_ngram=true, gram_num=4` for NGRAMBF. TODO marked in
-  `build_bloom_for_column`.
-- Compaction inline reclaim: when compaction rebuilds an input segment
-  whose IDG entries are still active, inline the IDG indexes into the new
-  segment footer; the .idx file then naturally falls into orphan_files
-  via the existing `compaction_inputs` -> vacuum path.
+  a single .idx file), so this is a larger follow-up. Intentionally out
+  of scope per current direction.
+
+### FE Job classes
+- LakeTableAddIndexJob / LakeTableDropIndexJob: end-to-end FE Job that
+  emits AlterReplicaTask with `setOnlyAddIndex(...)` /
+  `setOnlyDropIndex(...)`. Needs ~400 lines duplicating AlterJobV2
+  lifecycle (pending → waiting-txn → running → finished + persist /
+  replay). Skipping shadow-index creation since the fast path mutates
+  base tablets in place.
+- SchemaChangeHandler dispatch: currently only logs the classifier
+  decision and falls through to the regular path (commit 9). Once the
+  Job classes exist, replace the log with `return new
+  LakeTableAddIndexJob(...)` / `return new LakeTableDropIndexJob(...)`.
 
 ### Owner-wrapper leak (FIXED in commit 7)
 
