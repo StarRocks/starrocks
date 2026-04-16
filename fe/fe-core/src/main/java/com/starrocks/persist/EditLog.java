@@ -2228,14 +2228,6 @@ public class EditLog {
         logJsonObject(OperationType.OP_MODIFY_BINLOG_AVAILABLE_VERSION, log, walApplier);
     }
 
-    public void logMVJobState(MVMaintenanceJob job, WALApplier walApplier) {
-        logJsonObject(OperationType.OP_MV_JOB_STATE, job, walApplier);
-    }
-
-    public void logMVEpochChange(MVEpoch epoch) {
-        logJsonObject(OperationType.OP_MV_EPOCH_UPDATE, epoch);
-    }
-
     public void logAlterTableProperties(ModifyTablePropertyOperationLog info, WALApplier walApplier) {
         logJsonObject(OperationType.OP_ALTER_TABLE_PROPERTIES, info, walApplier);
     }

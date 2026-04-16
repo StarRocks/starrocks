@@ -129,7 +129,6 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.mv.MVMaintenanceJob;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -868,11 +867,6 @@ public class FakeEditLog extends MockUp<EditLog> {
     @Mock
     public void logModifyBinlogAvailableVersion(ModifyTablePropertyOperationLog log, WALApplier walApplier) {
         apply(walApplier, log);
-    }
-
-    @Mock
-    public void logMVJobState(MVMaintenanceJob job, WALApplier walApplier) {
-        apply(walApplier, job);
     }
 
     @Mock

@@ -22,7 +22,8 @@ import com.starrocks.common.io.Writable;
 import java.util.Objects;
 
 /**
- * Compatibility metadata for a legacy incremental MV maintenance epoch.
+ * Compatibility metadata for a legacy incremental MV maintenance epoch that
+ * must remain replayable and checkpointable for older persisted state.
  */
 public class MVEpoch implements Writable {
     @SerializedName("dbId")

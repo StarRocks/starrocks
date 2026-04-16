@@ -120,7 +120,7 @@ public class MaterializedViewMgrEditLogTest {
 
     private static void logLegacyJob(MaterializedViewMgr mvMgr, MVMaintenanceJob job) {
         EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-        editLog.logMVJobState(job, wal -> {
+        editLog.logJsonObject(OperationType.OP_MV_JOB_STATE, job, wal -> {
             try {
                 mvMgr.replay((MVMaintenanceJob) wal);
             } catch (IOException e) {
@@ -209,7 +209,7 @@ public class MaterializedViewMgrEditLogTest {
 
         MVEpoch epoch = new MVEpoch(mvId);
         epoch.setState(MVEpoch.EpochState.COMMITTED);
-        GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
+        GlobalStateMgr.getCurrentState().getEditLog().logJsonObject(OperationType.OP_MV_EPOCH_UPDATE, epoch);
 
         MVEpoch replayEpoch = (MVEpoch) UtFrameUtils.PseudoJournalReplayer
                 .replayNextJournal(OperationType.OP_MV_EPOCH_UPDATE);
