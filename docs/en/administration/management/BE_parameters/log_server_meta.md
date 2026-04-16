@@ -100,7 +100,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes (from v3.3.0, v3.2.7, and v3.1.12)
-- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARN, ERROR, and FATAL. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
+- Description: The severity levels into which system log entries are classified. Valid values: INFO, WARNING, ERROR, and FATAL. This item was changed to a dynamic configuration from v3.3.0, v3.2.7, and v3.1.12 onwards.
 - Introduced in: -
 
 ### sys_log_roll_mode
