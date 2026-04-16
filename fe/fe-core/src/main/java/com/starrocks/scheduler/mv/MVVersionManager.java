@@ -69,15 +69,9 @@ public class MVVersionManager {
                                     PCellSortedSet mvRefreshedPartitions,
                                     Set<Long> refBaseTableIds,
                                     Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames,
-<<<<<<< HEAD
-                                    Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap) {
+                                    Map<BaseTableInfo, TvrVersionRange> tvrDeltaToPromote) {
         MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
         MaterializedView.AsyncRefreshContext refreshContext = mvRefreshScheme.getAsyncRefreshContext();
-=======
-                                    Map<BaseTableInfo, TvrVersionRange> tvrDeltaToPromote) {
-        MaterializedView.MvRefreshScheme copiedScheme = mv.getRefreshScheme().copy(); // copy on write
-        MaterializedView.AsyncRefreshContext refreshContext = copiedScheme.getAsyncRefreshContext();
->>>>>>> 32a2112913 ([BugFix] Fix IVM-to-PCT fallback TVR drift and add pending TVR owner tracking (#71646))
         // update materialized view partition to ref base table partition names meta
         updateAssociatedPartitionMeta(refreshContext, mvRefreshedPartitions, refTableAndPartitionNames);
         // Update meta information for OLAP tables and external tables
@@ -95,13 +89,8 @@ public class MVVersionManager {
         if (tvrDeltaToPromote != null) {
             // update the tvr version range map in mv context
             final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
-<<<<<<< HEAD
                     mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
-            for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tempMvTvrVersionRangeMap.entrySet()) {
-=======
-                    refreshContext.getBaseTableInfoTvrVersionRangeMap();
             for (Map.Entry<BaseTableInfo, TvrVersionRange> entry : tvrDeltaToPromote.entrySet()) {
->>>>>>> 32a2112913 ([BugFix] Fix IVM-to-PCT fallback TVR drift and add pending TVR owner tracking (#71646))
                 TvrVersionRange versionRange = entry.getValue();
                 if (versionRange == null || versionRange.isEmpty()) {
                     continue;
