@@ -287,4 +287,19 @@ class ColumnUsageTest extends PlanTestBase {
             Assertions.assertEquals(usage, restored);
         }
     }
+
+    @Test
+    public void testPredicateColumnsVacuumSkipsWhenTtlDisabled() throws Exception {
+        starRocksAssert.query("select * from t0 where v1 > 1").explainQuery();
+        PredicateColumnsMgr mgr = PredicateColumnsMgr.getInstance();
+        TableName t0 = new TableName(connectContext.getDatabase(), "t0");
+        Assertions.assertEquals(1, mgr.queryPredicateColumns(t0).size());
+
+        long beforeValue = Config.statistic_predicate_columns_ttl_hours;
+        Config.statistic_predicate_columns_ttl_hours = -1;
+        mgr.vacuum();
+        Assertions.assertEquals(1, mgr.queryPredicateColumns(t0).size());
+
+        Config.statistic_predicate_columns_ttl_hours = beforeValue;
+    }
 }
