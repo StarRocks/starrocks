@@ -2378,15 +2378,15 @@ bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<Row
         return false;
     }
     for (const auto& rowset : rowsets) {
-        const auto& meta = rowset->metadata();
-        if (meta.segment_metas_size() == 0) {
+        const auto& rowset_meta = rowset->metadata();
+        if (rowset_meta.segment_metas_size() == 0) {
             return false;
         }
-        for (const auto& seg_meta : meta.segment_metas()) {
-            if (!seg_meta.has_sort_key_min() || !seg_meta.has_sort_key_max()) {
+        for (const auto& segment_meta : rowset_meta.segment_metas()) {
+            if (!segment_meta.has_sort_key_min() || !segment_meta.has_sort_key_max()) {
                 return false;
             }
-            if (seg_meta.sort_key_min().values_size() == 0 || seg_meta.sort_key_max().values_size() == 0) {
+            if (segment_meta.sort_key_min().values_size() == 0 || segment_meta.sort_key_max().values_size() == 0) {
                 return false;
             }
         }
@@ -2396,29 +2396,30 @@ bool TabletParallelCompactionManager::_can_use_range_split(const std::vector<Row
 
 StatusOr<std::vector<SegmentSplitInfo>> TabletParallelCompactionManager::_collect_segment_key_bounds(
         const std::vector<RowsetPtr>& rowsets) {
-    std::vector<SegmentSplitInfo> seg_bounds;
+    std::vector<SegmentSplitInfo> segments;
 
     for (const auto& rowset : rowsets) {
-        const auto& meta = rowset->metadata();
-        int32_t num_segments = meta.segment_metas_size();
+        const auto& rowset_meta = rowset->metadata();
+        int32_t num_segments = rowset_meta.segment_metas_size();
         int64_t rowset_data_size = rowset->data_size();
         int64_t rowset_num_rows = rowset->num_rows();
 
-        for (const auto& seg_meta : meta.segment_metas()) {
-            SegmentSplitInfo bound;
-            RETURN_IF_ERROR(bound.min_key.from_proto(seg_meta.sort_key_min()));
-            RETURN_IF_ERROR(bound.max_key.from_proto(seg_meta.sort_key_max()));
-            bound.num_rows = seg_meta.has_num_rows() ? seg_meta.num_rows() : 0;
-            if (bound.num_rows > 0 && rowset_num_rows > 0) {
-                bound.data_size = rowset_data_size * bound.num_rows / rowset_num_rows;
+        for (const auto& segment_meta : rowset_meta.segment_metas()) {
+            SegmentSplitInfo segment;
+            RETURN_IF_ERROR(segment.min_key.from_proto(segment_meta.sort_key_min()));
+            RETURN_IF_ERROR(segment.max_key.from_proto(segment_meta.sort_key_max()));
+            segment.num_rows = segment_meta.has_num_rows() ? segment_meta.num_rows() : 0;
+            if (segment.num_rows > 0 && rowset_num_rows > 0) {
+                segment.data_size = rowset_data_size * segment.num_rows / rowset_num_rows;
             } else if (num_segments > 0) {
-                bound.data_size = rowset_data_size / num_segments;
+                segment.data_size = rowset_data_size / num_segments;
             }
-            seg_bounds.push_back(std::move(bound));
+            RETURN_IF_ERROR(segment.load_sort_key_samples(segment_meta));
+            segments.push_back(std::move(segment));
         }
     }
 
-    return seg_bounds;
+    return segments;
 }
 
 OlapTuple TabletParallelCompactionManager::_variant_tuple_to_olap_tuple(const VariantTuple& vt) {
@@ -2438,17 +2439,17 @@ OlapTuple TabletParallelCompactionManager::_variant_tuple_to_olap_tuple(const Va
 std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_range_split_groups(
         int64_t tablet_id, const std::vector<RowsetPtr>& rowsets, int32_t max_parallel, int64_t max_bytes_per_subtask) {
     // Collect segment key bounds
-    auto seg_bounds_or = _collect_segment_key_bounds(rowsets);
-    if (!seg_bounds_or.ok() || seg_bounds_or.value().empty()) {
+    auto segments_or = _collect_segment_key_bounds(rowsets);
+    if (!segments_or.ok() || segments_or.value().empty()) {
         VLOG(1) << "Range split: tablet=" << tablet_id << " failed to collect segment key bounds, fallback";
         return {};
     }
-    auto& seg_bounds = seg_bounds_or.value();
+    auto& segments = segments_or.value();
 
     // Calculate total data
     int64_t total_bytes = 0;
-    for (const auto& bound : seg_bounds) {
-        total_bytes += bound.data_size;
+    for (const auto& segment : segments) {
+        total_bytes += segment.data_size;
     }
 
     int32_t target_subtasks = std::min(
@@ -2456,7 +2457,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_range_split_g
     target_subtasks = std::max(2, target_subtasks);
 
     // Use calculate_range_split_boundaries from tablet_splitter to compute boundaries
-    auto split_result_or = calculate_range_split_boundaries(seg_bounds, target_subtasks, max_bytes_per_subtask,
+    auto split_result_or = calculate_range_split_boundaries(segments, target_subtasks, max_bytes_per_subtask,
                                                             /*use_num_rows=*/false);
     if (!split_result_or.ok() || split_result_or.value().boundaries.empty()) {
         VLOG(1) << "Range split: tablet=" << tablet_id << " failed to calculate boundaries, fallback";
@@ -2500,7 +2501,7 @@ std::vector<SubtaskGroup> TabletParallelCompactionManager::_create_range_split_g
     }
 
     VLOG(1) << "Range split: tablet=" << tablet_id << " created " << groups.size() << " range split subtasks"
-            << " from " << rowsets.size() << " rowsets, " << seg_bounds.size() << " segments"
+            << " from " << rowsets.size() << " rowsets, " << segments.size() << " segments"
             << ", boundaries=" << boundaries.size() << ", total_bytes=" << total_bytes;
 
     return groups;
