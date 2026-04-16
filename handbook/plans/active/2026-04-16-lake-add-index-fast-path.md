@@ -36,7 +36,10 @@ Commits in chronological order:
 3. IndexFileWriter + SegmentReadOptions.idg_loader wiring.
 4. IndexFileReader + compaction conflict check.
 5. AddIndexSchemaChange (BITMAP) + do_process_add_index_only full impl.
-6. ColumnReader bitmap iterator prefers IDG (read-side closes the loop).
+6. ColumnReader bitmap iterator prefers IDG (bitmap read-side).
+7. Owner-wrapped bitmap iterator (leak fix) + docs (EN/ZH) + BE UTs
+   (index_file_writer_reader_test, index_delta_group_loader_test).
+8. AddIndexSchemaChange extended to BLOOM_FILTER / NGRAMBF builder.
 
 ## Decision Log
 
@@ -60,24 +63,29 @@ Commits in chronological order:
   (PK columns are routed through persistent index, so column-level bloom /
   bitmap there would be redundant).
 
-## Remaining Work (Phase 5+)
+## Remaining Work
 
 ### BE
-- Extend AddIndexSchemaChange::build_idg_for_segment beyond BITMAP:
-  - NGRAMBF: NgramBloomFilterIndexWriter — same shape as BITMAP, different
-    builder type. Builder lives in `be/src/storage/rowset/` along bitmap.
-  - GIN: InvertedWriter outputs to a per-column directory; IDG entry's
-    `index_file` points at the directory name; reader-side bridge needed.
-- ColumnReader IDG-aware bloom_filter / ngram_bloom / inverted iterators
-  (mirror `_new_idg_backed_bitmap_index_iterator`).
+- ColumnReader IDG-aware bloom_filter read path: the
+  `ColumnReader::bloom_filter<is_original_bf>` method filters row-ranges
+  with predicates during scan. Need to open a transient
+  BloomFilterIndexReader from the .idx file when IDG is active, analogous
+  to `_new_idg_backed_bitmap_index_iterator`. The builder side is done;
+  this is read-only wiring.
+- GIN: InvertedWriter outputs to a per-column directory; IDG entry's
+  `index_file` should point at the directory name; reader-side bridge
+  needed. Shape differs from bitmap/bloom (file layout is a directory, not
+  a single .idx file), so this is a larger follow-up.
+- index_properties parsing for BloomFilterOptions (gram_num / fpp /
+  case_sensitive). Currently uses BloomFilterOptions defaults with
+  `use_ngram=true, gram_num=4` for NGRAMBF. TODO marked in
+  `build_bloom_for_column`.
 - Compaction inline reclaim: when compaction rebuilds an input segment
   whose IDG entries are still active, inline the IDG indexes into the new
   segment footer; the .idx file then naturally falls into orphan_files
   via the existing `compaction_inputs` -> vacuum path.
-- Owner wrapper for transient BitmapIndexReader in
-  `_new_idg_backed_bitmap_index_iterator`: today the reader and
-  RandomAccessFile are leaked to keep the iterator alive. Needs a small
-  RAII holder that the iterator owns.
+
+### Owner-wrapper leak (FIXED in commit 7)
 
 ### FE
 - LakeTableAddIndexJob: clones the AlterJobV2 lifecycle from
@@ -109,9 +117,6 @@ Commits in chronological order:
 
 ## Risks
 
-- `ColumnReader::_new_idg_backed_bitmap_index_iterator` leaks transient
-  readers (documented). Acceptable for Phase 1 POC; must be fixed before
-  general availability.
 - All code below the proto/thrift layer is unreviewed by a build run in
   the implementation environment; first BE compile will likely surface
   small issues (header includes, namespace collisions, signature drift).
