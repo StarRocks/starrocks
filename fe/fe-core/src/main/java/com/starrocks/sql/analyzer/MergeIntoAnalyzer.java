@@ -181,7 +181,7 @@ public class MergeIntoAnalyzer {
                 .toList();
         for (Column col : dataColumns) {
             Expr dataExpr = buildDataColumnCaseExpr(
-                    stmt, col, targetSlotTableName, matchedClauses, notMatchedClauses);
+                    stmt, col, targetSlotTableName, matchedClauses, notMatchedClauses, icebergTable);
             selectList.addItem(new SelectListItem(dataExpr, col.getName()));
         }
 
@@ -266,12 +266,13 @@ public class MergeIntoAnalyzer {
     private static Expr buildDataColumnCaseExpr(MergeIntoStmt stmt, Column col,
                                                 TableName targetSlotTableName,
                                                 List<MergeWhenClause> matchedClauses,
-                                                List<MergeWhenClause> notMatchedClauses) {
+                                                List<MergeWhenClause> notMatchedClauses,
+                                                IcebergTable icebergTable) {
         // Build matched branch expression
         Expr matchedExpr = buildMatchedDataExpr(matchedClauses, col, targetSlotTableName);
 
         // Build not-matched branch expression
-        Expr notMatchedExpr = buildNotMatchedDataExpr(notMatchedClauses, col, stmt);
+        Expr notMatchedExpr = buildNotMatchedDataExpr(notMatchedClauses, col, stmt, icebergTable);
 
         // Optimization: if no matched clauses, we do not need the outer CASE
         // (all rows are inserts). Similarly if no not-matched clauses.
@@ -351,14 +352,14 @@ public class MergeIntoAnalyzer {
      * Build the data expression for NOT MATCHED branches for a given column.
      */
     private static Expr buildNotMatchedDataExpr(List<MergeWhenClause> notMatchedClauses, Column col,
-                                                MergeIntoStmt stmt) {
+                                                MergeIntoStmt stmt, IcebergTable icebergTable) {
         if (notMatchedClauses.isEmpty()) {
             return new NullLiteral();
         }
 
         if (notMatchedClauses.size() == 1) {
             return getNotMatchedColumnValue(
-                    (MergeWhenNotMatchedInsertClause) notMatchedClauses.get(0), col, stmt);
+                    (MergeWhenNotMatchedInsertClause) notMatchedClauses.get(0), col, stmt, icebergTable);
         }
 
         // Multiple NOT MATCHED clauses — build CASE
@@ -366,7 +367,7 @@ public class MergeIntoAnalyzer {
         for (MergeWhenClause clause : notMatchedClauses) {
             MergeWhenNotMatchedInsertClause insertClause = (MergeWhenNotMatchedInsertClause) clause;
             Expr condition = clause.getOptionalCondition();
-            Expr value = getNotMatchedColumnValue(insertClause, col, stmt);
+            Expr value = getNotMatchedColumnValue(insertClause, col, stmt, icebergTable);
             if (condition != null) {
                 whenClauses.add(new CaseWhenClause(condition, value));
             } else {
@@ -382,7 +383,8 @@ public class MergeIntoAnalyzer {
      * Get the data column value for a single NOT MATCHED INSERT clause.
      */
     private static Expr getNotMatchedColumnValue(MergeWhenNotMatchedInsertClause insertClause,
-                                                 Column col, MergeIntoStmt stmt) {
+                                                 Column col, MergeIntoStmt stmt,
+                                                 IcebergTable icebergTable) {
         if (insertClause.isStar()) {
             // INSERT * — reference source column with same name
             // Prefer the explicit sourceAlias from the grammar (the (AS? sourceAlias) after USING relation).
@@ -393,10 +395,14 @@ public class MergeIntoAnalyzer {
                     && stmt.getSourceRelation().getAlias() != null) {
                 sourceQualifier = stmt.getSourceRelation().getAlias().getTbl();
             }
+            if (sourceQualifier == null && stmt.getSourceRelation() instanceof TableRelation tr) {
+                // Source is a plain table reference without explicit alias — use its table name
+                sourceQualifier = tr.getName().getTbl();
+            }
             if (sourceQualifier != null) {
                 return new SlotRef(new TableName(null, null, sourceQualifier), col.getName());
             } else {
-                // No source alias — use unqualified reference
+                // Last resort: unqualified reference (may be ambiguous)
                 return new SlotRef(null, col.getName());
             }
         }
@@ -404,10 +410,18 @@ public class MergeIntoAnalyzer {
         List<String> targetColNames = insertClause.getTargetColumnNames();
         List<Expr> values = insertClause.getValues();
         if (targetColNames != null && values != null) {
+            // Named column list: INSERT (col1, col2) VALUES (v1, v2)
             for (int i = 0; i < targetColNames.size(); i++) {
                 if (targetColNames.get(i).equalsIgnoreCase(col.getName())) {
                     return values.get(i);
                 }
+            }
+        } else if (targetColNames == null && values != null) {
+            // Positional VALUES without column list: INSERT VALUES (v1, v2, ...)
+            // Map by target schema order
+            int colIdx = getColumnIndex(col, icebergTable);
+            if (colIdx >= 0 && colIdx < values.size()) {
+                return values.get(colIdx);
             }
         }
         // Column not mentioned in INSERT list — use NULL
@@ -479,5 +493,21 @@ public class MergeIntoAnalyzer {
         Expr elseExpr = new IntLiteral(IcebergRowDeltaSink.OpCode.NO_OP.value(), IntegerType.TINYINT);
 
         return new CaseExpr(null, whenClauses, elseExpr);
+    }
+
+    /**
+     * Get the positional index of a column in the Iceberg table's non-hidden schema.
+     * Returns -1 if not found.
+     */
+    private static int getColumnIndex(Column col, IcebergTable icebergTable) {
+        List<Column> dataColumns = icebergTable.getBaseSchema().stream()
+                .filter(c -> !c.isHidden())
+                .toList();
+        for (int i = 0; i < dataColumns.size(); i++) {
+            if (dataColumns.get(i).getName().equalsIgnoreCase(col.getName())) {
+                return i;
+            }
+        }
+        return -1;
     }
 }

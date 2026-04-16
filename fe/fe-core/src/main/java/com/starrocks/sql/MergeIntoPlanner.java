@@ -139,7 +139,11 @@ public class MergeIntoPlanner {
 
         IcebergMetadata.IcebergSinkExtra icebergSinkExtra = new IcebergMetadata.IcebergSinkExtra();
         icebergSinkExtra.setOperationType("MERGE");
-        org.apache.iceberg.expressions.Expression filterExpr = IcebergPlannerUtils.buildIcebergFilterExpr(execPlan);
+        // For MERGE, the plan has source LEFT JOIN target — there may be multiple
+        // IcebergScanNodes (e.g., self-merge or USING another Iceberg table).
+        // We must build the conflict filter from the TARGET scan, not the source.
+        org.apache.iceberg.expressions.Expression filterExpr =
+                buildTargetIcebergFilterExpr(execPlan, icebergTable);
         if (filterExpr != null) {
             icebergSinkExtra.setConflictDetectionFilter(filterExpr);
         }
@@ -158,6 +162,36 @@ public class MergeIntoPlanner {
         PlanNodeId nodeId = execPlan.getNextNodeId();
         EnforceUniqueNode enforceNode = new EnforceUniqueNode(nodeId, currentRoot, keyColIndices);
         sinkFragment.setPlanRoot(enforceNode);
+    }
+
+    /**
+     * Build conflict detection filter from the TARGET table's IcebergScanNode, not the first
+     * Iceberg scan found. In MERGE, the source may also be an Iceberg table, and the generic
+     * buildIcebergFilterExpr() picks the first scan it finds — which could be the source.
+     */
+    private static org.apache.iceberg.expressions.Expression buildTargetIcebergFilterExpr(
+            ExecPlan execPlan, IcebergTable targetTable) {
+        if (execPlan == null || execPlan.getScanNodes() == null) {
+            return null;
+        }
+
+        for (PlanNode node : execPlan.getScanNodes()) {
+            if (node instanceof com.starrocks.planner.IcebergScanNode scanNode) {
+                // Match by native table identity — same underlying Iceberg table object
+                if (scanNode.getIcebergTable().getNativeTable() == targetTable.getNativeTable()) {
+                    var predicate = scanNode.getIcebergJobPlanningPredicate();
+                    var nativeSchema = scanNode.getIcebergTable().getNativeTable().schema();
+                    if (predicate == null || nativeSchema == null) {
+                        return null;
+                    }
+                    var icebergContext = new com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr
+                            .IcebergContext(nativeSchema.asStruct());
+                    return new com.starrocks.connector.iceberg.ScalarOperatorToIcebergExpr()
+                            .convert(java.util.Collections.singletonList(predicate), icebergContext);
+                }
+            }
+        }
+        return null;
     }
 
 }
