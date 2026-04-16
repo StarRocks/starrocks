@@ -30,7 +30,6 @@ import java.util.BitSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class MultiJoinReorderTest extends PlanTestBase {
