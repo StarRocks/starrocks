@@ -189,9 +189,7 @@ public:
     void append(const Slice& str);
     DIAGNOSTIC_POP
 
-    void append_datum(const Datum& datum) override {
-        append(datum.get_slice());
-    }
+    void append_datum(const Datum& datum) override { append(datum.get_slice()); }
 
     void append(const Column& src, size_t offset, size_t count) override;
 
@@ -221,9 +219,7 @@ public:
 
     void append_value_multiple_times(const void* value, size_t count) override;
 
-    void append_default() override {
-        _offsets.emplace_back(_bytes.size());
-    }
+    void append_default() override { _offsets.emplace_back(_bytes.size()); }
 
     void append_default(size_t count) override {
         _offsets.insert(_offsets.end(), count, static_cast<uint32_t>(_bytes.size()));
@@ -367,9 +363,7 @@ public:
         _resource.reset();
     }
 
-    void invalidate_slice_cache() {
-        _german_strings_cache = false;
-    }
+    void invalidate_slice_cache() { _german_strings_cache = false; }
 
     std::string debug_item(size_t idx) const override;
 
