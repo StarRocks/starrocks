@@ -679,8 +679,6 @@ Iceberg クラスターのストレージとして Data Lake Storage Gen2 を選
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
-<<<<<<< HEAD
-=======
 - ワークロード ID 認証方法を選択する場合、`StorageCredentialParams` を次のように構成します:
 
   ```SQL
@@ -697,9 +695,6 @@ Iceberg クラスターのストレージとして Data Lake Storage Gen2 を選
   | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID です。                    |
   | azure.adls2.oauth2_client_id            | Yes          | ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。 |
 
-- REST カタログで Vended Credential（v4.0以降でサポート）を選択する場合、`StorageCredentialParams` を設定する必要はありません。
-
->>>>>>> 0c7b2f1392 ([Doc] Add ADLS2 Workload Identity Doc (#71798))
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -1058,8 +1053,6 @@ PROPERTIES
   );
   ```
 
-<<<<<<< HEAD
-=======
 - ワークロード ID 認証方法を選択した場合、次のようなコマンドを実行します。
 
   ```SQL
@@ -1075,23 +1068,6 @@ PROPERTIES
   );
   ```
 
-- REST カタログで Vended Credential を選択する場合、次のようなコマンドを実行します。
-
-  ```SQL
-  CREATE EXTERNAL CATALOG polaris_azure
-  PROPERTIES (   
-      "type"  =  "iceberg",   
-      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
-      "iceberg.catalog.type"  =  "rest",
-      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
-      "iceberg.catalog.security" = "oauth2",
-      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
-      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
-      "iceberg.catalog.warehouse" = "iceberg_catalog"
-  );
-  ```
-
->>>>>>> 0c7b2f1392 ([Doc] Add ADLS2 Workload Identity Doc (#71798))
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
