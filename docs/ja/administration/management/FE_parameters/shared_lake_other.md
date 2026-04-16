@@ -527,7 +527,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - デフォルト：600
 - タイプ：Long
 - 単位：Seconds
-- 変更可能：No
+- 変更可能：Yes
 - 説明：FE が共有データクラスターで StarMgr と定期的なメタデータ同期を実行する間隔。
 - 導入時期：-
 

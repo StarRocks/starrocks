@@ -662,6 +662,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        long newInterval = Config.star_mgr_meta_sync_interval_sec * 1000L;
+        if (newInterval > 0 && getInterval() != newInterval) {
+            setInterval(newInterval);
+        }
         long start = System.currentTimeMillis();
         acquireBackgroundComputeResource();
         deleteUnusedShardAndShardGroup();
