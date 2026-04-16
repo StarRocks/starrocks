@@ -1038,116 +1038,179 @@ public class PlanFragmentBuilder {
             return fragment;
         }
 
+        /**
+         * Compute partition key ranges for dynamic partition pruning.
+         * Returns a list of TKeyRange describing the value ranges of each used partition column.
+         * Returns empty if the partition has too many values (exceeding the session limit) or
+         * if the partition type is unsupported.
+         */
         private List<TKeyRange> computePartitionRange(OlapTable table, Partition partition,
                                                       Collection<Column> usedPartitionCols, SessionVariable session) {
             PartitionInfo partitionInfo = table.getPartitionInfo();
-            if (usedPartitionCols.isEmpty() || !partition.hasData() || !(partitionInfo.isRangePartition()
-                    || partitionInfo.isListPartition())) {
+            if (usedPartitionCols.isEmpty() || !partition.hasData()
+                    || !(partitionInfo.isRangePartition() || partitionInfo.isListPartition())) {
                 return List.of();
             }
-
             List<Column> partitionCols = partitionInfo.getPartitionColumns(table.getIdToColumn());
             Preconditions.checkState(partitionCols.containsAll(usedPartitionCols));
 
+            long limit = session.getDynamicPartitionPruneValuesLimit();
+            if (partitionInfo.isRangePartition()) {
+                return computeRangePartitionKeyRanges(partitionInfo, partition, partitionCols, usedPartitionCols, limit);
+            } else {
+                return computeListPartitionKeyRanges(partitionInfo, partition, partitionCols, usedPartitionCols, limit);
+            }
+        }
+    
+        private List<TKeyRange> computeRangePartitionKeyRanges(PartitionInfo partitionInfo, Partition partition,
+                                                               List<Column> partitionCols,
+                                                               Collection<Column> usedPartitionCols, long limit) {
+            RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
+            Range<PartitionKey> keyRange = rangeInfo.getRange(partition.getId());
+            if (!keyRange.hasLowerBound() || !keyRange.hasUpperBound()) {
+                return List.of();
+            }
+
+            boolean isNullPartition = keyRange.lowerEndpoint().isMinValue();
             long partitionValues = 1;
             List<TKeyRange> result = Lists.newArrayList();
-
-            if (partitionInfo.isRangePartition()) {
-                RangePartitionInfo range = (RangePartitionInfo) partitionInfo;
-                Range<PartitionKey> keyRange = range.getRange(partition.getId());
-                if (!keyRange.hasLowerBound() || !keyRange.hasUpperBound()) {
-                    return List.of();
+    
+            for (int i = 0; i < partitionCols.size(); i++) {
+                Column col = partitionCols.get(i);
+                if (!usedPartitionCols.contains(col)) {
+                    continue;
                 }
+    
+                TKeyRange kr = new TKeyRange();
+                long rangeSize;
 
-                // NULL values are placed in the partition whose lower bound is MINVALUE
-                boolean isNullPartition = keyRange.lowerEndpoint().isMinValue();
-
-                for (int i = 0; i < partitionCols.size(); i++) {
-                    if (!usedPartitionCols.contains(partitionCols.get(i))) {
+                if (col.getType().isDate()) {
+                    LiteralExpr lowerExpr = keyRange.lowerEndpoint().getKeys().get(i);
+                    LiteralExpr upperExpr = keyRange.upperEndpoint().getKeys().get(i);
+                    if (!(lowerExpr instanceof DateLiteral lower) || !(upperExpr instanceof DateLiteral upper)) {
                         continue;
                     }
-
-                    TKeyRange kr;
-                    if (partitionCols.get(i).getType().isDate()) {
-                        LiteralExpr lowerExpr = keyRange.lowerEndpoint().getKeys().get(i);
-                        LiteralExpr upperExpr = keyRange.upperEndpoint().getKeys().get(i);
-                        if (!(lowerExpr instanceof DateLiteral lower) || !(upperExpr instanceof DateLiteral upper)) {
-                            continue;
-                        }
-                        kr = new TKeyRange();
-                        kr.setBegin_key(lower.getYear() * 10000 + lower.getMonth() * 100 + lower.getDay());
-                        kr.setEnd_key(upper.getYear() * 10000 + upper.getMonth() * 100 + upper.getDay());
-                        partitionValues *= upper.toLocalDateTime().toLocalDate().toEpochDay() -
-                                lower.toLocalDateTime().toLocalDate().toEpochDay();
-                    } else if (partitionCols.get(i).getType().isIntegerType()) {
-                        kr = new TKeyRange();
-                        kr.setBegin_key(keyRange.lowerEndpoint().getKeys().get(i).getLongValue());
-                        kr.setEnd_key(keyRange.upperEndpoint().getKeys().get(i).getLongValue());
-                        partitionValues *= kr.getEnd_key() - kr.getBegin_key();
-                    } else {
-                        continue;
-                    }
-
-                    kr.setColumn_type(TypeSerializer.toThrift(partitionCols.get(i).getType().getPrimitiveType()));
-                    kr.setColumn_name(partitionCols.get(i).getName());
-
-                    if (isNullPartition) {
-                        kr.setHas_null(true);
-                    }
-
-                    if (partitionValues > session.getDynamicPartitionPruneValuesLimit()) {
-                        continue;
-                    }
-                    result.add(kr);
-                }
-            } else if (partitionInfo.isListPartition()) {
-                ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
-                if (listInfo.getLiteralExprValues().containsKey(partition.getId())) {
-                    Preconditions.checkState(partitionCols.size() == 1);
-                    List<LiteralExpr> partitionValuesList = listInfo.getLiteralExprValues().get(partition.getId());
-                    for (Column partitionCol : partitionCols) {
-                        if (!usedPartitionCols.contains(partitionCol)) {
-                            continue;
-                        }
-                        TKeyRange kr = new TKeyRange();
-                        kr.setColumn_type(TypeSerializer.toThrift(partitionCol.getType().getPrimitiveType()));
-                        kr.setColumn_name(partitionCol.getName());
-                        List<TExpr> l = Lists.newArrayList();
-                        partitionValuesList.forEach(v -> l.add(ExprToThrift.treeToThrift(v)));
-                        kr.setList_values(l);
-                        partitionValues *= partitionValuesList.size();
-                        if (partitionValues > session.getDynamicPartitionPruneValuesLimit()) {
-                            continue;
-                        }
-                        result.add(kr);
-                    }
-                } else if (listInfo.getMultiLiteralExprValues().containsKey(partition.getId())) {
-                    List<List<LiteralExpr>> partitionValuesList = listInfo.getMultiLiteralExprValues().get(partition.getId());
-                    for (int i = 0; i < partitionCols.size(); i++) {
-                        if (!usedPartitionCols.contains(partitionCols.get(i))) {
-                            continue;
-                        }
-                        TKeyRange kr = new TKeyRange();
-                        kr.setColumn_type(TypeSerializer.toThrift(partitionCols.get(i).getType().getPrimitiveType()));
-                        kr.setColumn_name(partitionCols.get(i).getName());
-                        List<TExpr> l = Lists.newArrayList();
-                        for (var values : partitionValuesList) {
-                            Preconditions.checkState(values.size() == partitionCols.size());
-                            l.add(ExprToThrift.treeToThrift(values.get(i)));
-                        }
-                        kr.setList_values(l);
-                        partitionValues *= partitionValuesList.size();
-                        if (partitionValues > session.getDynamicPartitionPruneValuesLimit()) {
-                            continue;
-                        }
-                        result.add(kr);
-                    }
+                    kr.setBegin_key(lower.getYear() * 10000 + lower.getMonth() * 100 + lower.getDay());
+                    kr.setEnd_key(upper.getYear() * 10000 + upper.getMonth() * 100 + upper.getDay());
+                    rangeSize = upper.toLocalDateTime().toLocalDate().toEpochDay()
+                            - lower.toLocalDateTime().toLocalDate().toEpochDay();
+                } else if (col.getType().isIntegerType()) {
+                    long lowerVal = keyRange.lowerEndpoint().getKeys().get(i).getLongValue();
+                    long upperVal = keyRange.upperEndpoint().getKeys().get(i).getLongValue();
+                    kr.setBegin_key(lowerVal);
+                    kr.setEnd_key(upperVal);
+                    rangeSize = upperVal - lowerVal;
                 } else {
-                    return List.of();
+                    continue;
                 }
+
+                if (rangeSize <= 0 || wouldOverflowOrExceedLimit(partitionValues, rangeSize, limit)) {
+                    break;
+                }
+                partitionValues *= rangeSize;
+    
+                kr.setColumn_type(TypeSerializer.toThrift(col.getType().getPrimitiveType()));
+                kr.setColumn_name(col.getName());
+                if (isNullPartition) {
+                    kr.setHas_null(true);
+                }
+                result.add(kr);
             }
 
             return result;
+        }
+    
+        private List<TKeyRange> computeListPartitionKeyRanges(PartitionInfo partitionInfo, Partition partition,
+                                                              List<Column> partitionCols,
+                                                              Collection<Column> usedPartitionCols, long limit) {
+            ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
+            if (listInfo.getLiteralExprValues().containsKey(partition.getId())) {
+                return computeSingleColumnListKeyRanges(listInfo, partition, partitionCols, usedPartitionCols, limit);
+            } else if (listInfo.getMultiLiteralExprValues().containsKey(partition.getId())) {
+                return computeMultiColumnListKeyRanges(listInfo, partition, partitionCols, usedPartitionCols, limit);
+            } else {
+                return List.of();
+            }
+        }
+    
+        private List<TKeyRange> computeSingleColumnListKeyRanges(ListPartitionInfo listInfo, Partition partition,
+                                                                 List<Column> partitionCols,
+                                                                 Collection<Column> usedPartitionCols, long limit) {
+            Preconditions.checkState(partitionCols.size() == 1);
+            List<LiteralExpr> partitionValuesList = listInfo.getLiteralExprValues().get(partition.getId());
+            long partitionValues = 1;
+            List<TKeyRange> result = Lists.newArrayList();
+    
+            for (Column col : partitionCols) {
+                if (!usedPartitionCols.contains(col)) {
+                    continue;
+                }
+
+                long listSize = partitionValuesList.size();
+                if (wouldOverflowOrExceedLimit(partitionValues, listSize, limit)) {
+                    break;
+                }
+                partitionValues *= listSize;
+
+                TKeyRange kr = new TKeyRange();
+                kr.setColumn_type(TypeSerializer.toThrift(col.getType().getPrimitiveType()));
+                kr.setColumn_name(col.getName());
+                List<TExpr> l = Lists.newArrayList();
+                partitionValuesList.forEach(v -> l.add(ExprToThrift.treeToThrift(v)));
+                kr.setList_values(l);
+                result.add(kr);
+            }
+
+            return result;
+        }
+    
+        private List<TKeyRange> computeMultiColumnListKeyRanges(ListPartitionInfo listInfo, Partition partition,
+                                                                List<Column> partitionCols,
+                                                                Collection<Column> usedPartitionCols, long limit) {
+            List<List<LiteralExpr>> partitionValuesList = listInfo.getMultiLiteralExprValues().get(partition.getId());
+            long partitionValues = 1;
+            List<TKeyRange> result = Lists.newArrayList();
+
+            for (int i = 0; i < partitionCols.size(); i++) {
+                Column col = partitionCols.get(i);
+                if (!usedPartitionCols.contains(col)) {
+                    continue;
+                }
+
+                long listSize = partitionValuesList.size();
+                if (wouldOverflowOrExceedLimit(partitionValues, listSize, limit)) {
+                    break;
+                }
+                partitionValues *= listSize;
+
+                TKeyRange kr = new TKeyRange();
+                kr.setColumn_type(TypeSerializer.toThrift(col.getType().getPrimitiveType()));
+                kr.setColumn_name(col.getName());
+                List<TExpr> l = Lists.newArrayList();
+                for (var values : partitionValuesList) {
+                    Preconditions.checkState(values.size() == partitionCols.size());
+                    l.add(ExprToThrift.treeToThrift(values.get(i)));
+                }
+                kr.setList_values(l);
+                result.add(kr);
+            }
+
+            return result;
+        }
+
+        /**
+         * Check if multiplying {@code current} by {@code factor} would overflow {@code long}
+         * or if the product would exceed the given {@code limit}.
+         */
+        private static boolean wouldOverflowOrExceedLimit(long current, long factor, long limit) {
+            if (factor == 0) {
+                return false;
+            }
+            // Overflow check: current * factor > Long.MAX_VALUE
+            if (current > limit / factor) {
+                return true;
+            }
+            return current * factor > limit;
         }
 
         @NotNull
@@ -1167,7 +1230,7 @@ public class PlanFragmentBuilder {
                             new SlotDescriptor(new SlotId(f.getId()), f.getName(), f.getType(), true)));
                 }
             }
-
+            
             Map<Integer, Expr> globalDictsExprs = Maps.newHashMap();
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(nodeRefs);
