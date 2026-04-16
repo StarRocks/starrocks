@@ -439,6 +439,8 @@ SET(DW_TEST_FILES
     ./storage/kv_store_test.cpp
     ./storage/lake/alter_tablet_meta_test.cpp
     ./storage/lake/async_delta_writer_test.cpp
+    ./storage/lake/index_delta_group_loader_test.cpp
+    ./storage/lake/index_file_writer_reader_test.cpp
     ./storage/lake/auto_increment_partial_update_test.cpp
     ./storage/lake/compaction_policy_test.cpp
     ./storage/lake/compaction_scheduler_test.cpp

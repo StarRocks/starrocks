@@ -417,18 +417,32 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
 
     auto bitmap_reader = std::make_unique<BitmapIndexReader>();
     ASSIGN_OR_RETURN(bool /*first_load*/, bitmap_reader->load(sub_opts, meta->bitmap_index()));
-    RETURN_IF_ERROR(bitmap_reader->new_iterator(sub_opts, iterator));
+    BitmapIndexIterator* inner = nullptr;
+    RETURN_IF_ERROR(bitmap_reader->new_iterator(sub_opts, &inner));
 
-    // The transient bitmap reader and the .idx file handle are kept alive
-    // by the iterator (it captures a shared_ptr on the read stream
-    // internally; bitmap_reader stays alive via a static member). To avoid
-    // dangling refs we leak the bitmap_reader for now: BitmapIndexReader
-    // holds shared_ptrs to its internal pages so the iterator survives.
-    // TODO: introduce a proper owner wrapper so transient readers are
-    // released when the iterator is freed; current behavior is correct
-    // but not memory-optimal under high IDG churn.
-    bitmap_reader.release();
-    (void)idx_file.release();
+    // Wrap the inner iterator so destruction tears down its backing reader
+    // and file handle deterministically. BitmapIndexIterator has a virtual
+    // destructor, so the caller's `delete iterator` correctly dispatches
+    // into the wrapper's dtor.
+    class OwningBitmapIndexIterator final : public BitmapIndexIterator {
+    public:
+        OwningBitmapIndexIterator(BitmapIndexIterator&& base, std::unique_ptr<BitmapIndexReader> reader,
+                                  std::unique_ptr<RandomAccessFile> file)
+                : BitmapIndexIterator(std::move(base)),
+                  _reader(std::move(reader)),
+                  _file(std::move(file)) {}
+        ~OwningBitmapIndexIterator() override = default;
+
+    private:
+        std::unique_ptr<BitmapIndexReader> _reader;
+        std::unique_ptr<RandomAccessFile> _file;
+    };
+
+    // Transfer inner iterator state into the wrapper. `inner` was allocated
+    // by BitmapIndexReader::new_iterator via `new`, so we take ownership
+    // through a unique_ptr and move-construct into the wrapper.
+    std::unique_ptr<BitmapIndexIterator> inner_owned(inner);
+    *iterator = new OwningBitmapIndexIterator(std::move(*inner_owned), std::move(bitmap_reader), std::move(idx_file));
     return Status::OK();
 }
 

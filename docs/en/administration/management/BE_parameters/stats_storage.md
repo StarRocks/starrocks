@@ -126,6 +126,15 @@ This topic introduces the following types of BE configurations:
 - Description: The number of threads used for Schema Change.
 - Introduced in: -
 
+### lake_schema_change_per_tablet_parallelism
+
+- Default: 4
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of segment-level sub-tasks executed in parallel within a single lake schema-change task (per tablet). Currently only the ADD INDEX fast path submits sub-tasks to the dedicated `lake_schema_change` thread pool; other schema-change paths (Linked / Direct / Sorted) and the DROP INDEX fast path remain single-threaded and are unaffected. The dedicated thread pool capacity is auto-derived as `alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism`, which keeps the outer alter pool and inner segment pool physically isolated and deadlock-free.
+- Introduced in: v4.0
+
 ### automatic_partition_thread_pool_thread_num
 
 - Default: 1000

@@ -123,6 +123,15 @@ SELECT * FROM information_schema.be_configs WHERE NAME LIKE "%<name_pattern>%"
 - 描述：进行 Schema Change 的线程数。自 2.5 版本起，该参数由静态变为动态。
 - 引入版本：-
 
+### lake_schema_change_per_tablet_parallelism
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离表单个 schema change 任务（按 tablet 粒度）内部最大并行 segment 子任务数。当前仅对 ADD INDEX 快速路径生效，其它 schema change 路径（Linked / Direct / Sorted）以及 DROP INDEX 快速路径保持单线程，不受该参数影响。专用线程池容量自动推导为 `alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism`，外层 alter 池与内层 segment 池物理隔离，不会相互死锁。
+- 引入版本：v4.0
+
 ### automatic_partition_thread_pool_thread_num
 
 - 默认值：1000
