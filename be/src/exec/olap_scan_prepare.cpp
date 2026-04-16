@@ -18,6 +18,7 @@
 #include <variant>
 
 #include "base/orlp/pdqsort.h"
+#include "column/raw_data_visitor.h"
 #include "column/runtime_type_traits.h"
 #include "common/config_scan_io_fwd.h"
 #include "exprs/binary_predicate.h"
@@ -189,7 +190,11 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
         std::string* str = obj_pool->add(new std::string(slice.data, slice.size));
         *value = *str;
     } else {
-        *value = *reinterpret_cast<const ValueType*>(data->raw_data());
+        RawDataVisitor visitor;
+        if (!data->accept(&visitor).ok()) {
+            return false;
+        }
+        *value = *reinterpret_cast<const ValueType*>(visitor.result());
         if (r->type().is_decimalv3_type()) {
             return check_decimal_overflow<ValueType>(r->type().precision, *value);
         }
