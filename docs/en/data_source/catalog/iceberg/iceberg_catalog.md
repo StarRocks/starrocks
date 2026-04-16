@@ -678,6 +678,27 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
+<<<<<<< HEAD
+=======
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
+
+- To choose REST catalog with vended credential (supported from v4.0 onwards), you do not need to configure `StorageCredentialParams`.
+
+>>>>>>> 0c7b2f1392 ([Doc] Add ADLS2 Workload Identity Doc (#71798))
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -1036,6 +1057,40 @@ PROPERTIES
   );
   ```
 
+<<<<<<< HEAD
+=======
+- If you choose the Workload Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG iceberg_catalog_hms
+  PROPERTIES
+  (
+      "type" = "iceberg",
+      "iceberg.catalog.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
+- If you choose REST catalog with vended credential, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG polaris_azure
+  PROPERTIES (   
+      "type"  =  "iceberg",   
+      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
+      "iceberg.catalog.type"  =  "rest",
+      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
+      "iceberg.catalog.security" = "oauth2",
+      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
+      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
+      "iceberg.catalog.warehouse" = "iceberg_catalog"
+  );
+  ```
+
+>>>>>>> 0c7b2f1392 ([Doc] Add ADLS2 Workload Identity Doc (#71798))
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
