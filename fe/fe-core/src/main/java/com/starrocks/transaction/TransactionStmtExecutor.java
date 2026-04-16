@@ -51,6 +51,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.FeNameFormat;
@@ -71,6 +72,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -183,9 +186,21 @@ public class TransactionStmtExecutor {
         try {
             if (transactionState.getDbId() == 0) {
                 transactionState.setDbId(database.getId());
+                // BEGIN binds the transaction's compute resource from the session at BEGIN time.
+                // When the session warehouse at BEGIN was the default warehouse (i.e. the user
+                // did not explicitly choose a warehouse before BEGIN), allow the first DML's
+                // SET_VAR(warehouse=...) hint to take over so the publish version RPC is routed
+                // correctly. Otherwise, require the session warehouse (possibly modified by hint)
+                // to match the already-bound warehouse; any mismatch is rejected explicitly to
+                // avoid silently overriding the user's explicit choice.
+                resolveTxnComputeResource(context.getCurrentComputeResource(), transactionState);
                 DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getDatabaseTransactionMgr(database.getId());
                 databaseTransactionMgr.upsertTransactionState(transactionState);
+            } else {
+                // Subsequent DMLs in the same transaction must stick to the warehouse
+                // already bound to the transaction.
+                checkTxnWarehouseConsistent(context.getCurrentComputeResource(), transactionState);
             }
 
             if (database.getId() != transactionState.getDbId()) {
@@ -237,9 +252,12 @@ public class TransactionStmtExecutor {
 
         if (transactionState.getDbId() == 0) {
             transactionState.setDbId(dbId);
+            resolveTxnComputeResource(context.getCurrentComputeResource(), transactionState);
             DatabaseTransactionMgr databaseTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getDatabaseTransactionMgr(dbId);
             databaseTransactionMgr.upsertTransactionState(transactionState);
+        } else {
+            checkTxnWarehouseConsistent(context.getCurrentComputeResource(), transactionState);
         }
 
         transactionState.addTableIdList(tableId);
@@ -676,5 +694,56 @@ public class TransactionStmtExecutor {
             }
         }
         return ConnectContext.get().getSessionVariable().getInsertMaxFilterRatio();
+    }
+
+    /**
+     * Resolve the transaction's compute resource when the first DML binds the transaction to a db.
+     *
+     * <p>BEGIN binds the transaction's compute resource to whatever the session had at BEGIN time
+     * (often the default warehouse if the user did not SET warehouse beforehand). For a SET_VAR
+     * warehouse hint on the first DML to route publish correctly, we upgrade the binding here:
+     * <ul>
+     *   <li>If the transaction is still bound to the default warehouse, adopt the session's current
+     *       (possibly hint-modified) compute resource.</li>
+     *   <li>If the transaction is already bound to a non-default warehouse and the current session
+     *       warehouse differs, reject the conflict explicitly instead of silently overriding the
+     *       user's explicit pre-BEGIN choice.</li>
+     * </ul>
+     */
+    static void resolveTxnComputeResource(ComputeResource sessionCr, TransactionState transactionState) {
+        long sessionWhId = sessionCr.getWarehouseId();
+        long txnWhId = transactionState.getWarehouseId();
+        if (txnWhId == sessionWhId) {
+            return;
+        }
+        if (txnWhId == WarehouseManager.DEFAULT_WAREHOUSE_ID) {
+            transactionState.setComputeResource(sessionCr);
+            return;
+        }
+        throw ErrorReportException.report(ErrorCode.ERR_EXPLICIT_TXN_WAREHOUSE_MISMATCH,
+                warehouseName(txnWhId), warehouseName(sessionWhId));
+    }
+
+    /**
+     * Ensure a subsequent DML within the same explicit transaction uses the already-bound warehouse.
+     * The transaction's publish version can only be executed on a single warehouse, so any
+     * divergence introduced by a later SET_VAR(warehouse=...) hint must be rejected.
+     */
+    static void checkTxnWarehouseConsistent(ComputeResource sessionCr, TransactionState transactionState) {
+        long sessionWhId = sessionCr.getWarehouseId();
+        long txnWhId = transactionState.getWarehouseId();
+        if (txnWhId != sessionWhId) {
+            throw ErrorReportException.report(ErrorCode.ERR_EXPLICIT_TXN_WAREHOUSE_MISMATCH,
+                    warehouseName(txnWhId), warehouseName(sessionWhId));
+        }
+    }
+
+    private static String warehouseName(long warehouseId) {
+        WarehouseManager mgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        if (mgr == null) {
+            return String.valueOf(warehouseId);
+        }
+        Warehouse wh = mgr.getWarehouseAllowNull(warehouseId);
+        return wh == null ? String.valueOf(warehouseId) : wh.getName();
     }
 }

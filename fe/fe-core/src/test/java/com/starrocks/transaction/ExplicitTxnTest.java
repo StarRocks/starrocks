@@ -48,6 +48,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -699,5 +701,102 @@ public class ExplicitTxnTest {
         // Cleanup
         globalTransactionMgr.clearExplicitTxnState(context.getTxnId());
         context.setTxnId(0);
+    }
+
+    /**
+     * Bug scenario: user did not SET warehouse before BEGIN, so the transaction is bound to the
+     * default warehouse at BEGIN time. A subsequent DML carries SET_VAR(warehouse=...) hint which
+     * changes the session's compute resource. The first-DML resolve step must adopt the session's
+     * compute resource so the publish version RPC is routed to the hinted warehouse, not the
+     * default one (which was the original bug causing wrong-warehouse publish).
+     */
+    @Test
+    public void testResolveTxnComputeResourceAdoptsHintWhenBoundToDefault() {
+        TransactionState transactionState = newTxnState(1000L, "test-adopt-label");
+        // Mimic beginStmt: initial binding is default warehouse (warehouseId = 0)
+        transactionState.setComputeResource(WarehouseComputeResource.DEFAULT);
+        Assertions.assertEquals(0L, transactionState.getWarehouseId());
+
+        // Session warehouse has been changed by SET_VAR hint to a non-default warehouse.
+        ComputeResource hinted = WarehouseComputeResource.of(114176L);
+
+        TransactionStmtExecutor.resolveTxnComputeResource(hinted, transactionState);
+
+        Assertions.assertEquals(114176L, transactionState.getWarehouseId());
+        Assertions.assertSame(hinted, transactionState.getComputeResource());
+    }
+
+    /**
+     * If the transaction was explicitly bound to a non-default warehouse (i.e. user did
+     * SET warehouse before BEGIN), a conflicting SET_VAR(warehouse=...) hint on the first DML
+     * must be rejected instead of silently overriding the user's explicit choice.
+     */
+    @Test
+    public void testResolveTxnComputeResourceRejectsMismatchOnFirstDml() {
+        TransactionState transactionState = newTxnState(1001L, "test-reject-first");
+        transactionState.setComputeResource(WarehouseComputeResource.of(111L));
+
+        // Session warehouse diverges from the already-bound warehouse.
+        ComputeResource sessionCr = WarehouseComputeResource.of(222L);
+
+        ErrorReportException e = Assertions.assertThrows(ErrorReportException.class, () ->
+                TransactionStmtExecutor.resolveTxnComputeResource(sessionCr, transactionState));
+        Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_WAREHOUSE_MISMATCH, e.getErrorCode());
+        // Transaction binding must not be mutated on reject.
+        Assertions.assertEquals(111L, transactionState.getWarehouseId());
+    }
+
+    /**
+     * When the session warehouse already matches the transaction's bound warehouse, resolve
+     * must be a no-op and must not touch the transaction's compute resource reference.
+     */
+    @Test
+    public void testResolveTxnComputeResourceNoOpOnMatch() {
+        TransactionState transactionState = newTxnState(1002L, "test-match-label");
+        ComputeResource bound = WarehouseComputeResource.of(333L);
+        transactionState.setComputeResource(bound);
+
+        TransactionStmtExecutor.resolveTxnComputeResource(WarehouseComputeResource.of(333L), transactionState);
+
+        Assertions.assertEquals(333L, transactionState.getWarehouseId());
+        Assertions.assertSame(bound, transactionState.getComputeResource());
+    }
+
+    /**
+     * A subsequent DML within the same explicit transaction must not change the bound warehouse.
+     * The publish version can only run on a single warehouse, so any divergence is rejected.
+     */
+    @Test
+    public void testCheckTxnWarehouseConsistentRejectsSubsequentMismatch() {
+        TransactionState transactionState = newTxnState(1003L, "test-sub-reject");
+        transactionState.setComputeResource(WarehouseComputeResource.of(444L));
+
+        ComputeResource sessionCr = WarehouseComputeResource.of(555L);
+
+        ErrorReportException e = Assertions.assertThrows(ErrorReportException.class, () ->
+                TransactionStmtExecutor.checkTxnWarehouseConsistent(sessionCr, transactionState));
+        Assertions.assertEquals(ErrorCode.ERR_EXPLICIT_TXN_WAREHOUSE_MISMATCH, e.getErrorCode());
+    }
+
+    /**
+     * A subsequent DML whose session warehouse still matches the transaction's bound warehouse
+     * is accepted without error.
+     */
+    @Test
+    public void testCheckTxnWarehouseConsistentAllowsMatch() {
+        TransactionState transactionState = newTxnState(1004L, "test-sub-match");
+        transactionState.setComputeResource(WarehouseComputeResource.of(666L));
+
+        Assertions.assertDoesNotThrow(() ->
+                TransactionStmtExecutor.checkTxnWarehouseConsistent(
+                        WarehouseComputeResource.of(666L), transactionState));
+    }
+
+    private static TransactionState newTxnState(long txnId, String label) {
+        return new TransactionState(txnId, label, null,
+                TransactionState.LoadJobSourceType.INSERT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
+                        FrontendOptions.getLocalHostAddress()),
+                60_000L);
     }
 }
