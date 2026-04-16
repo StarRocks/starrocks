@@ -275,6 +275,18 @@ public class CoordinatorPreprocessor {
         for (FragmentInstance instance : execFragment.getInstances()) {
             instance.resetAllScanRanges();
         }
+        // Reset bucket-aware state too. BucketAwareBackendSelector reads/writes
+        // colocatedAssignment.seqToScanRange directly, and its `scanRanges.put(scanId, ...)`
+        // only overwrites entries for buckets that appear in the current incremental batch.
+        // Buckets that were present in a previous batch but absent from the current one keep
+        // their stale scan ranges, so those files get re-emitted to the freshly-reset
+        // instance.node2ScanRanges and BE ends up scanning them once per follow-up batch.
+        // seqToWorkerId must be preserved: a bucket's worker assignment has to remain stable
+        // across batches so the bucket's data keeps landing on the same BE.
+        ColocatedBackendSelector.Assignment colocatedAssignment = execFragment.getColocatedAssignment();
+        if (colocatedAssignment != null) {
+            colocatedAssignment.getSeqToScanRange().clear();
+        }
         fragmentAssignmentStrategyFactory.create(execFragment, lazyWorkerProvider.get()).assignFragmentToWorker(execFragment);
     }
 
