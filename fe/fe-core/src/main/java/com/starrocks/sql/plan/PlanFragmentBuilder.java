@@ -58,7 +58,6 @@ import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
 import com.starrocks.planner.BenchmarkScanNode;
-import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.CacheStatsScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DecodeNode;
@@ -112,8 +111,6 @@ import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.TupleDescriptor;
 import com.starrocks.planner.TupleId;
 import com.starrocks.planner.UnionNode;
-import com.starrocks.planner.stream.StreamAggNode;
-import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -209,9 +206,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
@@ -224,7 +218,6 @@ import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
-import org.apache.commons.lang3.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -3862,9 +3855,6 @@ public class PlanFragmentBuilder {
             if (optExpr.getOp() instanceof PhysicalJoinOperator op) {
                 onPredicate = op.getOnPredicate();
                 joinType = op.getJoinType();
-            } else if (optExpr.getOp() instanceof PhysicalStreamJoinOperator op) {
-                onPredicate = ((PhysicalStreamJoinOperator) optExpr.getOp()).getOnPredicate();
-                joinType = op.getJoinType();
             } else {
                 throw new IllegalStateException("not supported join " + optExpr.getOp());
             }
@@ -3917,64 +3907,6 @@ public class PlanFragmentBuilder {
             }
 
             return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts, asofJoinConjunct, commonSubExprMap);
-        }
-
-        // TODO(murphy) consider state distribution
-        @Override
-        public PlanFragment visitPhysicalStreamJoin(OptExpression optExpr, ExecPlan context) {
-            PhysicalStreamJoinOperator node = (PhysicalStreamJoinOperator) optExpr.getOp();
-            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
-            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
-
-            ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
-            ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
-
-            if (!node.getJoinType().isInnerJoin()) {
-                throw new NotImplementedException("Only inner join is supported");
-            }
-
-            JoinOperator joinOperator = node.getJoinType();
-            PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
-            PlanNode rightFragmentPlanRoot = rightFragment.getPlanRoot();
-
-            // 1. Build distributionMode
-            // TODO(murphy): support other distribution mode
-            JoinNode.DistributionMode distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
-            // 2. Build join expression
-            JoinExprInfo joinExpr = buildJoinExpr(optExpr, context);
-            List<Expr> eqJoinConjuncts = joinExpr.eqJoinConjuncts;
-            List<Expr> otherJoinConjuncts = joinExpr.otherJoin;
-            List<Expr> conjuncts = joinExpr.conjuncts;
-
-            // 3. Build tuple descriptor
-            List<PlanFragment> nullablePlanFragments = new ArrayList<>();
-            if (joinOperator.isLeftOuterJoin()) {
-                nullablePlanFragments.add(rightFragment);
-            } else if (joinOperator.isRightOuterJoin()) {
-                nullablePlanFragments.add(leftFragment);
-            } else if (joinOperator.isFullOuterJoin()) {
-                nullablePlanFragments.add(leftFragment);
-                nullablePlanFragments.add(rightFragment);
-            }
-            for (PlanFragment planFragment : nullablePlanFragments) {
-                for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
-                    context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
-                }
-            }
-
-            JoinNode joinNode =
-                    new StreamJoinNode(context.getNextNodeId(), leftFragmentPlanRoot, rightFragmentPlanRoot,
-                            node.getJoinType(), eqJoinConjuncts, otherJoinConjuncts);
-            currentExecGroup.add(joinNode, true);
-            // 4. Build outputColumns
-            fillSlotsInfo(node.getProjection(), joinNode, optExpr);
-
-            joinNode.setDistributionMode(distributionMode);
-            joinNode.getConjuncts().addAll(conjuncts);
-            joinNode.setLimit(node.getLimit());
-            joinNode.computeStatistics(optExpr.getStatistics());
-
-            return buildJoinFragment(context, leftFragment, rightFragment, distributionMode, joinNode);
         }
 
         @NotNull
@@ -4102,72 +4034,6 @@ public class PlanFragmentBuilder {
                 distributionMode = JoinNode.DistributionMode.LOCAL_HASH_BUCKET;
             }
             return distributionMode;
-        }
-
-        @Override
-        public PlanFragment visitPhysicalStreamAgg(OptExpression optExpr, ExecPlan context) {
-            PhysicalStreamAggOperator node = (PhysicalStreamAggOperator) optExpr.getOp();
-            PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
-            TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
-            AggregateExprInfo aggExpr =
-                    buildAggregateTuple(node.getAggregations(), node.getGroupBys(), null, outputTupleDesc, context);
-
-            // TODO(murphy) refine the aggregate info
-            AggregateInfo aggInfo =
-                    AggregateInfo.create(aggExpr.groupExpr, aggExpr.aggregateExpr, outputTupleDesc, outputTupleDesc,
-                            AggregateInfo.AggPhase.FIRST);
-            StreamAggNode aggNode = new StreamAggNode(context.getNextNodeId(), inputFragment.getPlanRoot(), aggInfo);
-
-            aggNode.setHasNullableGenerateChild();
-            aggNode.computeStatistics(optExpr.getStatistics());
-            currentExecGroup.add(aggNode, true);
-            inputFragment.setPlanRoot(aggNode);
-            return inputFragment;
-        }
-
-        // TODO: distinguish various stream scan node, only binlog scan now
-        @Override
-        public PlanFragment visitPhysicalStreamScan(OptExpression optExpr, ExecPlan context) {
-            PhysicalStreamScanOperator node = (PhysicalStreamScanOperator) optExpr.getOp();
-            OlapTable scanTable = (OlapTable) node.getTable();
-            context.getDescTbl().addReferencedTable(scanTable);
-
-            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
-            tupleDescriptor.setTable(scanTable);
-
-            BinlogScanNode binlogScanNode = new BinlogScanNode(context.getNextNodeId(), tupleDescriptor);
-            binlogScanNode.computeStatistics(optExpr.getStatistics());
-            currentExecGroup.add(binlogScanNode, true);
-            try {
-                binlogScanNode.computeScanRanges();
-            } catch (StarRocksException e) {
-                throw new StarRocksPlannerException(
-                        "Failed to compute scan ranges for StreamScanNode, " + e.getMessage(), INTERNAL_ERROR);
-            }
-
-            // Add slots from table
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-            }
-
-            // set predicate
-            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
-            ScalarOperatorToExpr.FormatterContext formatterContext =
-                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-            for (ScalarOperator predicate : predicates) {
-                binlogScanNode.getConjuncts()
-                        .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
-            }
-            tupleDescriptor.computeMemLayout();
-            context.getScanNodes().add(binlogScanNode);
-            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), binlogScanNode, DataPartition.RANDOM);
-            context.getFragments().add(fragment);
-            return fragment;
         }
 
         private void fillSlotsInfo(Projection projection, JoinNode joinNode, OptExpression optExpr) {

@@ -34,7 +34,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -170,14 +169,6 @@ public class TypeChecker implements PlanValidator.Checker {
             return null;
         }
 
-
-        @Override
-        public Void visitPhysicalStreamAgg(OptExpression optExpression, Void context) {
-            PhysicalStreamAggOperator operator = (PhysicalStreamAggOperator) optExpression.getOp();
-            checkFuncCall(operator.getAggregations());
-            visit(optExpression, context);
-            return null;
-        }
 
         private void checkFuncCall(Map<ColumnRefOperator, CallOperator> functionCalls) {
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : functionCalls.entrySet()) {
