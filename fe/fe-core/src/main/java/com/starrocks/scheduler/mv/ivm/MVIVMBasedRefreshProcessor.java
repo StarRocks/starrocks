@@ -80,8 +80,9 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
  * - Execute the refresh plan to update the materialized view.
  */
 public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
-    // This map is used to store the temporary tvr version range for each base table
-    private final Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap = Maps.newConcurrentMap();
+    // Per-call buffer: stores TVR deltas computed in getProcessExecPlan(), consumed in execProcessExecPlan().
+    // NOT the editlog-persisted temp map (that is AsyncRefreshContext.tempBaseTableInfoTvrDeltaMap).
+    private final Map<BaseTableInfo, TvrVersionRange> stagedTvrDeltaMap = Maps.newConcurrentMap();
     // whether the next task run is needed
     private boolean hasNextTaskRun = false;
 
@@ -97,6 +98,9 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         if (!mvRefreshParams.isCompleteRefresh()) {
             throw new SemanticException("IVM based refresh only supports complete refresh, but got partial refresh");
         }
+        // Reset per-call buffer to prevent accumulation across retries within the same task run
+        // (processor instance is reused by retryProcessTaskRun).
+        this.stagedTvrDeltaMap.clear();
         syncAndCheckPCTPartitions(taskRunContext);
 
         // collect change snapshots
@@ -111,7 +115,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
                 // collect changed version range
                 TvrTableSnapshotInfo tvrTableSnapshotInfo = (TvrTableSnapshotInfo) snapshotInfo;
 
-                tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
+                stagedTvrDeltaMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
                 // update the snapshot info with the changed version range
                 tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
             }
@@ -160,8 +164,9 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         try (Timer ignored = Tracers.watchScope("MVRefreshMaterializedView")) {
             MaterializedView.AsyncRefreshContext mvRefreshContext =
                     mv.getRefreshScheme().getAsyncRefreshContext();
-            logger.info("temp tvr version range map: {}", tempMvTvrVersionRangeMap);
-            mvRefreshContext.getTempBaseTableInfoTvrDeltaMap().putAll(tempMvTvrVersionRangeMap);
+            logger.info("staged tvr delta map: {}", stagedTvrDeltaMap);
+            String owner = mvContext.getStatus().getStartTaskRunId();
+            mvRefreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, stagedTvrDeltaMap);
             executor.executePlan(execPlan, insertStmt);
         }
 
