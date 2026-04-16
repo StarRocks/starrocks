@@ -26,6 +26,7 @@ import org.apache.arrow.adbc.core.AdbcStatusCode;
 import org.apache.arrow.adbc.driver.jni.JniDriverFactory;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -177,8 +178,13 @@ public class ADBCConnector implements Connector {
      * If getInfo throws NOT_IMPLEMENTED, log a warning but do not fail.
      */
     private static void probeDriverVersion(AdbcDatabase db, String driverIdentifier) {
-        try (AdbcConnection conn = db.connect()) {
-            conn.getInfo();
+        try (AdbcConnection conn = db.connect();
+                ArrowReader infoReader = conn.getInfo()) {
+            // Consume and close the ArrowReader to release Arrow buffers.
+            // Without this, the RootAllocator leaks 64 bytes per catalog creation.
+            while (infoReader.loadNextBatch()) {
+                // drain
+            }
             LOG.info("ADBC driver '{}' loaded and responding", driverIdentifier);
         } catch (AdbcException e) {
             if (e.getStatus() == AdbcStatusCode.NOT_IMPLEMENTED) {
