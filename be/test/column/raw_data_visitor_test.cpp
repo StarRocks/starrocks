@@ -140,8 +140,8 @@ TEST(RawBytesVisitorTest, VisitDecimal32Column) {
     EXPECT_EQ(data[1], 200);
 }
 
-// Key test: for BinaryColumn, raw_bytes() returns the flat bytes buffer,
-// NOT the Slice* cache that raw_data() returns.
+// For BinaryColumn, the visitor must return the flat bytes buffer (raw_bytes()),
+// not a copy. Verified by pointer equality against col->raw_bytes().
 TEST(RawBytesVisitorTest, VisitBinaryColumn) {
     RawBytesVisitor visitor;
     auto col = BinaryColumn::create();
@@ -149,15 +149,16 @@ TEST(RawBytesVisitorTest, VisitBinaryColumn) {
     col->append(Slice("world"));
 
     ASSERT_OK(col->accept(&visitor));
-    ASSERT_NE(visitor.result(), nullptr);
+    // Pointer must be exactly the column's underlying flat-bytes buffer.
+    EXPECT_EQ(visitor.result(), col->raw_bytes());
 
-    // result points to the contiguous bytes buffer: "helloworld"
+    // Sanity-check the buffer contents: "helloworld" laid out contiguously.
     const auto* bytes = visitor.result();
     EXPECT_EQ(memcmp(bytes, "hello", 5), 0);
     EXPECT_EQ(memcmp(bytes + 5, "world", 5), 0);
 }
 
-// LargeBinaryColumn is BinaryColumnBase<uint64_t>; same flat-bytes semantics as BinaryColumn.
+// LargeBinaryColumn is BinaryColumnBase<uint64_t>; same flat-bytes semantics.
 TEST(RawBytesVisitorTest, VisitLargeBinaryColumn) {
     RawBytesVisitor visitor;
     auto col = LargeBinaryColumn::create();
@@ -165,7 +166,8 @@ TEST(RawBytesVisitorTest, VisitLargeBinaryColumn) {
     col->append(Slice("world"));
 
     ASSERT_OK(col->accept(&visitor));
-    ASSERT_NE(visitor.result(), nullptr);
+    // Pointer must be exactly the column's underlying flat-bytes buffer.
+    EXPECT_EQ(visitor.result(), col->raw_bytes());
 
     const auto* bytes = visitor.result();
     EXPECT_EQ(memcmp(bytes, "hello", 5), 0);
