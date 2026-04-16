@@ -108,8 +108,8 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
 
         // update mv's base table info tvr version range map
         mvBaseTableInfoTvrDeltaMap.putAll(baseTableInfoTvrDeltaMap);
-        // clear the temp map
-        asyncRefreshContext.clearTempBaseTableInfoTvrDeltaMap();
+        // clear the temp map and owner tag together
+        asyncRefreshContext.clearTempBaseTableInfoTvrDeltaState();
 
         long maxChangedTableRefreshTime = refreshScheme.getLastRefreshTime();
         mv.getRefreshScheme().setLastRefreshTime(maxChangedTableRefreshTime);
