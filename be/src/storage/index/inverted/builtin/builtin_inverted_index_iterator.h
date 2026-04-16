@@ -14,6 +14,12 @@
 
 #pragma once
 
+#include <CLucene.h>
+
+#include <memory>
+#include <vector>
+
+#include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "util/slice.h"
@@ -27,10 +33,7 @@ class BuiltinInvertedIndexIterator final : public InvertedIndexIterator {
 public:
     BuiltinInvertedIndexIterator(const std::shared_ptr<TabletIndex>& index_meta, InvertedReader* reader,
                                  OlapReaderStatistics* stats, std::unique_ptr<BitmapIndexIterator>& bitmap_itr,
-                                 const size_t& segment_rows)
-            : InvertedIndexIterator(index_meta, reader, stats),
-              _bitmap_itr(std::move(bitmap_itr)),
-              _segment_rows(segment_rows) {}
+                                 const size_t& segment_rows);
 
     ~BuiltinInvertedIndexIterator() override = default;
 
@@ -40,10 +43,18 @@ public:
     Status read_null(const std::string& column_name, roaring::Roaring* bit_map) override;
 
 private:
+    Status _tokenize_query_by_parser(const Slice& query, std::vector<std::string>* tokens);
+
     Status _equal_query(const Slice* search_query, roaring::Roaring* bit_map);
 
     Status _wildcard_query(const Slice* search_query, roaring::Roaring* bit_map);
 
+    // Reused CLucene analyzer for parser=standard/chinese query tokenization.
+    std::unique_ptr<lucene::analysis::Analyzer> _query_analyzer;
+    // Reused input buffer paired with _query_analyzer to avoid per-query allocations.
+    std::unique_ptr<lucene::util::StringReader> _query_string_reader;
+    // Reused builtin analyzer for parser=english query tokenization.
+    std::unique_ptr<SimpleAnalyzer> _builtin_query_analyzer;
     std::unique_ptr<BitmapIndexIterator> _bitmap_itr;
     size_t _segment_rows;
 };
