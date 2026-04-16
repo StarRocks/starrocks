@@ -563,6 +563,22 @@ StarRocks 访问存储系统的认证配置。
   | azure.adls2.oauth2_client_secret   | 是           | 新建 Client (Application) Secret。                           |
   | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
+- 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  以下表格描述了需要在 `StorageCredentialParams` 中配置的参数。
+
+  | **参数**                               | **必需** | **描述**                                              |
+  | ------------------------------------- | -------- | ----------------------------------------------------- |
+  | azure.adls2.oauth2_token_file         | 是       | Azure Workload Identity Webhook 投射到 Pod 中的 OAuth2 令牌文件的绝对文件路径。 |
+  | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
+  | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
+
 ##### Azure Data Lake Storage Gen1
 
 如果存储系统为 Data Lake Storage Gen1，请按如下配置 `StorageCredentialParams`：

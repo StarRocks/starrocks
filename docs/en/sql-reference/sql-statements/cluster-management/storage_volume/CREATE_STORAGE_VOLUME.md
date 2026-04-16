@@ -59,7 +59,8 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.sas_token               | The shared access signatures (SAS) used to authorize requests for your Azure Data Lake Storage Gen2. |
 | azure.adls2.oauth2_use_managed_identity | Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2. Default: `false`. |
 | azure.adls2.oauth2_tenant_id        | The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
-| azure.adls2.oauth2_client_id        | The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
+| azure.adls2.oauth2_client_id        | <ul><li>For Managed Identity Authentication: The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.</li><li>For Workload Identity: The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity.</li></ul> |
+| azure.adls2.oauth2_token_file       | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
 | gcp.gcs.service_account_email	      | The email address in the JSON file generated at the creation of the Service Account, for example, `user@hello.iam.gserviceaccount.com`. |
 | gcp.gcs.service_account_private_key_id | The Private Key ID in the JSON file generated at the creation of the Service Account. |
 | gcp.gcs.service_account_private_key | The Private Key in the JSON file generated at the creation of the Service Account, for example, `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`. |
@@ -203,6 +204,16 @@ Creating a storage volume on Azure Data Lake Storage Gen2 is supported from v3.4
   "azure.adls2.oauth2_use_managed_identity" = "true",
   "azure.adls2.oauth2_tenant_id" = "<tenant_id>",
   "azure.adls2.oauth2_client_id" = "<client_id>" 
+  ```
+
+- If you use Workload Identity to access Azure Data Lake Storage Gen2, set the following properties:
+
+  ```SQL
+  "enabled" = "{ true | false }",
+  "azure.adls2.endpoint" = "<endpoint_url>",
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
 :::note
