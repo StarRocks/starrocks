@@ -28,6 +28,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
+#include "column/raw_data_visitor.h"
 #include "types/value_generator.h"
 
 namespace starrocks {
@@ -46,7 +47,9 @@ void FixedLengthColumnBase<T>::append(const Column& src, size_t offset, size_t c
     const size_t orig_size = datas.size();
     raw::stl_vector_resize_uninitialized(&datas, orig_size + count);
 
-    const T* src_data = reinterpret_cast<const T*>(down_cast<const FixedLengthColumnBase&>(src).raw_data());
+    RawDataVisitor rv;
+    CHECK(src.accept(&rv).ok());
+    const T* src_data = reinterpret_cast<const T*>(rv.result());
     strings::memcpy_inlined(datas.data() + orig_size, src_data + offset, count * sizeof(T));
 }
 
@@ -61,7 +64,9 @@ void FixedLengthColumnBase<T>::append_selective(const Column& src, const uint32_
     raw::stl_vector_resize_uninitialized(&datas, orig_size + size);
     auto* dest_data = datas.data() + orig_size;
 
-    const T* src_data = reinterpret_cast<const T*>(down_cast<const FixedLengthColumnBase&>(src).raw_data());
+    RawDataVisitor rv;
+    CHECK(src.accept(&rv).ok());
+    const T* src_data = reinterpret_cast<const T*>(rv.result());
     SIMDGather::gather(dest_data, src_data, indexes, size);
 }
 
