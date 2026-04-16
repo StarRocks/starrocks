@@ -716,8 +716,6 @@ Microsoft Azure 的 `StorageCredentialParams`：
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
-<<<<<<< HEAD
-=======
 - 要选择 Workload Identity 验证方法，请按以下方式配置 `StorageCredentialParams`：
 
   ```SQL
@@ -734,9 +732,6 @@ Microsoft Azure 的 `StorageCredentialParams`：
   | azure.adls2.oauth2_tenant_id          | 是       | 您要访问数据的租户的 ID。                             |
   | azure.adls2.oauth2_client_id          | 是       | 与 Workload Identity 关联的 Azure AD 应用程序（用户分配的托管身份或应用程序注册）的客户端 ID（应用程序 ID）。 |
 
-- 要选择基于 REST Catalog 的 Vended Credential（自 v4.0 起支持），则无需配置 `StorageCredentialParams`。
-
->>>>>>> 0c7b2f1392 ([Doc] Add ADLS2 Workload Identity Doc (#71798))
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
@@ -1095,8 +1090,6 @@ PROPERTIES
   );
   ```
 
-<<<<<<< HEAD
-=======
 - 如果选择 Workload Identity 验证方法，请运行如下命令：
 
   ```SQL
@@ -1112,23 +1105,6 @@ PROPERTIES
   );
   ```
 
-- 如果基于 REST Catalog 使用 Vended Credential，请运行如下命令：
-
-  ```SQL
-  CREATE EXTERNAL CATALOG polaris_azure
-  PROPERTIES (   
-      "type"  =  "iceberg",   
-      "iceberg.catalog.uri"  = "http://xxx:xxx/api/catalog",
-      "iceberg.catalog.type"  =  "rest",
-      "iceberg.catalog.rest.nested-namespace-enabled"="true", 
-      "iceberg.catalog.security" = "oauth2",
-      "iceberg.catalog.oauth2.credential" = "xxxxx:xxxx",
-      "iceberg.catalog.oauth2.scope"='PRINCIPAL_ROLE:ALL',
-      "iceberg.catalog.warehouse" = "iceberg_catalog"
-  );
-  ```
-
->>>>>>> 0c7b2f1392 ([Doc] Add ADLS2 Workload Identity Doc (#71798))
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
