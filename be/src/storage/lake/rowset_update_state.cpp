@@ -878,7 +878,6 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     const auto* begin = reinterpret_cast<const uint8_t*>(read_buffer.data());
     const auto* end = begin + read_buffer.size();
     RETURN_IF_ERROR(Serd::deserialize(begin, end, col.get()));
-    col->raw_data();
     _memory_usage += col->memory_usage();
     _deletes[del_id] = std::move(col);
     TRACE("end read $0-th deletes files", del_id);

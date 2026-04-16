@@ -159,10 +159,6 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, MemTracker* update
     TRY_CATCH_BAD_ALLOC(header_ptr->offsets.push_back(header_ptr->upserts->size()));
     header_ptr->end_idx = *end_idx;
     DCHECK(header_ptr->offsets.size() == header_ptr->end_idx - header_ptr->start_idx + 1);
-    // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
-    // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
-    // So we try build slice in advance in here to make sure the correctness of memory statistics
-    TRY_CATCH_BAD_ALLOC(header_ptr->upserts->raw_data());
     _memory_usage += header_ptr->upserts->memory_usage();
 
     return Status::OK();

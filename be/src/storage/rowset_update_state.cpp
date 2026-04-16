@@ -91,7 +91,6 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
     auto col = pk_column->clone();
     const auto* end = read_buffer.data() + read_buffer.size();
     RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
-    TRY_CATCH_BAD_ALLOC(col->raw_data());
     _memory_usage += col != nullptr ? col->memory_usage() : 0;
     _deletes[idx] = std::move(col);
     return Status::OK();
@@ -151,10 +150,6 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
         itr->close();
     }
     dest = std::move(col);
-    // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
-    // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
-    // So we try build slice in advance in here to make sure the correctness of memory statistics
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest != nullptr ? dest->memory_usage() : 0;
 
     return Status::OK();
