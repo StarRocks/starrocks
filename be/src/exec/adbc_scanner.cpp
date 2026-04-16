@@ -22,7 +22,6 @@
 #include "base/time/time.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "connector/adbc_connector.h"
 #include "exec/adbc_driver_registry.h"
 #include "exec/adbc_parallel_reader.h"
 #include "exec/arrow_to_starrocks_converter.h"
@@ -61,20 +60,30 @@ Status ADBCScanner::open(RuntimeState* state) {
         _max_chunk_size = state->chunk_size();
     }
 
-    auto start = MonotonicMillis();
+    // Guard the entire open path against C++ exceptions from ADBC drivers.
+    // Drivers loaded via dlopen (e.g. DuckDB, Go-based FlightSQL) may throw
+    // std::out_of_range, std::runtime_error, or other C++ exceptions that
+    // would otherwise propagate up and crash the BE process.
+    try {
+        auto start = MonotonicMillis();
 
-    RETURN_IF_ERROR(_init_adbc());
+        RETURN_IF_ERROR(_init_adbc());
 
-    _connect_time_ms = MonotonicMillis() - start;
+        _connect_time_ms = MonotonicMillis() - start;
 
-    // Try parallel reading first; fall back to single stream if it fails
-    auto parallel_status = _try_parallel_read();
-    if (!parallel_status.ok()) {
-        RETURN_IF_ERROR(_fallback_single_stream_read());
+        // Try parallel reading first; fall back to single stream if it fails
+        auto parallel_status = _try_parallel_read();
+        if (!parallel_status.ok()) {
+            RETURN_IF_ERROR(_fallback_single_stream_read());
+        }
+
+        _opened = true;
+        return Status::OK();
+    } catch (const std::exception& e) {
+        return Status::InternalError(fmt::format("ADBC driver threw C++ exception during open: {}", e.what()));
+    } catch (...) {
+        return Status::InternalError("ADBC driver threw unknown C++ exception during open");
     }
-
-    _opened = true;
-    return Status::OK();
 }
 
 Status ADBCScanner::_init_adbc() {
@@ -217,6 +226,16 @@ Status ADBCScanner::_fallback_single_stream_read() {
 }
 
 Status ADBCScanner::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+    try {
+        return _get_next_impl(state, chunk, eos);
+    } catch (const std::exception& e) {
+        return Status::InternalError(fmt::format("ADBC driver threw C++ exception during read: {}", e.what()));
+    } catch (...) {
+        return Status::InternalError("ADBC driver threw unknown C++ exception during read");
+    }
+}
+
+Status ADBCScanner::_get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     *eos = false;
 
     std::shared_ptr<arrow::RecordBatch> batch;

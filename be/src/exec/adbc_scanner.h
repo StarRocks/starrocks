@@ -14,6 +14,11 @@
 
 #pragma once
 
+// connector/adbc_connector.h MUST come before arrow-adbc/adbc.h because
+// adbc.h defines `#define ADBC` (empty macro) which clashes with
+// ConnectorType::ADBC_CONN's predecessor name in connector.h.
+#include "connector/adbc_connector.h"
+
 #include <arrow-adbc/adbc.h>
 #include <arrow/record_batch.h>
 #include <arrow/type.h>
@@ -28,7 +33,6 @@
 
 namespace starrocks {
 
-struct ADBCScanContext; // forward decl; defined in connector/adbc_connector.h
 class ADBCParallelReader;
 class TupleDescriptor;
 
@@ -48,6 +52,7 @@ public:
 
 private:
     Status _init_adbc();
+    Status _get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* eos);
     Status _try_parallel_read();
     Status _fallback_single_stream_read();
     Status _convert_batch_to_chunk(const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk);
