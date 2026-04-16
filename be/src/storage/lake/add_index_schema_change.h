@@ -82,6 +82,14 @@ private:
     Status build_bitmap_for_column(Segment* segment, const TabletColumn& column, WritableFile* target_wfile,
                                    ColumnIndexMetaPB* out_meta);
 
+    // Build a BLOOM_FILTER / NGRAMBF index for `column`. The two share the
+    // same builder class (BloomFilterIndexWriter) differing only in the
+    // BloomFilterOptions.use_ngram / gram_num flags. `index_type` must be
+    // either BITMAP is rejected and handled by build_bitmap_for_column;
+    // this path handles the bloom family.
+    Status build_bloom_for_column(Segment* segment, const TabletColumn& column, IndexType index_type,
+                                  const TabletIndexPB& ix, WritableFile* target_wfile, ColumnIndexMetaPB* out_meta);
+
     TabletManager* _tablet_mgr;
     const int64_t _txn_id;
     VersionedTablet _base_tablet;

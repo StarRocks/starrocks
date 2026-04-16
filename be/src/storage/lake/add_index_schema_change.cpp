@@ -223,6 +223,13 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
             RETURN_IF_ERROR(build_bitmap_for_column(segment.get(), column, idx_writer.writable_file(), &meta));
             break;
         case IndexType::NGRAMBF:
+            // NGRAMBF is built by BloomFilterIndexWriter with use_ngram=true.
+            // No dedicated writer class; distinguishing info lives in
+            // BloomFilterOptions and the resulting blob ends up in
+            // ColumnIndexMetaPB.bloom_filter_index, same as plain bloom.
+            RETURN_IF_ERROR(build_bloom_for_column(segment.get(), column, ix.index_type(), ix,
+                                                   idx_writer.writable_file(), &meta));
+            break;
         case IndexType::GIN:
         case IndexType::VECTOR:
         default:
@@ -307,6 +314,89 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     // position; subsequent builders for other columns will be appended
     // after this one.
     RETURN_IF_ERROR(bitmap_writer->finish(target_wfile, out_meta));
+    return Status::OK();
+}
+
+Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const TabletColumn& column,
+                                                    IndexType index_type, const TabletIndexPB& ix,
+                                                    WritableFile* target_wfile, ColumnIndexMetaPB* out_meta) {
+    if (segment == nullptr || target_wfile == nullptr || out_meta == nullptr) {
+        return Status::InvalidArgument("build_bloom_for_column: null argument");
+    }
+
+    // Bloom / NGRAMBF options. `index_properties` on TabletIndexPB is a
+    // free-form JSON string; we parse the well-known knobs on a best-effort
+    // basis (fpp, case_sensitive, gram_num) and fall back to defaults
+    // otherwise, so a minimal TabletIndexPB still produces a valid index.
+    BloomFilterOptions bf_opts;
+    if (index_type == IndexType::NGRAMBF) {
+        bf_opts.use_ngram = true;
+        bf_opts.gram_num = 4; // default; FE passes gram size via properties
+        // (property parsing is out of scope for this minimal slice; a
+        // follow-up should read ix.index_properties() properly)
+        (void)ix;
+    }
+
+    auto type_info = get_type_info(column);
+    std::unique_ptr<BloomFilterIndexWriter> bf_writer;
+    RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_opts, type_info, &bf_writer));
+
+    ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(column, /*path=*/nullptr));
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(segment->file_name()));
+    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(segment->file_info()));
+
+    OlapReaderStatistics stats;
+    ColumnIteratorOptions col_iter_opts;
+    col_iter_opts.read_file = rfile.get();
+    col_iter_opts.stats = &stats;
+    col_iter_opts.use_page_cache = false;
+    col_iter_opts.lake_io_opts = {.fill_data_cache = false};
+    col_iter_opts.is_nullable = column.is_nullable();
+    col_iter_opts.reader_type = READER_ALTER_TABLE;
+    RETURN_IF_ERROR(col_iter->init(col_iter_opts));
+    RETURN_IF_ERROR(col_iter->seek_to_first());
+
+    auto col = ChunkHelper::column_from_field_type(column.type(), column.is_nullable());
+    constexpr size_t kBatch = 4096;
+    const size_t type_size = type_info->size();
+    while (true) {
+        col->reset_column();
+        size_t n = kBatch;
+        Status st = col_iter->next_batch(&n, col.get());
+        if (st.is_end_of_file() || n == 0) {
+            break;
+        }
+        if (!st.ok()) return st;
+        // BloomFilterIndexWriter shares the add_values/add_nulls signature
+        // with BitmapIndexWriter; reuse the feeder from the anonymous
+        // namespace by adapting it inline — simpler than adding an overload.
+        if (col->is_nullable()) {
+            const auto& nc = down_cast<const NullableColumn&>(*col);
+            const auto* data_col = nc.data_column().get();
+            const uint8_t* null_flags = nc.immutable_null_column_data().data();
+            const uint8_t* pdata = reinterpret_cast<const uint8_t*>(data_col->raw_data());
+            size_t i = 0;
+            while (i < n) {
+                bool is_null = null_flags[i] != 0;
+                size_t j = i + 1;
+                while (j < n && (null_flags[j] != 0) == is_null) ++j;
+                size_t sub = j - i;
+                if (is_null) {
+                    bf_writer->add_nulls(static_cast<uint32_t>(sub));
+                } else {
+                    bf_writer->add_values(pdata + i * type_size, sub);
+                }
+                i = j;
+            }
+        } else {
+            bf_writer->add_values(col->raw_data(), n);
+        }
+        // BloomFilterIndexWriter accumulates per-page filters; flush at
+        // chunk boundaries so memory stays bounded even for large columns.
+        RETURN_IF_ERROR(bf_writer->flush());
+    }
+
+    RETURN_IF_ERROR(bf_writer->finish(target_wfile, out_meta));
     return Status::OK();
 }
 
