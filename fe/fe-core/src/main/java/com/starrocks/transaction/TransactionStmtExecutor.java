@@ -173,12 +173,12 @@ public class TransactionStmtExecutor {
                                 DmlStmt dmlStmt,
                                 OriginStatement originStmt,
                                 ConnectContext context) {
-        Coordinator coordinator = new DefaultCoordinator.Factory().createInsertScheduler(
-                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
-
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(context.getTxnId());
         TransactionState transactionState = explicitTxnState.getTransactionState();
+
+        Coordinator coordinator = new DefaultCoordinator.Factory().createInsertScheduler(
+                context, execPlan.getFragments(), execPlan.getScanNodes(), execPlan.getDescTbl().toThrift(), execPlan);
 
         try {
             if (transactionState.getDbId() == 0) {
@@ -221,6 +221,15 @@ public class TransactionStmtExecutor {
                     load(database, targetTable, execPlan, dmlStmt, originStmt, context, coordinator);
             explicitTxnState.addTransactionItem(item);
 
+            // Sync the transaction's compute resource to the warehouse that actually
+            // executed this DML, so publish version RPCs are routed to the same warehouse.
+            // Use NoAcquire because Coordinator creation above has already populated the
+            // cache via JobSpec.fromQuerySpec() — this returns exactly the resource the
+            // DML ran on, without side effects.
+            // Placed AFTER addTransactionItem so a failed DML does not overwrite the
+            // publish target set by an earlier successful DML.
+            transactionState.setComputeResource(context.getCurrentComputeResourceNoAcquire());
+
             context.getState().setOk(item.getLoadedRows(), Ints.saturatedCast(item.getFilteredRows()),
                     buildMessage(transactionState.getLabel(), TransactionStatus.PREPARE,
                             transactionState.getTransactionId(), database.getId()));
@@ -248,6 +257,10 @@ public class TransactionStmtExecutor {
         explicitTxnState.addModifiedTableId(tableId);
 
         explicitTxnState.addTransactionItem(item);
+
+        // Sync the transaction's compute resource to the warehouse that actually executed
+        // this DML. Use NoAcquire to avoid side effects after the DML has succeeded.
+        transactionState.setComputeResource(context.getCurrentComputeResourceNoAcquire());
 
         context.getState().setOk(item.getLoadedRows(), Ints.saturatedCast(item.getFilteredRows()),
                 buildMessage(transactionState.getLabel(), TransactionStatus.PREPARE,
