@@ -949,8 +949,8 @@ Status SegmentIterator::_init_internal() {
     // Use indexes and predicates to filter some data page
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
-    const bool use_shared_static_pruned_range = !_opts.short_key_ranges.empty() ? false
-                                                                                : _opts.shared_static_pruned_scan_range != nullptr;
+    const bool use_shared_static_pruned_range =
+            !_opts.short_key_ranges.empty() ? false : _opts.shared_static_pruned_scan_range != nullptr;
     if (use_shared_static_pruned_range) {
         RETURN_IF_ERROR(_apply_shared_static_pruned_range());
     } else {
@@ -1017,8 +1017,8 @@ Status SegmentIterator::_reset_for_reuse() {
 
     RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
     RETURN_IF_ERROR(_get_row_ranges_by_keys());
-    const bool use_shared_static_pruned_range = !_opts.short_key_ranges.empty() ? false
-                                                                                : _opts.shared_static_pruned_scan_range != nullptr;
+    const bool use_shared_static_pruned_range =
+            !_opts.short_key_ranges.empty() ? false : _opts.shared_static_pruned_scan_range != nullptr;
     if (use_shared_static_pruned_range) {
         RETURN_IF_ERROR(_apply_shared_static_pruned_range());
     } else {
@@ -1942,10 +1942,9 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
         zonemap_scan_range = &coarse_scan_range;
     }
 
-    ASSIGN_OR_RETURN(auto hit_row_ranges,
-                     _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{_opts.pred_tree_for_zone_map,
-                                                                                _column_iterators, _del_predicates,
-                                                                                del_columns, zonemap_scan_range}));
+    ASSIGN_OR_RETURN(auto hit_row_ranges, _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
+                                                  _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates,
+                                                  del_columns, zonemap_scan_range}));
     if (hit_row_ranges.has_value()) {
         zm_range &= hit_row_ranges.value();
     }

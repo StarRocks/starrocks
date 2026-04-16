@@ -100,11 +100,10 @@ public:
     StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options,
                                                  const std::vector<SegmentPtr>& prepared_segments,
                                                  std::vector<ChunkIteratorPtr>* reusable_segment_iterators);
-    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options,
-                                                 const std::vector<SegmentPtr>& prepared_segments,
-                                                 std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
-                                                 std::vector<PreparedSegmentPruningStatePtr>* prepared_segment_pruning_states =
-                                                         nullptr);
+    StatusOr<std::vector<ChunkIteratorPtr>> read(
+            const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
+            std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
+            std::vector<PreparedSegmentPruningStatePtr>* prepared_segment_pruning_states = nullptr);
 
     StatusOr<size_t> get_read_iterator_num();
 
@@ -202,11 +201,10 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
-    StatusOr<std::vector<ChunkIteratorPtr>> do_read(const Schema& schema, const RowsetReadOptions& options,
-                                                    const std::vector<SegmentPtr>* prepared_segments,
-                                                    std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr,
-                                                    std::vector<PreparedSegmentPruningStatePtr>*
-                                                            prepared_segment_pruning_states = nullptr);
+    StatusOr<std::vector<ChunkIteratorPtr>> do_read(
+            const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>* prepared_segments,
+            std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr,
+            std::vector<PreparedSegmentPruningStatePtr>* prepared_segment_pruning_states = nullptr);
     StatusOr<std::optional<SeekRange>> get_seek_range() const;
 
     TabletManager* _tablet_mgr;

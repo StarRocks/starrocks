@@ -94,8 +94,8 @@ public:
 
     LakeIndexPrunedPhysicalSplitPlanner(TabletSchemaCSPtr tablet_schema, int64_t tablet_id, bool is_asc_hint,
                                         OlapReaderStatistics* stats, bool allow_static_prepare,
-                                        const TabletReaderParams& read_params,
-                                        const RowsetReadOptions& rs_opts, const LakeIOOptions& lake_io_opts,
+                                        const TabletReaderParams& read_params, const RowsetReadOptions& rs_opts,
+                                        const LakeIOOptions& lake_io_opts,
                                         TabletReader::PreparedReadState* prepared_state)
             : _tablet_schema(std::move(tablet_schema)),
               _tablet_id(tablet_id),
@@ -132,7 +132,8 @@ public:
                 auto& pruning_state = pruning_states[segment_idx];
 
                 SparseRangePtr key_pruned_range;
-                RETURN_IF_ERROR(prepare_segment_key_pruned_scan_range(segment, seg_options, pruning_state, &key_pruned_range));
+                RETURN_IF_ERROR(
+                        prepare_segment_key_pruned_scan_range(segment, seg_options, pruning_state, &key_pruned_range));
                 if (key_pruned_range == nullptr) {
                     key_pruned_range = std::make_shared<SparseRange<>>(Range<>(0, segment->num_rows()));
                 }
@@ -140,7 +141,7 @@ public:
                 SparseRangePtr final_scan_range = key_pruned_range;
                 if (_should_prepare_static_range(seg_options, key_pruned_range->span_size())) {
                     RETURN_IF_ERROR(prepare_segment_static_pruned_scan_range(segment_schema, segment, seg_options,
-                                                                            pruning_state, &final_scan_range));
+                                                                             pruning_state, &final_scan_range));
                     ++_plan_stats.static_prepared_segments;
                 }
 
@@ -214,7 +215,8 @@ private:
             }
 
             size_t remaining_in_segment = range_iter.remaining_rows();
-            size_t rows_to_take = std::min<size_t>(_read_params.splitted_scan_rows - _num_taken_rows, remaining_in_segment);
+            size_t rows_to_take =
+                    std::min<size_t>(_read_params.splitted_scan_rows - _num_taken_rows, remaining_in_segment);
             if (remaining_in_segment > rows_to_take &&
                 remaining_in_segment - rows_to_take < _read_params.splitted_scan_rows) {
                 rows_to_take = remaining_in_segment;
@@ -387,12 +389,10 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
                 }
                 LOG(WARNING) << "failed to build index-pruned Lake split tasks, fallback to generic physical split"
                              << ", query_id: " << print_id(read_params.runtime_state->query_id())
-                             << ", tablet_id: " << tablet_shared_ptr->tablet_id()
-                             << ", rowsets: " << _rowsets.size()
+                             << ", tablet_id: " << tablet_shared_ptr->tablet_id() << ", rowsets: " << _rowsets.size()
                              << ", start_keys: " << read_params.start_key.size()
                              << ", end_keys: " << read_params.end_key.size()
-                             << ", range_start_op: " << read_params.range
-                             << ", range_end_op: " << read_params.end_range
+                             << ", range_start_op: " << read_params.range << ", range_end_op: " << read_params.end_range
                              << ", splitted_scan_rows: " << read_params.splitted_scan_rows
                              << ", lake_io_has_fs: " << (read_params.lake_io_opts.fs != nullptr)
                              << ", lake_io_has_location_provider: "
@@ -477,8 +477,8 @@ Status TabletReader::_build_index_pruned_physical_split_tasks(const TabletReader
     rs_opts.lake_io_opts = lake_io_opts;
 
     LakeIndexPrunedPhysicalSplitPlanner planner(_tablet_schema, _tablet_metadata->id(), _is_asc_hint, &_stats,
-                                                _prepared_read_state != nullptr,
-                                                read_params, rs_opts, lake_io_opts, prepared_state);
+                                                _prepared_read_state != nullptr, read_params, rs_opts, lake_io_opts,
+                                                prepared_state);
     RETURN_IF_ERROR(planner.build(&_split_tasks));
 
     const auto& stats = planner.stats();
@@ -486,8 +486,7 @@ Status TabletReader::_build_index_pruned_physical_split_tasks(const TabletReader
               << ", query_id: " << print_id(read_params.runtime_state->query_id())
               << ", tablet_id: " << _tablet_metadata->id() << ", seek_ranges: " << seek_ranges.size()
               << ", resolved_fs_from_tablet_root: " << resolved_fs_from_tablet_root
-              << ", visited_segments: " << stats.visited_segments
-              << ", nonempty_segments: " << stats.nonempty_segments
+              << ", visited_segments: " << stats.visited_segments << ", nonempty_segments: " << stats.nonempty_segments
               << ", fully_pruned_segments: " << stats.fully_pruned_segments
               << ", static_prepared_segments: " << stats.static_prepared_segments
               << ", matched_rows: " << stats.matched_rows << ", split_tasks: " << stats.flushed_split_tasks;
@@ -720,23 +719,24 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         }
 
         if (config::enable_load_segment_parallel) {
-            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>(
-                    [&, rowset, rowset_idx]() {
+            auto task = std::make_shared<std::packaged_task<StatusOr<std::vector<ChunkIteratorPtr>>()>>([&, rowset,
+                                                                                                         rowset_idx]() {
 #ifdef BE_TEST
-                        Status injected_st;
-                        TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
-                        if (!injected_st.ok()) {
-                            return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
-                        }
+                Status injected_st;
+                TEST_SYNC_POINT_CALLBACK("TabletReader::get_segment_iterators::parallel_read", &injected_st);
+                if (!injected_st.ok()) {
+                    return StatusOr<std::vector<ChunkIteratorPtr>>(injected_st);
+                }
 #endif
-                        if (enable_reusable_segment_iters) {
-                            return enhance_error_prompt(
-                                    rowset->read(schema(), rs_opts, prepared_state->rowset_segments[rowset_idx],
-                                                 &prepared_state->rowset_iterators[rowset_idx],
-                                                 &prepared_state->rowset_pruning_states[rowset_idx]));
-                        }
-                        return enhance_error_prompt(rowset->read(schema(), rs_opts, prepared_state->rowset_segments[rowset_idx]));
-                    });
+                if (enable_reusable_segment_iters) {
+                    return enhance_error_prompt(rowset->read(schema(), rs_opts,
+                                                             prepared_state->rowset_segments[rowset_idx],
+                                                             &prepared_state->rowset_iterators[rowset_idx],
+                                                             &prepared_state->rowset_pruning_states[rowset_idx]));
+                }
+                return enhance_error_prompt(
+                        rowset->read(schema(), rs_opts, prepared_state->rowset_segments[rowset_idx]));
+            });
 
             auto packaged_func = [task]() { (*task)(); };
             if (auto st = ExecEnv::GetInstance()->load_rowset_thread_pool()->submit_func(std::move(packaged_func));
@@ -750,8 +750,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
                                                    schema(), rs_opts, prepared_state->rowset_segments[rowset_idx],
                                                    &prepared_state->rowset_iterators[rowset_idx],
                                                    &prepared_state->rowset_pruning_states[rowset_idx]))
-                                         : enhance_error_prompt(rowset->read(schema(), rs_opts,
-                                                                             prepared_state->rowset_segments[rowset_idx])));
+                                         : enhance_error_prompt(rowset->read(
+                                                   schema(), rs_opts, prepared_state->rowset_segments[rowset_idx])));
                 iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
             } else {
                 futures.push_back(task->get_future());
