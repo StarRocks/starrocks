@@ -159,7 +159,6 @@ inline constexpr bool column_uses_equals_v = is_nested_column_v<T> || std::is_sa
 template <typename T>
 using column_value_t = std::conditional_t<is_nested_column_v<T>, uint8_t, typename T::ValueType>;
 
-
 class ArrayRemoveImpl {
 public:
     static StatusOr<ColumnPtr> evaluate(const ColumnPtr& array, const ColumnPtr& element) {
