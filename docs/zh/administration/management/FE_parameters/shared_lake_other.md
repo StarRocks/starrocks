@@ -527,7 +527,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 600
 - 类型: Long
 - 单位: 秒
-- 是否可变: No
+- 是否可变: Yes
 - 描述: FE 在共享数据集群中与 StarMgr 进行周期性元数据同步的间隔。
 - 引入版本: -
 
