@@ -462,3 +462,70 @@ WITH BROKER
     "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
 );
 ```
+
+### 基于 Workload Identity 认证鉴权
+
+从 v3.5.10 版本开始，StarRocks 支持将 Azure Workload Identity 作为访问 Azure Data Lake Storage Gen2 时的身份验证方法。该身份验证方法专为在 Azure 内部运行的工作负载（例如 AKS Pod）设计，其中计算身份通过投影令牌文件与 Azure AD 应用程序进行联合，从而避免了存储长期有效凭据的必要。
+
+要使用 Workload Identity 认证，在继续操作前需完成以下 Azure 端的配置：
+
+- 在您的 AKS 集群（或等效环境）上启用 Azure 工作负载身份 Webhook。
+- 创建一个联合身份凭据，将您的 Kubernetes 服务账户与 Azure AD 应用程序或用户分配的托管身份关联起来。
+- 为 Kubernetes Pod/服务账户添加注解，以便 Webhook 注入令牌投影。令牌文件将出现在 `azure.adls2.oauth2_token_file` 中配置的路径下（通常为 `/var/run/secrets/azure/tokens/azure-identity-token`）。
+- 为该 Azure AD 身份授予存储账户上的必要 RBAC 角色（例如，Storage Blob Data Reader 或 Storage Blob Data Contributor）。
+
+#### External Catalog
+
+在 [CREATE EXTERNAL CATALOG](../sql-reference/sql-statements/Catalog/CREATE_EXTERNAL_CATALOG.md) 语句中，按如下配置 `azure.adls2.oauth2_token_file`、`azure.adls2.oauth2_tenant_id` 和 `azure.adls2.oauth2_client_id`：
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_azure
+PROPERTIES
+(
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```
+
+#### 文件外部表
+
+在 [CREATE EXTERNAL TABLE](../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 语句中，按如下配置 `azure.adls2.oauth2_token_file`、`azure.adls2.oauth2_tenant_id`、`azure.adls2.oauth2_client_id` 和文件路径 (`path`)：
+
+```SQL
+CREATE EXTERNAL TABLE external_table_azure
+(
+    id varchar(65500),
+    attributes map<varchar(100), varchar(2000)>
+) 
+ENGINE=FILE
+PROPERTIES
+(
+    "path" = "abfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>",
+    "format" = "ORC",
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```
+
+#### Broker Load
+
+在 [LOAD LABEL](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md) 语句中，按如下配置 `azure.adls2.oauth2_token_file`、`azure.adls2.oauth2_tenant_id`、`azure.adls2.oauth2_client_id` 和文件路径 (`DATA INFILE`)：
+
+```SQL
+LOAD LABEL test_db.label000
+(
+    DATA INFILE("adfs[s]://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>")
+    INTO TABLE target_table
+    FORMAT AS "parquet"
+)
+WITH BROKER
+(
+    "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+    "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+    "azure.adls2.oauth2_client_id" = "<service_client_id>"
+);
+```
