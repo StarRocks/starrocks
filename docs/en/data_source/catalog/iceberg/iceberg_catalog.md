@@ -678,8 +678,6 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
-<<<<<<< HEAD
-=======
 - To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
@@ -696,9 +694,6 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
   | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
 
-- To choose REST catalog with vended credential (supported from v4.0 onwards), you do not need to configure `StorageCredentialParams`.
-
->>>>>>> 0c7b2f1392 ([Doc] Add ADLS2 Workload Identity Doc (#71798))
 </TabItem>
 
 <TabItem value="GCS" label="Google GCS" >
