@@ -86,7 +86,7 @@ public:
     std::string to_cxx_string(jstring str);
     std::string dumpExceptionString(jthrowable throwable);
     jmethodID getToStringMethod(jclass clazz);
-    jstring to_jstring(const std::string& str);
+    StatusOr<jstring> to_jstring(const std::string& str);
     jmethodID getMethod(jclass clazz, const std::string& method, const std::string& sig);
     jmethodID getStaticMethod(jclass clazz, const std::string& method, const std::string& sig);
     // create a object array
