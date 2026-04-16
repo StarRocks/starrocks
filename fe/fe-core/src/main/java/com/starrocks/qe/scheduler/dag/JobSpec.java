@@ -142,36 +142,6 @@ public class JobSpec {
                     .build();
         }
 
-        public static JobSpec fromMVMaintenanceJobSpec(ConnectContext context,
-                                                       List<PlanFragment> fragments,
-                                                       List<ScanNode> scanNodes,
-                                                       TDescriptorTable descTable,
-                                                       ExecPlan execPlan) {
-            TQueryOptions queryOptions = context.getSessionVariable().toThrift();
-
-            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
-                    context.getSessionVariable().getTimeZone());
-            if (context.getLastQueryId() != null) {
-                queryGlobals.setLast_query_id(context.getLastQueryId().toString());
-            }
-            queryGlobals.setConnector_scan_node_number(scanNodes.stream().filter(x -> x.isRunningAsConnectorOperator()).count());
-
-            return new Builder()
-                    .queryId(context.getExecutionId())
-                    .fragments(fragments)
-                    .preExecutedFragments(execPlan.getPreExecutedFragments())
-                    .scanNodes(scanNodes)
-                    .execPlan(execPlan)
-                    .descTable(descTable)
-                    .enableStreamPipeline(true)
-                    .isBlockQuery(false)
-                    .needReport(true)
-                    .queryGlobals(queryGlobals)
-                    .queryOptions(queryOptions)
-                    .commonProperties(context)
-                    .build();
-        }
-
         public static JobSpec fromBrokerLoadJobSpec(LoadPlanner loadPlanner) {
             ConnectContext context = loadPlanner.getContext();
 
