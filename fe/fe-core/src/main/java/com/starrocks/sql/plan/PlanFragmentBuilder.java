@@ -1077,7 +1077,6 @@ public class PlanFragmentBuilder {
                                 lower.toLocalDateTime().toLocalDate().toEpochDay();
                     } else if (partitionCols.get(i).getType().isIntegerType()) {
                         kr = new TKeyRange();
-                        keyRange.upperEndpoint().getKeys().get(i).getLongValue();
                         kr.setBegin_key(keyRange.lowerEndpoint().getKeys().get(i).getLongValue());
                         kr.setEnd_key(keyRange.upperEndpoint().getKeys().get(i).getLongValue());
                         partitionValues *= kr.getEnd_key() - kr.getBegin_key();
