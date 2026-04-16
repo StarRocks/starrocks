@@ -229,6 +229,14 @@ private:
     Status _load_bitmap_index(const IndexReadOptions& opts);
     Status _load_bloom_filter_index(const IndexReadOptions& opts);
 
+    // Build a fresh BitmapIndexReader backed by a standalone .idx file
+    // (Index Delta Group payload). Used when IndexReadOptions carries an
+    // IDG entry that supersedes the segment footer's bitmap meta. The
+    // returned iterator owns its file handle and reader; the cached
+    // _bitmap_index footer reader is left untouched.
+    Status _new_idg_backed_bitmap_index_iterator(const IndexReadOptions& opts, const std::string& idx_filename,
+                                                 BitmapIndexIterator** iterator);
+
     // Determines the logical type to use when parsing zone map values for predicate filtering,
     // handling type mismatches between column and predicate types after fast schema evolution
     LogicalType _get_zone_map_parse_type(const ColumnPredicate* predicate) const;

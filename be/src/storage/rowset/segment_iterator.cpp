@@ -3585,6 +3585,17 @@ IndexReadOptions SegmentIterator::_index_read_options(ColumnId cid) const {
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _column_files.at(cid).get();
     opts.stats = _opts.stats;
+
+    // IDG context (lake only; nullptr loader keeps readers on the footer path).
+    opts.idg_loader = _opts.idg_loader;
+    opts.tablet_id = _opts.tablet_id;
+    opts.segment_id = _opts.rowset_id + segment_id();
+    opts.query_version = _opts.version;
+    // Column unique id needed by the IDG loader to match per-column entries;
+    // -1 when column is virtual / synthesized.
+    if (cid < static_cast<ColumnId>(_schema.num_fields()) && _schema.field(cid) != nullptr) {
+        opts.col_unique_id = _schema.field(cid)->uid();
+    }
     return opts;
 }
 

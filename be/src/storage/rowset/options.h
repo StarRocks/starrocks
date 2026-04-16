@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "io/seekable_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
@@ -43,6 +45,10 @@ namespace starrocks {
 
 class FileSystem;
 class RandomAccessFile;
+
+namespace lake {
+class IndexDeltaGroupLoader;
+} // namespace lake
 
 static const uint32_t DEFAULT_PAGE_SIZE = 1024 * 1024; // default size: 1M
 
@@ -65,6 +71,27 @@ public:
     OlapReaderStatistics* stats = nullptr;
 
     std::optional<size_t> segment_rows = std::nullopt;
+
+    // ============================================================
+    // Index Delta Group context (lake-only).
+    //
+    // If an ADD INDEX fast-path alter has produced a .idx file that covers
+    // this (col_unique_id, index_type), readers prefer it over the segment
+    // footer-embedded index. `idg_loader` resolves segment_id -> IDG
+    // entries; `tablet_id`/`segment_id` identify this segment; `query_version`
+    // drives snapshot visibility (entries with version > query_version are
+    // hidden so older snapshots see the pre-alter index or no index).
+    // `col_unique_id` disambiguates per-column lookups.
+    //
+    // Populated by SegmentIterator::_index_read_options from the enclosing
+    // SegmentReadOptions. Nullptr `idg_loader` keeps the reader on the
+    // traditional footer-embedded path, which is the existing behavior.
+    // ============================================================
+    std::shared_ptr<lake::IndexDeltaGroupLoader> idg_loader;
+    uint64_t tablet_id = 0;
+    uint32_t segment_id = 0;
+    int64_t query_version = 0;
+    int32_t col_unique_id = -1;
 };
 
 } // namespace starrocks
