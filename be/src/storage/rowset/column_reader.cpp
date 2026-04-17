@@ -416,7 +416,8 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
     sub_opts.read_file = idx_file->stream().get();
 
     auto bitmap_reader = std::make_unique<BitmapIndexReader>();
-    ASSIGN_OR_RETURN(bool /*first_load*/, bitmap_reader->load(sub_opts, meta->bitmap_index()));
+    ASSIGN_OR_RETURN(auto first_load, bitmap_reader->load(sub_opts, meta->bitmap_index()));
+    (void)first_load;
     BitmapIndexIterator* inner = nullptr;
     RETURN_IF_ERROR(bitmap_reader->new_iterator(sub_opts, &inner));
 
@@ -562,8 +563,9 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                 IndexReadOptions sub_opts = opts;
                 sub_opts.read_file = idg_file_holder->stream().get();
                 idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
-                ASSIGN_OR_RETURN(bool /*first_load*/,
+                ASSIGN_OR_RETURN(auto bf_first_load,
                                  idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
+                (void)bf_first_load;
                 RETURN_IF_ERROR(idg_reader_holder->new_iterator(sub_opts, &bf_iter));
                 used_idg = true;
                 break;
