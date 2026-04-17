@@ -45,13 +45,16 @@ g++ -shared -fPIC -O2 -std=c++17 \
     -ldl -lpthread
 
 echo "=== Verifying GLIBCXX ==="
-GLIBCXX_COUNT=$(strings "$BUILD_DIR/libadbc_driver_jni.so" | grep -c '^GLIBCXX_' || true)
+# Check for dynamic GLIBCXX version symbols (e.g. GLIBCXX_3.4.29) which indicate
+# a dynamic libstdc++ dependency. Ignore GLIBCXX_TUNABLES which is a GCC runtime
+# string embedded even with -static-libstdc++ (not a real dynamic dependency).
+GLIBCXX_COUNT=$(strings "$BUILD_DIR/libadbc_driver_jni.so" | grep -c '^GLIBCXX_[0-9]' || true)
 if [ "$GLIBCXX_COUNT" -gt 0 ]; then
     echo "FAIL: .so has dynamic GLIBCXX dependency"
-    strings "$BUILD_DIR/libadbc_driver_jni.so" | grep '^GLIBCXX_'
+    strings "$BUILD_DIR/libadbc_driver_jni.so" | grep '^GLIBCXX_[0-9]'
     exit 1
 fi
-echo "OK: no dynamic GLIBCXX dependency (static-linked)"
+echo "OK: no dynamic GLIBCXX version dependency (static-linked)"
 
 echo "=== Repackaging JAR ==="
 mkdir -p "$REPACK_DIR"
