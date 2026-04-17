@@ -37,23 +37,25 @@ package com.starrocks.sql.ast.expression;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
-import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.type.Type;
 
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
 public class FunctionCallExpr extends Expr {
-    protected Function fn;
+    private static final java.util.concurrent.atomic.AtomicLong FN_ID_COUNTER =
+            new java.util.concurrent.atomic.AtomicLong(0);
+
+    // Unique ID assigned when the function is resolved. Used as key in AnalysisContext
+    // to look up the resolved Function object. Survives clone/copy since it's a plain long.
+    private long fnId = -1;
+
     private FunctionRef fnRef;
-    // private BuiltinAggregateFunction.Operator aggOp;
     private FunctionParams fnParams;
 
     // check analytic function
@@ -64,9 +66,23 @@ public class FunctionCallExpr extends Expr {
     // resetAnalysisState() which is used during expr substitution.
     private boolean isMergeAggFn;
 
+    // Cached properties from the resolved Function object, set via AnalysisContext.populateCachedFields().
+    private boolean isAggregateFn = false;
+    private boolean fnNullable = true;
+    private Type[] fnArgTypes;
+    private boolean fnHasVarArgs = false;
+    private int fnNumArgs = 0;
+    private boolean isWindowFunction = false;
+
+    private static final ImmutableSet<String> NON_DETERMINISTIC_FUNCTIONS =
+            ImmutableSet.<String>builder()
+                    .add("rand").add("random").add("uuid").add("uuid_numeric")
+                    .add("uuid_v7").add("uuid_v7_numeric").add("sleep")
+                    .build();
+
     // TODO(yan): add more known functions which are monotonic.
     private static final ImmutableSet<String> MONOTONIC_FUNCTION_SET =
-            new ImmutableSet.Builder<String>().add(FunctionSet.YEAR).build();
+            new ImmutableSet.Builder<String>().add("year").build();
 
     public boolean isAnalyticFnCall() {
         return isAnalyticFnCall;
@@ -76,12 +92,78 @@ public class FunctionCallExpr extends Expr {
         isAnalyticFnCall = v;
     }
 
-    public Function getFn() {
-        return fn;
+    public static long nextFnId() {
+        return FN_ID_COUNTER.incrementAndGet();
     }
 
-    public void setFn(Function fn) {
-        this.fn = fn;
+    public long getFnId() {
+        return fnId;
+    }
+
+    public void setFnId(long fnId) {
+        this.fnId = fnId;
+    }
+
+    public boolean hasFnId() {
+        return fnId >= 0;
+    }
+
+    public boolean isAggregateFn() {
+        return isAggregateFn;
+    }
+
+    public void setAggregateFn(boolean aggregateFn) {
+        isAggregateFn = aggregateFn;
+    }
+
+    public boolean isFnNullable() {
+        return fnNullable;
+    }
+
+    public void setFnNullable(boolean fnNullable) {
+        this.fnNullable = fnNullable;
+    }
+
+    public Type[] getFnArgTypes() {
+        return fnArgTypes;
+    }
+
+    public void setFnArgTypes(Type[] fnArgTypes) {
+        this.fnArgTypes = fnArgTypes;
+    }
+
+    public boolean isFnHasVarArgs() {
+        return fnHasVarArgs;
+    }
+
+    public void setFnHasVarArgs(boolean fnHasVarArgs) {
+        this.fnHasVarArgs = fnHasVarArgs;
+    }
+
+    public int getFnNumArgs() {
+        return fnNumArgs;
+    }
+
+    public void setFnNumArgs(int fnNumArgs) {
+        this.fnNumArgs = fnNumArgs;
+    }
+
+    public boolean isWindowFunction() {
+        return isWindowFunction;
+    }
+
+    public void setWindowFunction(boolean windowFunction) {
+        isWindowFunction = windowFunction;
+    }
+
+    public void copyFnFieldsFrom(FunctionCallExpr other) {
+        this.fnId = other.fnId;
+        this.isAggregateFn = other.isAggregateFn;
+        this.fnNullable = other.fnNullable;
+        this.fnArgTypes = other.fnArgTypes;
+        this.fnHasVarArgs = other.fnHasVarArgs;
+        this.fnNumArgs = other.fnNumArgs;
+        this.isWindowFunction = other.isWindowFunction;
     }
 
     public FunctionRef getFnRef() {
@@ -177,11 +259,15 @@ public class FunctionCallExpr extends Expr {
         Preconditions.checkState(e.isAnalyzed);
         Preconditions.checkState(e.isAggregateFunction() || e.isAnalyticFnCall);
         fnRef = e.fnRef;
-        // aggOp = e.aggOp;
         isAnalyticFnCall = e.isAnalyticFnCall;
         fnParams = params;
-        // Just inherit the function object from 'e'.
-        fn = e.fn;
+        fnId = e.fnId;
+        isAggregateFn = e.isAggregateFn;
+        fnNullable = e.fnNullable;
+        fnArgTypes = e.fnArgTypes;
+        fnHasVarArgs = e.fnHasVarArgs;
+        fnNumArgs = e.fnNumArgs;
+        isWindowFunction = e.isWindowFunction;
         this.isMergeAggFn = e.isMergeAggFn;
         if (params.exprs() != null) {
             children.addAll(params.exprs());
@@ -190,11 +276,15 @@ public class FunctionCallExpr extends Expr {
 
     protected FunctionCallExpr(FunctionCallExpr other) {
         super(other);
-        fn = other.fn;
+        fnId = other.fnId;
+        isAggregateFn = other.isAggregateFn;
+        fnNullable = other.fnNullable;
+        fnArgTypes = other.fnArgTypes;
+        fnHasVarArgs = other.fnHasVarArgs;
+        fnNumArgs = other.fnNumArgs;
+        isWindowFunction = other.isWindowFunction;
         fnRef = other.fnRef;
         isAnalyticFnCall = other.isAnalyticFnCall;
-        //   aggOp = other.aggOp;
-        // fnParams = other.fnParams;
         // Clone the params in a way that keeps the children_ and the params.exprs()
         // in sync. The children have already been cloned in the super c'tor.
         if (other.fnParams.isStar()) {
@@ -208,13 +298,13 @@ public class FunctionCallExpr extends Expr {
 
     public static final Set<String> NULLABLE_SAME_WITH_CHILDREN_FUNCTIONS =
             ImmutableSet.<String>builder()
-                    .add(FunctionSet.YEAR)
-                    .add(FunctionSet.MONTH)
-                    .add(FunctionSet.DAY)
-                    .add(FunctionSet.HOUR)
-                    .add(FunctionSet.ADD)
-                    .add(FunctionSet.SUBTRACT)
-                    .add(FunctionSet.MULTIPLY)
+                    .add("year")
+                    .add("month")
+                    .add("day")
+                    .add("hour")
+                    .add("add")
+                    .add("subtract")
+                    .add("multiply")
                     .build();
 
     public boolean isMergeAggFn() {
@@ -234,7 +324,12 @@ public class FunctionCallExpr extends Expr {
         // fn_ such that analyze() hits the special-case code for merge agg fns that
         // handles this case.
         if (!isMergeAggFn) {
-            fn = null;
+            isAggregateFn = false;
+            fnNullable = true;
+            fnArgTypes = null;
+            fnHasVarArgs = false;
+            fnNumArgs = 0;
+            isWindowFunction = false;
         }
     }
 
@@ -250,13 +345,26 @@ public class FunctionCallExpr extends Expr {
                         super.debugString()).toString();
     }
 
+    @Override
+    public String toSimpleSql() {
+        StringBuilder sb = new StringBuilder(getFunctionName());
+        sb.append("(");
+        for (int i = 0; i < children.size(); i++) {
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(children.get(i).toSimpleSql());
+        }
+        sb.append(")");
+        return sb.toString();
+    }
+
     public FunctionParams getParams() {
         return fnParams;
     }
 
     public boolean isAggregateFunction() {
-        Preconditions.checkState(fn != null);
-        return fn instanceof AggregateFunction && !isAnalyticFnCall;
+        return isAggregateFn && !isAnalyticFnCall;
     }
 
     public boolean isDistinct() {
@@ -279,7 +387,7 @@ public class FunctionCallExpr extends Expr {
     // TODO(kks): improve this
     public boolean isNullable() {
         // check if fn always return non null
-        if (fn != null && !fn.isNullable()) {
+        if (fnArgTypes != null && !fnNullable) {
             return false;
         }
         // check children nullable
@@ -304,7 +412,7 @@ public class FunctionCallExpr extends Expr {
         // TODO: we can't correctly determine const-ness before analyzing 'fn_'. We should
         // rework logic so that we do not call this function on unanalyzed exprs.
         // Aggregate functions are never constant.
-        if (fn instanceof AggregateFunction) {
+        if (isAggregateFn) {
             return false;
         }
 
@@ -325,20 +433,20 @@ public class FunctionCallExpr extends Expr {
         which requires different hashes for each non-deterministic function,
         so in Expression Analyzer, each non-deterministic function will be numbered to achieve different hash values.
     */
-    private ExprId nondeterministicId = new ExprId(0);
+    private int nondeterministicId = 0;
 
-    public void setNondeterministicId(ExprId nondeterministicId) {
+    public void setNondeterministicId(int nondeterministicId) {
         this.nondeterministicId = nondeterministicId;
     }
 
     public boolean isNondeterministicBuiltinFnName() {
-        return FunctionSet.nonDeterministicFunctions.contains(fnRef.getFunctionName().toLowerCase());
+        return NON_DETERMINISTIC_FUNCTIONS.contains(fnRef.getFunctionName().toLowerCase());
     }
 
     @Override
     public int hashCode() {
         // @Note: fnParams is different with children Expr. use children plz.
-        return Objects.hash(super.hashCode(), type, fnRef.getFnName().toString(), nondeterministicId, fn);
+        return Objects.hash(super.hashCode(), type, fnRef.getFnName().toString(), nondeterministicId);
     }
 
     @Override
@@ -350,9 +458,8 @@ public class FunctionCallExpr extends Expr {
         return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnRef.getFnName().toString().equals(o.fnRef.getFnName().toString())
                 && fnParams.isDistinct() == o.fnParams.isDistinct()
                 && fnParams.isStar() == o.fnParams.isStar()
-                && nondeterministicId.equals(o.nondeterministicId)
-                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements())
-                && Objects.equals(fn, o.fn);
+                && nondeterministicId == o.nondeterministicId
+                && Objects.equals(fnParams.getOrderByElements(), o.fnParams.getOrderByElements());
     }
 
     /**
@@ -360,7 +467,7 @@ public class FunctionCallExpr extends Expr {
      */
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return ((AstVisitorExtendInterface<R, C>) visitor).visitFunctionCall(this, context);
+        return visitor.visitFunctionCall(this, context);
     }
 
     public void setMergeAggFn() {

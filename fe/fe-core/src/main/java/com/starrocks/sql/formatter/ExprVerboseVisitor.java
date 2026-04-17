@@ -71,13 +71,13 @@ public class ExprVerboseVisitor extends ExprExplainVisitor {
             sb.append(')');
         }
 
-        if (node.getFn() != null) {
+        if (node.getFnArgTypes() != null) {
             sb.append(" args: ");
-            for (int i = 0; i < node.getFn().getArgs().length; ++i) {
+            for (int i = 0; i < node.getFnArgTypes().length; ++i) {
                 if (i != 0) {
                     sb.append(',');
                 }
-                sb.append(node.getFn().getArgs()[i].getPrimitiveType().toString());
+                sb.append(node.getFnArgTypes()[i].getPrimitiveType().toString());
             }
             sb.append(";");
             sb.append(" result: ").append(node.getType()).append(";");

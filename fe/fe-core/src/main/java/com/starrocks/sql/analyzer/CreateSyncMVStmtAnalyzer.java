@@ -547,7 +547,7 @@ public class CreateSyncMVStmtAnalyzer {
                     Function fn = ExprUtils.getBuiltinFunction(FunctionSet.TO_BITMAP, new Type[] {baseType},
                             Function.CompareMode.IS_IDENTICAL);
                     defineExpr = new FunctionCallExpr(FunctionSet.TO_BITMAP, Lists.newArrayList(defineExpr));
-                    ((FunctionCallExpr) defineExpr).setFn(fn);
+                    AnalysisContext.populateCachedFields((FunctionCallExpr) defineExpr, fn);
                     defineExpr.setType(BitmapType.BITMAP);
                 } else {
                     throw new SemanticException("Unsupported bitmap_agg type:" + baseType);

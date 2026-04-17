@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -577,7 +578,7 @@ public class SimpleExpressionAnalyzer {
             Function fn = ExprUtils.getBuiltinFunction(node.getFunctionName(),
                     childTypes, Function.CompareMode.IS_IDENTICAL);
 
-            node.setFn(fn);
+            AnalysisContext.populateCachedFields(node, fn);
             node.setType(fn.getReturnType());
             return null;
         }

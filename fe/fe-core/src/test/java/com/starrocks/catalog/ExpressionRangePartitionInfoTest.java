@@ -22,6 +22,7 @@ import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalysisContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionDescAnalyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -79,7 +80,7 @@ public class ExpressionRangePartitionInfoTest {
         fnChildren.add(new StringLiteral("month"));
         fnChildren.add(slotRef2);
         functionCallExpr = new FunctionCallExpr("date_trunc", fnChildren);
-        functionCallExpr.setFn(ExprUtils.getBuiltinFunction(
+        AnalysisContext.populateCachedFields(functionCallExpr, ExprUtils.getBuiltinFunction(
                 "date_trunc", new Type[] {VarcharType.VARCHAR, DateType.DATETIME}, Function.CompareMode.IS_IDENTICAL));
 
         FeConstants.runningUnitTest = true;
@@ -530,7 +531,7 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
         List<Expr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs(readTable.getIdToColumn());
-        Function fn = ((FunctionCallExpr) readPartitionExprs.get(0)).getFn();
+        Function fn = AnalysisContext.getFunctionByExpr((FunctionCallExpr) readPartitionExprs.get(0));
         Assertions.assertNotNull(fn);
         starRocksAssert.dropTable("table_hitcount");
     }
@@ -568,7 +569,7 @@ public class ExpressionRangePartitionInfoTest {
         Assertions.assertTrue(exprs.get(0) instanceof FunctionCallExpr);
         FunctionCallExpr fn = (FunctionCallExpr) exprs.get(0);
         // The function should have been resolved by analyzePartitionExpr
-        Assertions.assertNotNull(fn.getFn(),
+        Assertions.assertNotNull(AnalysisContext.getFunctionByExpr(fn),
                 "Partition expression should be analyzed after column rename");
         // The slot ref column name should be updated to the new name
         SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(fn);
@@ -755,7 +756,7 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
         expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
         List<ColumnIdExpr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs();
-        Function fn = ((FunctionCallExpr) readPartitionExprs.get(0).getExpr()).getFn();
+        Function fn = AnalysisContext.getFunctionByExpr((FunctionCallExpr) readPartitionExprs.get(0).getExpr());
         Assertions.assertNotNull(fn);
     }
 

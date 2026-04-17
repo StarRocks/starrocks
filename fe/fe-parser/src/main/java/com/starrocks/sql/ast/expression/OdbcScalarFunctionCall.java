@@ -68,7 +68,7 @@ public class OdbcScalarFunctionCall implements ParseNode {
 
     public Expr mappingFunction() {
         if (!(function instanceof FunctionCallExpr)) {
-            throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(ExprToSql.toSql(function)), function.getPos());
+            throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(toSimpleSql(function)), function.getPos());
         }
         FunctionCallExpr functionCallExpr = (FunctionCallExpr) function;
         String fnName = functionCallExpr.getFunctionName();
@@ -83,7 +83,15 @@ public class OdbcScalarFunctionCall implements ParseNode {
             return function;
         }
 
-        throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(ExprToSql.toSql(function)), function.getPos());
+        throw new ParsingException(PARSER_ERROR_MSG.invalidOdbcFunc(toSimpleSql(function)), function.getPos());
+    }
+
+    /**
+     * Simple SQL-like representation for error messages.
+     * fe-parser cannot use ExprToSql (fe-core), so delegate to Expr.toSimpleSql().
+     */
+    private static String toSimpleSql(Expr expr) {
+        return expr.toSimpleSql();
     }
 
     @Override
