@@ -95,7 +95,7 @@ public:
         _flat_json_max_column_max = config.flat_json_column_max;
         if (config.__isset.flat_json_column_paths) {
             set_column_paths(std::vector<std::string>(config.flat_json_column_paths.begin(),
-                                                     config.flat_json_column_paths.end()));
+                                                      config.flat_json_column_paths.end()));
         }
         if (config.__isset.flat_json_column_paths_max && config.flat_json_column_paths_max > 0) {
             _flat_json_column_paths_max = static_cast<int>(config.flat_json_column_paths_max);
