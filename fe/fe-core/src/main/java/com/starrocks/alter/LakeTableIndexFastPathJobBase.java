@@ -38,11 +38,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * Base class for the lake-only ADD INDEX / DROP INDEX fast-path jobs.
@@ -162,7 +160,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             // Snapshot is immutable for the remainder of the job.
             for (PhysicalPartition pp : table.getAllPhysicalPartitions()) {
                 List<Long> tabletIds = new ArrayList<>();
-                for (MaterializedIndex idx : pp.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
+                for (MaterializedIndex idx : pp.getAllMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                     long indexMetaId = idx.getId();
                     for (Tablet tablet : idx.getTablets()) {
                         tabletIds.add(tablet.getId());
@@ -310,7 +308,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     LOG.warn("partition {} disappeared during publish; job {}", e.getKey(), jobId);
                     return false;
                 }
-                Utils.publishVersion(pp.getBaseIndex().getTablets(), watershedTxnId, pp.getVisibleVersion(),
+                Utils.publishVersion(pp.getLatestBaseIndex().getTablets(), watershedTxnId, pp.getVisibleVersion(),
                         e.getValue(), System.currentTimeMillis() / 1000, computeResource);
             }
             return true;
@@ -457,18 +455,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
     }
 
     /**
-     * Utility for subclasses: returns the set of column unique ids flagged as
-     * bloom-filter columns in the given table. Used by add/drop to know
-     * whether to flip {@code is_bf_column} on a column after adding /
-     * removing an NGRAMBF index on it.
+     * Placeholder for future helpers shared across add/drop. Per-column
+     * is_bf_column is no longer a first-class Column attribute; bloom-filter
+     * columns are tracked at the OlapTable level via bfColumns.
      */
-    protected static Set<Integer> collectBloomFilterColumnUniqueIds(OlapTable table) {
-        Set<Integer> out = new HashSet<>();
-        for (com.starrocks.catalog.Column col : table.getFullSchema()) {
-            if (col.isBloomFilterColumn()) {
-                out.add(col.getUniqueId());
-            }
-        }
-        return out;
-    }
 }

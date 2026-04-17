@@ -15,10 +15,8 @@
 package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.sql.ast.IndexDef;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TOlapTableIndex;
 
@@ -92,24 +90,12 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
             if (!dup) {
                 existing.add(ix);
             }
-
-            // NGRAMBF: flip is_bf_column on every target column so the
-            // existing column-writer path (segment_writer + column_writer
-            // branches keyed on `column.is_bf_column()` +
-            // `tablet_index[NGRAMBF]`) builds the index inline into all
-            // future segments (loads / compaction / etc.).
-            if (ix.getIndexType() == IndexDef.IndexType.NGRAMBF) {
-                for (String colName : table.getFullSchema().stream()
-                        .map(Column::getName).toList()) {
-                    if (ix.getColumns() != null && ix.getColumns().stream()
-                            .anyMatch(id -> id.getId().equalsIgnoreCase(colName))) {
-                        Column col = table.getColumn(colName);
-                        if (col != null) {
-                            col.setIsBloomFilterColumn(true);
-                        }
-                    }
-                }
-            }
+            // For NGRAMBF we rely purely on the presence of the Index object
+            // in table.getIndexes(); BE reads tablet_index[NGRAMBF] directly
+            // from the published schema without needing a per-column
+            // is_bf_column flip. (The table-level bloom_filter_columns
+            // property stays out of band and is set via ALTER TABLE ...
+            // SET PROPERTIES.)
         }
     }
 

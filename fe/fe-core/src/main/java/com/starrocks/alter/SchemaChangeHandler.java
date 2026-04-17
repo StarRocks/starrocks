@@ -3090,7 +3090,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // (col_uid, type).
                 if (target.getColumns() != null) {
                     for (com.starrocks.catalog.ColumnId colId : target.getColumns()) {
-                        com.starrocks.catalog.Column col = olapTable.getColumnByUniqueId(colId);
+                        com.starrocks.catalog.Column col = olapTable.getColumn(colId);
                         if (col == null) {
                             continue;
                         }
@@ -3129,7 +3129,7 @@ public class SchemaChangeHandler extends AlterHandler {
         if (ix.getColumns() != null) {
             List<String> names = new ArrayList<>();
             for (com.starrocks.catalog.ColumnId colId : ix.getColumns()) {
-                com.starrocks.catalog.Column col = table.getColumnByUniqueId(colId);
+                com.starrocks.catalog.Column col = table.getColumn(colId);
                 names.add(col == null ? colId.getId() : col.getName());
             }
             t.setColumns(names);
