@@ -155,27 +155,36 @@ Status ADBCScanner::_init_adbc() {
 
 Status ADBCScanner::_try_parallel_read() {
     AdbcError error = ADBC_ERROR_INIT;
-    ArrowSchemaHolder schema_holder;
+    ArrowSchema c_schema{};
+    c_schema.release = nullptr;
     struct AdbcPartitions partitions {};
     int64_t rows_affected = -1;
 
-    // Ensure partitions are released on all exit paths
+    // Ensure partitions and schema are released on all exit paths
     auto cleanup_partitions = [&partitions]() {
         if (partitions.release) {
             partitions.release(&partitions);
             partitions.release = nullptr;
         }
     };
+    auto cleanup_schema = [&c_schema]() {
+        if (c_schema.release) {
+            c_schema.release(&c_schema);
+            c_schema.release = nullptr;
+        }
+    };
 
     AdbcStatusCode sc =
-            AdbcStatementExecutePartitions(&_statement, schema_holder.get(), &partitions, &rows_affected, &error);
+            AdbcStatementExecutePartitions(&_statement, &c_schema, &partitions, &rows_affected, &error);
     if (sc != ADBC_STATUS_OK) {
         if (error.release) error.release(&error);
+        cleanup_schema();
         cleanup_partitions();
         return Status::NotSupported("ADBC partitions not supported by driver");
     }
 
     if (partitions.num_partitions <= 1) {
+        cleanup_schema();
         cleanup_partitions();
         return Status::NotSupported("Only one partition, falling back to single stream");
     }
@@ -184,6 +193,7 @@ Status ADBCScanner::_try_parallel_read() {
     size_t num_threads = std::min(partitions.num_partitions, (size_t)4);
     _parallel_reader = std::make_unique<ADBCParallelReader>(&_database, partitions, num_threads);
     auto start_status = _parallel_reader->start();
+    cleanup_schema();
     cleanup_partitions();
     if (!start_status.ok()) {
         _parallel_reader.reset();
@@ -198,13 +208,13 @@ Status ADBCScanner::_fallback_single_stream_read() {
     AdbcError error = ADBC_ERROR_INIT;
     int64_t rows_affected = -1;
 
-    RETURN_ADBC_NOT_OK(AdbcStatementExecuteQuery(&_statement, &_c_stream_holder.stream, &rows_affected, &error), error);
+    RETURN_ADBC_NOT_OK(AdbcStatementExecuteQuery(&_statement, &_c_stream, &rows_affected, &error), error);
     _stream_initialized = true;
 
     // Get schema from the C stream
     struct ArrowSchema c_schema {};
-    if (_c_stream_holder.stream.get_schema(&_c_stream_holder.stream, &c_schema) != 0) {
-        const char* err = _c_stream_holder.stream.get_last_error(&_c_stream_holder.stream);
+    if (_c_stream.get_schema(&_c_stream, &c_schema) != 0) {
+        const char* err = _c_stream.get_last_error(&_c_stream);
         return Status::InternalError(fmt::format("Failed to get schema from ADBC stream: {}", err ? err : "unknown"));
     }
     auto schema_result = arrow::ImportSchema(&c_schema);
@@ -255,9 +265,9 @@ Status ADBCScanner::_get_next_impl(RuntimeState* state, ChunkPtr* chunk, bool* e
         } else {
             // Read directly from the C stream
             struct ArrowArray c_array {};
-            int rc = _c_stream_holder.stream.get_next(&_c_stream_holder.stream, &c_array);
+            int rc = _c_stream.get_next(&_c_stream, &c_array);
             if (rc != 0) {
-                const char* err = _c_stream_holder.stream.get_last_error(&_c_stream_holder.stream);
+                const char* err = _c_stream.get_last_error(&_c_stream);
                 return Status::InternalError(fmt::format("Arrow stream read error: {}", err ? err : "unknown"));
             }
             if (c_array.release == nullptr) {
@@ -367,7 +377,11 @@ void ADBCScanner::close(RuntimeState* state) {
         _parallel_reader.reset();
     }
 
-    // ArrowArrayStream is released automatically by _c_stream_holder destructor (RAII)
+    // Release Arrow C stream
+    if (_c_stream.release) {
+        _c_stream.release(&_c_stream);
+        _c_stream.release = nullptr;
+    }
     _arrow_schema.reset();
     _pending_batch.reset();
 

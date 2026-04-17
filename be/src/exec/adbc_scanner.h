@@ -27,7 +27,6 @@
 #include "column/chunk.h"
 #include "common/status.h"
 #include "connector/adbc_connector.h"
-#include "exec/adbc_arrow_raii.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
@@ -68,8 +67,8 @@ private:
     bool _connection_initialized = false;
     bool _statement_initialized = false;
 
-    // Arrow C stream — RAII-managed
-    ArrowArrayStreamHolder _c_stream_holder;
+    // Arrow C stream (released explicitly in close())
+    ArrowArrayStream _c_stream{};
     std::shared_ptr<arrow::Schema> _arrow_schema;
     bool _stream_initialized = false;
 
