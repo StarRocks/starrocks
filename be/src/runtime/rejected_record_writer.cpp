@@ -14,6 +14,8 @@
 
 #include "runtime/rejected_record_writer.h"
 
+#include <chrono>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 
