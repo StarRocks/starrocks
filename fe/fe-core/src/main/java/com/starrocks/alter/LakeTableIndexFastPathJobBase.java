@@ -454,9 +454,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         }
     }
 
-    /**
-     * Placeholder for future helpers shared across add/drop. Per-column
-     * is_bf_column is no longer a first-class Column attribute; bloom-filter
-     * columns are tracked at the OlapTable level via bfColumns.
-     */
+    // Per-column is_bf_column is no longer a first-class Column attribute;
+    // bloom-filter columns are tracked at the OlapTable level via bfColumns,
+    // so add/drop subclasses do not need a shared helper here today.
 }
