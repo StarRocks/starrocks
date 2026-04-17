@@ -349,7 +349,14 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
 
     HttpClient client;
     RETURN_IF_ERROR(client.init(url.str()));
-    client.set_method(PUT);
+    // Use set_custom_method("PUT") instead of set_method(PUT) which
+    // sets CURLOPT_UPLOAD. CURLOPT_UPLOAD conflicts with set_payload's
+    // CURLOPT_POSTFIELDS -- the former expects a read callback while the
+    // latter provides inline data. set_custom_method uses
+    // CURLOPT_CUSTOMREQUEST which overrides the method string without
+    // changing curl's transfer semantics, so the payload is correctly
+    // sent as the PUT body through the FE 307 redirect to the CN.
+    client.set_custom_method("PUT");
     client.set_content_type("application/json");
     client.set_basic_auth(config::rejected_record_sync_user, config::rejected_record_sync_password);
 
