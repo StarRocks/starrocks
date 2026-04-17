@@ -330,8 +330,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
         // Phase 1: parallel load + rewrite for this batch.
         if (use_parallel_partial_update && batch_end - batch_start > 1) {
-            std::vector<std::map<int, FileInfo>> per_seg_replace(local_segments);
-            std::vector<std::vector<FileMetaPB>> per_seg_orphans(local_segments);
+            uint32_t batch_count = batch_end - batch_start;
+            std::vector<std::map<int, FileInfo>> per_seg_replace(batch_count);
+            std::vector<std::vector<FileMetaPB>> per_seg_orphans(batch_count);
 
             std::mutex status_mutex;
             Status shared_status;
@@ -340,11 +341,12 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
                 auto func = [&, i]() {
+                    uint32_t idx = i - batch_start;
                     auto st = state.load_segment(i, params, base_version, true /*resolve conflict*/,
                                                  false /*no need lock*/);
                     _update_state_cache.update_object_size(state_entry, state.memory_usage());
                     if (st.ok()) {
-                        st = state.rewrite_segment(i, txn_id, params, &per_seg_replace[i], &per_seg_orphans[i]);
+                        st = state.rewrite_segment(i, txn_id, params, &per_seg_replace[idx], &per_seg_orphans[idx]);
                     }
                     state.release_segment_partial_state(i);
                     _update_state_cache.update_object_size(state_entry, state.memory_usage());
@@ -362,9 +364,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             RETURN_IF_ERROR(shared_status);
 
             for (uint32_t i = batch_start; i < batch_end; i++) {
-                replace_segments.merge(per_seg_replace[i]);
-                orphan_files.insert(orphan_files.end(), std::make_move_iterator(per_seg_orphans[i].begin()),
-                                    std::make_move_iterator(per_seg_orphans[i].end()));
+                uint32_t idx = i - batch_start;
+                replace_segments.merge(per_seg_replace[idx]);
+                orphan_files.insert(orphan_files.end(), std::make_move_iterator(per_seg_orphans[idx].begin()),
+                                    std::make_move_iterator(per_seg_orphans[idx].end()));
                 rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), i,
                                                            replace_segments);
             }

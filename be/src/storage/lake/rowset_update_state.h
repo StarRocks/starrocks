@@ -173,17 +173,21 @@ public:
     Status prepare(const RowsetUpdateStateParams& params);
 
     // Load `segment_id`-th segment file's state. Requires prepare() called first.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values.
     Status load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
                         bool need_resolve_conflict, bool need_lock);
 
     // Handle `segment_id`-th segment file's partial update request.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values,
+    // provided each call uses its own replace_segments/orphan_files containers.
     Status rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                            std::map<int, FileInfo>* replace_segments, std::vector<FileMetaPB>* orphan_files);
 
-    // Release `segment_id`-th segment file's state.
+    // Release `segment_id`-th segment file's state (upserts + partial state).
     void release_segment(uint32_t segment_id);
 
     // Release partial update state (write_columns) for a segment, but keep upserts for Phase 2.
+    // Thread-safe for concurrent calls with DIFFERENT segment_id values.
     void release_segment_partial_state(uint32_t segment_id);
 
     // Load `del_id`-th delete file's state.
@@ -255,6 +259,8 @@ private:
     RowsetMetadataUniquePtr _rowset_meta_ptr;
     std::unique_ptr<Rowset> _rowset_ptr;
 
+    // Initialized by prepare(), reused by _do_load_upserts for each segment.
+    Schema _pkey_schema;
     // to be destructed after segment iters
     OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;

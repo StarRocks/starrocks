@@ -320,15 +320,13 @@ void RowsetUpdateState::plan_read_by_rssid(const std::vector<uint64_t>& rowids, 
 Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpdateStateParams& params) {
     CHECK_MEM_LIMIT("RowsetUpdateState::_do_load_upserts");
     TRACE_COUNTER_SCOPE_LATENCY_US("do_load_upserts_us");
-    // prepare() must have initialized _segment_iters already.
+    // prepare() must have initialized _segment_iters and _pkey_schema already.
     DCHECK(!_segment_iters.empty());
     RETURN_ERROR_IF_FALSE(_segment_iters.size() == _rowset_ptr->num_segments());
     ASSIGN_OR_RETURN(auto pk_encoding_type, params.tablet_schema->primary_key_encoding_type_or_error());
     auto& iter = _segment_iters[segment_id];
     SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
-    // Initialize PK iterator with lazy loading if conditions allow (see should_enable_lazy_load for details).
-    // Lazy loading can significantly reduce memory usage for large segments at the cost of deferred I/O.
-    RETURN_IF_ERROR(result->init(iter, pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
+    RETURN_IF_ERROR(result->init(iter, _pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
     _upserts[segment_id] = std::move(result);
     _memory_usage += _upserts[segment_id]->memory_usage();
 
@@ -863,8 +861,8 @@ Status RowsetUpdateState::prepare(const RowsetUpdateStateParams& params) {
         for (size_t i = 0; i < params.tablet_schema->num_key_columns(); i++) {
             pk_columns.push_back((uint32_t)i);
         }
-        Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
-        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(pkey_schema, false, &_stats));
+        _pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
+        ASSIGN_OR_RETURN(_segment_iters, _rowset_ptr->get_each_segment_iterator(_pkey_schema, false, &_stats));
     }
     if (_column_to_expr_value.empty() && params.op_write.has_txn_meta()) {
         for (auto& entry : params.op_write.txn_meta().column_to_expr_value()) {
