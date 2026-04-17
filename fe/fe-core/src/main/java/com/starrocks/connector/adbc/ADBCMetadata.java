@@ -316,21 +316,23 @@ public class ADBCMetadata implements ConnectorMetadata {
     /**
      * List table names, filtering by the correct hierarchy level.
      *
-     * <ul>
-     *   <li>{@code CATALOG model}: pass dbName as catalog filter, null as schema filter</li>
-     *   <li>{@code SCHEMA model}: pass null as catalog filter, dbName as schema filter</li>
-     * </ul>
+     * <p>For CATALOG model: pass dbName as catalog filter (e.g. SQLite "main").
+     * For SCHEMA model: fetch all objects without server-side filtering, then
+     * match schemas client-side. This is necessary because some drivers (e.g.
+     * FlightSQL/sqlflite) have a non-trivial catalog name (e.g. "TPC-H-small")
+     * that we don't know, so passing only schema filter may return nothing.
      */
     private List<String> listTableNamesFromGetObjects(
             AdbcConnection conn, String dbName, HierarchyModel model) throws Exception {
         String catalogFilter = (model == HierarchyModel.CATALOG) ? dbName : null;
-        String schemaFilter = (model == HierarchyModel.SCHEMA) ? dbName : null;
+        // For SCHEMA model, don't filter server-side — filter client-side below
+        String schemaFilter = null;
 
         List<String> tables = new ArrayList<>();
         try (ArrowReader reader = conn.getObjects(
                 AdbcConnection.GetObjectsDepth.TABLES,
                 catalogFilter, schemaFilter, null,
-                new String[] {"table", "view"}, null)) {
+                null, null)) {
             while (reader.loadNextBatch()) {
                 VectorSchemaRoot root = reader.getVectorSchemaRoot();
                 ListVector dbSchemasVec = (ListVector) root.getVector("catalog_db_schemas");
@@ -351,6 +353,16 @@ public class ADBCMetadata implements ConnectorMetadata {
                         }
                         @SuppressWarnings("unchecked")
                         Map<String, ?> schemaMap = (Map<String, ?>) schemaObj;
+
+                        // Client-side schema filter for SCHEMA model
+                        if (model == HierarchyModel.SCHEMA) {
+                            Object schemaName = schemaMap.get("db_schema_name");
+                            String sName = schemaName != null ? schemaName.toString() : "";
+                            if (!dbName.equals(sName)) {
+                                continue;
+                            }
+                        }
+
                         Object tablesObj = schemaMap.get("db_schema_tables");
                         if (!(tablesObj instanceof List)) {
                             continue;

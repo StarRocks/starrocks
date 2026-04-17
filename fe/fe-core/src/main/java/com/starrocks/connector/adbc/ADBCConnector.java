@@ -31,6 +31,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -67,10 +70,15 @@ public class ADBCConnector implements Connector {
             }
         }
 
-        // Validate properties (D-12 order)
+        // Validate properties
         validateProperties(properties);
 
-        // Eager driver loading (D-03, VAL-01)
+        // Resolve file:// values in adbc.* properties — read file content once at
+        // catalog creation so both FE (Java ADBC) and BE (C ADBC via thrift) get
+        // the actual content, not a file path.
+        resolveFileProperties(properties);
+
+        // Eager driver loading
         this.allocator = new RootAllocator();
         try {
             AdbcDriver driver = loadOrGetDriver(properties, allocator);
@@ -163,7 +171,7 @@ public class ADBCConnector implements Connector {
             params.put("password", password);
         }
 
-        // adbc.* pass-through -- forwarded verbatim (PROP-05)
+        // adbc.* pass-through — file:// values already resolved by resolveFileProperties()
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith("adbc.")) {
                 params.put(entry.getKey(), entry.getValue());
@@ -209,6 +217,27 @@ public class ADBCConnector implements Connector {
                 properties.put("_sr_identifier_quote", quoteChar);
                 LOG.info("ADBC driver '{}': identifier quote = '{}'",
                         driverIdentifier, quoteChar);
+            }
+        }
+    }
+
+    /**
+     * Resolve {@code file://} prefixed values in {@code adbc.*} properties.
+     * Reads the file content and replaces the property value in-place so that
+     * both FE (Java ADBC driver) and BE (C ADBC driver via thrift) receive
+     * the actual content, not a file path.
+     */
+    private static void resolveFileProperties(Map<String, String> properties) {
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith("adbc.") && entry.getValue().startsWith("file://")) {
+                String filePath = entry.getValue().substring(7);
+                try {
+                    entry.setValue(Files.readString(Path.of(filePath)));
+                } catch (IOException e) {
+                    throw new StarRocksConnectorException(
+                            "ADBC catalog: cannot read file for property '" + entry.getKey()
+                                    + "': " + filePath + ". Detail: " + e.getMessage(), e);
+                }
             }
         }
     }
