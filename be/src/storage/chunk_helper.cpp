@@ -15,6 +15,7 @@
 #include "storage/chunk_helper.h"
 
 #include <numeric>
+#include <type_traits>
 #include <utility>
 
 #include "column/adaptive_nullable_column.h"
@@ -274,15 +275,19 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     new_offset.resize(num_rows + 1);
     new_bytes.assign(num_rows * len, 0); // padding 0
 
-    uint32_t from = 0;
-    for (size_t j = 0; j < num_rows; ++j) {
-        uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-        strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-        from += len; // no copy data will be 0
-    }
+    size_t from = 0;
+    offset.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offset_data = offsets_buf.data();
+        for (size_t j = 0; j < num_rows; ++j) {
+            size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+            strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
+            from += len; // no copy data will be 0
+        }
+    });
 
+    new_offset.set(0, 0);
     for (size_t j = 1; j <= num_rows; ++j) {
-        new_offset[j] = static_cast<uint32_t>(len * j);
+        new_offset.set(j, static_cast<uint64_t>(len) * j);
     }
 
     if (field.is_nullable()) {
@@ -732,7 +737,6 @@ public:
 #endif
 
         // assign offsets
-        output_offsets.resize(_size + 1);
         size_t num_bytes = 0;
         size_t from = _from;
         for (size_t i = 0; i < _size; i++) {
@@ -744,9 +748,21 @@ public:
             const Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
 
-            output_offsets[i + 1] = output_offsets[i] + str_size;
             num_bytes += str_size;
         }
+        output_offsets.resize_uninitialized(_size + 1, num_bytes);
+        output_offsets.visit_storage([&](auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            offsets_buf[0] = 0;
+            uint64_t offset = 0;
+            for (size_t i = 0; i < _size; i++) {
+                size_t idx = _indexes[from + i];
+                auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
+                const Offsets& src_offsets = *input_offsets[segment_id];
+                offset += src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+                offsets_buf[i + 1] = static_cast<OffsetValue>(offset);
+            }
+        });
         output_bytes.resize(num_bytes);
 
         // copy bytes

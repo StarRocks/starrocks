@@ -150,7 +150,7 @@ public:
             bytes.resize(new_size);
             hll.serialize(bytes.data() + old_size);
 
-            result->get_offset()[i + 1] = new_size;
+            result->get_offset().set(i + 1, new_size);
             old_size = new_size;
         }
     }

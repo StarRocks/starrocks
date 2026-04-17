@@ -16,6 +16,7 @@
 
 #include <map>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
 #include "base/bit/rle_encoding.h"
@@ -549,11 +550,20 @@ private:
             auto& offsets = binary_column->get_offset();
             size_t prev_offsets = offsets.size();
             size_t cnt = 0;
-            raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
+            size_t final_offset = offset;
             for (size_t i = 0; i < count; ++i) {
-                offset += is_nulls[i] ? 0 : lengths[cnt++];
-                offsets[prev_offsets + i] = offset;
+                final_offset += is_nulls[i] ? 0 : lengths[cnt++];
             }
+            offsets.resize_uninitialized(count + prev_offsets, final_offset);
+            cnt = 0;
+            offsets.visit_storage([&](auto& offsets_buf) {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* dst_offsets = offsets_buf.data() + prev_offsets;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : lengths[cnt++];
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                }
+            });
 
             if (read_count == 0) {
                 return Status::OK();

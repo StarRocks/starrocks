@@ -523,7 +523,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
 
     auto& vo = values->get_offset();
     // We can resize directly
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
+    vo.resize_uninitialized(vo.size() + size, vb.size() + len);
 
     size_t write_pos = vb.size();
     if (cvb->hasNulls) {
@@ -535,10 +535,10 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
                     strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], str_size);
                     write_pos += str_size;
                     // Need plus 1 for offset
-                    vo[i + 1] = write_pos;
+                    vo.set(i + 1, write_pos);
                 } else {
                     // Need plus 1 for offset
-                    vo[i + 1] = write_pos;
+                    vo.set(i + 1, write_pos);
                 }
             }
         } else {
@@ -547,10 +547,10 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
                     strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
                     write_pos += data->length[cvb_pos];
                     // Need plus 1 for offset
-                    vo[i + 1] = write_pos;
+                    vo.set(i + 1, write_pos);
                 } else {
                     // Need plus 1 for offset
-                    vo[i + 1] = write_pos;
+                    vo.set(i + 1, write_pos);
                 }
             }
         }
@@ -562,14 +562,14 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
                 strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], str_size);
                 write_pos += str_size;
                 // Need plus 1 for offset
-                vo[i + 1] = write_pos;
+                vo.set(i + 1, write_pos);
             }
         } else {
             for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
                 strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
                 write_pos += data->length[cvb_pos];
                 // Need plus 1 for offset
-                vo[i + 1] = write_pos;
+                vo.set(i + 1, write_pos);
             }
         }
     }
@@ -669,7 +669,7 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
 
     // vb is using RawVectorPad16, resize will not initialize vector
     vb.resize(vb.size() + len);
-    raw::stl_vector_resize_uninitialized(&vo, vo.size() + size);
+    vo.resize_uninitialized(vo.size() + size, vb.size() + len);
 
     if (cvb->hasNulls) {
         for (size_t i = col_start, cvb_pos = from; i < col_start + size; ++i, ++cvb_pos) {
@@ -677,10 +677,10 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
                 strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
                 write_pos += data->length[cvb_pos];
                 // Plus 1 for offset
-                vo[i + 1] = write_pos;
+                vo.set(i + 1, write_pos);
             } else {
                 // Plus 1 for offset
-                vo[i + 1] = write_pos;
+                vo.set(i + 1, write_pos);
             }
         }
     } else {
@@ -688,7 +688,7 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
             strings::memcpy_inlined(&vb[write_pos], data->data[cvb_pos], data->length[cvb_pos]);
             write_pos += data->length[cvb_pos];
             // Plus 1 for offset
-            vo[i + 1] = write_pos;
+            vo.set(i + 1, write_pos);
         }
     }
     return Status::OK();

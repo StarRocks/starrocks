@@ -47,6 +47,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <type_traits>
 
 #include "base/coding.h"
 #include "base/string/faststring.h"
@@ -259,30 +260,35 @@ public:
     // Get offsets for zero-copy construction
     void get_offsets_for_zero_copy(BinaryColumn::Offsets& offsets) const {
         offsets.clear();
-        offsets.resize(_num_elems + 1);
-        offsets[0] = 0; // Start from 0
         if (_num_elems == 0) {
+            offsets.resize(1, 0);
             return;
         }
 
         uint32_t base_offset = offset_uncheck(0); // Get the base offset
-        for (uint32_t i = 0; i < _num_elems - 1; ++i) {
+        const uint32_t total_bytes = offset(_num_elems) - base_offset;
+        offsets.resize_uninitialized(_num_elems + 1, total_bytes);
+        offsets.visit_storage([&](auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            offsets_buf[0] = 0; // Start from 0
+            for (uint32_t i = 0; i < _num_elems - 1; ++i) {
 #if __BYTE_ORDER == __LITTLE_ENDIAN
-            auto offset = _offsets_ptr[i + 1];
+                auto offset = _offsets_ptr[i + 1];
 #else
-            // direct call offset_uncheck() will break auto-vectorized
-            // maybe we can remove this condition compile after we upgrade the toolchain
-            auto offset = offset_uncheck(i + 1);
+                // direct call offset_uncheck() will break auto-vectorized
+                // maybe we can remove this condition compile after we upgrade the toolchain
+                auto offset = offset_uncheck(i + 1);
 #endif
-            // Convert absolute offset to relative offset from base
-            uint32_t current_offset = offset - base_offset;
-            offsets[i + 1] = current_offset;
-        }
+                // Convert absolute offset to relative offset from base
+                uint32_t current_offset = offset - base_offset;
+                offsets_buf[i + 1] = static_cast<OffsetValue>(current_offset);
+            }
 
-        for (uint32_t i = _num_elems - 1; i < _num_elems; i++) {
-            uint32_t current_offset = offset(i + 1) - base_offset;
-            offsets[i + 1] = current_offset;
-        }
+            for (uint32_t i = _num_elems - 1; i < _num_elems; i++) {
+                uint32_t current_offset = offset(i + 1) - base_offset;
+                offsets_buf[i + 1] = static_cast<OffsetValue>(current_offset);
+            }
+        });
     }
 
     // Dictionary-page predicate cache (used by BinaryDictPageDecoder):
