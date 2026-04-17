@@ -68,6 +68,7 @@ public:
     int index = -1; // flat paths array index, only use for leaf, to find column
     LogicalType type = LogicalType::TYPE_JSON;
     bool remain = false;
+    bool force = false; // true: must flatten regardless of sparsity (column_paths)
     OP op = OP_INCLUDE; // merge flat json use, to mark the path is need
     FlatJsonHashMap<std::string_view, std::unique_ptr<JsonFlatPath>> children;
 
@@ -161,6 +162,10 @@ private:
     // clean sparsity path, to save memory
     void _clean_sparsity_path(const std::string_view& name, JsonFlatPath* root, size_t check_hits_min);
 
+    // Pre-mark all nodes along `path` (dot-separated) with force=true so that
+    // _clean_sparsity_path and _dfs_finalize never discard them.
+    void _mark_force_path(const std::string_view& path, JsonFlatPath* node);
+
 private:
     bool _has_remain = false;
     std::vector<std::string> _paths;
@@ -169,6 +174,10 @@ private:
     double _min_json_sparsity_factory = 0;
     double _max_json_null_factor = 0;
     int _max_column = 0;
+
+    // column_paths: dot-separated paths that bypass the sparsity check.
+    std::unordered_set<std::string> _column_paths;
+    int _column_paths_max = FlatJsonConfig::DEFAULT_COLUMN_PATHS_MAX;
 
     size_t _total_rows;
     std::shared_ptr<JsonFlatPath> _path_root;

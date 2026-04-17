@@ -90,6 +90,14 @@ struct TFlatJsonConfig {
     2: optional double flat_json_null_factor;
     3: optional double flat_json_sparsity_factor;
     4: optional i64 flat_json_column_max;
+    // Paths listed here are always flattened into typed columns regardless of
+    // sparsity.  Use the dot-separated internal format (e.g. "page_stms_1",
+    // "a.b.c") or the JSON-path form with a leading "$." prefix which is
+    // stripped automatically (e.g. "$.page_stms_1").
+    5: optional list<string> flat_json_column_paths;
+    // Maximum number of force-path columns.  Counted separately from
+    // flat_json_column_max so that forced paths do not consume the normal quota.
+    6: optional i64 flat_json_column_paths_max;
 }
 
 // If you want to add types,

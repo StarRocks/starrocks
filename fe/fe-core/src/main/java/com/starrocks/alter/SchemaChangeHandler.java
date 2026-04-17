@@ -2550,10 +2550,14 @@ public class SchemaChangeHandler extends AlterHandler {
         // Check if other flat JSON properties are set when flat_json.enable is false
         if (!flatJsonEnabled && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_ADD) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_REMOVE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX))) {
             throw new RuntimeException("flat JSON configuration must be set after enabling flat JSON.");
         }
-        
+
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
             double flatJsonNullFactor = PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
             if (flatJsonNullFactor != newFlatJsonConfig.getFlatJsonNullFactor()) {
@@ -2572,6 +2576,50 @@ public class SchemaChangeHandler extends AlterHandler {
             int flatJsonColumnMax = PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
             if (flatJsonColumnMax != newFlatJsonConfig.getFlatJsonColumnMax()) {
                 newFlatJsonConfig.setFlatJsonColumnMax(flatJsonColumnMax);
+                hasChanged = true;
+            }
+        }
+        // Full replace of column_paths list
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS)) {
+            java.util.List<String> columnPaths = PropertyAnalyzer.analyzeFlatJsonColumnPaths(properties);
+            if (!columnPaths.equals(newFlatJsonConfig.getFlatJsonColumnPaths())) {
+                newFlatJsonConfig.setFlatJsonColumnPaths(columnPaths);
+                hasChanged = true;
+            }
+        }
+        // Incremental add: append paths not already in the list
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_ADD)) {
+            java.util.List<String> toAdd = PropertyAnalyzer.analyzeFlatJsonColumnPaths(
+                    java.util.Collections.singletonMap(
+                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS,
+                            properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_ADD)));
+            java.util.List<String> current = new java.util.ArrayList<>(newFlatJsonConfig.getFlatJsonColumnPaths());
+            for (String path : toAdd) {
+                if (!current.contains(path)) {
+                    current.add(path);
+                    hasChanged = true;
+                }
+            }
+            if (hasChanged) {
+                newFlatJsonConfig.setFlatJsonColumnPaths(current);
+            }
+        }
+        // Incremental remove: delete matching paths from the list
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_REMOVE)) {
+            java.util.List<String> toRemove = PropertyAnalyzer.analyzeFlatJsonColumnPaths(
+                    java.util.Collections.singletonMap(
+                            PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS,
+                            properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_REMOVE)));
+            java.util.List<String> current = new java.util.ArrayList<>(newFlatJsonConfig.getFlatJsonColumnPaths());
+            if (current.removeAll(toRemove)) {
+                newFlatJsonConfig.setFlatJsonColumnPaths(current);
+                hasChanged = true;
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX)) {
+            int max = PropertyAnalyzer.analyzeFlatJsonColumnPathsMax(properties);
+            if (max >= 0 && max != newFlatJsonConfig.getFlatJsonColumnPathsMax()) {
+                newFlatJsonConfig.setFlatJsonColumnPathsMax(max);
                 hasChanged = true;
             }
         }

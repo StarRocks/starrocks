@@ -558,9 +558,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX)) {
             boolean enableFlatJson = PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
-            
+
             // In gsonPostProcess, we should be tolerant of existing properties even when flat_json.enable is false.
             // The validation should be done at ALTER TABLE time, not during deserialization/copy.
             // If flat_json.enable is false, ignore other flat JSON properties and use default values.
@@ -573,6 +575,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
                         PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
                 flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
                         flatJsonSparsityFactory, flatJsonColumnMax);
+                List<String> columnPaths = PropertyAnalyzer.analyzeFlatJsonColumnPaths(properties);
+                if (!columnPaths.isEmpty()) {
+                    flatJsonConfig.setFlatJsonColumnPaths(columnPaths);
+                }
+                int columnPathsMax = PropertyAnalyzer.analyzeFlatJsonColumnPathsMax(properties);
+                if (columnPathsMax >= 0) {
+                    flatJsonConfig.setFlatJsonColumnPathsMax(columnPathsMax);
+                }
             } catch (AnalysisException e) {
                 throw new RuntimeException("Failed to analyze flat JSON properties: " + e.getMessage(), e);
             }

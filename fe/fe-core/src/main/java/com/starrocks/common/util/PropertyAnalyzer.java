@@ -177,6 +177,17 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
 
+    // Comma-separated list of JSON paths that must always be flattened,
+    // regardless of sparsity (e.g. "page_stms_1,area_id" or "$.page_stms_1,$.area_id").
+    public static final String PROPERTIES_FLAT_JSON_COLUMN_PATHS = "flat_json.column_paths";
+
+    // Upper bound on the number of force-path columns (independent of flat_json.column.max).
+    public static final String PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX = "flat_json.column_paths.max";
+
+    // Incremental add/remove operations for column_paths (ALTER TABLE SET only).
+    public static final String PROPERTIES_FLAT_JSON_COLUMN_PATHS_ADD = "flat_json.column_paths.add";
+    public static final String PROPERTIES_FLAT_JSON_COLUMN_PATHS_REMOVE = "flat_json.column_paths.remove";
+
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
 
@@ -611,6 +622,57 @@ public class PropertyAnalyzer {
             flatJsonEnabled = Boolean.parseBoolean(properties.get(PROPERTIES_FLAT_JSON_ENABLE));
         }
         return flatJsonEnabled;
+    }
+
+    /**
+     * Parse and validate the {@code flat_json.column_paths} table property.
+     *
+     * <p>Each entry is trimmed and a leading {@code $.} prefix is stripped so that
+     * users may supply either {@code "page_stms_1"} or {@code "$.page_stms_1"}.
+     * An empty string after trimming is silently ignored.
+     *
+     * @return an immutable, order-preserving list of normalised path strings
+     */
+    public static java.util.List<String> analyzeFlatJsonColumnPaths(Map<String, String> properties) {
+        if (properties == null || !properties.containsKey(PROPERTIES_FLAT_JSON_COLUMN_PATHS)) {
+            return java.util.Collections.emptyList();
+        }
+        String raw = properties.get(PROPERTIES_FLAT_JSON_COLUMN_PATHS).trim();
+        if (raw.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        java.util.List<String> result = new java.util.ArrayList<>();
+        for (String part : raw.split(",")) {
+            String path = part.trim();
+            if (path.startsWith("$.")) {
+                path = path.substring(2);
+            }
+            if (!path.isEmpty()) {
+                result.add(path);
+            }
+        }
+        return java.util.Collections.unmodifiableList(result);
+    }
+
+    /**
+     * Parse and validate the {@code flat_json.column_paths.max} table property.
+     *
+     * @return the configured maximum, or {@code -1} if the property is absent
+     */
+    public static int analyzeFlatJsonColumnPathsMax(Map<String, String> properties) {
+        if (properties == null || !properties.containsKey(PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX)) {
+            return -1;
+        }
+        int max;
+        try {
+            max = Integer.parseInt(properties.get(PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX));
+        } catch (NumberFormatException e) {
+            throw new SemanticException("flat_json.column_paths.max: " + e.getMessage());
+        }
+        if (max < 0) {
+            throw new SemanticException("Illegal flat_json.column_paths.max: " + max);
+        }
+        return max;
     }
 
     public static boolean analyzeEnableLoadProfile(Map<String, String> properties) {

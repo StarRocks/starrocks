@@ -285,6 +285,11 @@ message FlatJsonConfigPB {
     optional double flat_json_null_factor = 2;
     optional double flat_json_sparsity_factor = 3;
     optional int64 flat_json_max_column_max = 4;
+    // Paths that must be flattened regardless of sparsity (dot-separated,
+    // no leading "$.").  Counted against flat_json_column_paths_max, not
+    // flat_json_max_column_max.
+    repeated string flat_json_column_paths = 5;
+    optional int64 flat_json_column_paths_max = 6;
 }
 
 message TabletMetaPB {

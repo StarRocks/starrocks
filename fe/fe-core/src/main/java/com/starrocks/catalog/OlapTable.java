@@ -3154,6 +3154,19 @@ public class OlapTable extends Table {
                 if (!Strings.isNullOrEmpty(flatJsonColumnMax)) {
                     properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, flatJsonColumnMax);
                 }
+
+                // flat json force paths
+                String flatJsonColumnPaths = tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS);
+                if (!Strings.isNullOrEmpty(flatJsonColumnPaths)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS, flatJsonColumnPaths);
+                }
+
+                // flat json force paths max
+                String flatJsonColumnPathsMax =
+                        tableProperties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX);
+                if (!Strings.isNullOrEmpty(flatJsonColumnPathsMax)) {
+                    properties.put(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX, flatJsonColumnPathsMax);
+                }
             }
         }
 

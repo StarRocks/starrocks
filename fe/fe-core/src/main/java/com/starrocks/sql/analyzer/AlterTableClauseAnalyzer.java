@@ -451,6 +451,35 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                                     " haven't been enabled");
                 }
             }
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_ADD) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_REMOVE) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX)) {
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                if (olapTable.getFlatJsonConfig() == null || !olapTable.getFlatJsonConfig().getFlatJsonEnable()) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE + " haven't been enabled");
+                }
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS)) {
+                    PropertyAnalyzer.analyzeFlatJsonColumnPaths(properties);
+                }
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_ADD)) {
+                    PropertyAnalyzer.analyzeFlatJsonColumnPaths(
+                            java.util.Collections.singletonMap(
+                                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS,
+                                    properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_ADD)));
+                }
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_REMOVE)) {
+                    PropertyAnalyzer.analyzeFlatJsonColumnPaths(
+                            java.util.Collections.singletonMap(
+                                    PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS,
+                                    properties.get(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_REMOVE)));
+                }
+                if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX)) {
+                    PropertyAnalyzer.analyzeFlatJsonColumnPathsMax(properties);
+                }
+            }
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("default") &&
                     !properties.get(PropertyAnalyzer.PROPERTIES_COMPACTION_STRATEGY).equalsIgnoreCase("real_time")) {

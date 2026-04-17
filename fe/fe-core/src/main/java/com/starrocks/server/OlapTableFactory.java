@@ -915,7 +915,9 @@ public class OlapTableFactory implements AbstractTableFactory {
             // Check if other flat JSON properties are set when flat_json.enable is false
             if (!enableFlatJson && (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                     properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX))) {
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS) ||
+                    properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX))) {
                 throw new DdlException("flat JSON configuration must be set after enabling flat JSON.");
             }
 
@@ -925,9 +927,19 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR, Config.flat_json_sparsity_factory);
             int flatJsonColumnMax = PropertyAnalyzer.analyzeIntProp(properties,
                     PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX, Config.flat_json_column_max);
+            java.util.List<String> columnPaths = PropertyAnalyzer.analyzeFlatJsonColumnPaths(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS);
+            int columnPathsMax = PropertyAnalyzer.analyzeFlatJsonColumnPathsMax(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX);
 
             FlatJsonConfig flatJsonConfig = new FlatJsonConfig(enableFlatJson, flatJsonNullFactor,
                     flatJsonSparsityFactory, flatJsonColumnMax);
+            if (!columnPaths.isEmpty()) {
+                flatJsonConfig.setFlatJsonColumnPaths(columnPaths);
+            }
+            if (columnPathsMax >= 0) {
+                flatJsonConfig.setFlatJsonColumnPathsMax(columnPathsMax);
+            }
 
             table.setFlatJsonConfig(flatJsonConfig);
             LOG.info("create table {} set flat json config: {}", tableName, flatJsonConfig.toString());
@@ -940,6 +952,8 @@ public class OlapTableFactory implements AbstractTableFactory {
         return properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR) ||
                 properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR) ||
-                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX);
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS) ||
+                properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_PATHS_MAX);
     }
 }

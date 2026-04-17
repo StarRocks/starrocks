@@ -396,6 +396,8 @@ void JsonPathDeriver::init_flat_json_config(const FlatJsonConfig* flat_json_conf
         _max_json_null_factor = flat_json_config->get_flat_json_null_factor();
         _min_json_sparsity_factory = flat_json_config->get_flat_json_sparsity_factor();
         _max_column = flat_json_config->get_flat_json_max_column_max();
+        _column_paths = flat_json_config->get_column_paths();
+        _column_paths_max = flat_json_config->get_column_paths_max();
     } else {
         _max_json_null_factor = config::json_flat_null_factor;
         _min_json_sparsity_factory = config::json_flat_sparsity_factor;
@@ -420,6 +422,10 @@ void JsonPathDeriver::derived(const std::vector<const Column*>& json_datas) {
     _total_rows = res.value();
 
     _path_root = std::make_shared<JsonFlatPath>();
+    // Pre-mark force paths so _clean_sparsity_path never prunes them.
+    for (const auto& fp : _column_paths) {
+        _mark_force_path(fp, _path_root.get());
+    }
     // init path by flat JSON
     _derived_on_flat_json(json_datas);
 
@@ -565,6 +571,21 @@ void JsonPathDeriver::_derived(const Column* col, size_t mark_row) {
     }
 }
 
+// Walk the tree along `path` (dot-separated), creating nodes as needed, and
+// mark every node on the path with force=true so they survive early pruning.
+void JsonPathDeriver::_mark_force_path(const std::string_view& path, JsonFlatPath* node) {
+    node->force = true;
+    if (path.empty()) {
+        return;
+    }
+    auto [key, next] = JsonFlatPath::split_path(path);
+    auto [iter, inserted] = node->children.try_emplace(key);
+    if (inserted) {
+        iter->second = std::make_unique<JsonFlatPath>();
+    }
+    _mark_force_path(next, iter->second.get());
+}
+
 void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFlatPath* node, size_t check_hits_min) {
     for (auto& [key, child] : node->children) {
         _clean_sparsity_path(key, child.get(), check_hits_min);
@@ -572,7 +593,8 @@ void JsonPathDeriver::_clean_sparsity_path(const std::string_view& name, JsonFla
     auto iter = node->children.begin();
     while (iter != node->children.end()) {
         auto child = iter->second.get();
-        if (child->hits < check_hits_min) {
+        // Never prune a node that belongs to a force path.
+        if (child->hits < check_hits_min && !child->force) {
             if (_generate_filter) {
                 _remain_keys.insert(iter->first);
             }
@@ -685,7 +707,17 @@ uint32_t JsonPathDeriver::_dfs_finalize(JsonFlatPath* node, const std::string& a
 
         bool is_base_type = node->base_type_count >= node->hits - (node->hits * config::json_flat_complex_type_factor);
         bool type_check = config::enable_json_flat_complex_type || is_base_type;
-        if (type_check && node->multi_times <= 0 && node->hits >= _total_rows * _min_json_sparsity_factory) {
+
+        // Force paths bypass the sparsity threshold entirely.
+        // We still skip if multi_times > 0 (ambiguous: same key appears twice in
+        // one object) or hits == 0 (path never seen in any row).
+        if (node->force && node->hits > 0 && node->multi_times <= 0) {
+            hit_leaf->emplace_back(node, absolute_path);
+            node->type = flat_json::JSON_BITS_TO_LOGICAL_TYPE.at(node->json_type);
+            node->remain = false;
+            return 1;
+        } else if (!node->force && type_check && node->multi_times <= 0 &&
+                   node->hits >= _total_rows * _min_json_sparsity_factory) {
             hit_leaf->emplace_back(node, absolute_path);
             node->type = flat_json::JSON_BITS_TO_LOGICAL_TYPE.at(node->json_type);
             node->remain = false;
@@ -726,21 +758,51 @@ void JsonPathDeriver::_finalize() {
     std::vector<std::pair<JsonFlatPath*, std::string>> hit_leaf;
     _dfs_finalize(_path_root.get(), "", &hit_leaf);
 
-    // sort by name, just for stable order
-    std::sort(hit_leaf.begin(), hit_leaf.end(),
-              [&](const auto& a, const auto& b) { return a.first->hits > b.first->hits; });
-    size_t limit = _max_column > 0 ? _max_column : std::numeric_limits<size_t>::max();
-    for (size_t i = limit; i < hit_leaf.size(); i++) {
-        if (!hit_leaf[i].first->remain && hit_leaf[i].first->hits >= _total_rows) {
+    // Separate forced leaves from normal leaves so each has its own quota.
+    std::vector<std::pair<JsonFlatPath*, std::string>> forced_leaves;
+    std::vector<std::pair<JsonFlatPath*, std::string>> normal_leaves;
+    for (auto& item : hit_leaf) {
+        if (item.first->force) {
+            forced_leaves.push_back(std::move(item));
+        } else {
+            normal_leaves.push_back(std::move(item));
+        }
+    }
+
+    // Apply _column_paths_max quota to force leaves (sort by hits desc for determinism).
+    std::sort(forced_leaves.begin(), forced_leaves.end(),
+              [](const auto& a, const auto& b) { return a.first->hits > b.first->hits; });
+    size_t force_limit = (_column_paths_max > 0)
+                                 ? static_cast<size_t>(_column_paths_max)
+                                 : std::numeric_limits<size_t>::max();
+    for (size_t i = force_limit; i < forced_leaves.size(); i++) {
+        forced_leaves[i].first->remain = true;
+        _has_remain = true;
+    }
+    if (forced_leaves.size() > force_limit) {
+        forced_leaves.resize(force_limit);
+    }
+
+    // Apply _max_column quota to normal leaves (existing behaviour).
+    std::sort(normal_leaves.begin(), normal_leaves.end(),
+              [](const auto& a, const auto& b) { return a.first->hits > b.first->hits; });
+    size_t limit = _max_column > 0 ? static_cast<size_t>(_max_column) : std::numeric_limits<size_t>::max();
+    for (size_t i = limit; i < normal_leaves.size(); i++) {
+        if (!normal_leaves[i].first->remain && normal_leaves[i].first->hits >= _total_rows) {
             limit++;
             continue;
         }
-        hit_leaf[i].first->remain = true;
+        normal_leaves[i].first->remain = true;
     }
-    if (hit_leaf.size() > limit) {
+    if (normal_leaves.size() > limit) {
         _has_remain |= true;
-        hit_leaf.resize(limit);
+        normal_leaves.resize(limit);
     }
+
+    // Merge back and sort by path name for stable column order.
+    hit_leaf.clear();
+    hit_leaf.insert(hit_leaf.end(), forced_leaves.begin(), forced_leaves.end());
+    hit_leaf.insert(hit_leaf.end(), normal_leaves.begin(), normal_leaves.end());
     std::sort(hit_leaf.begin(), hit_leaf.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
     for (auto& [node, path] : hit_leaf) {
         node->index = _paths.size();
