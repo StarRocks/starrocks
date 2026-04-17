@@ -17,15 +17,6 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
-=======
-#include "base/brpc/reusable_closure.h"
-#include "base/failpoint/fail_point.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/id_generator.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
->>>>>>> 6f3d52e399 ([BugFix] Fix use-after-free in LoadChannel::get_load_replica_status caused by temporary shared_ptr destruction (#71843))
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
@@ -41,6 +32,7 @@
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/failpoint/fail_point.h"
 #include "util/reusable_closure.h"
 #include "util/runtime_profile.h"
