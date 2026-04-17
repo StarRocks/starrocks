@@ -82,11 +82,11 @@ Status ADBCDataSource::open(RuntimeState* state) {
     auto* tuple_desc = state->desc_tbl().get_tuple_descriptor(scan_node.tuple_id);
     _tuple_desc = tuple_desc;
 
-    // Read connection params from ADBCTableDescriptor (per D-04, D-05)
+    // Read connection params from ADBCTableDescriptor
     const auto* adbc_table = down_cast<const ADBCTableDescriptor*>(tuple_desc->table_desc());
     DCHECK(adbc_table != nullptr);
 
-    // Build ADBCScanContext from table descriptor + scan node (per D-01)
+    // Build ADBCScanContext from table descriptor + scan node
     ADBCScanContext ctx;
     ctx.driver_url = adbc_table->adbc_driver_url();
     ctx.entrypoint = adbc_table->adbc_entrypoint();
@@ -113,7 +113,7 @@ Status ADBCDataSource::open(RuntimeState* state) {
     LOG(INFO) << "ADBC connector: driver_url=" << ctx.driver_url << " entrypoint=" << ctx.entrypoint
               << " options_count=" << ctx.adbc_options.size() << " sql=" << ctx.sql;
 
-    // Create scanner with context struct (per D-01)
+    // Create scanner with context struct
     _scanner = std::make_unique<ADBCScanner>(ctx, tuple_desc);
 
     RETURN_IF_ERROR(_scanner->open(state));

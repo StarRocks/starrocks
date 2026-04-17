@@ -37,7 +37,7 @@ class TupleDescriptor;
 
 class ADBCScanner {
 public:
-    // Takes context by const ref (per D-01). Scanner copies the context.
+    // Takes context by const ref. Scanner copies the context.
     ADBCScanner(const ADBCScanContext& ctx, const TupleDescriptor* tuple_desc);
     ~ADBCScanner();
 
@@ -68,7 +68,7 @@ private:
     bool _connection_initialized = false;
     bool _statement_initialized = false;
 
-    // Arrow C stream — RAII-managed (per D-08, BE-08)
+    // Arrow C stream — RAII-managed
     ArrowArrayStreamHolder _c_stream_holder;
     std::shared_ptr<arrow::Schema> _arrow_schema;
     bool _stream_initialized = false;

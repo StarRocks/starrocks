@@ -28,7 +28,7 @@ namespace starrocks {
 
 // Process-global singleton that loads ADBC driver .so files exactly once
 // per resolved absolute path. Never calls dlclose — driver handles stay
-// resident until process exit (per BE-05, BE-06).
+// resident until process exit.
 class ADBCDriverRegistry {
 public:
     static ADBCDriverRegistry& instance();

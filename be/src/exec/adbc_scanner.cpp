@@ -89,8 +89,8 @@ Status ADBCScanner::open(RuntimeState* state) {
 Status ADBCScanner::_init_adbc() {
     AdbcError error = ADBC_ERROR_INIT;
 
-    // 1. Ensure driver is loaded via the registry (enforces BE-05 load-once,
-    //    BE-06 never-dlclose). The registry calls AdbcLoadDriver() which
+    // 1. Ensure driver is loaded via the registry (load-once,
+    //    never-dlclose). The registry calls AdbcLoadDriver() which
     //    performs dlopen(RTLD_NOW | RTLD_LOCAL) on first call, and returns
     //    the cached AdbcDriver on subsequent calls.
     auto driver_result = ADBCDriverRegistry::instance().get_or_load(_ctx.driver_url, _ctx.entrypoint);
@@ -123,7 +123,7 @@ Status ADBCScanner::_init_adbc() {
         RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "password", _ctx.password.c_str(), &error), error);
     }
 
-    // 6. Forward ALL adbc_options before Init (per BE-02)
+    // 6. Forward ALL adbc_options before Init
     for (const auto& [key, value] : _ctx.adbc_options) {
         // Skip uri/username/password — already set above
         if (key == "uri" || key == "username" || key == "password") continue;
@@ -136,7 +136,7 @@ Status ADBCScanner::_init_adbc() {
     RETURN_ADBC_NOT_OK(AdbcDatabaseInit(&_database, &error), error);
     _database_initialized = true;
 
-    // 8. Connection (per BE-03: per-fragment, never cached)
+    // 8. Connection (per-fragment, never cached)
     error = ADBC_ERROR_INIT;
     RETURN_ADBC_NOT_OK(AdbcConnectionNew(&_connection, &error), error);
     error = ADBC_ERROR_INIT;
