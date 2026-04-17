@@ -108,10 +108,12 @@ enum TDebugAction {
 }
 
 struct TKeyRange {
-  1: required i64 begin_key
-  2: required i64 end_key
+  1: optional i64 begin_key
+  2: optional i64 end_key
   3: required Types.TPrimitiveType column_type
   4: required string column_name
+  5: optional list<Exprs.TExpr> list_values
+  6: optional bool has_null
 }
 
 // The information contained in subclasses of ScanNode captured in two separate
@@ -650,6 +652,13 @@ struct TOlapScanNode {
 
   // This field is only used for flat json to provide a uniq id
   55: optional i32 next_uniq_id
+<<<<<<< HEAD
+=======
+
+  56: optional bool enable_global_late_materialization
+
+  57: optional list<Exprs.TExpr> partition_conjuncts
+>>>>>>> c02accaa13 ([Enhancement] support prune partitions in be  (#68141))
 }
 
 struct TJDBCScanNode {
