@@ -14,6 +14,7 @@
 
 package com.starrocks.catalog;
 
+import com.staros.proto.PlacementPolicy;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
@@ -45,6 +46,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ColocateTableIndexTest {
     private static final Logger LOG = LogManager.getLogger(ColocateTableIndexTest.class);
@@ -305,17 +307,17 @@ public class ColocateTableIndexTest {
 
         colocateTableIndex.addTableToGroup(
                 dbId, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(dbId, 10000), false /* isReplay */);
-        Assertions.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
+        Assertions.assertTrue(colocateTableIndex.isMetaGroupColocateTable(tableId));
         colocateTableIndex.addTableToGroup(
                 dbId2, (OlapTable) olapTable, "lakeGroup", new ColocateTableIndex.GroupId(dbId2, 10000),
                 false /* isReplay */);
-        Assertions.assertTrue(colocateTableIndex.isLakeColocateTable(tableId));
+        Assertions.assertTrue(colocateTableIndex.isMetaGroupColocateTable(tableId));
 
         Assertions.assertTrue(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(dbId, 10000)));
         Assertions.assertFalse(colocateTableIndex.isGroupUnstable(new ColocateTableIndex.GroupId(dbId, 10001)));
 
         colocateTableIndex.removeTable(tableId, null, false /* isReplay */);
-        Assertions.assertFalse(colocateTableIndex.isLakeColocateTable(tableId));
+        Assertions.assertFalse(colocateTableIndex.isMetaGroupColocateTable(tableId));
     }
 
     @Test
@@ -395,6 +397,12 @@ public class ColocateTableIndexTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) {
+            }
+
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId,
+                                          long indexId, PlacementPolicy placementPolicy) {
+                return 9999L;
             }
         };
 
@@ -527,6 +535,21 @@ public class ColocateTableIndexTest {
             }
         };
 
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId,
+                                          long indexId, PlacementPolicy placementPolicy) {
+                return 9999L;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
         colocateTableIndex.addTableToGroup(100L, firstTable, "rg1:k1", null, false);
         Assertions.assertThrows(DdlException.class,
                 () -> colocateTableIndex.addTableToGroup(100L, secondTable, "rg1:k1,k2", null, false));
@@ -587,8 +610,425 @@ public class ColocateTableIndexTest {
             }
         };
 
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId,
+                                          long indexId, PlacementPolicy placementPolicy) {
+                return 9999L;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
         colocateTableIndex.addTableToGroup(100L, existingTable, "rg1:k1", null, false);
         Assertions.assertThrows(DdlException.class,
                 () -> colocateTableIndex.checkColocateSchemaWithGroupInOtherDb("rg1:k1,k2", 101L, newTable));
+    }
+
+    // ========== Tests for public addTableToGroup afterTabletCreation routing ==========
+
+    @Test
+    public void testAfterTabletCreationRoutingForNonLakeTable(
+            @Mocked Database db, @Mocked OlapTable olapTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        new Expectations() {
+            {
+                db.getId();
+                result = 100L;
+                minTimes = 0;
+                olapTable.isCloudNativeTableOrMaterializedView();
+                result = false;
+                minTimes = 0;
+                olapTable.getDefaultDistributionInfo();
+                result = new HashDistributionInfo();
+                minTimes = 0;
+            }
+        };
+
+        // Non-lake table: afterTabletCreation=false should proceed
+        Assertions.assertTrue(
+                colocateTableIndex.addTableToGroup(db, olapTable, "g1", false /* afterTabletCreation */));
+        // Non-lake table: afterTabletCreation=true should be skipped
+        Assertions.assertFalse(
+                colocateTableIndex.addTableToGroup(db, olapTable, "g1", true /* afterTabletCreation */));
+    }
+
+    @Test
+    public void testAfterTabletCreationRoutingForHashColocateLakeTable(
+            @Mocked Database db, @Mocked LakeTable lakeTable, @Mocked StarOSAgent starOSAgent) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new Expectations() {
+            {
+                db.getId();
+                result = 100L;
+                minTimes = 0;
+                lakeTable.getId();
+                result = 200L;
+                minTimes = 0;
+                lakeTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                lakeTable.getDefaultDistributionInfo();
+                result = new HashDistributionInfo();
+                minTimes = 0;
+                lakeTable.getShardGroupIds();
+                result = new ArrayList<>();
+                minTimes = 0;
+            }
+        };
+
+        // Hash colocate lake table: afterTabletCreation=false should be skipped
+        Assertions.assertFalse(
+                colocateTableIndex.addTableToGroup(db, lakeTable, "g1", false /* afterTabletCreation */));
+        // Hash colocate lake table: afterTabletCreation=true should proceed
+        Assertions.assertTrue(
+                colocateTableIndex.addTableToGroup(db, lakeTable, "g1", true /* afterTabletCreation */));
+    }
+
+    @Test
+    public void testAfterTabletCreationRoutingForRangeColocateLakeTable(
+            @Mocked Database db, @Mocked LakeTable lakeTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId,
+                                          long indexId, PlacementPolicy placementPolicy) {
+                return 9999L;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeColocateColumns(OlapTable olapTable, List<String> colocateColumnNames) {
+                return Arrays.asList(new Column("k1", com.starrocks.type.IntegerType.INT));
+            }
+        };
+
+        new Expectations() {
+            {
+                db.getId();
+                result = 100L;
+                minTimes = 0;
+                lakeTable.getId();
+                result = 200L;
+                minTimes = 0;
+                lakeTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                lakeTable.getDefaultDistributionInfo();
+                result = new RangeDistributionInfo();
+                minTimes = 0;
+                lakeTable.getDefaultReplicationNum();
+                result = (short) 1;
+                minTimes = 0;
+            }
+        };
+
+        // Range colocate lake table: afterTabletCreation=false should proceed
+        Assertions.assertTrue(
+                colocateTableIndex.addTableToGroup(db, lakeTable, "rg1:k1", false /* afterTabletCreation */));
+        // Verify table was registered
+        Assertions.assertNotNull(colocateTableIndex.getGroup(200L));
+
+        // Range colocate lake table: afterTabletCreation=true should be skipped
+        Assertions.assertFalse(
+                colocateTableIndex.addTableToGroup(db, lakeTable, "rg1:k1", true /* afterTabletCreation */));
+    }
+
+    @Test
+    public void testReplaySkipsPackShardGroupCreation(@Mocked LakeTable lakeTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        AtomicBoolean createShardGroupCalled = new AtomicBoolean(false);
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId,
+                                          long indexId, PlacementPolicy placementPolicy) {
+                createShardGroupCalled.set(true);
+                return 9999L;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeColocateColumns(OlapTable olapTable, List<String> colocateColumnNames) {
+                return Arrays.asList(new Column("k1", com.starrocks.type.IntegerType.INT));
+            }
+        };
+
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return 200L;
+            }
+
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new RangeDistributionInfo();
+            }
+
+            @Mock
+            public short getDefaultReplicationNum() {
+                return 1;
+            }
+        };
+
+        // Replay should NOT call createShardGroup
+        colocateTableIndex.addTableToGroup(
+                100L, (OlapTable) lakeTable, "rg1:k1", null, true /* isReplay */);
+        Assertions.assertFalse(createShardGroupCalled.get(),
+                "createShardGroup(PACK) should NOT be called during replay");
+
+        // Verify group was created but ColocateRangeMgr was NOT initialized
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(200L);
+        Assertions.assertNotNull(groupId);
+        Assertions.assertFalse(colocateTableIndex.getColocateRangeMgr().containsColocateGroup(groupId.grpId));
+    }
+
+    @Test
+    public void testRemoveTableSkipsMetaGroupForRangeColocate(@Mocked LakeTable lakeTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        AtomicBoolean updateMetaGroupCalled = new AtomicBoolean(false);
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId,
+                                          long indexId, PlacementPolicy placementPolicy) {
+                return 9999L;
+            }
+
+            @Mock
+            public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) {
+                updateMetaGroupCalled.set(true);
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeColocateColumns(OlapTable olapTable, List<String> colocateColumnNames) {
+                return Arrays.asList(new Column("k1", com.starrocks.type.IntegerType.INT));
+            }
+        };
+
+        long tableId = 200L;
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return tableId;
+            }
+
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new RangeDistributionInfo();
+            }
+
+            @Mock
+            public short getDefaultReplicationNum() {
+                return 1;
+            }
+        };
+
+        new MockUp<LakeTable>() {
+            @Mock
+            public List<Long> getShardGroupIds() {
+                return Arrays.asList(5001L);
+            }
+        };
+
+        // Add range colocate table
+        colocateTableIndex.addTableToGroup(
+                100L, (OlapTable) lakeTable, "rg1:k1", null, false /* isReplay */);
+        Assertions.assertNotNull(colocateTableIndex.getGroup(tableId));
+
+        // Remove table — should NOT call updateMetaGroup for range colocate
+        colocateTableIndex.removeTable(tableId, (OlapTable) lakeTable, false /* isReplay */);
+        Assertions.assertFalse(updateMetaGroupCalled.get(),
+                "updateMetaGroup should NOT be called when removing a range colocate table");
+    }
+
+    @Test
+    public void testUpdateLakeTableColocationInfoSkipsRangeColocate(@Mocked LakeTable lakeTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        AtomicBoolean updateMetaGroupCalled = new AtomicBoolean(false);
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId,
+                                          long indexId, PlacementPolicy placementPolicy) {
+                return 9999L;
+            }
+
+            @Mock
+            public void updateMetaGroup(long metaGroupId, List<Long> shardGroupIds, boolean isJoin) {
+                updateMetaGroupCalled.set(true);
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeColocateColumns(OlapTable olapTable, List<String> colocateColumnNames) {
+                return Arrays.asList(new Column("k1", com.starrocks.type.IntegerType.INT));
+            }
+        };
+
+        long tableId = 200L;
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return tableId;
+            }
+
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new RangeDistributionInfo();
+            }
+
+            @Mock
+            public short getDefaultReplicationNum() {
+                return 1;
+            }
+        };
+
+        new MockUp<LakeTable>() {
+            @Mock
+            public List<Long> getShardGroupIds() {
+                return Arrays.asList(5001L);
+            }
+        };
+
+        // Add range colocate table
+        colocateTableIndex.addTableToGroup(
+                100L, (OlapTable) lakeTable, "rg1:k1", null, false /* isReplay */);
+
+        // updateLakeTableColocationInfo should skip range colocate
+        colocateTableIndex.updateLakeTableColocationInfo(
+                (OlapTable) lakeTable, true /* isJoin */, null);
+        Assertions.assertFalse(updateMetaGroupCalled.get(),
+                "updateMetaGroup should NOT be called for range colocate table");
+    }
+
+    @Test
+    public void testConstructMetaGroupsSkipsRangeColocate(@Mocked LakeTable lakeTable) throws Exception {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public long createShardGroup(long dbId, long tableId, long partitionId,
+                                          long indexId, PlacementPolicy placementPolicy) {
+                return 9999L;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return new StarOSAgent();
+            }
+        };
+
+        new MockUp<MetaUtils>() {
+            @Mock
+            public List<Column> getRangeColocateColumns(OlapTable olapTable, List<String> colocateColumnNames) {
+                return Arrays.asList(new Column("k1", com.starrocks.type.IntegerType.INT));
+            }
+        };
+
+        long tableId = 200L;
+        new MockUp<OlapTable>() {
+            @Mock
+            public long getId() {
+                return tableId;
+            }
+
+            @Mock
+            public boolean isCloudNativeTableOrMaterializedView() {
+                return true;
+            }
+
+            @Mock
+            public DistributionInfo getDefaultDistributionInfo() {
+                return new RangeDistributionInfo();
+            }
+
+            @Mock
+            public short getDefaultReplicationNum() {
+                return 1;
+            }
+        };
+
+        // Add range colocate table
+        colocateTableIndex.addTableToGroup(
+                100L, (OlapTable) lakeTable, "rg1:k1", null, false /* isReplay */);
+        ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
+        Assertions.assertNotNull(groupId);
+
+        // Range colocate table should NOT be in metaGroups
+        Assertions.assertFalse(colocateTableIndex.isMetaGroupColocateTable(tableId));
+
+        // constructMetaGroups is private, invoked by loadColocateTableIndexV2.
+        // Verify via isGroupUnstable: for non-metaGroups, it checks unstableGroups (not MetaGroup).
+        // Since we didn't mark it unstable, it should return false.
+        Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupId));
     }
 }
