@@ -515,11 +515,6 @@ public class DecimalV3FunctionAnalyzer {
         switch (fn.functionName()) {
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_SORT:
-<<<<<<< HEAD
-            case FunctionSet.REVERSE:
-=======
-            case FunctionSet.ARRAY_SORT_LAMBDA:
->>>>>>> 086cb4b679 ([BugFix] Fix the bug of reverse(DecimalV3) (#71834))
             case FunctionSet.ARRAY_INTERSECT:
             case FunctionSet.ARRAY_CONCAT: {
                 newFn.setArgsType(new Type[] {argumentTypes[0]});
