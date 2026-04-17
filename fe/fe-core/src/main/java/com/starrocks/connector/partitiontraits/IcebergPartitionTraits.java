@@ -58,6 +58,12 @@ public class IcebergPartitionTraits extends DefaultTraits {
     @Override
     public List<PartitionInfo> getPartitions(List<String> partitionNames) {
         IcebergTable icebergTable = (IcebergTable) table;
+        if (pinnedVersionRange != null) {
+            ConnectorMetadatRequestContext ctx = new ConnectorMetadatRequestContext();
+            ctx.setTableVersionRange(pinnedVersionRange);
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().
+                    getPartitions(icebergTable.getCatalogName(), table, partitionNames, ctx);
+        }
         return GlobalStateMgr.getCurrentState().getMetadataMgr().
                 getPartitions(icebergTable.getCatalogName(), table, partitionNames);
     }
@@ -75,11 +81,15 @@ public class IcebergPartitionTraits extends DefaultTraits {
         }
 
         IcebergTable icebergTable = (IcebergTable) table;
-        Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
-                .map(Snapshot::snapshotId);
         ConnectorMetadatRequestContext requestContext = new ConnectorMetadatRequestContext();
         requestContext.setQueryMVRewrite(isQueryMVRewrite());
-        requestContext.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
+        if (pinnedVersionRange != null) {
+            requestContext.setTableVersionRange(pinnedVersionRange);
+        } else {
+            Optional<Long> snapshotId = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot())
+                    .map(Snapshot::snapshotId);
+            requestContext.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
+        }
         return GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                 table.getCatalogName(), getCatalogDBName(), getTableName(), requestContext);
     }
