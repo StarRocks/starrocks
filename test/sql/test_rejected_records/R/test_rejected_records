@@ -55,14 +55,14 @@ shell: sleep 15
 0
 
 -- !result
-select target_database, target_table, load_type,
+select load_type,
        error_code is not null as has_error_code,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 -- result:
-db_aed01a407ba94f9383e51570139ae8fd	t	STREAM_LOAD	1	1
+STREAM_LOAD	1	1
 -- !result
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
 -- result:
@@ -102,14 +102,14 @@ shell: sleep 15
 0
 
 -- !result
-select target_database, target_table, load_type,
+select load_type,
        error_message like '%NULL%' as msg_mentions_null,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 -- result:
-db_a5f9d6e353c3484188baf814881f19e4	t	STREAM_LOAD	1	1
+STREAM_LOAD	1	1
 -- !result
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
 -- result:
@@ -149,14 +149,13 @@ shell: sleep 15
 0
 
 -- !result
-select target_database, target_table,
-       error_message like '%too long%' as msg_mentions_length,
+select error_message like '%too long%' as msg_mentions_length,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 -- result:
-db_01c662a0630d4ca3a8fa08971f5d1b95	t	0	1
+0	1
 -- !result
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
 -- result:
@@ -202,13 +201,13 @@ shell: sleep 15
 0
 
 -- !result
-select target_database, target_table,
-       error_message like '%partition%' as msg_mentions_partition,
+select error_message like '%partition%' as msg_mentions_partition,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 -- result:
+1	1
 -- !result
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
 -- result:
@@ -292,14 +291,14 @@ shell: sleep 15
 0
 
 -- !result
-select target_database, target_table, load_type,
+select load_type,
        error_code is not null as has_error_code,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 -- result:
-db_06df6d69a2694238877041621a5d0233	t	STREAM_LOAD	1	1
+STREAM_LOAD	1	1
 -- !result
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
 -- result:
@@ -344,7 +343,7 @@ shell: sleep 15
 0
 
 -- !result
-select target_database, target_table, load_type,
+select load_type,
        error_code as error_code,
        raw_record is not null as has_raw_record,
        source_info is not null as has_source_info
@@ -401,7 +400,7 @@ shell: sleep 15
 0
 
 -- !result
-select target_database, target_table, load_type,
+select load_type,
        error_code as error_code,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
@@ -573,7 +572,7 @@ select count(*) >= 2 as root_sees_both
 from _statistics_.rejected_records
 where target_database in ('db_a_${uuid0}', 'db_b_${uuid0}');
 -- result:
-0
+1
 -- !result
 shell: ${mysql_cmd} --user=testuser_${uuid0} --password='Test1234!' -e "select count(*) from _statistics_.rejected_records where target_database='db_a_${uuid0}';" | tail -1
 -- result:
