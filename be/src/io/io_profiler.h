@@ -15,10 +15,12 @@
 #pragma once
 
 #include <atomic>
+#include <functional>
+#include <string>
+#include <vector>
 
 #include "common/status.h"
 #include "common/statusor.h"
-#include "util/system_metrics.h"
 
 namespace starrocks {
 

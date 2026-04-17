@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/fd_output_stream.h"
+#include "io/core/fd_output_stream.h"
 
 #include <fcntl.h>
 #include <sys/types.h>
@@ -22,7 +22,7 @@
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/core/io_error.h"
-#include "io/io_profiler.h"
+#include "io/core/io_instrumentation.h"
 
 namespace starrocks::io {
 
@@ -72,7 +72,7 @@ Status FdOutputStream::write(const void* data, int64_t count) {
             }
         }
     }
-    IOProfiler::add_write(bytes_written, watch.elapsed_time());
+    IOInstrumentation::record_write(bytes_written, watch.elapsed_time());
     return Status::OK();
 }
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/fd_output_stream.h"
+#include "io/core/fd_output_stream.h"
 
 #include <fcntl.h>
 #include <gtest/gtest.h>

@@ -14,11 +14,26 @@
 
 #include "io/io_profiler.h"
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include "base/testutil/assert.h"
+#include "io/core/fd_input_stream.h"
+#include "io/core/fd_output_stream.h"
 
 namespace starrocks {
+
+namespace {
+
+std::string create_temp_file(int* fd) {
+    char path[] = "/tmp/io_profiler_fd_stream_testXXXXXX";
+    *fd = ::mkstemp(path);
+    EXPECT_GE(*fd, 0);
+    return path;
+}
+
+} // namespace
 
 #define ADD_READ_IO_STAT(stat, bytes, time_ns) \
     stat.read_ops += 1;                        \
@@ -144,6 +159,49 @@ TEST(IOProfilerTest, test_profile_and_get_topn_stats) {
     ASSERT_FALSE(IOProfiler::is_empty());
     auto ret = IOProfiler::profile_and_get_topn_stats_str("all", 1, 1);
     ASSERT_TRUE(IOProfiler::is_empty());
+}
+
+TEST(IOProfilerTest, test_fd_streams_use_io_instrumentation_hooks) {
+    int write_fd = -1;
+    std::string path = create_temp_file(&write_fd);
+    ASSERT_GE(write_fd, 0);
+
+    ASSERT_OK(IOProfiler::start(IOProfiler::IOMode::IOMODE_ALL));
+    {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, 7);
+        std::string_view content = "hooked-io";
+
+        io::FdOutputStream out(write_fd);
+        ASSERT_OK(out.write(content.data(), content.size()));
+        ASSERT_OK(out.close());
+
+        int read_fd = ::open(path.c_str(), O_RDONLY);
+        ASSERT_GE(read_fd, 0);
+        io::FdInputStream in(read_fd);
+        in.set_close_on_delete(true);
+
+        std::string actual(content.size(), '\0');
+        ASSERT_EQ(content.size(), *in.read(actual.data(), actual.size()));
+        ASSERT_EQ(content, actual);
+
+        auto scoped_io = scope.current_scoped_tls_io();
+        ASSERT_EQ(1, scoped_io.read_ops);
+        ASSERT_EQ(content.size(), scoped_io.read_bytes);
+        ASSERT_EQ(1, scoped_io.write_ops);
+        ASSERT_EQ(content.size(), scoped_io.write_bytes);
+        ASSERT_EQ(0, scoped_io.sync_ops);
+
+        auto context_io = scope.current_context_io();
+        ASSERT_EQ(1, context_io.read_ops);
+        ASSERT_EQ(content.size(), context_io.read_bytes);
+        ASSERT_EQ(1, context_io.write_ops);
+        ASSERT_EQ(content.size(), context_io.write_bytes);
+        ASSERT_EQ(0, context_io.sync_ops);
+    }
+    IOProfiler::stop();
+    IOProfiler::reset();
+
+    ASSERT_EQ(0, ::unlink(path.c_str()));
 }
 
 } // namespace starrocks
