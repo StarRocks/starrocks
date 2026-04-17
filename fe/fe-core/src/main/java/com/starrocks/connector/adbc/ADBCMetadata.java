@@ -444,7 +444,8 @@ public class ADBCMetadata implements ConnectorMetadata {
      */
     private Schema getTableSchemaViaQuery(AdbcConnection conn, String dbName, String tblName)
             throws Exception {
-        String sql = String.format("SELECT * FROM \"%s\".\"%s\" LIMIT 1", dbName, tblName);
+        String sql = String.format("SELECT * FROM \"%s\".\"%s\" LIMIT 1",
+                dbName.replace("\"", "\"\""), tblName.replace("\"", "\"\""));
         try (org.apache.arrow.adbc.core.AdbcStatement stmt = conn.createStatement()) {
             stmt.setSqlQuery(sql);
             try (org.apache.arrow.adbc.core.AdbcStatement.QueryResult qr = stmt.executeQuery()) {

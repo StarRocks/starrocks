@@ -291,18 +291,16 @@ public class ADBCConnector implements Connector {
     }
 
     @Override
-    public ConnectorMetadata getMetadata() {
+    public synchronized ConnectorMetadata getMetadata() {
         if (metadata == null) {
+            BufferAllocator newAllocator = new RootAllocator();
             try {
-                this.allocator = new RootAllocator();
-                AdbcDriver driver = loadOrGetDriver(properties, allocator);
+                AdbcDriver driver = loadOrGetDriver(properties, newAllocator);
                 AdbcDatabase db = openDatabase(driver, properties);
-                metadata = new ADBCMetadata(properties, catalogName, allocator, db);
+                metadata = new ADBCMetadata(properties, catalogName, newAllocator, db);
+                this.allocator = newAllocator;
             } catch (AdbcException e) {
-                if (allocator != null) {
-                    allocator.close();
-                    allocator = null;
-                }
+                newAllocator.close();
                 String driverIdentifier = getDriverIdentifier(properties);
                 LOG.error("Failed to create adbc metadata on [catalog : {}]", catalogName, e);
                 throw new StarRocksConnectorException(classifyAdbcError(e, driverIdentifier), e);
