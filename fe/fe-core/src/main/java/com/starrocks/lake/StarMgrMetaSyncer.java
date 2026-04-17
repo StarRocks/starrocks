@@ -636,7 +636,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
 
     private void syncTableColocationInfo(Database db, OlapTable table) throws DdlException {
         // quick check
-        if (!GlobalStateMgr.getCurrentState().getColocateTableIndex().isLakeColocateTable(table.getId())) {
+        if (!GlobalStateMgr.getCurrentState().getColocateTableIndex().isMetaGroupColocateTable(table.getId())) {
             return;
         }
         Locker locker = new Locker();

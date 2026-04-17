@@ -56,6 +56,8 @@ import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.ColocateGroupSchema;
+import com.starrocks.catalog.ColocateRange;
+import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -83,6 +85,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
+import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -2230,13 +2233,25 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         properties.put(LakeTablet.PROPERTY_KEY_TABLE_ID, Long.toString(table.getId()));
         properties.put(LakeTablet.PROPERTY_KEY_PARTITION_ID, Long.toString(physicalPartitionId));
         properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(index.getId()));
-        int bucketNum = distributionInfo.getBucketNum();
         final long warehouseId = computeResource.getWarehouseId();
         final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
             Warehouse warehouse = warehouseManager.getWarehouse(warehouseId);
             throw ErrorReportException.report(ErrorCode.ERR_NO_NODES_IN_WAREHOUSE, warehouse.getName());
         }
+
+        // For range colocate tables: create tablets aligned with colocate ranges,
+        // each tablet belonging to both SPREAD and PACK shard groups.
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        if (distributionInfo instanceof RangeDistributionInfo
+                && colocateTableIndex.isColocateTable(table.getId())) {
+            createRangeColocateLakeTablets(table, physicalPartitionId, shardGroupId,
+                    index, tabletMeta, tabletIdSet, computeResource, properties,
+                    colocateTableIndex.getGroup(table.getId()));
+            return;
+        }
+
+        int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
@@ -2249,6 +2264,39 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             index.addTablet(tablet, tabletMeta);
             tabletIdSet.add(tablet.getId());
+        }
+    }
+
+    private void createRangeColocateLakeTablets(OlapTable table, long physicalPartitionId,
+                                                 long spreadShardGroupId, MaterializedIndex index,
+                                                 TabletMeta tabletMeta, Set<Long> tabletIdSet,
+                                                 ComputeResource computeResource,
+                                                 Map<String, String> properties,
+                                                 ColocateTableIndex.GroupId groupId)
+            throws DdlException {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<ColocateRange> colocateRanges = colocateTableIndex.getColocateRangeMgr()
+                .getColocateRanges(groupId.grpId);
+        if (colocateRanges.isEmpty()) {
+            throw new DdlException("Colocate range metadata is missing for group '"
+                    + table.getColocateGroup() + "', cannot create range colocate tablets");
+        }
+        int colocateColumnCount = colocateTableIndex.getGroupSchema(groupId).getColocateColumnCount();
+        List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(table);
+
+        for (ColocateRange colocateRange : colocateRanges) {
+            List<Long> shardIds = stateMgr.getStarOSAgent().createShards(1,
+                    table.getPartitionFilePathInfo(physicalPartitionId),
+                    table.getPartitionFileCacheInfo(physicalPartitionId),
+                    List.of(spreadShardGroupId, colocateRange.getShardGroupId()),
+                    null, properties, computeResource);
+
+            long shardId = shardIds.get(0);
+            TabletRange tabletRange = new TabletRange(ColocateRangeUtils.expandToFullSortKey(
+                    colocateRange.getRange(), sortKeyColumns, colocateColumnCount));
+            LakeTablet tablet = new LakeTablet(shardId, tabletRange);
+            index.addTablet(tablet, tabletMeta);
+            tabletIdSet.add(shardId);
         }
     }
 
@@ -3275,6 +3323,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         boolean isNonPartitioned = partitionInfo.isUnPartitioned();
         DataProperty dataProperty = PropertyAnalyzer.analyzeMVDataProperty(materializedView, properties);
         String colocateGroup = properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH);
+        // PropertyAnalyzer.analyzeMVProperties calls addTableToGroup(false) internally,
+        // which handles non-lake MVs and range colocate lake MVs (before tablet creation).
         PropertyAnalyzer.analyzeMVProperties(db, materializedView, properties, isNonPartitioned,
                 stmt.getPartitionByExprToAdjustExprMap());
         final long warehouseId = materializedView.getWarehouseId();
@@ -3296,9 +3346,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 materializedView.setPartitionExprMaps(partitionExprMaps);
             }
 
-            // shared-data mv's colocation info must be updated after tablet creation
+            // Hash colocate lake tables: set up MetaGroup after tablet creation
             if (StringUtils.isNotEmpty(colocateGroup)) {
-                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup, true /* expectLakeTable */);
+                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
+                        true /* afterTabletCreation */);
             }
 
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().prepareMaintenanceWork(stmt, materializedView);
