@@ -18,10 +18,12 @@
 
 #include "common/config.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/workgroup/mem_tracker_manager.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "util/cpu_info.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
@@ -95,7 +97,7 @@ RunningQueryToken::~RunningQueryToken() {
 }
 
 WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
-                     size_t concurrency, double spill_mem_limit_threshold, WorkGroupType type)
+                     size_t concurrency, double spill_mem_limit_threshold, WorkGroupType type, std::string mem_pool)
         : _name(std::move(name)),
           _id(id),
           _version(version),
@@ -104,6 +106,7 @@ WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_l
           _memory_limit(memory_limit),
           _concurrency_limit(concurrency),
           _spill_mem_limit_threshold(spill_mem_limit_threshold),
+          _mem_pool(std::move(mem_pool)),
           _driver_sched_entity(this),
           _scan_sched_entity(this),
           _connector_scan_sched_entity(this) {}
@@ -153,6 +156,11 @@ WorkGroup::WorkGroup(const TWorkGroup& twg)
     if (twg.__isset.spill_mem_limit_threshold) {
         _spill_mem_limit_threshold = twg.spill_mem_limit_threshold;
     }
+    if (twg.__isset.mem_pool) {
+        _mem_pool = twg.mem_pool;
+    } else {
+        _mem_pool = DEFAULT_MEM_POOL;
+    }
 }
 
 TWorkGroup WorkGroup::to_thrift() const {
@@ -181,13 +189,20 @@ TWorkGroup WorkGroup::to_thrift_verbose() const {
     return twg;
 }
 
-void WorkGroup::init() {
-    _memory_limit_bytes = _memory_limit == ABSENT_MEMORY_LIMIT
-                                  ? GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit()
-                                  : GlobalEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
+void WorkGroup::init(std::shared_ptr<MemTracker>& parent_mem_tracker) {
+    if (parent_mem_tracker->type() == MemTrackerType::RESOURCE_GROUP_SHARED_MEMORY_POOL) {
+        _memory_limit_bytes = parent_mem_tracker->limit();
+        _shared_mem_tracker = parent_mem_tracker;
+    } else {
+        _memory_limit_bytes = _memory_limit == ABSENT_MEMORY_LIMIT ? parent_mem_tracker->limit()
+                                                                   : parent_mem_tracker->limit() * _memory_limit;
+    }
+
     _spill_mem_limit_bytes = _spill_mem_limit_threshold * _memory_limit_bytes;
+
+    //todo (m.bogusz) MemTracker can only handle raw ptr parent so we need to add parent_mem_tracker as member to workgroup
     _mem_tracker = std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP, _memory_limit_bytes, _name,
-                                                GlobalEnv::GetInstance()->query_pool_mem_tracker());
+                                                parent_mem_tracker.get());
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
 
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>(
@@ -274,7 +289,7 @@ void WorkGroup::copy_metrics(const WorkGroup& rhs) {
 // ------------------------------------------------------------------------------------
 
 WorkGroupManager::WorkGroupManager(PipelineExecutorSetConfig executors_manager_conf)
-        : _executors_manager(this, std::move(executors_manager_conf)) {}
+        : _executors_manager(this, std::move(executors_manager_conf)), _shared_mem_tracker_manager{} {}
 
 WorkGroupManager::~WorkGroupManager() = default;
 
@@ -500,10 +515,12 @@ void WorkGroupManager::apply(const std::vector<TWorkGroupOp>& ops) {
     while (it != _workgroup_expired_versions.end()) {
         auto wg_it = _workgroups.find(*it);
         if (wg_it != _workgroups.end() && wg_it->second->is_removable()) {
-            auto id = wg_it->second->id();
-            auto version = wg_it->second->version();
+            const auto id = wg_it->second->id();
+            const auto version = wg_it->second->version();
+            const auto mem_pool = wg_it->second->mem_pool();
             _sum_cpu_weight -= wg_it->second->cpu_weight();
             _workgroups.erase(wg_it);
+            _shared_mem_tracker_manager.deregister_workgroup(mem_pool);
             auto version_it = _workgroup_versions.find(id);
             if (version_it != _workgroup_versions.end() && version_it->second <= version) {
                 _workgroup_versions.erase(version_it);
@@ -539,7 +556,8 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
         return;
     }
 
-    wg->init();
+    auto parent_mem_tracker = _shared_mem_tracker_manager.register_workgroup(wg);
+    wg->init(parent_mem_tracker);
     _workgroups[unique_id] = wg;
 
     _sum_cpu_weight += wg->cpu_weight();
@@ -553,7 +571,7 @@ void WorkGroupManager::create_workgroup_unlocked(const WorkGroupPtr& wg, UniqueL
             auto& old_wg = _workgroups[old_unique_id];
 
             _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
-            old_wg->mark_del();
+            old_wg->mark_del(_workgroup_expiration_time);
             _workgroup_expired_versions.push_back(old_unique_id);
             LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << stale_version << ")";
 
@@ -607,7 +625,7 @@ void WorkGroupManager::delete_workgroup_unlocked(const WorkGroupPtr& wg) {
     if (wg_it != _workgroups.end()) {
         const auto& old_wg = wg_it->second;
         _executors_manager.reclaim_cpuids_from_worgroup(old_wg.get());
-        old_wg->mark_del();
+        old_wg->mark_del(_workgroup_expiration_time);
         _executors_manager.update_shared_executors();
         _workgroup_expired_versions.push_back(unique_id);
         LOG(INFO) << "workgroup expired version: " << wg->name() << "(" << wg->id() << "," << curr_version << ")";
@@ -624,6 +642,11 @@ std::vector<TWorkGroup> WorkGroupManager::list_workgroups() {
         }
     }
     return alive_workgroups;
+}
+
+std::vector<std::string> WorkGroupManager::list_memory_pools() const {
+    std::shared_lock read_lock(_mutex);
+    return _shared_mem_tracker_manager.list_mem_trackers();
 }
 
 void WorkGroupManager::for_each_workgroup(const WorkGroupConsumer& consumer) const {
@@ -661,6 +684,11 @@ void WorkGroupManager::change_enable_resource_group_cpu_borrowing(const bool val
     _executors_manager.change_enable_resource_group_cpu_borrowing(val);
 }
 
+void WorkGroupManager::set_workgroup_expiration_time(const std::chrono::seconds value) {
+    std::unique_lock write_lock(_mutex);
+    _workgroup_expiration_time = value;
+}
+
 // ------------------------------------------------------------------------------------
 // DefaultWorkGroupInitialization
 // ------------------------------------------------------------------------------------
@@ -680,7 +708,8 @@ std::shared_ptr<WorkGroup> DefaultWorkGroupInitialization::create_default_workgr
     const double memory_limit = 1.0;
     const double spill_mem_limit_threshold = 1.0; // not enable spill mem limit threshold
     return std::make_shared<WorkGroup>("default_wg", WorkGroup::DEFAULT_WG_ID, WorkGroup::DEFAULT_VERSION, cpu_limit,
-                                       memory_limit, 0, spill_mem_limit_threshold, WorkGroupType::WG_DEFAULT);
+                                       memory_limit, 0, spill_mem_limit_threshold, WorkGroupType::WG_DEFAULT,
+                                       WorkGroup::DEFAULT_MEM_POOL);
 }
 
 std::shared_ptr<WorkGroup> DefaultWorkGroupInitialization::create_default_mv_workgroup() {
@@ -690,7 +719,6 @@ std::shared_ptr<WorkGroup> DefaultWorkGroupInitialization::create_default_mv_wor
     double mv_spill_mem_limit_threshold = config::default_mv_resource_group_spill_mem_limit_threshold;
     return std::make_shared<WorkGroup>("default_mv_wg", WorkGroup::DEFAULT_MV_WG_ID, WorkGroup::DEFAULT_MV_VERSION,
                                        mv_cpu_limit, mv_memory_limit, mv_concurrency_limit,
-                                       mv_spill_mem_limit_threshold, WorkGroupType::WG_MV);
+                                       mv_spill_mem_limit_threshold, WorkGroupType::WG_MV, WorkGroup::DEFAULT_MEM_POOL);
 }
-
 } // namespace starrocks::workgroup
