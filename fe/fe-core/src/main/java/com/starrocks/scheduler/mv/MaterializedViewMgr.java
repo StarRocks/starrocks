@@ -32,38 +32,37 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Manage FE-side MV compatibility metadata such as legacy maintenance job replay/state
- * and MV timeliness tracking. Legacy jobs are replay-only metadata and do not restore
- * a live MaterializedView handle.
+ * and checkpoint persistence, plus MV timeliness tracking. Legacy jobs remain
+ * compatibility-only metadata and do not restore a live MaterializedView handle.
  */
 public class MaterializedViewMgr {
     private static final Logger LOG = LogManager.getLogger(MaterializedViewMgr.class);
 
     // MV's global timeliness info manager
     private final MVTimelinessMgr mvTimelinessMgr = new MVTimelinessMgr();
-    // MV's maintenance job
+    // Replay/checkpoint compatibility metadata for legacy incremental MV jobs.
     private final Map<MvId, MVMaintenanceJob> jobMap = new ConcurrentHashMap<>();
 
     /**
-     * Replay from journal
+     * Replay legacy job metadata from journal.
      */
     public void replay(MVMaintenanceJob job) throws IOException {
         restoreAndTrackJob(job, "journal");
     }
 
     /**
-     * Replay epoch from journal
+     * Replay legacy epoch metadata from journal.
      */
     public void replayEpoch(MVEpoch epoch) throws IOException {
-        // TODO: Make it works.
         try {
             MvId mvId = new MvId(epoch.getDbId(), epoch.getMvId());
             Preconditions.checkState(jobMap.containsKey(mvId));
             MVMaintenanceJob job = jobMap.get(mvId);
             job.setEpoch(epoch);
-            LOG.info("Replay MV epoch: {}", job);
+            LOG.info("Replay legacy MV epoch metadata: {}", job);
         } catch (Exception e) {
-            LOG.warn("Replay MV epoch failed: {}", epoch);
-            LOG.warn("Failed to replay MV epoch", e);
+            LOG.warn("Replay legacy MV epoch metadata failed: {}", epoch);
+            LOG.warn("Failed to replay legacy MV epoch metadata", e);
         }
     }
 

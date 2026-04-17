@@ -28,7 +28,8 @@ import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Compatibility-only metadata for legacy incremental MV maintenance jobs.
+ * Compatibility-only metadata for legacy incremental MV maintenance jobs that
+ * must remain replayable and checkpointable for older persisted state.
  */
 public class MVMaintenanceJob implements Writable, GsonPreProcessable, GsonPostProcessable {
     @SerializedName("jobId")
