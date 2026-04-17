@@ -82,6 +82,7 @@ public:
     METRICS_DEFINE_THREAD_POOL(drop);
     METRICS_DEFINE_THREAD_POOL(create_tablet);
     METRICS_DEFINE_THREAD_POOL(alter_tablet);
+    METRICS_DEFINE_THREAD_POOL(lake_schema_change);
     METRICS_DEFINE_THREAD_POOL(clear_transaction);
     METRICS_DEFINE_THREAD_POOL(storage_medium_migrate);
     METRICS_DEFINE_THREAD_POOL(check_consistency);
