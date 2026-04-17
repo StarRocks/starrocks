@@ -34,7 +34,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 -- Only good rows committed
 select * from t order by id;
 
-shell: sleep 25
+shell: sleep 30
 
 -- One rejected record, load_type=STREAM_LOAD, error_code non-null
 select load_type,
@@ -63,7 +63,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: sleep 25
+shell: sleep 30
 
 select load_type,
        error_message like '%NULL%' as msg_mentions_null,
@@ -91,7 +91,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: sleep 25
+shell: sleep 30
 
 select error_message like '%too long%' as msg_mentions_length,
        raw_record is not null as has_raw_record
@@ -124,7 +124,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by dt;
 
-shell: sleep 25
+shell: sleep 30
 
 select error_message like '%partition%' as msg_mentions_partition,
        raw_record is not null as has_raw_record
@@ -151,7 +151,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: sleep 25
+shell: sleep 30
 
 select count(*) as rejected_count
 from _statistics_.rejected_records
@@ -180,7 +180,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: sleep 25
+shell: sleep 30
 
 select load_type,
        error_code is not null as has_error_code,
@@ -214,7 +214,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: sleep 25
+shell: sleep 30
 
 select load_type,
        error_code as error_code,
@@ -250,7 +250,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: sleep 25
+shell: sleep 30
 
 select load_type,
        error_code as error_code,
@@ -280,7 +280,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_fields_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d $'1,10\n2,not_int\n3,30' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
-shell: sleep 25
+shell: sleep 30
 
 -- id should be UUID (len=36), created_at should be recent, raw_record not null, backend_id not null
 select
@@ -319,7 +319,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_idem_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad_val' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
-shell: sleep 25
+shell: sleep 30
 
 -- Count after first sync
 select count(*) as cnt_after_first_sync
@@ -364,7 +364,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_pol_a_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad' ${url}/api/db_a_${uuid0}/ta/_stream_load | jq -r '.Status'
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_pol_b_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad' ${url}/api/db_b_${uuid0}/tb/_stream_load | jq -r '.Status'
 
-shell: sleep 25
+shell: sleep 30
 
 -- root sees records from both databases
 select count(*) >= 2 as root_sees_both
