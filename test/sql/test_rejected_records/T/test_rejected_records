@@ -210,12 +210,7 @@ create table t (id int not null, val int not null, name varchar(64))
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- Generate a small Parquet file: val column is STRING in parquet but INT in table; strict_mode rejects unconvertible rows
-shell: python3 -c "
-import pyarrow as pa, pyarrow.parquet as pq
-tbl = pa.table({'id': pa.array([1,2,3],pa.int32()), 'val': pa.array(['100','bad_val','200'],pa.string()), 'name': pa.array(['alice','bob','carol'],pa.string())})
-pq.write_table(tbl, '/tmp/rej_parquet_${uuid0}.parquet')
-print(0)
-"
+shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array(["100","bad_val","200"],pa.string()), "name": pa.array(["alice","bob","carol"],pa.string())}); pq.write_table(tbl, "/tmp/rej_parquet_${uuid0}.parquet"); print(0)'
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_parquet_${uuid0}" -H "format:parquet" -H "strict_mode:true" --data-binary @/tmp/rej_parquet_${uuid0}.parquet ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
@@ -251,18 +246,7 @@ create table t (id int not null, val int not null, name varchar(64))
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- Generate a small ORC file with a string val column that can't fit INT
-shell: python3 -c "
-import pyorc, io
-schema = 'struct<id:int,val:string,name:string>'
-buf = io.BytesIO()
-with pyorc.Writer(buf, schema) as w:
-    w.write((1, '100', 'alice'))
-    w.write((2, 'bad_val', 'bob'))
-    w.write((3, '200', 'carol'))
-with open('/tmp/rej_orc_${uuid0}.orc','wb') as f:
-    f.write(buf.getvalue())
-print(0)
-"
+shell: python3 -c 'import pyorc, io; schema = "struct<id:int,val:string,name:string>"; buf = io.BytesIO(); w = pyorc.Writer(buf, schema); w.write((1, "100", "alice")); w.write((2, "bad_val", "bob")); w.write((3, "200", "carol")); w.close(); open("/tmp/rej_orc_${uuid0}.orc","wb").write(buf.getvalue()); print(0)'
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_orc_${uuid0}" -H "format:orc" -H "strict_mode:true" --data-binary @/tmp/rej_orc_${uuid0}.orc ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
