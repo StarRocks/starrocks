@@ -37,7 +37,7 @@ select * from t order by id;
 shell: sleep 15
 
 -- One rejected record, load_type=STREAM_LOAD, error_code non-null
-select target_database, target_table, load_type,
+select load_type,
        error_code is not null as has_error_code,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
@@ -65,7 +65,7 @@ select * from t order by id;
 
 shell: sleep 15
 
-select target_database, target_table, load_type,
+select load_type,
        error_message like '%NULL%' as msg_mentions_null,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
@@ -93,8 +93,7 @@ select * from t order by id;
 
 shell: sleep 15
 
-select target_database, target_table,
-       error_message like '%too long%' as msg_mentions_length,
+select error_message like '%too long%' as msg_mentions_length,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
@@ -127,8 +126,7 @@ select * from t order by dt;
 
 shell: sleep 15
 
-select target_database, target_table,
-       error_message like '%partition%' as msg_mentions_partition,
+select error_message like '%partition%' as msg_mentions_partition,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
@@ -184,7 +182,7 @@ select * from t order by id;
 
 shell: sleep 15
 
-select target_database, target_table, load_type,
+select load_type,
        error_code is not null as has_error_code,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
@@ -218,7 +216,7 @@ select * from t order by id;
 
 shell: sleep 15
 
-select target_database, target_table, load_type,
+select load_type,
        error_code as error_code,
        raw_record is not null as has_raw_record,
        source_info is not null as has_source_info
@@ -254,7 +252,7 @@ select * from t order by id;
 
 shell: sleep 15
 
-select target_database, target_table, load_type,
+select load_type,
        error_code as error_code,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
