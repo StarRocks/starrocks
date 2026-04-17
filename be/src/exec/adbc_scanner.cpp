@@ -174,8 +174,7 @@ Status ADBCScanner::_try_parallel_read() {
         }
     };
 
-    AdbcStatusCode sc =
-            AdbcStatementExecutePartitions(&_statement, &c_schema, &partitions, &rows_affected, &error);
+    AdbcStatusCode sc = AdbcStatementExecutePartitions(&_statement, &c_schema, &partitions, &rows_affected, &error);
     if (sc != ADBC_STATUS_OK) {
         if (error.release) error.release(&error);
         cleanup_schema();
