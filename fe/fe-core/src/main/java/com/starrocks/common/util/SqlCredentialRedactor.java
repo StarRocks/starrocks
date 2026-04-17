@@ -20,6 +20,11 @@ import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 
+<<<<<<< HEAD
+=======
+import java.util.HashSet;
+import java.util.Locale;
+>>>>>>> cd8e9f362a ([BugFix] insert files credential redaction (#71245))
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -83,7 +88,20 @@ public class SqlCredentialRedactor {
             .add("broker.password")
             .build();
 
+<<<<<<< HEAD
     // Pattern to match key-value pairs in SQL
+=======
+    // Lowercase set for O(1) lookup (case-insensitive matching)
+    private static final Set<String> CREDENTIAL_KEYS_LOWERCASE = new HashSet<>();
+
+    static {
+        for (String key : CREDENTIAL_KEYS) {
+            CREDENTIAL_KEYS_LOWERCASE.add(key.toLowerCase(Locale.ROOT));
+        }
+    }
+
+    // Simplified pattern to match any key-value pair in SQL
+>>>>>>> cd8e9f362a ([BugFix] insert files credential redaction (#71245))
     // This pattern handles cases like:
     // "key"="value"
     // 'key'='value'
@@ -131,6 +149,27 @@ public class SqlCredentialRedactor {
     private static final String LDAP_SIMPLE_AUTH_PLUGIN = "AUTHENTICATION_LDAP_SIMPLE";
 
     /**
+     * Cheap check for whether {@link #redact(String)} might change the SQL. Used on hot paths (e.g. query profiles)
+     * to skip full redaction when the text has no credential-related markers.
+     */
+    public static boolean mayNeedCredentialRedaction(String sql) {
+        if (sql == null || sql.isEmpty()) {
+            return false;
+        }
+        String lower = sql.toLowerCase(Locale.ROOT);
+        for (String key : CREDENTIAL_KEYS_LOWERCASE) {
+            if (lower.indexOf(key) >= 0) {
+                return true;
+            }
+        }
+        // "password" is already in CREDENTIAL_KEYS_LOWERCASE, so "set password"
+        // (with any whitespace) is caught by the loop above. Only "identified"
+        // needs a separate check — a single keyword avoids false negatives from
+        // whitespace variations like IDENTIFIED\nBY or IDENTIFIED\tWITH.
+        return lower.contains("identified");
+    }
+
+    /**
      * Redact sensitive credentials from SQL string.
      *
      * @param sql the SQL string that may contain credentials
@@ -158,11 +197,30 @@ public class SqlCredentialRedactor {
             String key = matcher.group(2);
             String keySuffix = matcher.group(3) != null ? matcher.group(3) : "";
 
+<<<<<<< HEAD
             // Determine if value is quoted or unquoted
             if (matcher.group(4) != null && matcher.group(5) != null) {
                 // Quoted value case
                 String valueQuote = matcher.group(4);
                 replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
+=======
+            // Check if this key should be redacted (case-insensitive)
+            if (CREDENTIAL_KEYS_LOWERCASE.contains(key.toLowerCase(Locale.ROOT))) {
+                // Append text before the match
+                result.append(sql, lastEnd, matcher.start());
+
+                // Build replacement for redacted value
+                String replacement;
+                if (matcher.group(4) != null && matcher.group(5) != null) {
+                    // Quoted value case
+                    String valueQuote = matcher.group(4);
+                    replacement = keyPrefix + key + keySuffix + " = " + valueQuote + REDACTED_VALUE + valueQuote;
+                } else {
+                    // Unquoted value case
+                    replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
+                }
+                result.append(replacement);
+>>>>>>> cd8e9f362a ([BugFix] insert files credential redaction (#71245))
             } else {
                 // Unquoted value case
                 replacement = keyPrefix + key + keySuffix + " = " + REDACTED_VALUE;
