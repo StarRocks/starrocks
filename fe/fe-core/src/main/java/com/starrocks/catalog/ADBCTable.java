@@ -97,9 +97,9 @@ public class ADBCTable extends Table {
                     adbcOpts.put(e.getKey(), e.getValue());
                 }
             }
-            String user = properties.get("user");
-            if (user != null) {
-                adbcOpts.put("username", user);
+            String username = properties.get("username");
+            if (username != null) {
+                adbcOpts.put("username", username);
             }
             String password = properties.get("password");
             if (password != null) {

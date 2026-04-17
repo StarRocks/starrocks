@@ -43,12 +43,12 @@ public class ADBCConnector implements Connector {
 
     private static final Logger LOG = LogManager.getLogger(ADBCConnector.class);
 
-    // Recognized non-adbc.* top-level keys (PROP-04)
+    // Recognized non-adbc.* top-level keys
     static final Set<String> KNOWN_TOP_LEVEL_KEYS = Set.of(
             "type", "driver_url", "driver_name", "driver_entrypoint",
-            "uri", "user", "password", "path", "_sr_identifier_quote");
+            "uri", "username", "password", "path", "_sr_identifier_quote");
 
-    // Driver registry -- one AdbcDriver per resolved absolute driver_url (D-01, META-05)
+    // Driver registry -- one AdbcDriver per resolved absolute driver_url
     private static final ConcurrentHashMap<String, AdbcDriver> DRIVER_REGISTRY = new ConcurrentHashMap<>();
 
     private final Map<String, String> properties;
@@ -59,16 +59,6 @@ public class ADBCConnector implements Connector {
     public ADBCConnector(ConnectorContext context) {
         this.catalogName = context.getCatalogName();
         this.properties = context.getProperties();
-
-        // Legacy v1 catalog detection (VAL-05): properties have adbc.driver but no driver_url/driver_name
-        if (!properties.containsKey("driver_url") && !properties.containsKey("driver_name")) {
-            if (properties.containsKey("adbc.driver") || properties.containsKey("adbc.url")) {
-                LOG.warn("Legacy ADBC catalog '{}' detected -- DROP and recreate with driver_url/driver_name",
-                        catalogName);
-                this.metadata = null;
-                return;
-            }
-        }
 
         // Validate properties
         validateProperties(properties);
@@ -127,7 +117,7 @@ public class ADBCConnector implements Connector {
     }
 
     /**
-     * Load or retrieve a cached driver from the registry (D-01, META-05).
+     * Load or retrieve a cached driver from the registry.
      * Uses ConcurrentHashMap.computeIfAbsent for thread-safe at-most-once loading.
      */
     private static AdbcDriver loadOrGetDriver(Map<String, String> properties, BufferAllocator allocator) {
@@ -136,7 +126,7 @@ public class ADBCConnector implements Connector {
     }
 
     /**
-     * Open an AdbcDatabase with the jni.driver params map (META-02, PROP-05, PROP-06).
+     * Open an AdbcDatabase with the jni.driver params map.
      */
     private static AdbcDatabase openDatabase(AdbcDriver driver, Map<String, String> properties) throws AdbcException {
         String driverUrl = properties.get("driver_url");
@@ -145,10 +135,10 @@ public class ADBCConnector implements Connector {
 
         Map<String, Object> params = new HashMap<>();
 
-        // jni.driver is REQUIRED for JniDriver (META-02)
+        // jni.driver is REQUIRED for JniDriver
         params.put("jni.driver", driverUrl != null ? driverUrl : driverName);
 
-        // Optional entrypoint (PROP-03)
+        // Optional entrypoint
         if (entrypoint != null) {
             params.put("entrypoint", entrypoint);
         }
@@ -159,10 +149,9 @@ public class ADBCConnector implements Connector {
             params.put("uri", uri);
         }
 
-        // user -> username translation (PROP-06)
-        String user = properties.get("user");
-        if (user != null) {
-            params.put("username", user);
+        String username = properties.get("username");
+        if (username != null) {
+            params.put("username", username);
         }
 
         // password forwarded as-is
@@ -266,7 +255,7 @@ public class ADBCConnector implements Connector {
     }
 
     /**
-     * Classify AdbcException into distinct error messages for the 5 failure classes (VAL-03).
+     * Classify AdbcException into distinct error messages for the 5 failure classes.
      */
     static String classifyAdbcError(AdbcException e, String driverPath) {
         String msg = e.getMessage() != null ? e.getMessage() : "(no message)";
@@ -303,10 +292,6 @@ public class ADBCConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        if (metadata == null && !properties.containsKey("driver_url") && !properties.containsKey("driver_name")) {
-            throw new StarRocksConnectorException("ADBC catalog '" + catalogName
-                    + "' uses legacy property schema -- DROP and recreate with driver_url / driver_name");
-        }
         if (metadata == null) {
             try {
                 this.allocator = new RootAllocator();
