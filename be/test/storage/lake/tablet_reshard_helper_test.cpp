@@ -14,6 +14,7 @@
 
 #include "storage/lake/tablet_reshard_helper.h"
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 namespace starrocks::lake {
@@ -251,6 +252,89 @@ TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_covers_op_replica
         ASSERT_EQ(op_write.ssts_size(), 1);
         EXPECT_TRUE(op_write.ssts(0).shared());
     }
+}
+
+// Verify update_rowset_data_stats scales num_dels alongside num_rows / data_size so that
+// children of a split tablet do not inherit the parent's full delete cardinality. Without
+// this, get_tablet_stats subtracts the full D from each child's partial num_rows and the
+// partition row count collapses to 0.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_scales_num_dels) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.set_data_size(1000);
+    rowset.set_num_dels(7);
+
+    // Split into 3 children: num_dels = 7/3 + remainder -> children get 3, 2, 2.
+    std::vector<int64_t> child_num_dels;
+    int64_t total_num_dels = 0;
+    for (int i = 0; i < 3; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/3, /*split_index=*/i);
+        child_num_dels.push_back(child.num_dels());
+        total_num_dels += child.num_dels();
+        EXPECT_LE(child.num_dels(), child.num_rows()) << "child " << i;
+    }
+    EXPECT_EQ(7, total_num_dels);
+    EXPECT_THAT(child_num_dels, ::testing::ElementsAre(3, 2, 2));
+}
+
+// When num_dels/split_count would exceed num_rows (extreme case, e.g. parent with almost
+// all rows deleted and uneven row split), the child must clamp num_dels to its share of
+// rows so that live_rows = num_rows - num_dels stays >= 0 downstream.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_clamps_num_dels_to_num_rows) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(3);
+    rowset.set_data_size(300);
+    rowset.set_num_dels(9); // pathologically large
+
+    RowsetMetadataPB child = rowset;
+    update_rowset_data_stats(&child, /*split_count=*/3, /*split_index=*/0);
+    EXPECT_EQ(1, child.num_rows());
+    // 9/3 = 3, clamped to num_rows=1.
+    EXPECT_EQ(1, child.num_dels());
+}
+
+// Verify update_txn_log_data_stats scales num_dels across every op_* branch that already
+// scales num_rows / data_size (op_write / op_compaction / op_schema_change / op_replication /
+// op_parallel_compaction). Parallel tests pin down the set of branches that produce output
+// rowsets during split's cross-publish, so dropping any branch here would resurrect the
+// original bug for that flow.
+TEST_F(TabletReshardHelperTest, test_update_txn_log_data_stats_scales_num_dels_all_branches) {
+    auto make_rowset = [](RowsetMetadataPB* r) {
+        r->set_num_rows(8);
+        r->set_data_size(800);
+        r->set_num_dels(4);
+    };
+
+    TxnLogPB txn_log;
+    make_rowset(txn_log.mutable_op_write()->mutable_rowset());
+    make_rowset(txn_log.mutable_op_compaction()->mutable_output_rowset());
+    make_rowset(txn_log.mutable_op_schema_change()->add_rowsets());
+    make_rowset(txn_log.mutable_op_replication()->add_op_writes()->mutable_rowset());
+    make_rowset(txn_log.mutable_op_parallel_compaction()->add_subtask_compactions()->mutable_output_rowset());
+
+    // split_count=2 split_index=0 -> num_dels should halve to 2 everywhere.
+    update_txn_log_data_stats(&txn_log, /*split_count=*/2, /*split_index=*/0);
+
+    EXPECT_EQ(2, txn_log.op_write().rowset().num_dels());
+    EXPECT_EQ(2, txn_log.op_compaction().output_rowset().num_dels());
+    EXPECT_EQ(2, txn_log.op_schema_change().rowsets(0).num_dels());
+    EXPECT_EQ(2, txn_log.op_replication().op_writes(0).rowset().num_dels());
+    EXPECT_EQ(2, txn_log.op_parallel_compaction().subtask_compactions(0).output_rowset().num_dels());
+}
+
+// Rowsets that predate the num_dels field (has_num_dels() == false) must not be written
+// at split time; otherwise the new child would record "0 deletes" and permanently lose
+// the parent's accurate-mode fallback, masking a pre-existing replication / recover bug
+// whose fix is tracked separately.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_skips_when_num_dels_absent) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.set_data_size(1000);
+    // num_dels intentionally unset.
+
+    update_rowset_data_stats(&rowset, /*split_count=*/2, /*split_index=*/0);
+    EXPECT_FALSE(rowset.has_num_dels());
 }
 
 } // namespace starrocks::lake

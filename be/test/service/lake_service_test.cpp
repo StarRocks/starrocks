@@ -1272,17 +1272,25 @@ TEST_F(LakeServiceTest, test_splitting_tablet_pk_with_delvec_stats) {
 
     int64_t total_rows = 0;
     int64_t total_size = 0;
+    int64_t total_num_dels = 0;
     for (auto new_tablet_id : new_tablet_ids) {
         ASSIGN_OR_ABORT(auto new_metadata, _tablet_mgr->get_tablet_metadata(new_tablet_id, metadata->version() + 1));
         ASSERT_EQ(1, new_metadata->rowsets_size());
-        EXPECT_GT(new_metadata->rowsets(0).num_rows(), 0);
-        EXPECT_GT(new_metadata->rowsets(0).data_size(), 0);
-        total_rows += new_metadata->rowsets(0).num_rows();
-        total_size += new_metadata->rowsets(0).data_size();
+        const auto& child_rowset = new_metadata->rowsets(0);
+        EXPECT_GT(child_rowset.num_rows(), 0);
+        EXPECT_GT(child_rowset.data_size(), 0);
+        EXPECT_TRUE(child_rowset.has_num_dels()) << "split must write num_dels on PK children";
+        EXPECT_LE(child_rowset.num_dels(), child_rowset.num_rows());
+        total_rows += child_rowset.num_rows();
+        total_size += child_rowset.data_size();
+        total_num_dels += child_rowset.num_dels();
     }
-    // Split metadata keeps the raw rowset stats. Delete vectors are applied later by get_tablet_stats().
     EXPECT_EQ(150, total_rows);
     EXPECT_EQ(1500, total_size);
+    // Parent had 40 deletes on seg_0 and 10 on seg_1 = 50 total. The split reads those
+    // through UpdateManager::get_rowset_num_deletes (num_dels unset on the parent rowset)
+    // and the largest-remainder allocator must conserve the sum.
+    EXPECT_EQ(50, total_num_dels);
 }
 
 TEST_F(LakeServiceTest, test_splitting_tablet_split_count_too_large_fallback) {

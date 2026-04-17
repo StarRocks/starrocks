@@ -14,6 +14,8 @@
 
 #include "storage/lake/tablet_reshard_helper.h"
 
+#include <algorithm>
+
 #include "storage/tablet_range.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
@@ -211,6 +213,11 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
     if (rowset->has_data_size()) {
         int64_t data_size = rowset->data_size();
         rowset->set_data_size(data_size / split_count + (split_index < data_size % split_count ? 1 : 0));
+    }
+    if (rowset->has_num_dels()) {
+        int64_t num_dels = rowset->num_dels();
+        int64_t scaled_num_dels = num_dels / split_count + (split_index < num_dels % split_count ? 1 : 0);
+        rowset->set_num_dels(std::min<int64_t>(scaled_num_dels, rowset->num_rows()));
     }
 }
 
