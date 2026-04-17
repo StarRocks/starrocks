@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <string>
+
 #include "common/object_pool.h"
 #include "exprs/expr.h"
 
@@ -34,5 +36,6 @@ public:
 private:
     // @IMPORTANT: BinaryColumnPtr's build_slice will cause multi-thread(OLAP_SCANNER) crash
     ColumnPtr _value;
+    std::string _func_name;
 };
 } // namespace starrocks

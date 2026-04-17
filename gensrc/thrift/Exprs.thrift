@@ -168,6 +168,7 @@ struct TStringLiteral {
 struct TInfoFunc {
   1: required i64 int_value;
   2: required string str_value;
+  3: optional string func_name;
 }
 
 struct TFunctionCallExpr {

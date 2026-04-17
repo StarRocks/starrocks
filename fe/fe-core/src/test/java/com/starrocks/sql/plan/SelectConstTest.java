@@ -103,6 +103,39 @@ public class SelectConstTest extends PlanTestBase {
         assertPlanContains("select database(), catalog()",
                 "<slot 2> : 'test'",
                 "<slot 3> : 'default_catalog'");
+        assertPlanContains("select database(), current_user()",
+                "<slot 2> : 'test'",
+                "<slot 3> : '\\'root\\'@\\'%\\''");
+        assertPlanContains("select schema(), current_warehouse()",
+                "<slot 2> : 'test'",
+                "<slot 3> : 'default_warehouse'");
+        assertPlanContains("select current_user(), current_warehouse()",
+                "<slot 2> : '\\'root\\'@\\'%\\''",
+                "<slot 3> : 'default_warehouse'");
+        assertPlanContains("select current_warehouse(), current_user()",
+                "<slot 2> : 'default_warehouse'",
+                "<slot 3> : '\\'root\\'@\\'%\\''");
+    }
+
+    @Test
+    public void testExecuteInFeMultipleInformationFunctions() throws Exception {
+        assertFeExecuteRow("select database(), current_user()", "test", "'root'@'%'");
+        assertFeExecuteRow("select schema(), current_warehouse()", "test", "default_warehouse");
+        assertFeExecuteRow("select current_user(), current_warehouse()", "'root'@'%'", "default_warehouse");
+        assertFeExecuteRow("select current_warehouse(), current_user()", "default_warehouse", "'root'@'%'");
+    }
+
+    @Test
+    public void testExecuteInFeInformationFunctionsWithoutSelectedDb() throws Exception {
+        String originalDb = connectContext.getDatabase();
+        try {
+            connectContext.setDatabase("");
+            assertFeExecuteRow("select database(), schema()", "", "");
+            assertFeExecuteRow("select database(), current_user()", "", "'root'@'%'");
+            assertFeExecuteRow("select schema(), current_warehouse()", "", "default_warehouse");
+        } finally {
+            connectContext.setDatabase(originalDb);
+        }
     }
 
     @Test
@@ -278,6 +311,43 @@ public class SelectConstTest extends PlanTestBase {
             }
             System.out.println(value);
             Assertions.assertEquals(expected, value);
+        }
+    }
+
+    private void assertFeExecuteRow(String sql, String... expected) throws Exception {
+        ExecPlan execPlan = getExecPlan(sql);
+        FeExecuteCoordinator coordinator = new FeExecuteCoordinator(connectContext, execPlan);
+        RowBatch rowBatch = coordinator.getNext();
+        TResultBatch tResultBatch = rowBatch.getBatch();
+        Assertions.assertEquals(1, tResultBatch.rows.size());
+        byte[] bytes = tResultBatch.getRows().get(0).array();
+        int offset = 0;
+        for (String expectedValue : expected) {
+            int header = bytes[offset] & 0xff;
+            String actualValue;
+            if (header == 251) {
+                actualValue = "NULL";
+                offset += 1;
+            } else {
+                int length;
+                if (header < 251) {
+                    length = header;
+                    offset += 1;
+                } else if (header == 252) {
+                    length = (bytes[offset + 1] & 0xff) | ((bytes[offset + 2] & 0xff) << 8);
+                    offset += 3;
+                } else if (header == 253) {
+                    length = (bytes[offset + 1] & 0xff)
+                            | ((bytes[offset + 2] & 0xff) << 8)
+                            | ((bytes[offset + 3] & 0xff) << 16);
+                    offset += 4;
+                } else {
+                    throw new IllegalStateException("Unsupported length-encoded row value in test: " + header);
+                }
+                actualValue = new String(bytes, offset, length, StandardCharsets.UTF_8);
+                offset += length;
+            }
+            Assertions.assertEquals(expectedValue, actualValue);
         }
     }
 

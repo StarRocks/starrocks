@@ -32,7 +32,6 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TInPredicate;
-import com.starrocks.thrift.TInfoFunc;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
@@ -144,8 +143,11 @@ public class ExprToThriftTest {
                 Assertions.assertFalse(node.isSetNode_type());
             }));
             cases.add(nodeCase("InformationFunction", ExprCaseFactory::buildInformationFunction,
-                    TExprNodeType.INFO_FUNC, node -> Assertions.assertEquals(new TInfoFunc(11, "cluster"),
-                            node.getInfo_func())));
+                    TExprNodeType.INFO_FUNC, node -> {
+                        Assertions.assertEquals(11, node.getInfo_func().getInt_value());
+                        Assertions.assertEquals("cluster", node.getInfo_func().getStr_value());
+                        Assertions.assertEquals("CURRENT_CATALOG", node.getInfo_func().getFunc_name());
+                    }));
             cases.add(nodeCase("TimestampArithmeticExpr", ExprCaseFactory::buildTimestampArithmeticExpr,
                     TExprNodeType.COMPUTE_FUNCTION_CALL));
             cases.add(nodeCase("LambdaFunctionExpr", ExprCaseFactory::buildLambdaFunctionExpr,

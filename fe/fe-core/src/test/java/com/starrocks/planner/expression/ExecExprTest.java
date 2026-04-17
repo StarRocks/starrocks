@@ -2766,6 +2766,7 @@ public class ExecExprTest {
         assertNotNull(node.info_func);
         assertEquals("testdb", node.info_func.getStr_value());
         assertEquals(0L, node.info_func.getInt_value());
+        assertEquals("database", node.info_func.getFunc_name());
     }
 
     @Test
@@ -2778,6 +2779,7 @@ public class ExecExprTest {
 
         assertNotNull(node.info_func);
         assertEquals("wh1", node.info_func.getStr_value());
+        assertEquals("current_warehouse", node.info_func.getFunc_name());
     }
 
     @Test

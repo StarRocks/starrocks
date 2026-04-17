@@ -21,6 +21,9 @@
 namespace starrocks {
 
 VectorizedInfoFunc::VectorizedInfoFunc(const TExprNode& node) : Expr(node) {
+    if (node.info_func.__isset.func_name) {
+        _func_name = node.info_func.func_name;
+    }
     switch (_type.type) {
     case TYPE_BIGINT: {
         _value = ColumnHelper::create_const_column<TYPE_BIGINT>(node.info_func.int_value, 1);
@@ -50,7 +53,11 @@ StatusOr<ColumnPtr> VectorizedInfoFunc::evaluate_checked(ExprContext* context, C
 std::string VectorizedInfoFunc::debug_string() const {
     std::stringstream out;
     out << "VectorizedInfoFunc("
-        << "type=" << this->type().debug_string() << " )";
+        << "type=" << this->type().debug_string();
+    if (!_func_name.empty()) {
+        out << ", func_name=" << _func_name;
+    }
+    out << " )";
     return out.str();
 }
 

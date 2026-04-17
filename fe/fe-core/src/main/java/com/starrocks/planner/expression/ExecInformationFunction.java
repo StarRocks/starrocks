@@ -14,7 +14,6 @@
 
 package com.starrocks.planner.expression;
 
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 import com.starrocks.thrift.TInfoFunc;
@@ -74,9 +73,7 @@ public class ExecInformationFunction extends ExecExpr {
     @Override
     public void toThrift(TExprNode node) {
         node.info_func = new TInfoFunc(intValue, strValue);
-        if (FunctionSet.CURRENT_WAREHOUSE.equalsIgnoreCase(funcName) && strValue != null) {
-            node.info_func.setStr_value(strValue);
-        }
+        node.info_func.setFunc_name(funcName);
     }
 
     @Override

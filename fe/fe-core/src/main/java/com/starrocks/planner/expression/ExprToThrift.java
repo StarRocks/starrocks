@@ -404,10 +404,7 @@ public final class ExprToThrift {
         public Void visitInformationFunction(InformationFunction node, TExprNode msg) {
             msg.node_type = TExprNodeType.INFO_FUNC;
             msg.info_func = new TInfoFunc(node.getIntValue(), node.getStrValue());
-            if (FunctionSet.CURRENT_WAREHOUSE.equalsIgnoreCase(node.getFuncType())
-                    && node.getStrValue() != null) {
-                msg.info_func.setStr_value(node.getStrValue());
-            }
+            msg.info_func.setFunc_name(node.getFuncType());
             return null;
         }
 
