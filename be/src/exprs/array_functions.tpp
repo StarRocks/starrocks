@@ -845,33 +845,36 @@ private:
     }
 
     static void _reverse_binary_column(Column* column, const Buffer<uint32_t>& array_offsets, size_t chunk_size) {
-        auto& offsets = down_cast<BinaryColumn*>(column)->get_offset();
-        // convert offset ot size
-        for (size_t i = offsets.size() - 1; i > 0; i--) {
-            offsets[i] = offsets[i] - offsets[i - 1];
-        }
-
-        for (size_t i = 0; i < chunk_size; i++) {
-            size_t begin = array_offsets[i];
-            size_t end = array_offsets[i + 1];
-
-            // revert size
-            std::reverse(offsets.begin() + begin + 1, offsets.begin() + end + 1);
-
-            // convert size to offset
-            for (size_t j = begin; j < end; j++) {
-                offsets[j + 1] = offsets[j] + offsets[j + 1];
+        auto* binary_column = down_cast<BinaryColumn*>(column);
+        auto& offsets = binary_column->get_offset();
+        auto& bytes = binary_column->get_bytes();
+        offsets.visit_storage([&](auto& offsets_buf) {
+            // convert offset ot size
+            for (size_t i = offsets_buf.size() - 1; i > 0; i--) {
+                offsets_buf[i] = offsets_buf[i] - offsets_buf[i - 1];
             }
 
-            // revert all byte of one array
-            auto& bytes = down_cast<BinaryColumn*>(column)->get_bytes();
-            std::reverse(bytes.begin() + offsets[begin], bytes.begin() + offsets[end]);
+            for (size_t i = 0; i < chunk_size; i++) {
+                size_t begin = array_offsets[i];
+                size_t end = array_offsets[i + 1];
 
-            // revert string one by one
-            for (size_t j = begin; j < end; j++) {
-                std::reverse(bytes.begin() + offsets[j], bytes.begin() + offsets[j + 1]);
+                // revert size
+                std::reverse(offsets_buf.begin() + begin + 1, offsets_buf.begin() + end + 1);
+
+                // convert size to offset
+                for (size_t j = begin; j < end; j++) {
+                    offsets_buf[j + 1] = offsets_buf[j] + offsets_buf[j + 1];
+                }
+
+                // revert all byte of one array
+                std::reverse(bytes.begin() + offsets_buf[begin], bytes.begin() + offsets_buf[end]);
+
+                // revert string one by one
+                for (size_t j = begin; j < end; j++) {
+                    std::reverse(bytes.begin() + offsets_buf[j], bytes.begin() + offsets_buf[j + 1]);
+                }
             }
-        }
+        });
     }
 
     static void _reverse_json_column(Column* column, const Buffer<uint32_t>& array_offsets, size_t chunk_size) {
