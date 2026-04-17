@@ -415,7 +415,7 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
         // with BitmapIndexWriter; reuse the feeder from the anonymous
         // namespace by adapting it inline — simpler than adding an overload.
         if (col->is_nullable()) {
-            const auto& nc = down_cast<const NullableColumn&>(*col);
+            auto& nc = down_cast<NullableColumn&>(*col);
             const auto* data_col = nc.data_column().get();
             const uint8_t* null_flags = nc.immutable_null_column_data().data();
             RawDataVisitor data_visitor;
