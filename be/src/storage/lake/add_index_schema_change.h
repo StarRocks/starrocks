@@ -22,6 +22,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
+#include "gen_cpp/segment.pb.h"
 #include "gen_cpp/tablet_schema.pb.h"
 #include "storage/lake/versioned_tablet.h"
 

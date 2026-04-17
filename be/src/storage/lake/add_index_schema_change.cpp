@@ -20,8 +20,10 @@
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "column/schema.h"
 #include "common/config_agent_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
@@ -64,7 +66,9 @@ Status feed_bitmap_from_column(BitmapIndexWriter* writer, const Column& col, siz
         const auto& nc = down_cast<const NullableColumn&>(col);
         const auto* data_col = nc.data_column().get();
         const uint8_t* null_flags = nc.immutable_null_column_data().data() + start_row;
-        const uint8_t* pdata = reinterpret_cast<const uint8_t*>(data_col->raw_data()) + start_row * type_size;
+        RawDataVisitor data_visitor;
+        RETURN_IF_ERROR(data_col->accept(&data_visitor));
+        const uint8_t* pdata = data_visitor.result() + start_row * type_size;
 
         // Collapse contiguous runs of null / non-null values to minimize
         // per-call overhead into add_values / add_nulls.
@@ -86,7 +90,9 @@ Status feed_bitmap_from_column(BitmapIndexWriter* writer, const Column& col, siz
         return Status::OK();
     }
 
-    const uint8_t* pdata = reinterpret_cast<const uint8_t*>(col.raw_data()) + start_row * type_size;
+    RawDataVisitor data_visitor;
+    RETURN_IF_ERROR(col.accept(&data_visitor));
+    const uint8_t* pdata = data_visitor.result() + start_row * type_size;
     writer->add_values(pdata, run_len);
     return Status::OK();
 }
@@ -412,7 +418,9 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
             const auto& nc = down_cast<const NullableColumn&>(*col);
             const auto* data_col = nc.data_column().get();
             const uint8_t* null_flags = nc.immutable_null_column_data().data();
-            const uint8_t* pdata = reinterpret_cast<const uint8_t*>(data_col->raw_data());
+            RawDataVisitor data_visitor;
+            RETURN_IF_ERROR(data_col->accept(&data_visitor));
+            const uint8_t* pdata = data_visitor.result();
             size_t i = 0;
             while (i < n) {
                 bool is_null = null_flags[i] != 0;
@@ -427,7 +435,9 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
                 i = j;
             }
         } else {
-            bf_writer->add_values(col->raw_data(), n);
+            RawDataVisitor data_visitor;
+            RETURN_IF_ERROR(col->accept(&data_visitor));
+            bf_writer->add_values(data_visitor.result(), n);
         }
         // BloomFilterIndexWriter accumulates per-page filters; flush at
         // chunk boundaries so memory stays bounded even for large columns.
