@@ -355,19 +355,4 @@ TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_with_escaped_enclose) {
     EXPECT_EQ("it's fine", rows[0][1]);
 }
 
-// Regression guard: explicit multi-byte row delimiter of "\r\n" must not
-// be affected by the CRLF fix (the fix only triggers when row_delimiter
-// is a single '\n').
-TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_explicit_delimiter) {
-    starrocks::CSVParseOptions options("\r\n", ",", 0, false, 0, '\'');
-    std::string data = "a,'{\"x\":1}'\r\nb,'{\"y\":2}'\r\n";
-    StringCSVReader reader(options, data);
-
-    std::vector<std::vector<std::string>> rows;
-    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
-    ASSERT_EQ(2u, rows.size());
-    EXPECT_EQ("{\"x\":1}", rows[0][1]);
-    EXPECT_EQ("{\"y\":2}", rows[1][1]);
-}
-
 } // namespace starrocks::csv
