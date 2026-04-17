@@ -110,8 +110,8 @@ Status ADBCDataSource::open(RuntimeState* state) {
     ctx.sql = get_adbc_sql(scan_node.table_name, scan_node.columns, scan_node.filters,
                            scan_node.__isset.limit ? scan_node.limit : -1);
 
-    LOG(INFO) << "ADBC connector: driver_url=" << ctx.driver_url << " entrypoint=" << ctx.entrypoint
-              << " options_count=" << ctx.adbc_options.size() << " sql=" << ctx.sql;
+    VLOG(2) << "ADBC connector: driver_url=" << ctx.driver_url << " entrypoint=" << ctx.entrypoint
+            << " sql=" << ctx.sql;
 
     // Create scanner with context struct
     _scanner = std::make_unique<ADBCScanner>(ctx, tuple_desc);
@@ -130,22 +130,22 @@ void ADBCDataSource::close(RuntimeState* state) {
 }
 
 Status ADBCDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    LOG(INFO) << "ADBC connector: get_next called, _tuple_desc=" << (void*)_tuple_desc;
+    VLOG(3) << "ADBC connector: get_next called, _tuple_desc=" << (void*)_tuple_desc;
     bool eos = false;
     RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
-    LOG(INFO) << "ADBC connector: _init_chunk_if_needed OK, chunk=" << (void*)chunk->get();
+    VLOG(3) << "ADBC connector: _init_chunk_if_needed OK, chunk=" << (void*)chunk->get();
     do {
         RETURN_IF_ERROR(_scanner->get_next(state, chunk, &eos));
     } while (!eos && (*chunk)->num_rows() == 0);
 
     if (eos) {
-        LOG(INFO) << "ADBC connector: EOS reached";
+        VLOG(3) << "ADBC connector: EOS reached";
         return Status::EndOfFile("");
     }
 
     _rows_read += (*chunk)->num_rows();
     _bytes_read += (*chunk)->bytes_usage();
-    LOG(INFO) << "ADBC connector: get_next returning " << (*chunk)->num_rows() << " rows";
+    VLOG(3) << "ADBC connector: get_next returning " << (*chunk)->num_rows() << " rows";
     return Status::OK();
 }
 
