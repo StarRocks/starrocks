@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
