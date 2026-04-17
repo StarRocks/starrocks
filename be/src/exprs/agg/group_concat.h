@@ -210,7 +210,8 @@ public:
                     size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
                                       column_sep->get_immutable_bytes().size();
                     bytes.resize(new_size);
-                    dst_column->get_offset().resize(chunk_size + 1);
+                    auto& offsets = dst_column->get_offset();
+                    offsets.resize(chunk_size + 1);
 
                     for (size_t i = 0; i < chunk_size; ++i) {
                         auto value = column_value->get_slice(i);
@@ -221,7 +222,7 @@ public:
 
                         old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep.get_data(),
                                                            value.get_data());
-                        dst_column->get_offset()[i + 1] = old_size;
+                        offsets.set(i + 1, old_size);
                     }
                 }
             } else {
@@ -232,7 +233,8 @@ public:
                     size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
                                       chunk_size * sep.size;
                     bytes.resize(new_size);
-                    dst_column->get_offset().resize(chunk_size + 1);
+                    auto& offsets = dst_column->get_offset();
+                    offsets.resize(chunk_size + 1);
 
                     for (size_t i = 0; i < chunk_size; ++i) {
                         auto value = column_value->get_slice(i);
@@ -242,7 +244,7 @@ public:
 
                         old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep.get_data(),
                                                            value.get_data());
-                        dst_column->get_offset()[i + 1] = old_size;
+                        offsets.set(i + 1, old_size);
                     }
                 }
             }
@@ -260,14 +262,15 @@ public:
                 size_t new_size = 2 * chunk_size * sizeof(uint32_t) + column_value->get_immutable_bytes().size() +
                                   size_sep * chunk_size;
                 bytes.resize(new_size);
-                dst_column->get_offset().resize(chunk_size + 1);
+                auto& offsets = dst_column->get_offset();
+                offsets.resize(chunk_size + 1);
 
                 for (size_t i = 0; i < chunk_size; ++i) {
                     auto value = column_value->get_slice(i);
                     uint32_t size_value = value.get_size();
 
                     old_size = serialize_sep_and_value(bytes, old_size, size_value, size_sep, sep, value.get_data());
-                    dst_column->get_offset()[i + 1] = old_size;
+                    offsets.set(i + 1, old_size);
                 }
             }
         }

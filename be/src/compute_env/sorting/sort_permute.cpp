@@ -15,6 +15,7 @@
 #include "compute_env/sorting/sort_permute.h"
 
 #include <span>
+#include <type_traits>
 
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
@@ -185,18 +186,24 @@ public:
             slices.push_back(slice);
         }
 
-        bytes.resize(bytes.size() + added_bytes);
-        offsets.reserve(offsets.size() + _perm.size());
-
         DCHECK(!offsets.empty());
-        auto curr_offset = offsets.back();
+        const size_t old_offsets_size = offsets.size();
+        uint64_t curr_offset = offsets.back();
+        bytes.resize(bytes.size() + added_bytes);
+        offsets.resize_uninitialized(old_offsets_size + _perm.size(), curr_offset + added_bytes);
         auto* const byte_ptr = bytes.data();
 
-        for (Slice slice : slices) {
-            strings::memcpy_inlined(byte_ptr + curr_offset, slice.get_data(), slice.get_size());
-            curr_offset += slice.get_size();
-            offsets.push_back(curr_offset);
-        }
+        offsets.visit_storage([&](auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            auto* __restrict dst_offsets = offsets_buf.data() + old_offsets_size;
+
+            for (size_t i = 0; i < slices.size(); ++i) {
+                Slice slice = slices[i];
+                strings::memcpy_inlined(byte_ptr + curr_offset, slice.get_data(), slice.get_size());
+                curr_offset += slice.get_size();
+                dst_offsets[i] = static_cast<OffsetValue>(curr_offset);
+            }
+        });
 
         dst->invalidate_slice_cache();
 

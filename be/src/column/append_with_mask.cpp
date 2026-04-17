@@ -14,6 +14,8 @@
 
 #include "column/append_with_mask.h"
 
+#include <type_traits>
+
 #include "base/simd/simd.h"
 #include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
@@ -165,43 +167,47 @@ Status AppendWithMaskVisitor<PositiveSelect>::append_binary_impl(BinaryColumnBas
         return Status::OK();
     }
 
-    const auto* src_offsets = src_column->get_offset().data();
+    const auto& src_offsets = src_column->get_offset();
     const auto* src_bytes = src_column->raw_bytes();
 
     size_t total_bytes = 0;
-    for (size_t i = 0; i < _count; ++i) {
-        if (is_selected(_mask[i])) {
-            total_bytes += src_offsets[i + 1] - src_offsets[i];
+    src_offsets.visit_storage([&](const auto& src_offsets_buf) {
+        for (size_t i = 0; i < _count; ++i) {
+            if (is_selected(_mask[i])) {
+                total_bytes += src_offsets_buf[i + 1] - src_offsets_buf[i];
+            }
         }
-    }
+    });
 
     auto& offsets = column->get_offset();
     auto& bytes = column->get_bytes();
     size_t old_rows = offsets.size() - 1;
     size_t old_bytes = bytes.size();
-    offsets.resize(old_rows + selected + 1);
+    offsets.resize_uninitialized(old_rows + selected + 1, old_bytes + total_bytes);
     bytes.resize(old_bytes + total_bytes);
 
-    auto* dest_offsets = offsets.data() + old_rows + 1;
     auto* dest_bytes = bytes.data() + old_bytes;
 
-    T current_offset = offsets[old_rows];
-    if (current_offset != static_cast<T>(old_bytes)) {
-        current_offset = static_cast<T>(old_bytes);
-        offsets[old_rows] = current_offset;
-    }
-    size_t copied = 0;
-    for (size_t i = 0; i < _count; ++i) {
-        if (is_selected(_mask[i])) {
-            const T start = src_offsets[i];
-            const T end = src_offsets[i + 1];
-            const T len = end - start;
-            strings::memcpy_inlined(dest_bytes + copied, src_bytes + start, len);
-            copied += len;
-            current_offset += len;
-            *dest_offsets++ = current_offset;
+    using Offsets = typename BinaryColumnBase<T>::Offsets;
+    Offsets::visit_storage_pair(offsets, src_offsets, [&](auto& dst_offsets_buf, const auto& src_offsets_buf) {
+        uint64_t current_offset = old_bytes;
+        dst_offsets_buf[old_rows] = static_cast<typename std::decay_t<decltype(dst_offsets_buf)>::value_type>(
+                current_offset);
+        auto* dest_offsets = dst_offsets_buf.data() + old_rows + 1;
+        size_t copied = 0;
+        for (size_t i = 0; i < _count; ++i) {
+            if (is_selected(_mask[i])) {
+                const uint64_t start = src_offsets_buf[i];
+                const uint64_t end = src_offsets_buf[i + 1];
+                const uint64_t len = end - start;
+                strings::memcpy_inlined(dest_bytes + copied, src_bytes + start, len);
+                copied += len;
+                current_offset += len;
+                *dest_offsets++ = static_cast<typename std::decay_t<decltype(dst_offsets_buf)>::value_type>(
+                        current_offset);
+            }
         }
-    }
+    });
 
     column->invalidate_slice_cache();
     return Status::OK();

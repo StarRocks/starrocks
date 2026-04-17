@@ -161,7 +161,7 @@ public:
             memcpy(bytes.data() + old_size, &quantile, sizeof(double));
             percentile.serialize(bytes.data() + old_size + sizeof(double));
 
-            result->get_offset()[i + 1] = new_size;
+            result->get_offset().set(i + 1, new_size);
             old_size = new_size;
         }
     }
@@ -249,7 +249,7 @@ public:
                     memcpy(bytes.data() + old_size, &quantile, sizeof(double));
                     percentile.serialize(bytes.data() + old_size + sizeof(double));
                     old_size = new_size;
-                    result->get_offset()[i + 1] = new_size;
+                    result->get_offset().set(i + 1, new_size);
                 }
             } else {
                 // TODO: optimize for empty weight but should not happen frequently
@@ -261,7 +261,7 @@ public:
                     memcpy(bytes.data() + old_size, &quantile, sizeof(double));
                     empty_percentile.serialize(bytes.data() + old_size + sizeof(double));
                     old_size = new_size;
-                    result->get_offset()[i + 1] = new_size;
+                    result->get_offset().set(i + 1, new_size);
                 }
             }
         } else {
@@ -278,7 +278,7 @@ public:
                 memcpy(bytes.data() + old_size, &quantile, sizeof(double));
                 percentile.serialize(bytes.data() + old_size + sizeof(double));
                 old_size = new_size;
-                result->get_offset()[i + 1] = new_size;
+                result->get_offset().set(i + 1, new_size);
             }
         }
     }
@@ -431,7 +431,7 @@ public:
             // Write TDigest
             percentile.serialize(bytes.data() + old_size + sizeof(uint32_t) + count * sizeof(double));
 
-            result->get_offset()[i + 1] = new_size;
+            result->get_offset().set(i + 1, new_size);
             old_size = new_size;
         }
     }
@@ -596,7 +596,7 @@ public:
                     percentile.serialize(bytes.data() + old_size + sizeof(uint32_t) + count * sizeof(double));
 
                     old_size = new_size;
-                    result->get_offset()[i + 1] = new_size;
+                    result->get_offset().set(i + 1, new_size);
                 }
             } else {
                 // TODO: optimize for empty weight but should not happen frequently
@@ -614,7 +614,7 @@ public:
                     empty_percentile.serialize(bytes.data() + old_size + sizeof(uint32_t) + count * sizeof(double));
 
                     old_size = new_size;
-                    result->get_offset()[i + 1] = new_size;
+                    result->get_offset().set(i + 1, new_size);
                 }
             }
         } else {
@@ -638,7 +638,7 @@ public:
                 percentile.serialize(bytes.data() + old_size + sizeof(uint32_t) + count * sizeof(double));
 
                 old_size = new_size;
-                result->get_offset()[i + 1] = new_size;
+                result->get_offset().set(i + 1, new_size);
             }
         }
     }

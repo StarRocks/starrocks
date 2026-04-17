@@ -130,8 +130,8 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& 
 
     char* ptr = reinterpret_cast<char*>(bytes.data());
 
-    for (int i = 0; i < num_rows; ++i) {
-        offsets[i + 1] = offsets[i] + 36;
+    for (int i = 0; i <= num_rows; ++i) {
+        offsets.set(i, static_cast<uint64_t>(i) * 36);
     }
 
 #ifdef __SSE4_2__
@@ -256,8 +256,11 @@ StatusOr<ColumnPtr> UtilityFunctions::uuid_v7(FunctionContext* ctx, const Column
 
     char* ptr = reinterpret_cast<char*>(bytes.data());
 
+    for (int i = 0; i <= num_rows; ++i) {
+        offsets.set(i, static_cast<uint64_t>(i) * 36);
+    }
+
     for (int i = 0; i < num_rows; ++i) {
-        offsets[i + 1] = offsets[i] + 36;
         auto uuid = ThreadLocalUUIDGenerator::next_uuid_v7();
         std::string uuid_str = boost::uuids::to_string(uuid);
         memcpy(ptr, uuid_str.c_str(), 36);

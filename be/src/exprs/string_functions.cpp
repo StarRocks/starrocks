@@ -38,6 +38,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #include "base/container/raw_container.h"
 #include "base/crypto/sm3.h"
@@ -242,12 +243,12 @@ static inline void utf8_substr_from_right_per_slice(Slice* s, int off, int len, 
 }
 
 static inline void binary_column_empty_op(Bytes* bytes, Offsets* offsets, size_t i) {
-    (*offsets)[i + 1] = bytes->size();
+    offsets->set(i + 1, bytes->size());
 }
 
 static inline void binary_column_non_empty_op(uint8_t* begin, uint8_t* end, Bytes* bytes, Offsets* offsets, size_t i) {
     bytes->insert(bytes->end(), begin, end);
-    (*offsets)[i + 1] = bytes->size();
+    offsets->set(i + 1, bytes->size());
 }
 
 template <bool off_is_negative, bool allow_out_of_left_bound>
@@ -436,9 +437,9 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
         return result;
     }
 
+    // The size of substr result never exceeds the counterpart of the source column.
+    size_t reserved = src->get_immutable_bytes().size();
     if (len > 0) {
-        // the size of substr result never exceeds the counterpart of the source column.
-        size_t reserved = src->get_immutable_bytes().size();
         // when start pos is negative, the result of substr take last abs(pos) chars,
         // thus length of the result is less than abs(pos) and len.
         int min_len = len;
@@ -452,8 +453,8 @@ ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src,
         bytes.reserve(reserved);
     }
 
-    raw::make_room(&offsets, size + 1);
-    offsets[0] = 0;
+    offsets.make_room(size + 1, reserved);
+    offsets.set(0, 0);
 
     auto src_bytes = src->get_immutable_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
@@ -500,8 +501,8 @@ ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, 
     }
 
     bytes.reserve(reserved);
-    raw::make_room(&offsets, size + 1);
-    offsets[0] = 0;
+    offsets.make_room(size + 1, reserved);
+    offsets.set(0, 0);
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
         // off_is_negative=true, off=-len
@@ -800,20 +801,20 @@ public:
         auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
         auto& nulls = builder.get_null_data();
 
-        raw::make_room(&dst_offsets, num_rows + 1);
-        dst_offsets[0] = 0;
+        dst_offsets.resize(num_rows + 1);
+        dst_offsets.set(0, 0);
         nulls.resize(num_rows);
         bool has_null = false;
         size_t dst_off = 0;
         for (auto i = 0; i < num_rows; ++i) {
             auto len = len_array[i];
             if (UNLIKELY((uint32_t)len > get_olap_string_max_length())) {
-                dst_offsets[i + 1] = dst_off;
+                dst_offsets.set(i + 1, dst_off);
                 has_null = true;
                 nulls[i] = 1;
             } else {
                 dst_off += len;
-                dst_offsets[i + 1] = dst_off;
+                dst_offsets.set(i + 1, dst_off);
             }
         }
         dst_bytes.resize(dst_off, ' ');
@@ -899,8 +900,6 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         dst_offsets.resize(num_rows + 1);
         return builder.build(ColumnHelper::is_all_const(columns));
     } else {
-        raw::make_room(&dst_offsets, num_rows + 1);
-        dst_offsets[0] = 0;
         size_t reserved = static_cast<size_t>(times) * src_offsets.back();
         if (reserved > get_olap_string_max_length() * num_rows) {
             reserved = 0;
@@ -911,6 +910,8 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
                 }
             }
         }
+        dst_offsets.make_room(num_rows + 1, reserved);
+        dst_offsets.set(0, 0);
         dst_bytes.resize(reserved);
     }
 
@@ -919,7 +920,7 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
     for (auto i = 0; i < num_rows; ++i) {
         auto s = src->get_slice(i);
         if (s.size == 0) {
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
         // if result exceed STRING_MAX_LENGTH
@@ -927,14 +928,14 @@ static inline ColumnPtr repeat_const_not_null(const Columns& columns, const Bina
         if (s.size * times > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
         fast_repeat(dst_curr, (uint8_t*)s.data, s.size, times);
         const size_t dst_slice_size = s.size * times;
         dst_curr += dst_slice_size;
         dst_off += dst_slice_size;
-        dst_offsets[i + 1] = dst_off;
+        dst_offsets.set(i + 1, dst_off);
     }
 
     dst_bytes.resize(dst_off);
@@ -956,8 +957,8 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.resize(num_rows + 1);
+    dst_offsets.set(0, 0);
 
     bool has_null = false;
     size_t dst_off = 0;
@@ -966,12 +967,12 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
         if (str_viewer.is_null(i) || times_viewer.is_null(i)) {
             dst_nulls[i] = 1;
             has_null = true;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
 
         if (str_viewer.value(i).size == 0 || times_viewer.value(i) <= 0) {
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
 
@@ -981,12 +982,12 @@ static inline ColumnPtr repeat_not_const(const Columns& columns) {
         if (s.size * n > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
 
         dst_off += n * s.size;
-        dst_offsets[i + 1] = dst_off;
+        dst_offsets.set(i + 1, dst_off);
     }
 
     dst_bytes.resize(dst_off);
@@ -1208,10 +1209,10 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
         return dst;
     }
 
-    const int num_src_bytes = src_offsets.back();
+    const size_t num_src_bytes = src_offsets.back();
     dst_bytes.resize(num_src_bytes);
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.make_room(num_rows + 1, num_src_bytes);
+    dst_offsets.set(0, 0);
 
     uint8_t* dst_begin = dst_bytes.data();
     size_t dst_offset = 0;
@@ -1221,7 +1222,7 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
         const Slice s = src->get_slice(i);
         size_t num_row_bytes = translate_string_with_ascii_map(s, ascii_map, dst_begin + dst_offset);
         dst_offset += num_row_bytes;
-        dst_offsets[i + 1] = dst_offset;
+        dst_offsets.set(i + 1, dst_offset);
     }
 
     dst_bytes.resize(dst_offset);
@@ -1258,13 +1259,13 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
     }
 
     const auto& src_offsets = src->get_offset();
-    const int num_src_bytes = src_offsets.back();
+    const size_t num_src_bytes = src_offsets.back();
     // The `dst_bytes` can be at most four times larger than `src_bytes`, as in the worst-case scenario, each
     // `src_bytes` corresponds to a one-byte UTF-8 character, while each dst_bytes is replaced by a four-byte
     // UTF-8 character.
     dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.resize(num_rows + 1);
+    dst_offsets.set(0, 0);
     dst_nulls.resize(num_rows);
 
     bool has_null = false;
@@ -1285,11 +1286,11 @@ static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Colu
         const auto [is_null, num_row_bytes] = translate_string_with_utf8_map(src_encoded_values, utf8_map, dst_begin);
         if (is_null) {
             has_null = true;
-            dst_offsets[i + 1] = dst_offset;
+            dst_offsets.set(i + 1, dst_offset);
             dst_nulls[i] = 1;
         } else {
             dst_offset += num_row_bytes;
-            dst_offsets[i + 1] = dst_offset;
+            dst_offsets.set(i + 1, dst_offset);
         }
     }
 
@@ -1327,10 +1328,10 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
     }
 
     const auto& src_offsets = src_viewer.column()->get_offset();
-    const int num_src_bytes = src_offsets.back();
+    const size_t num_src_bytes = src_offsets.back();
     dst_bytes.reserve(std::min<size_t>(16ULL, num_src_bytes * 4));
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.resize(num_rows + 1);
+    dst_offsets.set(0, 0);
     dst_nulls.resize(num_rows);
 
     bool has_null = false;
@@ -1341,7 +1342,7 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
     for (int i = 0; i < num_rows; i++) {
         if (src_viewer.is_null(i) || from_viewer.is_null(i) || to_viewer.is_null(i)) {
             has_null = true;
-            dst_offsets[i + 1] = dst_offset;
+            dst_offsets.set(i + 1, dst_offset);
             dst_nulls[i] = 1;
             continue;
         }
@@ -1356,7 +1357,7 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
             size_t num_row_bytes =
                     translate_string_with_ascii_map(src, local_state.ascii_map, dst_bytes.data() + dst_offset);
             dst_offset += num_row_bytes;
-            dst_offsets[i + 1] = dst_offset;
+            dst_offsets.set(i + 1, dst_offset);
         } else {
             src_encoded_values.clear();
             src_encoded_values.reserve(src.size);
@@ -1369,11 +1370,11 @@ ColumnPtr translate_with_non_const_from_or_to(const Columns& columns, const Tran
                     translate_string_with_utf8_map(src_encoded_values, local_state.utf8_map, dst_begin);
             if (is_null) {
                 has_null = true;
-                dst_offsets[i + 1] = dst_offset;
+                dst_offsets.set(i + 1, dst_offset);
                 dst_nulls[i] = 1;
             } else {
                 dst_offset += num_row_bytes;
-                dst_offsets[i + 1] = dst_offset;
+                dst_offsets.set(i + 1, dst_offset);
             }
         }
     }
@@ -1457,8 +1458,8 @@ static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, const Bina
     auto& dst_bytes = result->get_bytes();
 
     dst_bytes.resize(num_rows * len);
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.make_room(num_rows + 1, static_cast<uint64_t>(num_rows) * len);
+    dst_offsets.set(0, 0);
 
     uint8_t* dst_begin = dst_bytes.data();
     size_t dst_off = 0;
@@ -1469,7 +1470,7 @@ static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, const Bina
         if (s.size >= len) {
             strings::memcpy_inlined(dst_begin + dst_off, s.data, len);
             dst_off += len;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
         const size_t fill_len = len - s.size;
@@ -1492,7 +1493,7 @@ static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, const Bina
             dst_off += s.size;
         }
 
-        dst_offsets[i + 1] = dst_off;
+        dst_offsets.set(i + 1, dst_off);
     }
     dst_bytes.resize(dst_off);
     return result;
@@ -1510,8 +1511,8 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColum
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_nulls = builder.get_null_data();
 
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.resize(num_rows + 1);
+    dst_offsets.set(0, 0);
 
     Bytes dst_bytes;
     dst_bytes.reserve(16ULL << 20);
@@ -1530,7 +1531,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColum
                 dst_bytes.resize(dst_off + real_len);
                 strings::memcpy_inlined(dst_bytes.data() + dst_off, s.data, real_len);
                 dst_off += real_len;
-                dst_offsets[i + 1] = dst_off;
+                dst_offsets.set(i + 1, dst_off);
                 continue;
             }
             fill_len = len - skipped_chars;
@@ -1540,7 +1541,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColum
                 dst_bytes.resize(dst_off + len);
                 strings::memcpy_inlined(dst_bytes.data() + dst_off, s.data, len);
                 dst_off += len;
-                dst_offsets[i + 1] = dst_off;
+                dst_offsets.set(i + 1, dst_off);
                 continue;
             }
             fill_len = len - s.size;
@@ -1561,7 +1562,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColum
         if (dst_slice_size > get_olap_string_max_length()) {
             dst_nulls[i] = 1;
             has_null = true;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
 
@@ -1582,7 +1583,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColum
             strings::memcpy_inlined(dst_begin + dst_off, s.data, s.size);
             dst_off += s.size;
         }
-        dst_offsets[i + 1] = dst_off;
+        dst_offsets.set(i + 1, dst_off);
     }
     dst_bytes.resize(dst_off);
     builder.data_column_raw_ptr()->get_bytes().swap(reinterpret_cast<Bytes&>(dst_bytes));
@@ -1662,7 +1663,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         // NULL if any [str, len, pad] is NULL
         if (str_viewer.is_null(i) || len_viewer.is_null(i) || fill_viewer.is_null(i)) {
             has_null = true;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             dst_nulls[i] = 1;
             continue;
         }
@@ -1671,13 +1672,13 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         // NULL if len < 0 || len > get_olap_string_max_length()
         if ((uint32)len > get_olap_string_max_length()) {
             has_null = true;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             dst_nulls[i] = 1;
             continue;
         }
         // empty string if len = 0
         if (len == 0) {
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
         auto str = str_viewer.value(i);
@@ -1695,7 +1696,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
                 dst_bytes.resize(dst_off + len);
                 strings::memcpy_inlined(dst_bytes.data() + dst_off, str.data, len);
                 dst_off += len;
-                dst_offsets[i + 1] = dst_off;
+                dst_offsets.set(i + 1, dst_off);
                 continue;
             }
             fill_len = len - str.size;
@@ -1708,7 +1709,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
                 dst_bytes.resize(dst_off + real_len);
                 strings::memcpy_inlined(dst_bytes.data() + dst_off, str.data, real_len);
                 dst_off += real_len;
-                dst_offsets[i + 1] = dst_off;
+                dst_offsets.set(i + 1, dst_off);
                 continue;
             }
             fill_len = len - skipped_chars;
@@ -1720,7 +1721,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
             dst_bytes.resize(dst_off + str.size);
             strings::memcpy_inlined(dst_bytes.data() + dst_off, str.data, str.size);
             dst_off += str.size;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
 
@@ -1731,7 +1732,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
         // result is oversize, return NULL
         if (dst_slice_size > get_olap_string_max_length()) {
             has_null = true;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             dst_nulls[i] = 1;
             continue;
         }
@@ -1755,7 +1756,7 @@ ColumnPtr pad_not_const(const Columns& columns, [[maybe_unused]] const PadState*
             strings::memcpy_inlined(dst_begin + dst_off, str.data, str.size);
             dst_off += str.size;
         }
-        dst_offsets[i + 1] = dst_off;
+        dst_offsets.set(i + 1, dst_off);
     }
     DCHECK(dst_bytes.size() == dst_off);
     builder.data_column_raw_ptr()->get_bytes().swap(reinterpret_cast<Bytes&>(dst_bytes));
@@ -1861,7 +1862,7 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
 
         dst_data.resize(src_data.size() + row_num);
         dst_offsets.resize(row_num + 1);
-        dst_offsets[0] = 0;
+        dst_offsets.set(0, 0);
 
         size_t src_offset = 0;
         size_t dst_offset = 0;
@@ -1882,7 +1883,7 @@ StatusOr<ColumnPtr> StringFunctions::append_trailing_char_if_absent(FunctionCont
                 ++dst_offset;
             }
 
-            dst_offsets[row + 1] = dst_offset;
+            dst_offsets.set(row + 1, dst_offset);
         }
         if (!dst_data.empty()) {
             dst_data.resize(dst_offsets.back());
@@ -1988,7 +1989,7 @@ void utf8_case_toggle(ImmBytes src_bytes, const Offsets& src_offsets, Bytes* dst
     size_t current_dst_size = dst_bytes->size();
 
     size_t current_offset = 0;
-    (*dst_offsets)[0] = 0;
+    dst_offsets->set(0, 0);
     for (size_t i = 0; i < num_rows; i++) {
         const auto* src_data = reinterpret_cast<const char*>(src_bytes.data() + src_offsets[i]);
         size_t src_len = src_offsets[i + 1] - src_offsets[i];
@@ -2024,7 +2025,7 @@ void utf8_case_toggle(ImmBytes src_bytes, const Offsets& src_offsets, Bytes* dst
             throw std::runtime_error(fmt::format("Failed to convert case: {}", u_errorName(err_code)));
         }
         current_offset += dst_size;
-        (*dst_offsets)[i + 1] = current_offset;
+        dst_offsets->set(i + 1, current_offset);
     };
     dst_bytes->resize(current_offset);
 }
@@ -2038,7 +2039,7 @@ ColumnPtr StringCaseToggleFunction<to_upper>::evaluate(const ColumnPtr& v1) {
     auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
     auto& dst_offsets = dst->get_offset();
     auto& dst_bytes = dst->get_bytes();
-    dst_offsets.assign(src_offsets.begin(), src_offsets.end());
+    dst_offsets = src_offsets;
     if constexpr (to_upper) {
         vectorized_toggle_case<'a', 'z'>(src_bytes, &dst_bytes);
     } else {
@@ -2065,7 +2066,7 @@ public:
         auto& dst_offsets = dst->get_offset();
         auto& dst_bytes = dst->get_bytes();
         if (validate_ascii_fast(reinterpret_cast<const char*>(src_bytes.data()), src_bytes.size())) {
-            dst_offsets.assign(src_offsets.begin(), src_offsets.end());
+            dst_offsets = src_offsets;
             // if all characters are ascii, we process them with the fast path
             if constexpr (to_upper) {
                 vectorized_toggle_case<'a', 'z'>(src_bytes, &dst_bytes);
@@ -2209,7 +2210,7 @@ struct ReverseFunction {
         auto& dst_bytes = result->get_bytes();
         auto& dst_offsets = result->get_offset();
 
-        dst_offsets.assign(src_offsets.begin(), src_offsets.end());
+        dst_offsets = src_offsets;
         dst_bytes.resize(src_bytes.size());
 
         const auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
@@ -2337,7 +2338,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
                                   [[maybe_unused]] size_t* trailing_spaces_num) {
     auto s = src->get_slice(i);
     if (UNLIKELY(s.size == 0)) {
-        (*offsets)[i + 1] = bytes->size();
+        offsets->set(i + 1, bytes->size());
         return;
     }
 
@@ -2365,7 +2366,7 @@ static inline void trim_per_slice(const BinaryColumn* src, const size_t i, Bytes
     }
 
     bytes->insert(bytes->end(), (uint8*)from_ptr, (uint8*)to_ptr);
-    (*offsets)[i + 1] = bytes->size();
+    offsets->set(i + 1, bytes->size());
 }
 
 template <TrimType trim_type, size_t simd_threshold, bool trim_single, bool trim_utf8>
@@ -2379,8 +2380,8 @@ struct AdaptiveTrimFunction {
         auto& dst_bytes = dst->get_bytes();
 
         const auto num_rows = src->size();
-        raw::make_room(&dst_offsets, num_rows + 1);
-        dst_offsets[0] = 0;
+        dst_offsets.resize(num_rows + 1);
+        dst_offsets.set(0, 0);
         dst_bytes.reserve(src->get_immutable_bytes().size());
 
         size_t i = 0;
@@ -2989,8 +2990,8 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, const Bina
     auto is_null = false;
 
     const auto num_rows = src->size();
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.resize(num_rows + 1);
+    dst_offsets.set(0, 0);
     nulls.resize(num_rows);
 
     auto& tail = state->tail;
@@ -3003,12 +3004,12 @@ static inline ColumnPtr concat_const_not_null(Columns const& columns, const Bina
         const auto dst_slice_size = s.size + tail_size;
         if (LIKELY(dst_slice_size <= get_olap_string_max_length())) {
             dst_off += dst_slice_size;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
         } else {
             // return NULL for an oversize result
             nulls[i] = 1;
             is_null = true;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
         }
     }
 
@@ -3042,8 +3043,8 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.make_room(num_rows + 1, dst_bytes_max_size);
+    dst_offsets.set(0, 0);
     dst_bytes.resize(dst_bytes_max_size);
 
     auto* dst_begin = (uint8_t*)dst_bytes.data();
@@ -3061,7 +3062,7 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
         if (is_null) {
             has_null = true;
             dst_nulls[i] = 1;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
         size_t dst_slice_len = 0;
@@ -3082,7 +3083,7 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
             dst_nulls[i] = 1;
             dst_off -= dst_slice_len;
         }
-        dst_offsets[i + 1] = dst_off;
+        dst_offsets.set(i + 1, dst_off);
     }
     dst_bytes.resize(dst_off);
     builder.set_has_null(has_null);
@@ -3169,8 +3170,8 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
     auto& dst_offsets = builder.data_column_raw_ptr()->get_offset();
     auto& dst_bytes = builder.data_column_raw_ptr()->get_bytes();
     dst_nulls.resize(num_rows);
-    raw::make_room(&dst_offsets, num_rows + 1);
-    dst_offsets[0] = 0;
+    dst_offsets.make_room(num_rows + 1, dst_bytes_max_size);
+    dst_offsets.set(0, 0);
     dst_bytes.resize(dst_bytes_max_size);
     auto* dst_begin = (uint8_t*)dst_bytes.data();
     size_t dst_off = 0;
@@ -3179,7 +3180,7 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
         if (sep_viewer.is_null(i)) {
             has_null = true;
             dst_nulls[i] = 1;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
             continue;
         }
 
@@ -3210,14 +3211,14 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
             dst_off -= dst_slice_size;
             has_null = true;
             dst_nulls[i] = 1;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
         } else if (LIKELY(dst_slice_size > 0)) {
             // just rewind last sep
             dst_off -= sep.size;
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
         } else {
             // empty result, no need to rewind
-            dst_offsets[i + 1] = dst_off;
+            dst_offsets.set(i + 1, dst_off);
         }
     }
     dst_bytes.resize(dst_off);
@@ -4015,14 +4016,14 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
     auto& dst_offsets = dst->get_offset();
     auto& dst_bytes = dst->get_bytes();
 
-    raw::make_room(&dst_offsets, num_rows + 1);
+    dst_offsets.make_room(num_rows + 1, data_count());
     dst_bytes.reserve(data_count());
 
     // copy data row by row with replacements applied
     char* cursor = reinterpret_cast<char*>(dst_bytes.data());
     size_t match_index = 0;
     size_t match_size = match_info_chain_in_one_row.info_chain.size();
-    dst_offsets[0] = 0;
+    dst_offsets.set(0, 0);
 
     for (size_t i = 0; i < num_rows; i++) {
         size_t row_start = src_offsets[i];
@@ -4047,7 +4048,7 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
         cursor += row_end - last_to;
 
         // Calculate offset for this row
-        dst_offsets[i + 1] = cursor - reinterpret_cast<char*>(dst_bytes.data());
+        dst_offsets.set(i + 1, cursor - reinterpret_cast<char*>(dst_bytes.data()));
     }
     DCHECK(match_index == match_size);
     DCHECK(dst_offsets.back() == data_count());

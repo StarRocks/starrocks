@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstring>
+#include <type_traits>
 
 #include "base/bit/bit_stream_utils.h"
 #include "base/bit/bit_util.h"
@@ -233,15 +234,24 @@ public:
             auto& offsets = binary_column->get_offset();
             auto& bytes = binary_column->get_bytes();
             size_t prev_offsets = offsets.size();
-            raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
             size_t offset = bytes.size();
+            size_t final_offset = offset;
             size_t cnt = 0;
             for (size_t i = 0; i < count; ++i) {
-                offset += is_nulls[i] ? 0 : lengths[cnt++];
-                offsets[prev_offsets + i] = offset;
+                final_offset += is_nulls[i] ? 0 : lengths[cnt++];
             }
+            offsets.resize_uninitialized(count + prev_offsets, final_offset);
+            cnt = 0;
+            offsets.visit_storage([&](auto& offsets_buf) {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* dst_offsets = offsets_buf.data() + prev_offsets;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : lengths[cnt++];
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                }
+            });
 
-            binary_column->get_bytes().reserve(offset);
+            binary_column->get_bytes().reserve(final_offset);
         }
 
         if (read_count == 0) {
@@ -557,13 +567,21 @@ public:
         }
         auto& offsets = binary_column->get_offset();
         size_t prev_offsets = offsets.size();
-        raw::stl_vector_resize_uninitialized(&offsets, count + prev_offsets);
+        size_t final_offset = offset;
+        for (size_t i = 0; i < count; ++i) {
+            final_offset += is_nulls[i] ? 0 : _type_length;
+        }
+        offsets.resize_uninitialized(count + prev_offsets, final_offset);
         {
             // fill offset columns
-            for (size_t i = 0; i < count; ++i) {
-                offset += is_nulls[i] ? 0 : _type_length;
-                offsets[prev_offsets + i] = offset;
-            }
+            offsets.visit_storage([&](auto& offsets_buf) {
+                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                auto* dst_offsets = offsets_buf.data() + prev_offsets;
+                for (size_t i = 0; i < count; ++i) {
+                    offset += is_nulls[i] ? 0 : _type_length;
+                    dst_offsets[i] = static_cast<OffsetValue>(offset);
+                }
+            });
         }
         DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
 

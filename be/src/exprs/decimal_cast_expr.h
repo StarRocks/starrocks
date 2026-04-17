@@ -404,9 +404,9 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
         auto result = BinaryColumn::create();
         auto& bytes = result->get_bytes();
         auto& offsets = result->get_offset();
-        raw::make_room(&offsets, num_rows + 1);
-        offsets[0] = 0;
         size_t max_length = decimal_precision_limit<DecimalCppType> + 4;
+        offsets.make_room(num_rows + 1, num_rows * max_length);
+        offsets.set(0, 0);
         bytes.resize(num_rows * max_length);
         auto bytes_data = &bytes.front();
         auto data_column = ColumnHelper::cast_to_raw<DecimalType>(column);
@@ -418,7 +418,7 @@ struct DecimalNonDecimalCast<overflow_mode, DecimalType, StringType, DecimalLTGu
             auto s = DecimalV3Cast::to_string<DecimalCppType>(data[i], precision, scale);
             strings::memcpy_inlined(bytes_data + bytes_off, s.data(), s.size());
             bytes_off += s.size();
-            offsets[i + 1] = bytes_off;
+            offsets.set(i + 1, bytes_off);
         }
         bytes.resize(bytes_off);
         return result;

@@ -114,7 +114,6 @@ public:
         }
 #endif
 
-        output_offsets.resize(_size + 1);
         size_t num_bytes = 0;
         size_t from = _from;
         for (size_t i = 0; i < _size; i++) {
@@ -126,9 +125,21 @@ public:
             const Offsets& src_offsets = *input_offsets[segment_id];
             Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
 
-            output_offsets[i + 1] = output_offsets[i] + str_size;
             num_bytes += str_size;
         }
+        output_offsets.resize_uninitialized(_size + 1, num_bytes);
+        output_offsets.visit_storage([&](auto& offsets_buf) {
+            using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+            offsets_buf[0] = 0;
+            uint64_t offset = 0;
+            for (size_t i = 0; i < _size; i++) {
+                size_t idx = _indexes[from + i];
+                auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
+                const Offsets& src_offsets = *input_offsets[segment_id];
+                offset += src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+                offsets_buf[i + 1] = static_cast<OffsetValue>(offset);
+            }
+        });
         output_bytes.resize(num_bytes);
 
         Byte* dest_bytes = output_bytes.data();

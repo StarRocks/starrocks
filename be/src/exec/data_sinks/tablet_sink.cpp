@@ -1186,15 +1186,19 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
             new_offset.resize(num_rows + 1);
             new_bytes.assign(num_rows * len, 0); // padding 0
 
-            uint32_t from = 0;
-            for (size_t j = 0; j < num_rows; ++j) {
-                uint32_t copy_data_len = std::min(len, offset[j + 1] - offset[j]);
-                strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset[j], copy_data_len);
-                from += len; // no copy data will be 0
-            }
+            size_t from = 0;
+            offset.visit_storage([&](const auto& offsets_buf) {
+                const auto* __restrict offset_data = offsets_buf.data();
+                for (size_t j = 0; j < num_rows; ++j) {
+                    size_t copy_data_len = std::min<size_t>(len, offset_data[j + 1] - offset_data[j]);
+                    strings::memcpy_inlined(new_bytes.data() + from, bytes.data() + offset_data[j], copy_data_len);
+                    from += len; // no copy data will be 0
+                }
+            });
 
+            new_offset.set(0, 0);
             for (size_t j = 1; j <= num_rows; ++j) {
-                new_offset[j] = len * j;
+                new_offset.set(j, static_cast<uint64_t>(len) * j);
             }
 
             if (desc->is_nullable()) {
