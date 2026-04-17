@@ -20,8 +20,8 @@
 #include "base/brpc/reusable_closure.h"
 #include "base/failpoint/fail_point.h"
 #include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
@@ -960,8 +960,7 @@ TEST_F(LocalTabletsChannelTest, test_get_load_replica_status_use_after_free) {
     ctx.done = nullptr;
     ctx.receive_rpc_time_ns = MonotonicNanos();
     _load_channel->open(ctx);
-    ASSERT_EQ(TStatusCode::OK, open_response.status().status_code())
-            << open_response.status().error_msgs(0);
+    ASSERT_EQ(TStatusCode::OK, open_response.status().status_code()) << open_response.status().error_msgs(0);
 
     TabletsChannelKey channel_key(_load_id, _sink_id, _index_id);
     ASSERT_NE(nullptr, _load_channel->get_tablets_channel(channel_key));
@@ -973,19 +972,18 @@ TEST_F(LocalTabletsChannelTest, test_get_load_replica_status_use_after_free) {
 
     bool sync_triggered = false;
     SyncPoint::GetInstance()->EnableProcessing();
-    SyncPoint::GetInstance()->SetCallBack(
-            "LoadChannel::get_load_replica_status::after_raw_ptr", [&](void*) {
-                // Simulate a concurrent channel close: erase the map entry, dropping
-                // the last shared_ptr reference from the channel manager's perspective.
-                //
-                // Buggy code  : local_tablets_channel is now a dangling pointer ->
-                //               ASAN reports heap-use-after-free on the next line.
-                // Fixed code  : the caller holds a named shared_ptr, so ref-count
-                //               stays >= 1 and the object remains alive.
-                std::lock_guard l(_load_channel->_lock);
-                _load_channel->_tablets_channels.erase(channel_key);
-                sync_triggered = true;
-            });
+    SyncPoint::GetInstance()->SetCallBack("LoadChannel::get_load_replica_status::after_raw_ptr", [&](void*) {
+        // Simulate a concurrent channel close: erase the map entry, dropping
+        // the last shared_ptr reference from the channel manager's perspective.
+        //
+        // Buggy code  : local_tablets_channel is now a dangling pointer ->
+        //               ASAN reports heap-use-after-free on the next line.
+        // Fixed code  : the caller holds a named shared_ptr, so ref-count
+        //               stays >= 1 and the object remains alive.
+        std::lock_guard l(_load_channel->_lock);
+        _load_channel->_tablets_channels.erase(channel_key);
+        sync_triggered = true;
+    });
 
     PLoadReplicaStatusRequest status_request;
     status_request.mutable_load_id()->CopyFrom(_load_id);
