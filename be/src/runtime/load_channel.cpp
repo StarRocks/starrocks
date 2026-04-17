@@ -36,7 +36,16 @@
 
 #include <memory>
 
+<<<<<<< HEAD
 #include "common/closure_guard.h"
+=======
+#include "base/container/lru_cache.h"
+#include "base/string/faststring.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/runtime_profile.h"
+>>>>>>> 6f3d52e399 ([BugFix] Fix use-after-free in LoadChannel::get_load_replica_status caused by temporary shared_ptr destruction (#71843))
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "runtime/lake_tablets_channel.h"
@@ -447,6 +456,62 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     }
 
     _last_report_time_ns.store(now);
+<<<<<<< HEAD
+=======
+    Status status = _update_and_serialize_profile(result->mutable_load_channel_profile(), print_profile);
+    if (!status.ok()) {
+        result->clear_load_channel_profile();
+    }
+}
+
+void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequest* request,
+                           PLoadDiagnoseResult* result) {
+    if (request->has_profile() && request->profile()) {
+        Status st = _update_and_serialize_profile(result->mutable_profile_data(), config::pipeline_print_profile);
+        result->mutable_profile_status()->set_status_code(st.code());
+        result->mutable_profile_status()->add_error_msgs(st.to_string());
+        if (!st.ok()) {
+            result->clear_profile_data();
+        }
+        LOG(INFO) << "load channel diagnose profile, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                  << ", status: " << st;
+    }
+    if (request->has_stack_trace() && request->stack_trace()) {
+        DiagnoseRequest stack_trace_request;
+        stack_trace_request.type = DiagnoseType::STACK_TRACE;
+        stack_trace_request.context =
+                fmt::format("load_id: {}, txn_id: {}, remote: {}", print_id(_load_id), _txn_id, remote_ip);
+        Status st = _diagnose_daemon->diagnose(stack_trace_request);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to diagnose stack trace, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                         << ", status: " << st;
+        }
+        result->mutable_stack_trace_status()->set_status_code(st.code());
+        result->mutable_stack_trace_status()->add_error_msgs(st.to_string());
+        VLOG(2) << "load channel diagnose stack trace, " << stack_trace_request.context << ", status: " << st;
+    }
+}
+
+void LoadChannel::get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
+                                          PLoadReplicaStatusResult* response) {
+    TabletsChannelKey key(request->load_id(), request->sink_id(), request->index_id());
+    auto tablets_channel = get_tablets_channel(key);
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(tablets_channel.get());
+    TEST_SYNC_POINT("LoadChannel::get_load_replica_status::after_raw_ptr");
+    if (local_tablets_channel == nullptr) {
+        for (int64_t tablet_id : request->tablet_ids()) {
+            auto replica_status = response->add_replica_statuses();
+            replica_status->set_tablet_id(tablet_id);
+            replica_status->set_state(LoadReplicaStatePB::NOT_PRESENT);
+            replica_status->set_message("can't find local tablets channel");
+        }
+        return;
+    }
+    local_tablets_channel->get_load_replica_status(remote_ip, request, response);
+}
+
+Status LoadChannel::_update_and_serialize_profile(std::string* result, bool print_profile) {
+>>>>>>> 6f3d52e399 ([BugFix] Fix use-after-free in LoadChannel::get_load_replica_status caused by temporary shared_ptr destruction (#71843))
     COUNTER_UPDATE(_profile_report_count, 1);
     SCOPED_TIMER(_profile_report_timer);
 
