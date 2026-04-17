@@ -25,6 +25,8 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
@@ -302,14 +304,20 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             // publishVersion handles the per-tablet PublishVersionTask fan-out
             // and collects results; a single boolean return drives the
             // AlterJobV2 state machine.
+            TxnInfoPB txnInfo = new TxnInfoPB();
+            txnInfo.txnId = watershedTxnId;
+            txnInfo.combinedTxnLog = false;
+            txnInfo.commitTime = System.currentTimeMillis() / 1000;
+            txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
                 PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
                 if (pp == null) {
                     LOG.warn("partition {} disappeared during publish; job {}", e.getKey(), jobId);
                     return false;
                 }
-                Utils.publishVersion(pp.getLatestBaseIndex().getTablets(), watershedTxnId, pp.getVisibleVersion(),
-                        e.getValue(), System.currentTimeMillis() / 1000, computeResource);
+                long commitVersion = e.getValue();
+                Utils.publishVersion(pp.getLatestBaseIndex().getTablets(), txnInfo, commitVersion - 1,
+                        commitVersion, computeResource, false);
             }
             return true;
         } catch (Exception e) {
