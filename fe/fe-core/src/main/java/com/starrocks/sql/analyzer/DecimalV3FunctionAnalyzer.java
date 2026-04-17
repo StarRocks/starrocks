@@ -556,11 +556,21 @@ public class DecimalV3FunctionAnalyzer {
             case FunctionSet.ARRAY_DISTINCT:
             case FunctionSet.ARRAY_SORT:
             case FunctionSet.ARRAY_SORT_LAMBDA:
-            case FunctionSet.REVERSE:
             case FunctionSet.ARRAY_INTERSECT:
             case FunctionSet.ARRAY_CONCAT: {
                 newFn.setArgsType(new Type[] {argumentTypes[0]});
                 newFn.setRetType(argumentTypes[0]);
+                return newFn;
+            }
+            case FunctionSet.REVERSE: {
+                // reverse() supports both VARCHAR and array arguments.
+                // Only apply array-decimal type fixup when the argument is actually an array;
+                // for scalar decimal arguments the matched reverse(VARCHAR) is kept as-is so
+                // that ImplicitCastRule inserts the required cast(decimal -> VARCHAR).
+                if (argumentTypes[0].isArrayType()) {
+                    newFn.setArgsType(new Type[] {argumentTypes[0]});
+                    newFn.setRetType(argumentTypes[0]);
+                }
                 return newFn;
             }
             case FunctionSet.ARRAY_MAX:
