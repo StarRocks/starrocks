@@ -14,47 +14,38 @@
 
 #include "exec/spill/operator_mem_resource_manager.h"
 
-#include "common/config_exec_flow_fwd.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/operator_factory.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
-void OperatorMemoryResourceManager::prepare(OP* op, QuerySpillManager* query_spill_manager) {
-    _op = op;
-    _spillable = op->spillable();
-    _releaseable = op->releaseable();
-    _releaseable |= _spillable;
+void OperatorMemoryResourceManager::prepare(QuerySpillManager* query_spill_manager, bool spillable, bool releaseable,
+                                            size_t reserved_bytes) {
+    _performance_level = MEM_RESOURCE_DEFAULE_MEMORY;
+    _spillable = spillable;
+    _releaseable = releaseable || spillable;
     _query_spill_manager = query_spill_manager;
     if (_spillable) {
         DCHECK(_query_spill_manager != nullptr);
         _res_guard.inc_spillable_operators();
     }
     if (_query_spill_manager != nullptr) {
-        size_t reserved_bytes = 0;
-        if (_spillable) {
-            reserved_bytes = operator_avaliable_memory_bytes();
-        } else if (op->releaseable()) {
-            reserved_bytes = config::local_exchange_buffer_mem_limit_per_driver;
-        }
         _res_guard.inc_reserve_bytes(reserved_bytes);
     }
 }
 
-void OperatorMemoryResourceManager::to_low_memory_mode() {
+bool OperatorMemoryResourceManager::enter_low_memory_mode() {
     if (_performance_level < MEM_RESOURCE_LOW_MEMORY) {
         _performance_level = MEM_RESOURCE_LOW_MEMORY;
-        _op->set_execute_mode(_performance_level);
+        return true;
     }
+    return false;
 }
 
-size_t OperatorMemoryResourceManager::operator_avaliable_memory_bytes() {
+size_t OperatorMemoryResourceManager::compute_available_memory_bytes(const RuntimeState& runtime_state) {
     // TODO: think about multi-operators
-    auto* runtime_state = _op->get_factory()->runtime_state();
-    size_t avaliable = runtime_state->spill_mem_table_size() * runtime_state->spill_mem_table_num();
-    avaliable = std::max<size_t>(avaliable, runtime_state->spill_operator_min_bytes());
-    avaliable = std::min<size_t>(avaliable, runtime_state->spill_operator_max_bytes());
-    return avaliable;
+    size_t available = runtime_state.spill_mem_table_size() * runtime_state.spill_mem_table_num();
+    available = std::max<size_t>(available, runtime_state.spill_operator_min_bytes());
+    available = std::min<size_t>(available, runtime_state.spill_operator_max_bytes());
+    return available;
 }
 
 void OperatorMemoryResourceManager::close() {

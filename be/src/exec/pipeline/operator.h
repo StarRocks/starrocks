@@ -199,7 +199,7 @@ public:
     void set_prepare_time(int64_t cost_ns);
     void set_local_prepare_time(int64_t cost_ns);
 
-    // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
+    // Adjusts the execution mode of the operator after spill memory heuristics request low-memory mode.
     virtual void set_execute_mode(int performance_level) {}
     // @TODO(silverbullet233): for an operator, the way to reclaim memory is either spill
     // or push the buffer data to the downstream operator.

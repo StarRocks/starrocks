@@ -648,7 +648,9 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         static thread_local std::mt19937_64 generator{std::random_device{}()};
         static std::uniform_real_distribution<double> distribution(0.0, 1.0);
         if (distribution(generator) < state->spill_rand_ratio()) {
-            mem_resource_mgr.to_low_memory_mode();
+            if (mem_resource_mgr.enter_low_memory_mode()) {
+                op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+            }
         }
         return;
     }
@@ -658,7 +660,9 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
 
     // force mark operator to low memory mode
     if (state->spill_revocable_max_bytes() > 0 && op->revocable_mem_bytes() > state->spill_revocable_max_bytes()) {
-        mem_resource_mgr.to_low_memory_mode();
+        if (mem_resource_mgr.enter_low_memory_mode()) {
+            op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+        }
         return;
     }
 
@@ -676,7 +680,9 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
         bool need_spill = false;
         if (!tls_thread_status.try_mem_reserve(request_reserved, shared_reserved)) {
             need_spill = true;
-            mem_resource_mgr.to_low_memory_mode();
+            if (mem_resource_mgr.enter_low_memory_mode()) {
+                op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+            }
         }
 
         const auto& query_mem_tracker = _query_ctx->mem_tracker();
@@ -712,7 +718,9 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
                             << ", release buffer threshold: "
                             << static_cast<int64_t>(spill_mem_threshold * release_buffer_mem_ratio)
                             << ", spill mem threshold: " << static_cast<int64_t>(spill_mem_threshold);
-            mem_resource_mgr.to_low_memory_mode();
+            if (mem_resource_mgr.enter_low_memory_mode()) {
+                op->set_execute_mode(spill::MEM_RESOURCE_LOW_MEMORY);
+            }
         }
     }
 }

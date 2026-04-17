@@ -19,6 +19,7 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/operator_factory.h"
@@ -73,7 +74,13 @@ Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
 
     if (state->query_ctx() && state->query_ctx()->spill_manager()) {
-        _mem_resource_manager.prepare(this, state->query_ctx()->spill_manager());
+        size_t reserved_bytes = 0;
+        if (spillable()) {
+            reserved_bytes = spill::OperatorMemoryResourceManager::compute_available_memory_bytes(*state);
+        } else if (releaseable()) {
+            reserved_bytes = config::local_exchange_buffer_mem_limit_per_driver;
+        }
+        _mem_resource_manager.prepare(state->query_ctx()->spill_manager(), spillable(), releaseable(), reserved_bytes);
     }
 
     return Status::OK();
