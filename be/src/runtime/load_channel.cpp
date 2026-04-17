@@ -36,7 +36,16 @@
 
 #include <memory>
 
+<<<<<<< HEAD
 #include "common/closure_guard.h"
+=======
+#include "base/container/lru_cache.h"
+#include "base/string/faststring.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_ingest_fwd.h"
+#include "common/runtime_profile.h"
+>>>>>>> 6f3d52e399 ([BugFix] Fix use-after-free in LoadChannel::get_load_replica_status caused by temporary shared_ptr destruction (#71843))
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "runtime/diagnose_daemon.h"
@@ -473,7 +482,9 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
 void LoadChannel::get_load_replica_status(const std::string& remote_ip, const PLoadReplicaStatusRequest* request,
                                           PLoadReplicaStatusResult* response) {
     TabletsChannelKey key(request->load_id(), request->sink_id(), request->index_id());
-    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(get_tablets_channel(key).get());
+    auto tablets_channel = get_tablets_channel(key);
+    auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(tablets_channel.get());
+    TEST_SYNC_POINT("LoadChannel::get_load_replica_status::after_raw_ptr");
     if (local_tablets_channel == nullptr) {
         for (int64_t tablet_id : request->tablet_ids()) {
             auto replica_status = response->add_replica_statuses();
