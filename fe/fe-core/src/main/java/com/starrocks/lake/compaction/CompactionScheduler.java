@@ -442,11 +442,18 @@ public class CompactionScheduler extends Daemon {
         // maxParallel > 0 means parallel compaction is enabled
         int maxParallel = table.getTableProperty().getLakeCompactionMaxParallel();
 
+        // Track the candidate aggregator nodes (those that actually own tablets in the
+        // batch). We prefer one of them as aggregator so the BE side can resolve the
+        // first tablet id locally through the staros worker cache when deriving the
+        // combined_txn_log / bundle_tablet_metadata file path.
+        List<ComputeNode> candidateAggregatorNodes = Lists.newArrayList();
+
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
             ComputeNode node = systemInfoService.getBackendOrComputeNode(entry.getKey());
             if (node == null) {
                 throw new StarRocksException("Node " + entry.getKey() + " has been dropped");
             }
+            candidateAggregatorNodes.add(node);
             ComputeNodePB nodePB = new ComputeNodePB();
             nodePB.setHost(node.getHost());
             nodePB.setBrpcPort(node.getBrpcPort());
@@ -479,7 +486,7 @@ public class CompactionScheduler extends Daemon {
         }
 
         // 2. pick aggregator node and build lake service
-        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource);
+        ComputeNode aggregatorNode = LakeAggregator.chooseAggregatorNode(computeResource, candidateAggregatorNodes);
         if (aggregatorNode == null) {
             throw new NoAliveBackendException("No alive compute node available for aggregate compaction");
         }
