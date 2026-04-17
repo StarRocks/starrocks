@@ -101,6 +101,10 @@ bool SegmentPKIterator::done() {
     if (_defer_data_load) {
         _defer_data_load = false;
         _status = _load();
+        if (_status.ok() && _pk_column_chunk != nullptr) {
+            _memory_usage = _pk_column_chunk->memory_usage() +
+                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
+        }
     }
     return (_pk_column_chunk == nullptr || _pk_column_chunk->is_empty()) || !_status.ok();
 }

@@ -361,10 +361,14 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
 
         for (const auto& each : rss_upt_id_to_rowid_pairs) {
             uint32_t rssid = each.first;
-            const auto& upt_pairs = each.second;
+            // `each`/`each.second` are loop-local bindings whose storage may be reused as the
+            // loop advances, so capturing a reference to `each.second` from the thread-pool task
+            // would dangle. The map itself is stable for the duration of execute(); capture the
+            // address of the map entry's value by value and dereference inside the task.
+            const auto* upt_pairs_ptr = &each.second;
 
             auto func = [this, &params, &partial_schema, &partial_tschema, &selective_unique_update_column_ids, rssid,
-                         &upt_pairs, &dcg_column_ids, &dcg_column_file_with_encryption_metas, &result_mutex,
+                         upt_pairs_ptr, &dcg_column_ids, &dcg_column_file_with_encryption_metas, &result_mutex,
                          &shared_status]() {
                 // 3.3 read from source segment
                 auto source_chunk_or = _read_from_source_segment(params, partial_schema, rssid);
@@ -379,7 +383,7 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                 DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
 
                 // 3.4 read from update segment and apply updates
-                auto st = _update_source_chunk_by_upt(upt_pairs, partial_schema, &source_chunk_ptr);
+                auto st = _update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, &source_chunk_ptr);
                 if (!st.ok()) {
                     std::lock_guard<std::mutex> l(result_mutex);
                     shared_status.update(st);

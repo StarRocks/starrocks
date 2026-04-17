@@ -3884,8 +3884,16 @@ TEST_P(LakePartialUpdateTest, test_parallel_column_mode_partial_update_multi_seg
     // Step 2: Perform partial column updates with multiple update segments per txn.
     // Using write_buffer_size=1 forces each write() call to flush as a separate segment,
     // creating multiple update segments that exercise parallel PK index lookup.
+    // Force parallel execution on and restore both configs via RAII so a failing
+    // ASSERT in the loop below cannot leak state into subsequent tests.
     const int64_t old_write_buffer_size = config::write_buffer_size;
+    const bool old_enable_parallel = config::enable_pk_index_parallel_execution;
     config::write_buffer_size = 1;
+    config::enable_pk_index_parallel_execution = true;
+    DeferOp restore_cfg([&]() {
+        config::write_buffer_size = old_write_buffer_size;
+        config::enable_pk_index_parallel_execution = old_enable_parallel;
+    });
 
     for (int i = 0; i < kNumPartialUpdates; i++) {
         auto txn_id = next_id();
@@ -3914,7 +3922,6 @@ TEST_P(LakePartialUpdateTest, test_parallel_column_mode_partial_update_multi_seg
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
         version++;
     }
-    config::write_buffer_size = old_write_buffer_size;
 
     // Step 3: Verify correctness - the last partial update set c1 = c0 * (5 + kNumPartialUpdates - 1)
     // while c2 should remain unchanged (c0 * 4, set by original full writes).
