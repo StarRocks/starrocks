@@ -1081,7 +1081,8 @@ public class StarMgrMetaSyncerTest {
         // test aggregator
         new MockUp<LakeAggregator>() {
             @Mock
-            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+            public static ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                           java.util.Collection<ComputeNode> candidateNodes) {
                 return null;
             }
         };

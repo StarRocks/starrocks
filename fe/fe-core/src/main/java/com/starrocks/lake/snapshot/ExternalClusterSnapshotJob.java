@@ -408,8 +408,7 @@ public class ExternalClusterSnapshotJob extends ClusterSnapshotJob {
                 return preAggregatorNodeId;
             }
         }
-        LakeAggregator lakeAggregator = new LakeAggregator();
-        ComputeNode computeNode = lakeAggregator.chooseAggregatorNode(getComputeResource());
+        ComputeNode computeNode = LakeAggregator.chooseAggregatorNode(getComputeResource(), null);
         if (computeNode == null) {
             return 0;
         }
