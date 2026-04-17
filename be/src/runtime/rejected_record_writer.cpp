@@ -249,6 +249,21 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     doc.AddMember("id", rapidjson::Value(record_id.c_str(), static_cast<rapidjson::SizeType>(record_id.size()), alloc),
                   alloc);
 
+    // Wall-clock timestamp for the rejection event. The column is NOT NULL
+    // and part of the primary key, so it must always be present. Format as
+    // "YYYY-MM-DD HH:MM:SS" which StarRocks parses natively for DATETIME.
+    {
+        auto now = std::chrono::system_clock::now();
+        std::time_t t = std::chrono::system_clock::to_time_t(now);
+        struct tm tm_buf;
+        ::localtime_r(&t, &tm_buf);
+        char ts_buf[32];
+        std::strftime(ts_buf, sizeof(ts_buf), "%Y-%m-%d %H:%M:%S", &tm_buf);
+        std::string ts(ts_buf);
+        doc.AddMember("created_at", rapidjson::Value(ts.c_str(), static_cast<rapidjson::SizeType>(ts.size()), alloc),
+                      alloc);
+    }
+
     // Target. target_database is set early in OlapTableSink::init() via
     // RuntimeState::set_db; target_table alongside via set_table_name.
     // Scanner-phase rejections inherit whichever value the sink installed.

@@ -353,11 +353,9 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     client.set_content_type("application/json");
     client.set_basic_auth(config::rejected_record_sync_user, config::rejected_record_sync_password);
 
-    // Merge-commit so N BEs writing concurrently collapse into one FE
-    // transaction. Format is json-lines (one JSON object per line); the
-    // StarRocks Stream Load parses this when `strip_outer_array=false`
-    // (the default) with `format=json`.
-    client.set_header(HTTP_ENABLE_MERGE_COMMIT, "true");
+    // Format is json-lines (one JSON object per line); the StarRocks
+    // Stream Load parses this when `strip_outer_array=false` (the
+    // default) with `format=json`.
     client.set_header(HTTP_FORMAT_KEY, "json");
     client.set_header(HTTP_STRIP_OUTER_ARRAY, "false");
     // The FE 307-redirects large PUTs; opt into 100-continue so curl
