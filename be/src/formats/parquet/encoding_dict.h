@@ -556,11 +556,12 @@ private:
             }
             offsets.resize_uninitialized(count + prev_offsets, final_offset);
             cnt = 0;
-            offsets.visit_storage([&](auto& offsets_buf) {
+            const uint32_t* lengths_ptr = lengths;
+            offsets.visit_storage([prev_offsets, count, is_nulls, lengths_ptr, offset, cnt](auto& offsets_buf) mutable {
                 using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
                 auto* dst_offsets = offsets_buf.data() + prev_offsets;
                 for (size_t i = 0; i < count; ++i) {
-                    offset += is_nulls[i] ? 0 : lengths[cnt++];
+                    offset += is_nulls[i] ? 0 : lengths_ptr[cnt++];
                     dst_offsets[i] = static_cast<OffsetValue>(offset);
                 }
             });

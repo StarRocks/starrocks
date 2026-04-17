@@ -23,6 +23,7 @@
 #include "base/container/raw_container.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
+#include "common/memory/column_allocator.h"
 
 namespace starrocks {
 
