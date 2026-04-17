@@ -18,6 +18,8 @@ import com.google.common.collect.ImmutableList;
 
 import java.util.List;
 
+// TODO: implement ADBC partition support when drivers expose partitioning metadata.
+//       Reference: JDBCPartitionKey.java for the JDBC partition implementation.
 public class ADBCPartitionKey extends PartitionKey implements NullablePartitionKey {
     public ADBCPartitionKey() {
         super();

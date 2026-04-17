@@ -21,6 +21,8 @@ import com.starrocks.connector.PartitionInfo;
 
 import java.util.List;
 
+// TODO: implement ADBC partition support when drivers expose partitioning metadata.
+//       Reference: JDBCPartitionTraits.java for the JDBC partition implementation.
 public class ADBCPartitionTraits extends DefaultTraits {
     @Override
     public String getTableName() {
@@ -29,7 +31,7 @@ public class ADBCPartitionTraits extends DefaultTraits {
 
     @Override
     public boolean isSupportPCTRefresh() {
-        return false;  // Full refresh only per CONTEXT.md decision
+        return false;  // Full refresh only
     }
 
     @Override
