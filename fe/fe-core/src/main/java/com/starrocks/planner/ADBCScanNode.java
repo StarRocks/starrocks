@@ -63,8 +63,8 @@ public class ADBCScanNode extends ScanNode {
 
     private String getIdentifierSymbol() {
         Map<String, String> props = adbcTable.getProperties();
-        if (props != null && props.containsKey("adbc.identifier.quote")) {
-            return props.get("adbc.identifier.quote");
+        if (props != null && props.containsKey("_sr_identifier_quote")) {
+            return props.get("_sr_identifier_quote");
         }
         // Default to double-quote (standard SQL)
         return "\"";
