@@ -38,6 +38,67 @@ public class SqlCredentialRedactorTest {
     }
 
     @Test
+    public void testRedactFilesCredentialScenarios() {
+        // Case 1: INSERT INTO ... SELECT FROM FILES(...)
+        String insertSelectSql = "INSERT INTO t0 SELECT * FROM FILES(\n" +
+                "        \"path\" = \"s3://bucket/data.parquet\",\n" +
+                "        \"format\" = \"parquet\",\n" +
+                "        \"aws.s3.access_key\" = \"AKIA_INSERT_SOURCE\",\n" +
+                "        \"aws.s3.secret_key\" = \"SOURCE_SECRET\"\n" +
+                ")";
+        String insertSelectRedacted = SqlCredentialRedactor.redact(insertSelectSql);
+        String insertSelectExpected = "INSERT INTO t0 SELECT * FROM FILES(\n" +
+                "        \"path\" = \"s3://bucket/data.parquet\",\n" +
+                "        \"format\" = \"parquet\",\n" +
+                "        \"aws.s3.access_key\" = ***,\n" +
+                "        \"aws.s3.secret_key\" = ***\n" +
+                ")";
+        Assertions.assertEquals(insertSelectExpected, insertSelectRedacted);
+
+        // Case 2: INSERT INTO FILES(...) SELECT ...
+        String insertIntoFilesSql = "INSERT INTO FILES(\n" +
+                "        \"path\" = \"s3://bucket/output/\",\n" +
+                "        \"format\" = \"parquet\",\n" +
+                "        \"aws.s3.access_key\" = \"AKIA_INSERT_TARGET\",\n" +
+                "        \"aws.s3.secret_key\" = \"TARGET_SECRET\"\n" +
+                ")\n" +
+                "SELECT 1";
+        String insertIntoFilesRedacted = SqlCredentialRedactor.redact(insertIntoFilesSql);
+        Assertions.assertFalse(insertIntoFilesRedacted.contains("AKIA_INSERT_TARGET"),
+                "FILES target access key should be redacted");
+        Assertions.assertFalse(insertIntoFilesRedacted.contains("TARGET_SECRET"),
+                "FILES target secret key should be redacted");
+        Assertions.assertTrue(insertIntoFilesRedacted.contains("***"), "Should contain redacted marker");
+    }
+
+    @Test
+    public void testMayNeedCredentialRedactionScenarios() {
+        // Case 1: null/empty/plain SQL should be skipped.
+        Assertions.assertFalse(SqlCredentialRedactor.mayNeedCredentialRedaction(null));
+        Assertions.assertFalse(SqlCredentialRedactor.mayNeedCredentialRedaction(""));
+        Assertions.assertFalse(SqlCredentialRedactor.mayNeedCredentialRedaction("SELECT 1"));
+        Assertions.assertFalse(SqlCredentialRedactor.mayNeedCredentialRedaction("SELECT * FROM t0 WHERE id = 1"));
+
+        // Case 2: direct credential markers should be detected.
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "\"aws.s3.secret_key\" = \"x\""));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "CREATE USER u IDENTIFIED BY 'secret'"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "SET PASSWORD FOR u = PASSWORD('p')"));
+
+        // Case 3: whitespace variations in IDENTIFIED clauses should be detected.
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "CREATE USER u IDENTIFIED\nBY 'secret'"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "CREATE USER u IDENTIFIED\t BY 'secret'"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "ALTER USER u IDENTIFIED\n  WITH mysql_native_password BY 'x'"));
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(
+                "SET\n PASSWORD FOR u = PASSWORD('p')"));
+    }
+
+    @Test
     public void testRedactAzureCredentials() {
         String sql = "CREATE EXTERNAL TABLE test (\n" +
                 "    id INT\n" +
