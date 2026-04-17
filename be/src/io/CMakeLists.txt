@@ -19,6 +19,7 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/io")
 
 ADD_BE_LIB(IOCore
         core/array_input_stream.cpp
+        core/io_instrumentation.cpp
         core/readable.cpp
         core/seekable_input_stream.cpp
 )

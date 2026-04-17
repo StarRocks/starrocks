@@ -15,6 +15,7 @@
 set(IO_TEST_FILES
     ../base/cxa_throw_wrap.cpp
     array_input_stream_test.cpp
+    io_instrumentation_test.cpp
     seekable_input_stream_test.cpp
     io_error_test.cpp
 )
