@@ -108,7 +108,9 @@ public final class SchemaChangeIndexFastPathClassifier {
     }
 
     public static boolean isSupportedIndexType(IndexDef.IndexType type) {
-        if (type == null) return false;
+        if (type == null) {
+            return false;
+        }
         switch (type) {
             case BITMAP:
             case NGRAMBF:
@@ -122,7 +124,9 @@ public final class SchemaChangeIndexFastPathClassifier {
 
     private static Index findIndexByName(OlapTable table, String name) {
         List<Index> all = table.getIndexes();
-        if (all == null) return null;
+        if (all == null) {
+            return null;
+        }
         for (Index ix : all) {
             if (ix.getIndexName().equalsIgnoreCase(name)) {
                 return ix;

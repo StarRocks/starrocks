@@ -3091,7 +3091,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (target.getColumns() != null) {
                     for (com.starrocks.catalog.ColumnId colId : target.getColumns()) {
                         com.starrocks.catalog.Column col = olapTable.getColumnByUniqueId(colId);
-                        if (col == null) continue;
+                        if (col == null) {
+                            continue;
+                        }
                         com.starrocks.thrift.TDropIndexInfo info = new com.starrocks.thrift.TDropIndexInfo();
                         info.setIndex_id(target.getIndexId());
                         info.setCol_unique_id(col.getUniqueId());
