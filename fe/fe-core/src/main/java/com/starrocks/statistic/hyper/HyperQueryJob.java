@@ -256,8 +256,9 @@ public abstract class HyperQueryJob {
 
     public static List<HyperQueryJob> createFullQueryJobs(long analyzeId, ConnectContext context, Database db, Table table,
                                                           List<String> columnNames, List<Type> columnTypes,
-                                                          List<Long> partitionIdList, int batchLimit, boolean isManualJob) {
-        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, isManualJob);
+                                                          List<Long> partitionIdList, int batchLimit, boolean isManualJob,
+                                                          Map<String, String> analyzeProperties) {
+        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, isManualJob, analyzeProperties);
 
         List<ColumnStats> supportedStats = classifier.getColumnStats();
         List<ColumnStats> dataCollectColumns =
@@ -280,8 +281,9 @@ public abstract class HyperQueryJob {
     public static List<HyperQueryJob> createSampleQueryJobs(long analyzeId, ConnectContext context, Database db, Table table,
                                                             List<String> columnNames, List<Type> columnTypes,
                                                             List<Long> partitionIdList, int batchLimit,
-                                                            PartitionSampler sampler, boolean isManualJob) {
-        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, isManualJob);
+                                                            PartitionSampler sampler, boolean isManualJob,
+                                                            Map<String, String> analyzeProperties) {
+        ColumnClassifier classifier = ColumnClassifier.of(columnNames, columnTypes, table, isManualJob, analyzeProperties);
         List<ColumnStats> supportedStats = classifier.getColumnStats();
 
         List<ColumnStats> metaCollectColumns =

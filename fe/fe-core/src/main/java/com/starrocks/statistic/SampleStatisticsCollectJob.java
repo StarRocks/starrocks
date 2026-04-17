@@ -53,7 +53,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
-                sampleInfo);
+                sampleInfo, properties);
 
         // sample complex type column stats
         if (!columnSampleManager.getComplexTypeStats().isEmpty()) {

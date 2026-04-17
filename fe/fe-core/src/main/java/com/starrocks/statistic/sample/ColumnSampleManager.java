@@ -18,10 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.statistic.virtual.VirtualStatistic;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 
 import java.util.List;
+import java.util.Map;
 
 public class ColumnSampleManager {
 
@@ -34,29 +36,38 @@ public class ColumnSampleManager {
     }
 
     public static ColumnSampleManager init(List<String> columnNames, List<Type> columnTypes, Table table,
-                                           SampleInfo sampleInfo) {
+                                           SampleInfo sampleInfo, Map<String, String> statsJobProperties) {
         ColumnSampleManager columnSampleManager = new ColumnSampleManager();
-        columnSampleManager.classifyColumnStats(columnNames, columnTypes, table, sampleInfo);
+        columnSampleManager.classifyColumnStats(columnNames, columnTypes, table, sampleInfo, statsJobProperties);
         return columnSampleManager;
     }
 
     private void classifyColumnStats(List<String> columnNames, List<Type> columnTypes, Table table,
-                                     SampleInfo sampleInfo) {
-        boolean onlyOneDistributionCol = table.getDistributionColumnNames().size() == 1;
+                                     SampleInfo sampleInfo, Map<String, String> statsJobProperties) {
         for (int i = 0; i < columnNames.size(); i++) {
             String columnName = columnNames.get(i);
             Type columnType = columnTypes.get(i);
 
-            if (table.getColumn(columnName) != null) {
+            final var column = table.getColumn(columnName);
+            if (column != null) {
                 if (columnType.canStatistic() && !columnType.isCollectionType()) {
-                    if (onlyOneDistributionCol && table.getDistributionColumnNames().contains(columnName)) {
-                        primitiveTypeStats.add(new DistributionColumnStats(columnName, columnType, sampleInfo));
-                        onlyOneDistributionCol = false;
+                    if (table.getDistributionColumnNames().size() == 1 &&
+                            table.getDistributionColumnNames().contains(column.getName())) {
+                        primitiveTypeStats.add(new DistributionColumnStats(column.getName(), column.getType(), sampleInfo));
                     } else {
-                        primitiveTypeStats.add(new PrimitiveTypeColumnStats(columnName, columnType));
+                        primitiveTypeStats.add(new PrimitiveTypeColumnStats(column.getName(), column.getType()));
                     }
                 } else {
-                    complexTypeStats.add(new ComplexTypeColumnStats(columnName, columnType));
+                    complexTypeStats.add(new ComplexTypeColumnStats(column.getName(), column.getType()));
+                }
+
+                for (final var virtualStatistic : VirtualStatistic.INSTANCES) {
+                    if (virtualStatistic.isEnabledInStatsJobProperties(statsJobProperties) &&
+                            virtualStatistic.appliesTo(column.getType())) {
+                        final var virtualColumnStats = new VirtualPrimitiveTypeColumnStats(column.getName(), column.getType(),
+                                virtualStatistic);
+                        primitiveTypeStats.add(virtualColumnStats);
+                    }
                 }
             } else {
                 int start = 0;

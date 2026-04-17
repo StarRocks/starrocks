@@ -70,7 +70,7 @@ public class HyperStatisticSQLs {
             ", $maxFunction" + // VARCHAR
             ", $minFunction" + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT
-            " FROM `$dbName`.`$tableName` partition `$partitionName`";
+            " FROM (SELECT * FROM `$dbName`.`$tableName` partition `$partitionName` $laterals) from_cte";
 
     public static final String BATCH_META_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT, partition_id
@@ -106,7 +106,7 @@ public class HyperStatisticSQLs {
             ", $maxFunction" + // VARCHAR
             ", $minFunction" + // VARCHAR
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT, collection_size
-            " FROM base_cte_table ";
+            " FROM (SELECT * FROM base_cte_table $laterals) from_cte ";
 
     public static final String FULL_MULTI_COLUMN_STATISTICS_SELECT_TEMPLATE =
             "SELECT cast($version as INT), $columnIdsStr, cast($ndvFunction as BIGINT) from `$dbName`.`$tableName`";
@@ -182,6 +182,7 @@ public class HyperStatisticSQLs {
             context.put("maxFunction", stat.getMax());
             context.put("minFunction", stat.getMin());
             context.put("collectionSizeFunction", stat.getCollectionSize());
+            context.put("laterals", stat.getLateralJoin());
             groupSQLs.add(HyperStatisticSQLs.build(context, template));
         }
         sqlBuilder.append(String.join(" UNION ALL ", groupSQLs));

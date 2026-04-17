@@ -1170,6 +1170,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
 
+    public static final String ENABLE_UNNEST_VIRTUAL_STATISTICS = "enable_unnest_virtual_statistics";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2403,6 +2405,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT)
     private boolean enableLabeledColumnStatisticOutput = false;
+
+    @VarAttr(name = ENABLE_UNNEST_VIRTUAL_STATISTICS)
+    private boolean enableUnnestVirtualStatistics = false;
+
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -6186,6 +6192,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLabeledColumnStatisticOutput() {
         return this.enableLabeledColumnStatisticOutput;
+    }
+
+    public void setEnableUnnestVirtualStatistics(boolean flag) {
+        this.enableUnnestVirtualStatistics = flag;
+    }
+
+    public boolean isUnnestVirtualStatisticsEnabled() {
+        return this.enableUnnestVirtualStatistics;
     }
 
     // Serialize to thrift object

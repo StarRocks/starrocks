@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.statistic.virtual.VirtualStatistic;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TResultBatch;
@@ -72,6 +73,7 @@ import org.jetbrains.annotations.NotNull;
 
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -197,7 +199,7 @@ public class StatisticExecutor {
                             .map(x -> StatisticUtils.getQueryStatisticsColumnType(table, x.getColumnName()))
                             .collect(Collectors.toList());
 
-            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNamesForStats, 
+            String statsSql = StatisticSQLBuilder.buildQueryFullStatisticsSQL(tableId, columnNamesForStats,
                     columnTypesForStats, partitionIds);
             List<TStatisticData> tStatisticData = executeStatisticDQL(context, statsSql);
             columnStats.addAll(tStatisticData);
@@ -542,6 +544,25 @@ public class StatisticExecutor {
         return statistics;
     }
 
+    private List<ColumnStatsMeta> getVirtualStatisticsColumnMetaData(Table table, String columnName,
+                                                                     StatisticsCollectJob statsJob, AnalyzeStatus analyzeStatus) {
+        final var statsMeta = new ArrayList<ColumnStatsMeta>();
+        final var column = table.getColumn(columnName);
+        if (column != null) {
+            for (final var virtualStatistic : VirtualStatistic.INSTANCES) {
+                if (virtualStatistic.isEnabledInStatsJobProperties(statsJob.getProperties()) &&
+                        virtualStatistic.appliesTo(column.getType())) {
+                    ColumnStatsMeta virtualMeta = new ColumnStatsMeta(
+                            virtualStatistic.getVirtualColumnName(column.getName()),
+                            statsJob.getAnalyzeType(),
+                            analyzeStatus.getEndTime());
+                    statsMeta.add(virtualMeta);
+                }
+            }
+        }
+        return statsMeta;
+    }
+
     public AnalyzeStatus collectStatistics(ConnectContext statsConnectCtx,
                                            StatisticsCollectJob statsJob,
                                            AnalyzeStatus analyzeStatus,
@@ -645,10 +666,14 @@ public class StatisticExecutor {
                         basicStatsMeta.increaseStatsCollectionCount(analyzeStatus);
                     }
 
-                    for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
+                    for (String columnName : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
                         ColumnStatsMeta meta =
-                                new ColumnStatsMeta(column, statsJob.getAnalyzeType(), analyzeStatus.getEndTime());
+                                new ColumnStatsMeta(columnName, statsJob.getAnalyzeType(), analyzeStatus.getEndTime());
                         basicStatsMeta.addColumnStatsMeta(meta);
+
+                        // For applicable column types, also add virtual statistics metadata
+                        getVirtualStatisticsColumnMetaData(table, columnName, statsJob, analyzeStatus) //
+                                .forEach(basicStatsMeta::addColumnStatsMeta);
                     }
                     analyzeMgr.addBasicStatsMeta(basicStatsMeta);
                     analyzeMgr.refreshBasicStatisticsCache(
