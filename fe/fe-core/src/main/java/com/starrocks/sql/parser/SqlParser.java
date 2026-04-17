@@ -23,6 +23,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.OriginStatement;
 import com.starrocks.sql.ast.PrepareStmt;
@@ -35,6 +36,7 @@ import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.antlr.v4.runtime.ParserRuleContext;
+import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.atn.LexerATNSimulator;
 import org.antlr.v4.runtime.atn.ParserATNSimulator;
 import org.antlr.v4.runtime.atn.PredictionContextCache;
@@ -152,6 +154,12 @@ public class SqlParser {
 
     private static List<StatementBase> parseWithStarRocksDialect(String sql, SessionVariable sessionVariable) {
         List<StatementBase> statements = Lists.newArrayList();
+        if (hasNoVisibleTokens(sql, sessionVariable)) {
+            StatementBase statement = new EmptyStmt();
+            statement.setOrigStmt(new OriginStatement(sql, 0));
+            statements.add(statement);
+            return statements;
+        }
         Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> pair =
                 invokeParser(sql, sessionVariable, com.starrocks.sql.parser.StarRocksParser::sqlStatements);
         com.starrocks.sql.parser.StarRocksParser.SqlStatementsContext sqlStatementsContext =
@@ -244,6 +252,15 @@ public class SqlParser {
         return expressionListContext.expression().stream()
                 .map(e -> (Expr) astBuilder.visit(e))
                 .collect(Collectors.toList());
+    }
+
+    private static boolean hasNoVisibleTokens(String sql, SessionVariable sessionVariable) {
+        StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        lexer.setSqlMode(sessionVariable.getSqlMode());
+        CommonTokenStream tokenStream = new CommonTokenStream(lexer);
+        tokenStream.fill();
+        return tokenStream.getTokens().stream().allMatch(token ->
+                token.getChannel() != Token.DEFAULT_CHANNEL || token.getType() == Token.EOF);
     }
 
     public static ImportColumnsStmt parseImportColumns(String expressionSql, long sqlMode) {

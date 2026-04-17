@@ -28,6 +28,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterDatabaseSetStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.MergeTabletClause;
@@ -100,6 +101,29 @@ class ParserTest {
             assertContains(e.getMessage(), "Getting syntax error at line 1, column 14. " +
                     "Detail message: Unexpected input 'tbl', the most similar input is {<EOF>, ';'}.");
         }
+    }
+
+    @Test
+    void commentOnlySqlParsesAsEmptyStatement() {
+        SessionVariable sessionVariable = new SessionVariable();
+
+        List<StatementBase> singleLineComment = SqlParser.parse("-- SELECT 1;", sessionVariable);
+        Assertions.assertEquals(1, singleLineComment.size());
+        Assertions.assertInstanceOf(EmptyStmt.class, singleLineComment.get(0));
+
+        List<StatementBase> bracketedComment = SqlParser.parse("/* comment */", sessionVariable);
+        Assertions.assertEquals(1, bracketedComment.size());
+        Assertions.assertInstanceOf(EmptyStmt.class, bracketedComment.get(0));
+    }
+
+    @Test
+    void inlineSingleLineCommentPreservesStatementParsing() {
+        SessionVariable sessionVariable = new SessionVariable();
+        String sql = "SELECT 1 -- or whatever\n, 2 + 2; -- trailing comment";
+
+        List<StatementBase> statements = SqlParser.parse(sql, sessionVariable);
+        Assertions.assertEquals(1, statements.size());
+        Assertions.assertInstanceOf(QueryStatement.class, statements.get(0));
     }
 
     /**
