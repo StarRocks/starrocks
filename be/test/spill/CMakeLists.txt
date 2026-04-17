@@ -14,7 +14,6 @@
 
 set(SPILL_CORE_TEST_FILES
     ../base/cxa_throw_wrap.cpp
-    ../../src/fs/fs_memory.cpp
     spill_block_manager_test.cpp
 )
 

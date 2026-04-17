@@ -22,6 +22,7 @@ set(CORE_FILES
     encrypt_file.cpp
     bundle_file.cpp
     fs_options.cpp
+    fs_memory.cpp
     )
 
 ADD_BE_LIB(FSCore
@@ -37,7 +38,6 @@ set(EXEC_FILES
     key_cache.cpp
     fs_posix.cpp
     fs_broker.cpp
-    fs_memory.cpp
     fs_s3.cpp
     azure/azblob_uri.cpp
     azure/fs_azblob.cpp
