@@ -280,7 +280,8 @@ StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn*
             builder.append_null();
             continue;
         }
-        const VariantValue& variant_value = read.value.as_ref().get_value();
+        auto variant_ref = read.value.as_ref();
+        const VariantValue& variant_value = variant_ref.get_value();
         if (variant_value.type() == VariantType::NULL_TYPE) {
             builder.append_null();
             continue;
