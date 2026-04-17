@@ -96,10 +96,10 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Thirdparty build rewrite (shared lib) + Go toolchain purge + CMakeLists swap
-- [ ] 03-02-PLAN.md — ADBCTableDescriptor + connector rewrite (descriptor-based data flow)
-- [ ] 03-03-PLAN.md — Scanner rewrite + driver registry + RAII wrappers
-- [ ] 03-04-PLAN.md — Throwaway C++ smoke tests (SQLite, concurrent scan)
+- [x] 03-01-PLAN.md — Thirdparty build rewrite (shared lib) + Go toolchain purge + CMakeLists swap
+- [x] 03-02-PLAN.md — ADBCTableDescriptor + connector rewrite (descriptor-based data flow)
+- [x] 03-03-PLAN.md — Scanner rewrite + driver registry + RAII wrappers
+- [x] 03-04-PLAN.md — Throwaway C++ smoke tests (SQLite, concurrent scan)
 
 **Risks** (from PITFALLS.md):
 - **Never-`dlclose` correctness (BE-06 / Pitfall 3).** This is a correctness requirement, not an optimization — Go-based drivers (Flight SQL, Snowflake, BigQuery) hang on `dlclose`. ADBC 22 changed the upstream Rust manager for exactly this reason. The 30-second drain deadline + `_exit(0)` is the safety valve.
@@ -138,12 +138,25 @@ Plans:
 - This is the only phase with a UI/docs surface (`UI hint: yes`) — covers user-facing reference docs, not application UI.
 - Per user preference: commit messages must not reference GSD, planning sessions, or `.planning/` artifacts. PR title prefix `[Doc] ...`.
 
+### Phase 5: External Integration Verification Suite
+
+**Goal:** Create a standalone Python test suite at `/home/mete/coding/opensource/adbc_verification` that exercises the full ADBC catalog stack end-to-end against four backends (SQLite, FlightSQL via sqlflite Docker, PostgreSQL via Docker, DuckDB), with and without TLS, testing catalog operations, schema operations, data read/write, cross-driver joins, error handling, and negative cases. Docker lifecycle management included. Produces agent-native JSON diagnostics for AI-driven fix convergence.
+**Requirements**: GOAL-05
+**Depends on:** Phase 3
+**Plans:** 4 plans
+
+Plans:
+- [x] 05-01-PLAN.md — Project scaffold, venv, library modules (StarRocks startup, Docker lifecycle, driver registry, TLS, catalog helpers), conftest.py fixtures
+- [x] 05-02-PLAN.md — SQLite + DuckDB test modules (local backends, all D-09 scenarios)
+- [x] 05-03-PLAN.md — FlightSQL + PostgreSQL test modules (Docker backends, TLS testing)
+- [x] 05-04-PLAN.md — Cross-driver join tests + negative tests + JSON report verification
+
 ---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -151,3 +164,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 2. FE Rewrite — Driver Acquisition, Validation, Plan Path | 0/5 | Planning complete | - |
 | 3. BE Rewrite, Build-System Purge, CI Smoke | 0/4 | Planning complete | - |
 | 4. Docs, Hard-Break Migration, Final Audit | 0/TBD | Not started | - |
+| 5. External Integration Verification Suite | 0/4 | Planning complete | - |
