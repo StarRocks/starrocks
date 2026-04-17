@@ -105,7 +105,7 @@ public class ADBCMetadataTest {
                 // getObjects called for hierarchy resolution + listDbNames
                 mockConnection.getObjects(
                         (AdbcConnection.GetObjectsDepth) any,
-                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                        anyString, anyString, anyString, (String[]) any, anyString);
                 result = mockReader;
                 minTimes = 0;
 
@@ -155,7 +155,7 @@ public class ADBCMetadataTest {
 
                 mockConnection.getObjects(
                         (AdbcConnection.GetObjectsDepth) any,
-                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                        anyString, anyString, anyString, (String[]) any, anyString);
                 result = mockReader;
                 minTimes = 0;
 
@@ -181,7 +181,7 @@ public class ADBCMetadataTest {
 
                 mockConnection.getObjects(
                         (AdbcConnection.GetObjectsDepth) any,
-                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                        anyString, anyString, anyString, (String[]) any, anyString);
                 result = mockReader;
                 minTimes = 0;
 
@@ -215,7 +215,7 @@ public class ADBCMetadataTest {
                 // getObjects for hierarchy resolution
                 mockConnection.getObjects(
                         (AdbcConnection.GetObjectsDepth) any,
-                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                        anyString, anyString, anyString, (String[]) any, anyString);
                 result = mockReader;
                 minTimes = 0;
 
@@ -252,7 +252,7 @@ public class ADBCMetadataTest {
 
                 mockConnection.getObjects(
                         (AdbcConnection.GetObjectsDepth) any,
-                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                        anyString, anyString, anyString, (String[]) any, anyString);
                 result = mockReader;
                 minTimes = 0;
 
@@ -287,7 +287,7 @@ public class ADBCMetadataTest {
 
                 mockConnection.getObjects(
                         (AdbcConnection.GetObjectsDepth) any,
-                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                        anyString, anyString, anyString, (String[]) any, anyString);
                 result = mockReader;
                 minTimes = 0;
 
@@ -317,7 +317,7 @@ public class ADBCMetadataTest {
 
                 mockConnection.getObjects(
                         (AdbcConnection.GetObjectsDepth) any,
-                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                        anyString, anyString, anyString, (String[]) any, anyString);
                 result = mockReader;
                 minTimes = 0;
 
@@ -442,7 +442,7 @@ public class ADBCMetadataTest {
 
                 mockConnection.getObjects(
                         (AdbcConnection.GetObjectsDepth) any,
-                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                        anyString, anyString, anyString, (String[]) any, anyString);
                 result = mockReader;
                 minTimes = 0;
 
