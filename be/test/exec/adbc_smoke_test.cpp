@@ -15,18 +15,17 @@
 // Throwaway ADBC smoke tests — deleted before PR push (per D-16).
 // Proves the ADBC scanner stack works E2E against the SQLite ADBC driver.
 
-#include <gtest/gtest.h>
-
 #include <arrow-adbc/adbc.h>
 #include <arrow-adbc/adbc_driver_manager.h>
 #include <arrow/c/bridge.h>
 #include <arrow/record_batch.h>
+#include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <thread>
-#include <unistd.h>
 #include <vector>
 
 #include "exec/adbc_arrow_raii.h"
@@ -34,13 +33,13 @@
 
 namespace starrocks {
 
-#define ASSERT_ADBC_OK(status, error)                                                       \
-    do {                                                                                    \
-        if ((status) != ADBC_STATUS_OK) {                                                   \
-            std::string msg = (error).message ? (error).message : "Unknown";                \
-            if ((error).release) (error).release(&(error));                                 \
-            FAIL() << "ADBC error: " << msg;                                                \
-        }                                                                                   \
+#define ASSERT_ADBC_OK(status, error)                                        \
+    do {                                                                     \
+        if ((status) != ADBC_STATUS_OK) {                                    \
+            std::string msg = (error).message ? (error).message : "Unknown"; \
+            if ((error).release) (error).release(&(error));                  \
+            FAIL() << "ADBC error: " << msg;                                 \
+        }                                                                    \
     } while (0)
 
 static std::string get_sqlite_driver_path() {
@@ -246,8 +245,8 @@ TEST(ADBCSmokeTest, ConcurrentScan) {
 
         exec_sql(&setup_conn, "CREATE TABLE concurrent_t (id INTEGER, val TEXT)");
         for (int i = 0; i < 100; i++) {
-            std::string sql = "INSERT INTO concurrent_t VALUES (" + std::to_string(i) + ", 'row" +
-                              std::to_string(i) + "')";
+            std::string sql =
+                    "INSERT INTO concurrent_t VALUES (" + std::to_string(i) + ", 'row" + std::to_string(i) + "')";
             exec_sql(&setup_conn, sql.c_str());
         }
 

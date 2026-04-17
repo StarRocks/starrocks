@@ -93,8 +93,7 @@ Status ADBCScanner::_init_adbc() {
     //    BE-06 never-dlclose). The registry calls AdbcLoadDriver() which
     //    performs dlopen(RTLD_NOW | RTLD_LOCAL) on first call, and returns
     //    the cached AdbcDriver on subsequent calls.
-    auto driver_result = ADBCDriverRegistry::instance().get_or_load(
-            _ctx.driver_url, _ctx.entrypoint);
+    auto driver_result = ADBCDriverRegistry::instance().get_or_load(_ctx.driver_url, _ctx.entrypoint);
     if (!driver_result.ok()) return driver_result.status();
 
     // 2. Init database
@@ -102,31 +101,26 @@ Status ADBCScanner::_init_adbc() {
 
     // 3. Set driver path (MUST be first option per ADBC protocol)
     error = ADBC_ERROR_INIT;
-    RETURN_ADBC_NOT_OK(
-            AdbcDatabaseSetOption(&_database, "driver", _ctx.driver_url.c_str(), &error), error);
+    RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "driver", _ctx.driver_url.c_str(), &error), error);
 
     // 4. Optional entrypoint
     if (!_ctx.entrypoint.empty()) {
         error = ADBC_ERROR_INIT;
-        RETURN_ADBC_NOT_OK(
-                AdbcDatabaseSetOption(&_database, "entrypoint", _ctx.entrypoint.c_str(), &error), error);
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "entrypoint", _ctx.entrypoint.c_str(), &error), error);
     }
 
     // 5. Standard options: uri, username, password
     if (!_ctx.uri.empty()) {
         error = ADBC_ERROR_INIT;
-        RETURN_ADBC_NOT_OK(
-                AdbcDatabaseSetOption(&_database, "uri", _ctx.uri.c_str(), &error), error);
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "uri", _ctx.uri.c_str(), &error), error);
     }
     if (!_ctx.username.empty()) {
         error = ADBC_ERROR_INIT;
-        RETURN_ADBC_NOT_OK(
-                AdbcDatabaseSetOption(&_database, "username", _ctx.username.c_str(), &error), error);
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "username", _ctx.username.c_str(), &error), error);
     }
     if (!_ctx.password.empty()) {
         error = ADBC_ERROR_INIT;
-        RETURN_ADBC_NOT_OK(
-                AdbcDatabaseSetOption(&_database, "password", _ctx.password.c_str(), &error), error);
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, "password", _ctx.password.c_str(), &error), error);
     }
 
     // 6. Forward ALL adbc_options before Init (per BE-02)
@@ -134,8 +128,7 @@ Status ADBCScanner::_init_adbc() {
         // Skip uri/username/password — already set above
         if (key == "uri" || key == "username" || key == "password") continue;
         error = ADBC_ERROR_INIT;
-        RETURN_ADBC_NOT_OK(
-                AdbcDatabaseSetOption(&_database, key.c_str(), value.c_str(), &error), error);
+        RETURN_ADBC_NOT_OK(AdbcDatabaseSetOption(&_database, key.c_str(), value.c_str(), &error), error);
     }
 
     // 7. Initialize database (driver manager routes to the already-loaded driver)
@@ -154,8 +147,7 @@ Status ADBCScanner::_init_adbc() {
     error = ADBC_ERROR_INIT;
     RETURN_ADBC_NOT_OK(AdbcStatementNew(&_connection, &_statement, &error), error);
     error = ADBC_ERROR_INIT;
-    RETURN_ADBC_NOT_OK(
-            AdbcStatementSetSqlQuery(&_statement, _ctx.sql.c_str(), &error), error);
+    RETURN_ADBC_NOT_OK(AdbcStatementSetSqlQuery(&_statement, _ctx.sql.c_str(), &error), error);
     _statement_initialized = true;
 
     return Status::OK();
@@ -175,7 +167,8 @@ Status ADBCScanner::_try_parallel_read() {
         }
     };
 
-    AdbcStatusCode sc = AdbcStatementExecutePartitions(&_statement, schema_holder.get(), &partitions, &rows_affected, &error);
+    AdbcStatusCode sc =
+            AdbcStatementExecutePartitions(&_statement, schema_holder.get(), &partitions, &rows_affected, &error);
     if (sc != ADBC_STATUS_OK) {
         if (error.release) error.release(&error);
         cleanup_partitions();

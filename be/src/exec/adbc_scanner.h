@@ -17,8 +17,6 @@
 // connector/adbc_connector.h MUST come before arrow-adbc/adbc.h because
 // adbc.h defines `#define ADBC` (empty macro) which clashes with
 // ConnectorType::ADBC_CONN's predecessor name in connector.h.
-#include "connector/adbc_connector.h"
-
 #include <arrow-adbc/adbc.h>
 #include <arrow/record_batch.h>
 #include <arrow/type.h>
@@ -28,6 +26,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "connector/adbc_connector.h"
 #include "exec/adbc_arrow_raii.h"
 #include "runtime/runtime_state.h"
 

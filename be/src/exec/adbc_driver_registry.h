@@ -38,8 +38,7 @@ public:
     // internally uses dlopen(RTLD_NOW | RTLD_LOCAL).
     // Subsequent calls return the cached driver.
     // entrypoint is optional — defaults to nullptr (driver manager default) if empty.
-    StatusOr<const AdbcDriver*> get_or_load(const std::string& driver_url,
-                                             const std::string& entrypoint = "");
+    StatusOr<const AdbcDriver*> get_or_load(const std::string& driver_url, const std::string& entrypoint = "");
 
     // For testing: number of loaded drivers
     size_t loaded_count() const;

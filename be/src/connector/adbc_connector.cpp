@@ -110,10 +110,8 @@ Status ADBCDataSource::open(RuntimeState* state) {
     ctx.sql = get_adbc_sql(scan_node.table_name, scan_node.columns, scan_node.filters,
                            scan_node.__isset.limit ? scan_node.limit : -1);
 
-    LOG(INFO) << "ADBC connector: driver_url=" << ctx.driver_url
-              << " entrypoint=" << ctx.entrypoint
-              << " options_count=" << ctx.adbc_options.size()
-              << " sql=" << ctx.sql;
+    LOG(INFO) << "ADBC connector: driver_url=" << ctx.driver_url << " entrypoint=" << ctx.entrypoint
+              << " options_count=" << ctx.adbc_options.size() << " sql=" << ctx.sql;
 
     // Create scanner with context struct (per D-01)
     _scanner = std::make_unique<ADBCScanner>(ctx, tuple_desc);

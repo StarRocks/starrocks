@@ -26,14 +26,13 @@ ADBCDriverRegistry& ADBCDriverRegistry::instance() {
     return registry;
 }
 
-StatusOr<const AdbcDriver*> ADBCDriverRegistry::get_or_load(
-        const std::string& driver_url, const std::string& entrypoint) {
+StatusOr<const AdbcDriver*> ADBCDriverRegistry::get_or_load(const std::string& driver_url,
+                                                            const std::string& entrypoint) {
     // Canonicalize path via realpath to avoid loading the same .so twice
     // under different paths (symlinks, relative vs absolute, etc.)
     char resolved[PATH_MAX];
     if (realpath(driver_url.c_str(), resolved) == nullptr) {
-        return Status::InvalidArgument(
-                fmt::format("ADBC driver path not found or not readable: {}", driver_url));
+        return Status::InvalidArgument(fmt::format("ADBC driver path not found or not readable: {}", driver_url));
     }
     std::string key(resolved);
 
@@ -53,14 +52,12 @@ StatusOr<const AdbcDriver*> ADBCDriverRegistry::get_or_load(
     if (status != ADBC_STATUS_OK) {
         std::string msg = error.message ? error.message : "Unknown ADBC driver load error";
         if (error.release) error.release(&error);
-        entry.load_status = Status::InternalError(
-                fmt::format("Failed to load ADBC driver '{}': {}", key, msg));
+        entry.load_status = Status::InternalError(fmt::format("Failed to load ADBC driver '{}': {}", key, msg));
         entry.loaded = true;
         return entry.load_status;
     }
 
-    LOG(INFO) << "ADBC driver loaded: " << key
-              << (entrypoint.empty() ? "" : " (entrypoint=" + entrypoint + ")");
+    LOG(INFO) << "ADBC driver loaded: " << key << (entrypoint.empty() ? "" : " (entrypoint=" + entrypoint + ")");
     entry.loaded = true;
     entry.load_status = Status::OK();
     return &entry.driver;

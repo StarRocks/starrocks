@@ -469,8 +469,7 @@ std::string JDBCTableDescriptor::debug_string() const {
     return out.str();
 }
 
-ADBCTableDescriptor::ADBCTableDescriptor(const TTableDescriptor& tdesc)
-        : TableDescriptor(tdesc) {
+ADBCTableDescriptor::ADBCTableDescriptor(const TTableDescriptor& tdesc) : TableDescriptor(tdesc) {
     if (tdesc.__isset.adbcTable) {
         const auto& t = tdesc.adbcTable;
         if (t.__isset.driver_url) _driver_url = t.driver_url;
@@ -481,8 +480,7 @@ ADBCTableDescriptor::ADBCTableDescriptor(const TTableDescriptor& tdesc)
 
 std::string ADBCTableDescriptor::debug_string() const {
     std::stringstream ss;
-    ss << "ADBCTableDescriptor{driver_url=" << _driver_url
-       << " entrypoint=" << _entrypoint
+    ss << "ADBCTableDescriptor{driver_url=" << _driver_url << " entrypoint=" << _entrypoint
        << " options_count=" << _adbc_options.size() << "}";
     return ss.str();
 }
