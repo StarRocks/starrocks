@@ -151,12 +151,24 @@ Plans:
 - [x] 05-03-PLAN.md — FlightSQL + PostgreSQL test modules (Docker backends, TLS testing)
 - [x] 05-04-PLAN.md — Cross-driver join tests + negative tests + JSON report verification
 
+### Phase 6: PR Review Resolution & Test Hardening
+
+**Goal:** Resolve all 23 PR #1 review comments: remove smoke tests/legacy code/GSD references/local build workarounds, delete ADBCMetaCache and simplify metadata to direct ADBC calls, standardize user->username property naming, fix test infrastructure (remove IT, improve mocks), simplify BE scanner abstractions, add TODOs for future partition support. After each wave, run the 24-test /home/mete/coding/opensource/adbc_verification suite to ensure no regressions. All tests must pass at phase completion.
+**Requirements**: GOAL-06
+**Depends on:** Phase 5
+**Plans:** 3 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — BE deletions (smoke tests, CMakeLists), build workaround reverts, .gitignore cleanup, BE GSD reference removal
+- [ ] 06-02-PLAN.md — FE cleanup (legacy detection, GSD refs, user->username rename), test infrastructure fix (delete IT, pure mock), partition TODOs
+- [ ] 06-03-PLAN.md — Cache removal (delete ADBCMetaCache, Config entries, rewrite ADBCMetadata), update ADBCMetadataTest
+
 ---
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -165,3 +177,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5
 | 3. BE Rewrite, Build-System Purge, CI Smoke | 0/4 | Planning complete | - |
 | 4. Docs, Hard-Break Migration, Final Audit | 0/TBD | Not started | - |
 | 5. External Integration Verification Suite | 0/4 | Planning complete | - |
+| 6. PR Review Resolution & Test Hardening | 0/3 | Planning complete | - |
