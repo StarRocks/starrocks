@@ -344,10 +344,12 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 auto func = [&, i]() {
                     auto st = state.load_segment(i, params, base_version, true /*resolve conflict*/,
                                                  false /*no need lock*/);
+                    _update_state_cache.update_object_size(state_entry, state.memory_usage());
                     if (st.ok()) {
                         st = state.rewrite_segment(i, txn_id, params, &per_seg_replace[i], &per_seg_orphans[i]);
                     }
                     state.release_segment_partial_state(i);
+                    _update_state_cache.update_object_size(state_entry, state.memory_usage());
 
                     std::lock_guard<std::mutex> l(status_mutex);
                     shared_status.update(st);
