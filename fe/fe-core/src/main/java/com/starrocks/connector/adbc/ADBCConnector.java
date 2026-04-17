@@ -173,33 +173,24 @@ public class ADBCConnector implements Connector {
         return driver.open(params);
     }
 
-    // XDBC info code for the character used to quote identifiers (from Flight SQL / ADBC 1.1.0+)
-    private static final int SQL_IDENTIFIER_QUOTE_CHAR = 504;
-
     /**
-     * Probe driver: verify it responds and discover identifier quoting.
+     * Probe driver: verify it responds and detect identifier quoting.
      *
-     * <p>Queries {@code SQL_IDENTIFIER_QUOTE_CHAR} (XDBC info code 504) to discover what
-     * character the driver uses to quote identifiers (e.g. {@code `} for MySQL, {@code "}
-     * for PostgreSQL). If the driver supports it, the value is stored as
-     * {@code _sr_identifier_quote} in the catalog properties so that
-     * {@link com.starrocks.planner.ADBCScanNode} generates correctly-quoted SQL.
+     * <p>Detects the identifier quote character from the driver file path
+     * (e.g. mysql → backtick, postgresql → double-quote) and stores it as
+     * {@code _sr_identifier_quote} in the catalog properties. This internal
+     * property is read by {@link com.starrocks.planner.ADBCScanNode} to
+     * generate correctly-quoted SQL for each driver dialect.
      */
     private static void probeDriverAndDiscoverQuoting(
             AdbcDatabase db, String driverIdentifier, Map<String, String> properties) {
         try (AdbcConnection conn = db.connect()) {
-            // 1. Probe driver version
             try (ArrowReader infoReader = conn.getInfo()) {
                 while (infoReader.loadNextBatch()) {
                     // drain to release Arrow buffers
                 }
             }
             LOG.info("ADBC driver '{}' loaded and responding", driverIdentifier);
-
-            // 2. Query identifier quote character if not already set by user
-            if (!properties.containsKey("_sr_identifier_quote")) {
-                discoverIdentifierQuote(conn, driverIdentifier, properties);
-            }
         } catch (AdbcException e) {
             if (e.getStatus() == AdbcStatusCode.NOT_IMPLEMENTED) {
                 LOG.warn("ADBC driver '{}': getInfo() not implemented -- skipping probe",
@@ -210,56 +201,24 @@ public class ADBCConnector implements Connector {
         } catch (Exception e) {
             LOG.warn("ADBC driver '{}': probe failed -- {}", driverIdentifier, e.getMessage());
         }
-    }
 
-    /**
-     * Query the driver for its identifier quote character via XDBC info code 504.
-     * Falls back to detecting from the driver path if the driver doesn't support getInfo(504).
-     */
-    private static void discoverIdentifierQuote(
-            AdbcConnection conn, String driverIdentifier, Map<String, String> properties) {
-        try (ArrowReader reader = conn.getInfo(new int[] {SQL_IDENTIFIER_QUOTE_CHAR})) {
-            while (reader.loadNextBatch()) {
-                org.apache.arrow.vector.VectorSchemaRoot root = reader.getVectorSchemaRoot();
-                if (root.getRowCount() > 0) {
-                    // getInfo returns: info_name (uint32), info_value (dense_union)
-                    // For string values, the union type index 0 is utf8
-                    org.apache.arrow.vector.complex.DenseUnionVector valueVec =
-                            (org.apache.arrow.vector.complex.DenseUnionVector)
-                                    root.getVector("info_value");
-                    if (valueVec != null && !valueVec.isNull(0)) {
-                        Object val = valueVec.getObject(0);
-                        if (val != null) {
-                            String quoteChar = val.toString().trim();
-                            if (!quoteChar.isEmpty()) {
-                                properties.put("_sr_identifier_quote", quoteChar);
-                                LOG.info("ADBC driver '{}': identifier quote = '{}'",
-                                        driverIdentifier, quoteChar);
-                                return;
-                            }
-                        }
-                    }
-                }
+        // Detect identifier quote character from driver path
+        if (!properties.containsKey("_sr_identifier_quote")) {
+            String quoteChar = detectQuoteFromDriverPath(driverIdentifier);
+            if (quoteChar != null) {
+                properties.put("_sr_identifier_quote", quoteChar);
+                LOG.info("ADBC driver '{}': identifier quote = '{}'",
+                        driverIdentifier, quoteChar);
             }
-        } catch (Exception e) {
-            LOG.debug("ADBC driver '{}': getInfo(504) not supported, falling back to path detection",
-                    driverIdentifier);
-        }
-
-        // Fallback: detect from driver file path
-        String quoteChar = detectQuoteFromDriverPath(driverIdentifier);
-        if (quoteChar != null) {
-            properties.put("_sr_identifier_quote", quoteChar);
-            LOG.info("ADBC driver '{}': identifier quote = '{}' (detected from path)",
-                    driverIdentifier, quoteChar);
         }
     }
 
     /**
-     * Heuristic fallback: detect identifier quote character from the driver file path.
-     * Returns null if the driver type cannot be determined.
+     * Detect identifier quote character from the driver file path.
+     * Returns null if the driver type cannot be determined (defaults to double-quote
+     * in {@link com.starrocks.planner.ADBCScanNode}).
      */
-    private static String detectQuoteFromDriverPath(String driverPath) {
+    static String detectQuoteFromDriverPath(String driverPath) {
         if (driverPath == null) {
             return null;
         }
