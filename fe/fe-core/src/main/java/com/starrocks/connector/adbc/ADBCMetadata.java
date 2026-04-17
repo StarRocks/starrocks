@@ -38,17 +38,18 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Metadata provider for ADBC external catalogs.
  *
  * <h3>Hierarchy mapping</h3>
- * ADBC drivers expose a 3-level hierarchy: {@code catalog → db_schema → table}.
+ * ADBC drivers expose a 3-level hierarchy: {@code catalog -> db_schema -> table}.
  * Different drivers populate these levels differently:
  * <ul>
- *   <li><b>SQLite:</b> catalog="main", db_schema="" → schemas are empty, catalogs carry meaning</li>
- *   <li><b>PostgreSQL:</b> catalog="testdb", db_schema="public" → schemas carry meaning</li>
- *   <li><b>DuckDB:</b> catalog="my.db", db_schema="main" → schemas carry meaning</li>
+ *   <li><b>SQLite:</b> catalog="main", db_schema="" -> schemas are empty, catalogs carry meaning</li>
+ *   <li><b>PostgreSQL:</b> catalog="testdb", db_schema="public" -> schemas carry meaning</li>
+ *   <li><b>DuckDB:</b> catalog="my.db", db_schema="main" -> schemas carry meaning</li>
  * </ul>
  *
  * StarRocks maps to a 2-level model: {@code external_catalog.database.table}. This class
@@ -63,9 +64,9 @@ public class ADBCMetadata implements ConnectorMetadata {
     /**
      * Which ADBC hierarchy level maps to StarRocks' "database" concept.
      * <ul>
-     *   <li>{@code CATALOG} — driver has meaningful catalog names but empty schemas
+     *   <li>{@code CATALOG} -- driver has meaningful catalog names but empty schemas
      *       (e.g. SQLite: "main" is a catalog).</li>
-     *   <li>{@code SCHEMA} — driver has meaningful schema names
+     *   <li>{@code SCHEMA} -- driver has meaningful schema names
      *       (e.g. PostgreSQL: "public" is a schema).</li>
      * </ul>
      */
@@ -80,11 +81,9 @@ public class ADBCMetadata implements ConnectorMetadata {
     private final BufferAllocator allocator;
     private final ADBCSchemaResolver schemaResolver;
 
-    // Caches
-    private final ADBCMetaCache<ADBCTableName, Integer> tableIdCache;
-    private final ADBCMetaCache<ADBCTableName, Table> tableInstanceCache;
-    private final ADBCMetaCache<String, List<String>> dbNamesCache;
-    private final ADBCMetaCache<String, List<String>> tableNamesCache;
+    // Stable table ID assignment -- IDs persist for the catalog's lifetime so that
+    // the same table always gets the same ID within a session.
+    private final ConcurrentHashMap<ADBCTableName, Integer> tableIdMap;
 
     // Resolved once on first metadata call, then cached for the catalog's lifetime.
     private volatile HierarchyModel hierarchyModel;
@@ -96,11 +95,7 @@ public class ADBCMetadata implements ConnectorMetadata {
         this.allocator = allocator;
         this.adbcDatabase = adbcDatabase;
         this.schemaResolver = createSchemaResolver();
-
-        this.tableIdCache = new ADBCMetaCache<>(properties, true);
-        this.tableInstanceCache = new ADBCMetaCache<>(properties, false);
-        this.dbNamesCache = new ADBCMetaCache<>(properties, false);
-        this.tableNamesCache = new ADBCMetaCache<>(properties, false);
+        this.tableIdMap = new ConcurrentHashMap<>();
     }
 
     // Visible for testing
@@ -110,11 +105,7 @@ public class ADBCMetadata implements ConnectorMetadata {
         this.allocator = new RootAllocator();
         this.adbcDatabase = adbcDatabase;
         this.schemaResolver = createSchemaResolver();
-
-        this.tableIdCache = new ADBCMetaCache<>(properties, true);
-        this.tableInstanceCache = new ADBCMetaCache<>(properties, false);
-        this.dbNamesCache = new ADBCMetaCache<>(properties, false);
-        this.tableNamesCache = new ADBCMetaCache<>(properties, false);
+        this.tableIdMap = new ConcurrentHashMap<>();
     }
 
     private ADBCSchemaResolver createSchemaResolver() {
@@ -220,24 +211,22 @@ public class ADBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
-        return dbNamesCache.get(catalogName, k -> {
-            try (AdbcConnection conn = adbcDatabase.connect()) {
-                HierarchyModel model = getHierarchyModel(conn);
-                return listDbNamesFromGetObjects(conn, model);
-            } catch (Exception e) {
-                throw new StarRocksConnectorException(
-                        "Failed to list databases from ADBC catalog '" + catalogName
-                                + "'. Detail: " + e.getMessage(), e);
-            }
-        });
+        try (AdbcConnection conn = adbcDatabase.connect()) {
+            HierarchyModel model = getHierarchyModel(conn);
+            return listDbNamesFromGetObjects(conn, model);
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(
+                    "Failed to list databases from ADBC catalog '" + catalogName
+                            + "'. Detail: " + e.getMessage(), e);
+        }
     }
 
     /**
      * List "databases" by reading the correct hierarchy level.
      *
      * <ul>
-     *   <li>{@code CATALOG model}: returns catalog names (e.g. SQLite → ["main"])</li>
-     *   <li>{@code SCHEMA model}: returns schema names (e.g. PostgreSQL → ["public", "pg_catalog"])</li>
+     *   <li>{@code CATALOG model}: returns catalog names (e.g. SQLite -> ["main"])</li>
+     *   <li>{@code SCHEMA model}: returns schema names (e.g. PostgreSQL -> ["public", "pg_catalog"])</li>
      * </ul>
      */
     private List<String> listDbNamesFromGetObjects(AdbcConnection conn, HierarchyModel model)
@@ -301,16 +290,14 @@ public class ADBCMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
-        return tableNamesCache.get(dbName, k -> {
-            try (AdbcConnection conn = adbcDatabase.connect()) {
-                HierarchyModel model = getHierarchyModel(conn);
-                return listTableNamesFromGetObjects(conn, dbName, model);
-            } catch (Exception e) {
-                throw new StarRocksConnectorException(
-                        "Failed to list tables from ADBC catalog '" + catalogName
-                                + "', database '" + dbName + "'. Detail: " + e.getMessage(), e);
-            }
-        });
+        try (AdbcConnection conn = adbcDatabase.connect()) {
+            HierarchyModel model = getHierarchyModel(conn);
+            return listTableNamesFromGetObjects(conn, dbName, model);
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(
+                    "Failed to list tables from ADBC catalog '" + catalogName
+                            + "', database '" + dbName + "'. Detail: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -325,7 +312,7 @@ public class ADBCMetadata implements ConnectorMetadata {
     private List<String> listTableNamesFromGetObjects(
             AdbcConnection conn, String dbName, HierarchyModel model) throws Exception {
         String catalogFilter = (model == HierarchyModel.CATALOG) ? dbName : null;
-        // For SCHEMA model, don't filter server-side — filter client-side below
+        // For SCHEMA model, don't filter server-side -- filter client-side below
         String schemaFilter = null;
 
         List<String> tables = new ArrayList<>();
@@ -394,34 +381,28 @@ public class ADBCMetadata implements ConnectorMetadata {
     public Table getTable(ConnectContext context, String dbName, String tblName) {
         ADBCTableName key = ADBCTableName.of(catalogName, dbName, tblName);
         try {
-            return tableInstanceCache.get(key, k -> {
-                try (AdbcConnection conn = adbcDatabase.connect()) {
-                    HierarchyModel model = getHierarchyModel(conn);
-                    Schema arrowSchema = getTableSchemaViaADBC(conn, dbName, tblName, model);
-                    if (arrowSchema == null) {
-                        throw new StarRocksConnectorException(
-                                "No schema returned for table " + dbName + "." + tblName);
-                    }
-                    List<Column> fullSchema = schemaResolver.convertToSRTable(arrowSchema);
-                    if (fullSchema.isEmpty()) {
-                        throw new StarRocksConnectorException(
-                                "Empty schema for table " + dbName + "." + tblName);
-                    }
-                    int tableId = tableIdCache.getPersistentCache(k,
-                            j -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
-                    return new ADBCTable(tableId, tblName, fullSchema, dbName, catalogName, properties);
-                } catch (StarRocksConnectorException e) {
-                    throw e;
-                } catch (Exception e) {
+            try (AdbcConnection conn = adbcDatabase.connect()) {
+                HierarchyModel model = getHierarchyModel(conn);
+                Schema arrowSchema = getTableSchemaViaADBC(conn, dbName, tblName, model);
+                if (arrowSchema == null) {
                     throw new StarRocksConnectorException(
-                            "Failed to get table '" + dbName + "." + tblName
-                                    + "' from ADBC catalog '" + catalogName
-                                    + "'. Check that the remote server is reachable. Detail: "
-                                    + e.getMessage(), e);
+                            "No schema returned for table " + dbName + "." + tblName);
                 }
-            });
+                List<Column> fullSchema = schemaResolver.convertToSRTable(arrowSchema);
+                if (fullSchema.isEmpty()) {
+                    throw new StarRocksConnectorException(
+                            "Empty schema for table " + dbName + "." + tblName);
+                }
+                int tableId = tableIdMap.computeIfAbsent(key,
+                        k -> ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt());
+                return new ADBCTable(tableId, tblName, fullSchema, dbName, catalogName, properties);
+            }
         } catch (StarRocksConnectorException e) {
             LOG.warn(e.getMessage());
+            return null;
+        } catch (Exception e) {
+            LOG.warn("Failed to get table '{}' from ADBC catalog '{}': {}",
+                    dbName + "." + tblName, catalogName, e.getMessage());
             return null;
         }
     }
@@ -477,19 +458,12 @@ public class ADBCMetadata implements ConnectorMetadata {
     @Override
     public void refreshTable(String srDbName, Table table,
                               List<String> partitionNames, boolean onlyCachedPartitions) {
-        ADBCTable adbcTable = (ADBCTable) table;
-        ADBCTableName tableName = ADBCTableName.of(
-                catalogName, adbcTable.getDbName(), adbcTable.getName());
-        if (!onlyCachedPartitions) {
-            tableInstanceCache.invalidate(tableName);
-        }
+        // No cache to invalidate -- next getTable() fetches fresh metadata from driver
     }
 
     @Override
     public void clear() {
-        tableInstanceCache.invalidateAll();
-        dbNamesCache.invalidateAll();
-        tableNamesCache.invalidateAll();
+        tableIdMap.clear();
         synchronized (this) {
             hierarchyModel = null;
         }
