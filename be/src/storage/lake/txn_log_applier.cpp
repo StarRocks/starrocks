@@ -854,11 +854,17 @@ public:
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
         }
-        if (log.has_op_add_index()) {
-            _builder.apply_add_index(log.op_add_index());
-        }
-        if (log.has_op_drop_index()) {
-            _builder.apply_drop_index(log.op_drop_index());
+        if (log.has_op_add_index() || log.has_op_drop_index()) {
+            // NonPrimaryKeyTxnLogApplier doesn't carry a persistent MetaFileBuilder,
+            // but apply_add_index / apply_drop_index only mutate the embedded
+            // TabletMetadata; construct a transient builder scoped to this log.
+            MetaFileBuilder builder(_tablet, _metadata);
+            if (log.has_op_add_index()) {
+                builder.apply_add_index(log.op_add_index());
+            }
+            if (log.has_op_drop_index()) {
+                builder.apply_drop_index(log.op_drop_index());
+            }
         }
         if (log.has_op_replication()) {
             RETURN_IF_ERROR(apply_replication_log(log.op_replication()));
