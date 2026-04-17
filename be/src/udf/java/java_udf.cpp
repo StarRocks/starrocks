@@ -681,18 +681,12 @@ Status ClassLoader::init() {
 
     _get_call_stub =
             env->GetMethodID((jclass)_clazz.handle(), "generateCallStubV",
-<<<<<<< HEAD
                              "(Ljava/lang/String;Ljava/lang/Class;Ljava/lang/reflect/Method;I)Ljava/lang/Class;");
 
     // init method
     if (_get_class == nullptr || _get_call_stub == nullptr) {
-        return Status::InternalError("couldn't get method for classloader");
-=======
-                             "(Ljava/lang/String;Ljava/lang/Class;Ljava/lang/reflect/Method;II)Ljava/lang/Class;");
-    if (_get_call_stub == nullptr) {
         RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "couldn't get generateCallStubV method for classloader");
         return Status::InternalError("couldn't get generateCallStubV method for classloader");
->>>>>>> d93dd6a64e ([BugFix] Add JNI exception handling checks in Java UDF code (#71734))
     }
 
     return Status::OK();
