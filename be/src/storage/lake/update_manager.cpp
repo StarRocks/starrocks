@@ -315,9 +315,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     const bool has_condition_update = (condition_column >= 0);
     const bool is_row_mode_partial_update =
             op_write.has_txn_meta() && op_write.rewrite_segments_size() > 0 && op_write.rowset().num_rows() > 0;
-    const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution &&
-                                             is_row_mode_partial_update && local_segments > 1 &&
-                                             use_cloud_native_pk_index(*metadata);
+    const bool use_parallel_partial_update = config::enable_pk_index_parallel_execution && is_row_mode_partial_update &&
+                                             local_segments > 1 && use_cloud_native_pk_index(*metadata);
 
     // 2. Process segments in batches. In parallel mode, each batch runs Phase 1 (parallel
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
@@ -326,9 +325,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
         RETURN_IF_ERROR(state.prepare_for_parallel(params));
     }
     const uint32_t batch_size =
-            use_parallel_partial_update
-                    ? ExecEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads()
-                    : 1;
+            use_parallel_partial_update ? ExecEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads() : 1;
 
     for (uint32_t batch_start = 0; batch_start < local_segments; batch_start += batch_size) {
         uint32_t batch_end = std::min(batch_start + batch_size, local_segments);
@@ -384,8 +381,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 RETURN_IF_ERROR(state.load_segment(local_id, params, base_version, true /*resolve conflict*/,
                                                    false /*no need lock*/));
                 _update_state_cache.update_object_size(state_entry, state.memory_usage());
-                RETURN_IF_ERROR(
-                        state.rewrite_segment(local_id, txn_id, params, &replace_segments, &orphan_files));
+                RETURN_IF_ERROR(state.rewrite_segment(local_id, txn_id, params, &replace_segments, &orphan_files));
                 rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), local_id,
                                                            replace_segments);
             }
@@ -403,8 +399,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 auto itr = new_deletes.find(rowset_id + global_segment_id);
                 if (itr != new_deletes.end() && itr->second.size() > 0) {
                     dv_generated_during_merge_update = std::make_shared<DelVector>();
-                    dv_generated_during_merge_update->init(metadata->version(), itr->second.data(),
-                                                           itr->second.size());
+                    dv_generated_during_merge_update->init(metadata->version(), itr->second.data(), itr->second.size());
                     builder->append_delvec(dv_generated_during_merge_update, rowset_id + global_segment_id);
                 }
             } else {
@@ -431,10 +426,10 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                 bool succ = true;
                 ASSIGN_OR_RETURN(succ, async_compact_cb->wait_for(1000 /* ms timeout */));
                 if (succ) {
-                    LOG(INFO) << fmt::format(
-                            "early sst compact finish. tablet {}, txn {}, fileset remain {}, trace {}", tablet->id(),
-                            txn_id, index.current_fileset_index() - current_fileset_start_idx,
-                            async_compact_cb->trace()->MetricsAsJSON());
+                    LOG(INFO) << fmt::format("early sst compact finish. tablet {}, txn {}, fileset remain {}, trace {}",
+                                             tablet->id(), txn_id,
+                                             index.current_fileset_index() - current_fileset_start_idx,
+                                             async_compact_cb->trace()->MetricsAsJSON());
                     async_compact_cb = nullptr;
                 }
             }
@@ -447,7 +442,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                                          metadata, current_fileset_start_idx + 1 /* new fileset*/));
             }
         } // end Phase 2 per-segment loop
-    } // end batch loop
+    }     // end batch loop
     if (async_compact_cb) {
         TRACE_COUNTER_SCOPE_LATENCY_US("early_sst_compact_wait_us");
         RETURN_IF_ERROR(async_compact_cb->wait_for());
