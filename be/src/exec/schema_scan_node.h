@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/scan_node.h"
 #include "exec/schema_scanner.h"
 #include "gen_cpp/Descriptors_types.h"
@@ -52,8 +53,7 @@ public:
     // this is no use in this class
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     bool accept_empty_scan_ranges() const override { return false; }
 

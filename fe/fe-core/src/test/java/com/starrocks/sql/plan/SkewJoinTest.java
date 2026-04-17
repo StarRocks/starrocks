@@ -238,13 +238,11 @@ public class SkewJoinTest extends PlanTestBase {
         sql = "select struct_tbl.c0, struct_tbl.c2.a, t0.v2 from default_catalog.test.struct_tbl " +
                 "join[skew|test.struct_tbl.c1.a(1,2)] test.t0 on t0.v1 = c1.a ";
         sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, "HASH JOIN\n" +
-                        "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                        "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
-                        "  |  equal join conjunct: 9: cast = 5: v1",
-                "<slot 10> : CASE WHEN 22: cast IS NULL THEN 24: round WHEN 22: cast IN (1, 2) THEN 24: round " +
-                        "ELSE 0 END");
+        assertCContains(sqlPlan, "  14:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
+                "  |  equal join conjunct: 9: cast = 5: v1");
     }
 
     @Test
@@ -391,7 +389,7 @@ public class SkewJoinTest extends PlanTestBase {
                     if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
                         return ColumnStatistic.builder() //
                                 .setNullsFraction(0.3) // NULL skew
-                                .setHistogram(new Histogram(List.of(), Map.of("a", 400L, "b", 200L))) // MCV skew
+                                .setHistogram(new Histogram(List.of(), Map.of("11", 400L, "22", 200L))) // MCV skew
                                 .build();
                     }
 
@@ -418,10 +416,10 @@ public class SkewJoinTest extends PlanTestBase {
             assertCContains(plan, "IS NULL THEN");
 
             // In this case, the MCV should be selected since:
-            //  - 0.3 null fractions * 1337 rows < 400 rows (a) + 300 rows (b)
+            //  - 0.3 null fractions * 1337 rows < 400 rows (11) + 200 rows (22)
             assertCContains(plan, """
                       5:Project
-                      |  <slot 9> : ['a','b']
+                      |  <slot 9> : [11,22]
                     """);
         } finally {
             // Restore threshold

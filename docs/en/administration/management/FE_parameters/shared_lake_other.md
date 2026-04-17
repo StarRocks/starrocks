@@ -527,7 +527,7 @@ This topic introduces the following types of FE configurations:
 - Default: 600
 - Type: Long
 - Unit: Seconds
-- Is mutable: No
+- Is mutable: Yes
 - Description: The interval at which FE runs the periodical metadata synchronization with StarMgr in a shared-data cluster.
 - Introduced in: -
 
@@ -551,13 +551,14 @@ This topic introduces the following types of FE configurations:
 
 ## Data Lake
 
-### `files_enable_insert_push_down_schema`
+### `files_enable_insert_push_down_column_type`
 
 - Default: true
+- Alias: `files_enable_insert_push_down_schema`
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: When enabled, the analyzer will attempt to push the target table schema into the `files()` table function for INSERT ... FROM files() operations. This only applies when the source is a FileTableFunctionRelation, the target is a native table, and the SELECT list contains corresponding slot-ref columns (or *). The analyzer will match select columns to target columns (counts must match), lock the target table briefly, and replace file-column types with deep-copied target column types for non-complex types (complex types such as Parquet JSON `->` `array<varchar>` are skipped). Column names from the original files table are preserved. This reduces type-mismatch and looseness from file-based type inference during ingestion.
+- Description: When enabled, StarRocks pushes target table column types down to the `files()` table function for `INSERT INTO target_table SELECT ... FROM files()` operations. Only the types of columns already inferred from the files are rewritten; no columns are added or removed. Complex types are skipped. This reduces type-mismatch errors caused by imprecise file-based type inference. For full schema push-down (column names and types), use the INSERT property `enable_push_down_schema`.
 - Introduced in: v3.4.0, v3.5.0
 
 ### `hdfs_read_buffer_size_kb`
@@ -668,6 +669,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: The maximum number of pending commit operations per Iceberg table. When using the commit queue (`enable_iceberg_commit_queue=true`), this limits the number of commit operations that can be queued for a single table. When the limit is reached, additional commit operations will execute in the caller thread (blocking until capacity available). This configuration is read at FE startup and applies to newly created table executors. Requires FE restart to take effect. Increase this value if you expect many concurrent commits to the same table. If this value is too low, commits may block in the caller thread during high concurrency.
 - Introduced in: v4.1.0
+
+##### lake_balance_tablets_threshold
+
+- Default: 0.15
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold the system used to judge the tablet balance among workers in a shared-data cluster, The imbalance factor is calculated as `f = (MAX(tablets) - MIN(tablets)) / AVERAGE(tablets)`. If the factor is greater than `lake_balance_tablets_threshold`, a tablet balance will be triggered. This item takes effect only when `lake_enable_balance_tablets_between_workers` is set to `true`.
+- Introduced in: v3.3.4
 
 ## Other
 

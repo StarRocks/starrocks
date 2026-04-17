@@ -26,7 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.Expr;
@@ -148,10 +148,10 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
                 return false;
             }
             Expr rangePartitionExpr = rangePartitionExprOpt.get();
-            PCellSortedSet snapshotPartitionMap = PartitionUtil.getPartitionKeyRange(
-                    baseTable, partitionColumn, rangePartitionExpr);
-            PCellSortedSet currentPartitionMap = PartitionUtil.getPartitionKeyRange(
-                    table, partitionColumn, rangePartitionExpr);
+            PCellSortedSet snapshotPartitionMap = MVPartitionCellBuilder.getPartitionKeyRange(
+                    baseTable, partitionColumn, rangePartitionExpr).cells();
+            PCellSortedSet currentPartitionMap = MVPartitionCellBuilder.getPartitionKeyRange(
+                    table, partitionColumn, rangePartitionExpr).cells();
             return SyncPartitionUtils.hasRangePartitionChanged(snapshotPartitionMap, currentPartitionMap);
         } else {
             return false;

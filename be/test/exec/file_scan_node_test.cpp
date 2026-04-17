@@ -120,7 +120,8 @@ void FileScanNodeTest::_create_runtime_state() {
     TUniqueId fragment_id;
     TQueryOptions query_options;
     TQueryGlobals query_globals;
-    _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    _runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                                    &_exec_env->query_execution_services(), _exec_env);
     TUniqueId id;
     _mem_tracker = std::make_shared<MemTracker>(-1, "olap scanner test");
     _runtime_state->init_mem_trackers(id);

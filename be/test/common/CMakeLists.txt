@@ -20,6 +20,7 @@ set(COMMON_TEST_FILES
     process_exit_test.cpp
     runtime_profile_test.cpp
     stack_trace_mutex_test.cpp
+    system/master_info_test.cpp
     table_metrics_mgr_test.cpp
     thrift_client_test.cpp
     thread/cpu_usage_info_test.cpp

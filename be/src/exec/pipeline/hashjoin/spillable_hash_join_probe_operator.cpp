@@ -23,8 +23,10 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/runtime_profile.h"
 #include "exec/hash_joiner.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/spill/executor.h"
 #include "exec/spill/partition.h"
 #include "exec/spill/spill_components.h"
@@ -89,7 +91,7 @@ bool SpillableHashJoinProbeOperator::has_output() const {
 
     if (_processing_partitions.empty()) {
         as_mutable()->_acquire_next_partitions();
-        _update_status(as_mutable()->_load_all_partition_build_side(runtime_state()));
+        _update_status(as_mutable()->_load_all_partition_build_side(get_factory()->runtime_state()));
         return false;
     }
 
@@ -122,8 +124,9 @@ bool SpillableHashJoinProbeOperator::has_output() const {
             } else if (!_current_reader[i]->has_restore_task()) {
                 // if trigger_restore returns error, should record this status and return it in pull_chunk
                 _update_status(_current_reader[i]->trigger_restore(
-                        runtime_state(), TRACKER_WITH_SPILLER_RES_GUARD(runtime_state(), _probe_spiller,
-                                                                        std::weak_ptr(_current_reader[i]))));
+                        get_factory()->runtime_state(),
+                        TRACKER_WITH_SPILLER_RES_GUARD(get_factory()->runtime_state(), _probe_spiller,
+                                                       std::weak_ptr(_current_reader[i]))));
                 if (!_status().ok()) {
                     return true;
                 }
@@ -153,7 +156,7 @@ bool SpillableHashJoinProbeOperator::need_input() const {
 
     if (_processing_partitions.empty()) {
         as_mutable()->_acquire_next_partitions();
-        _update_status(as_mutable()->_load_all_partition_build_side(runtime_state()));
+        _update_status(as_mutable()->_load_all_partition_build_side(get_factory()->runtime_state()));
         return false;
     }
 

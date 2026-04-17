@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -205,6 +206,19 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         ExecPlan execPlan = getExecPlan(taskRun);
         Assertions.assertTrue(execPlan != null);
         return execPlan;
+    }
+
+    private void assertRefreshScopeMatchesExtraMessage(MvTaskRunContext mvTaskRunContext, MVTaskRunExtraMessage message) {
+        PCTRefreshScope refreshScope = mvTaskRunContext.getRefreshScope();
+        Assertions.assertNotNull(refreshScope);
+        Assertions.assertEquals(message.getMvPartitionsToRefresh(),
+                refreshScope.getMvPartitionsToRefresh().getPartitionNames());
+        Assertions.assertEquals(message.getRefBasePartitionsToRefreshMap(),
+                refreshScope.getRefTablePartitionNames().getRefTablePartitionNames());
+
+        Map<String, Set<String>> refreshScopeRefPartitions = refreshScope.getRefTableRefreshPartitions().entrySet().stream()
+                .collect(Collectors.toMap(entry -> entry.getKey().getName(), entry -> entry.getValue().getPartitionNames()));
+        Assertions.assertEquals(message.getRefBasePartitionsToRefreshMap(), refreshScopeRefPartitions);
     }
 
     @Test
@@ -1084,6 +1098,8 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         Assertions.assertNull(mvTaskRunContext.getNextPartitionValues());
                         MVTaskRunExtraMessage message = mvTaskRunContext.status.getMvTaskRunExtraMessage();
                         Assertions.assertEquals("p2", message.getMvPartitionsToRefreshString());
+                        Assertions.assertEquals(Map.of("s2", "p2"), message.getPlanBuilderMessage());
+                        assertRefreshScopeMatchesExtraMessage(mvTaskRunContext, message);
                         ExecPlan execPlan = mvTaskRunContext.getExecPlan();
                         Assertions.assertNotEquals(null, execPlan);
                         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "common/status.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "exec/tablet_info.h"
 #include "runtime/lookup_stream_mgr.h"
 

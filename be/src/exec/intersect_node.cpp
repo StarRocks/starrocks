@@ -81,7 +81,7 @@ void IntersectNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> IntersectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     IntersectPartitionContextFactoryPtr intersect_partition_ctx_factory =
@@ -92,7 +92,7 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
             std::make_shared<RcRfProbeCollector>(num_operators_generated, std::move(this->runtime_filter_collector()));
 
     // Use the first child to build the hast table by IntersectBuildSinkOperator.
-    OpFactories ops_with_intersect_build_sink = child(0)->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto ops_with_intersect_build_sink, child(0)->decompose_to_pipeline(context));
     if (_local_partition_by_exprs.empty()) {
         ops_with_intersect_build_sink = context->maybe_interpolate_local_shuffle_exchange(
                 runtime_state(), id(), ops_with_intersect_build_sink, _child_expr_lists[0]);
@@ -109,7 +109,7 @@ pipeline::OpFactories IntersectNode::decompose_to_pipeline(pipeline::PipelineBui
 
     // Use the rest children to erase keys from the hast table by IntersectProbeSinkOperator.
     for (size_t i = 1; i < _children.size(); i++) {
-        OpFactories ops_with_intersect_probe_sink = child(i)->decompose_to_pipeline(context);
+        ASSIGN_OR_RETURN(auto ops_with_intersect_probe_sink, child(i)->decompose_to_pipeline(context));
         if (_local_partition_by_exprs.empty()) {
             ops_with_intersect_probe_sink = context->maybe_interpolate_local_shuffle_exchange(
                     runtime_state(), id(), ops_with_intersect_probe_sink, _child_expr_lists[i]);

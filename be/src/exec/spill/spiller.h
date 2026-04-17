@@ -36,6 +36,7 @@
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller_factory.h"
 #include "fs/fs.h"
+#include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
 #include "util/compression/block_compression.h"
@@ -48,6 +49,8 @@
     }
 
 namespace starrocks::spill {
+
+TQueryType::type spill_query_type(RuntimeState* state);
 
 // some metrics for spill
 struct SpillProcessMetrics {

@@ -506,6 +506,22 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
   | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
   | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
+
 ##### Azure Data Lake Storage Gen1
 
 If you choose Data Lake Storage Gen1 as your storage system, take one of the following actions:
@@ -647,7 +663,11 @@ StarRocks supports loading JSON data from v3.2.3 onwards. The parameters are as 
 - json_root
 
   The root element of the JSON data that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. For more information, see the "[Load JSON data using matched mode with root element specified](#load-json-data-using-matched-mode-with-root-element-specified)" section of this topic.
-  
+
+- envelope
+
+  Specifies the CDC envelope format of the JSON data. Valid value: `debezium`. Default: not set (no envelope wrapping). When set to `debezium`, StarRocks parses each JSON message as a Debezium CDC event. The message must contain an `op` field (`c`=create, `u`=update, `d`=delete, `r`=snapshot read) and an `after` field (for c/u/r) or `before` field (for d) holding the actual row data. Tombstone messages where `payload` is `null` are silently skipped. Can only be specified when `format` is `json`. Cannot be used together with `json_root` or `strip_outer_array`.
+
 When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
 
 <LoadWarehouse />

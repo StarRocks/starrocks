@@ -26,7 +26,9 @@
 #include "common/statusor.h"
 #include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
@@ -156,10 +158,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             _dependencies.push_back(op_with_dep);
         }
 
-        const auto& rf_set = op->rf_waiting_set();
+        const auto& rf_set = op->get_factory()->rf_waiting_set();
         all_local_rf_set.insert(rf_set.begin(), rf_set.end());
 
-        const auto* global_rf_collector = op->runtime_bloom_filters();
+        const auto* global_rf_collector = op->get_factory()->get_runtime_bloom_filters();
         if (global_rf_collector != nullptr) {
             for (const auto& [_, desc] : global_rf_collector->descriptors()) {
                 if (!desc->skip_wait()) {
@@ -167,7 +169,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 #ifdef FIU_ENABLE
                     FAIL_POINT_TRIGGER_EXECUTE(global_runtime_filter_sync_A, { desc->barrier.arrive_A(); });
 #endif
-                    desc->add_observer(_runtime_state, &_observer);
+                    desc->add_observer(_runtime_state, [observer = &_observer]() { observer->source_trigger(); });
                 }
             }
 

@@ -15,7 +15,9 @@
 #include "storage/primary_index.h"
 
 #include <gtest/gtest.h>
+#include <pthread.h>
 
+#include <cstdint>
 #include <random>
 
 #include "base/testutil/parallel_test.h"
@@ -35,8 +37,9 @@ namespace starrocks {
 template <typename DatumType>
 void test_pk_dump(PrimaryIndex* pk_index, const std::map<std::string, uint64_t>& current_index_stat) {
     std::srand(static_cast<unsigned int>(time(nullptr)));
-    std::string kPrimaryIndexDumpDir = "./PrimaryIndexTest_test_index_dump_" + std::to_string(std::rand()) + "_" +
-                                       std::to_string(static_cast<int64_t>(pthread_self()));
+    std::string kPrimaryIndexDumpDir =
+            "./PrimaryIndexTest_test_index_dump_" + std::to_string(std::rand()) + "_" +
+            std::to_string(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(pthread_self())));
     std::string kPrimaryIndexDumpFile = kPrimaryIndexDumpDir + "/111.pkdump";
     bool created;
     FileSystem* fs = FileSystem::Default();
@@ -229,7 +232,7 @@ void test_binary_pk(int key_size) {
     ASSERT_TRUE(pk_index->insert(0, 0, *pk_col).ok());
 
     std::map<std::string, uint64_t> current_index_stat;
-    auto* keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    auto keys = pk_col->immutable_data();
     for (int i = 0; i < pk_col->size(); i++) {
         current_index_stat[hexdump(keys[i].data, keys[i].size)] = i;
     }
@@ -240,7 +243,7 @@ void test_binary_pk(int key_size) {
         pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(1, 0, *pk_col).ok());
-    keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    keys = pk_col->immutable_data();
     for (int i = 0; i < pk_col->size(); i++) {
         current_index_stat[hexdump(keys[i].data, keys[i].size)] = (((uint64_t)1) << 32) + i;
     }
@@ -251,7 +254,7 @@ void test_binary_pk(int key_size) {
         pk_col->append(strings::Substitute("binary_pk_$0_$1", fill_str, pk_value++));
     }
     ASSERT_TRUE(pk_index->insert(2, 0, *pk_col).ok());
-    keys = reinterpret_cast<const Slice*>(pk_col->raw_data());
+    keys = pk_col->immutable_data();
     for (int i = 0; i < pk_col->size(); i++) {
         current_index_stat[hexdump(keys[i].data, keys[i].size)] = (((uint64_t)2) << 32) + i;
     }

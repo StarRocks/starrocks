@@ -94,6 +94,7 @@ import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.util.List;
 import java.util.Map;
@@ -522,6 +523,20 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
 
             if (properties.containsKey(LoadStmt.JSONROOT)) {
                 jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
+            }
+
+            if (properties.containsKey(LoadStmt.ENVELOPE)) {
+                String envelope = properties.get(LoadStmt.ENVELOPE);
+                if (!envelope.equalsIgnoreCase(LoadStmt.ENVELOPE_DEBEZIUM)) {
+                    throw new DdlException("Unknown envelope type: " + envelope);
+                }
+                if (!Strings.isNullOrEmpty(jsonOptions.jsonRoot)) {
+                    throw new DdlException(LoadStmt.JSONROOT + " cannot be specified when envelope is set");
+                }
+                if (jsonOptions.stripOuterArray) {
+                    throw new DdlException(LoadStmt.STRIP_OUTER_ARRAY + " cannot be specified when envelope is set");
+                }
+                jsonOptions.envelope = envelope;
             }
         } else {
             if (RunMode.isSharedDataMode()) {
@@ -1359,5 +1374,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback
 
         @SerializedName("jr")
         public String jsonRoot;
+
+        @SerializedName("env")
+        public String envelope;
     }
 }

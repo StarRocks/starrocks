@@ -47,7 +47,7 @@ static inline opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> cre
 void Tracer::init(const std::string& service_name) {
     if (!config::jaeger_endpoint.empty()) {
         opentelemetry::exporter::jaeger::JaegerExporterOptions opts;
-        vector<string> host_port = strings::Split(config::jaeger_endpoint, ":");
+        std::vector<std::string> host_port = strings::Split(config::jaeger_endpoint, ":");
         if (host_port.size() != 2) {
             LOG(WARNING) << "bad jaeger_endpoint " << config::jaeger_endpoint;
             _tracer = create_no_op_tracer();
@@ -144,7 +144,7 @@ SpanContext Tracer::from_trace_parent(const std::string& trace_parent) {
     if (trace_parent.size() != trace_parent_header_length) {
         return SpanContext::GetInvalid();
     }
-    vector<string> fields = strings::Split(trace_parent, "-");
+    std::vector<std::string> fields = strings::Split(trace_parent, "-");
     if (fields.size() != 4) {
         return SpanContext::GetInvalid();
     }

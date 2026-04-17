@@ -84,10 +84,9 @@ void TableFunctionNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-std::vector<std::shared_ptr<pipeline::OperatorFactory>> TableFunctionNode::decompose_to_pipeline(
-        pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> TableFunctionNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto operators, _children[0]->decompose_to_pipeline(context));
 
     operators.emplace_back(std::make_shared<TableFunctionOperatorFactory>(context->next_operator_id(), id(), _tnode));
     // Create a shared RefCountedRuntimeFilterCollector

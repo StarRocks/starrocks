@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/pipeline_node.h"
 #include "runtime/mem_pool.h"
 
@@ -49,8 +50,7 @@ public:
 
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     std::map<SlotId, ExprContext*> _common_expr_ctxs;

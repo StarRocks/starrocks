@@ -59,7 +59,8 @@ protected:
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
         state->_query_options.query_type = TQueryType::LOAD;

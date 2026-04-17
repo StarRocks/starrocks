@@ -23,6 +23,8 @@
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
+#include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
@@ -41,6 +43,7 @@ public:
     void submit(DriverRawPtr driver) override { (void)_tp->submit(std::make_shared<GroupTaskRunner>(_group)); }
     void cancel(DriverRawPtr driver) override {}
     void close() override { _tp->shutdown(); }
+    void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) override {}
 
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override {}
@@ -48,13 +51,6 @@ public:
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override {}
 
     void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const override {}
-
-    size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) override { return 0; }
-
-    void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx,
-                      std::vector<FragmentContext*> fragment_ctxs) override {}
-
-    size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const override { return 0; }
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override {}
 

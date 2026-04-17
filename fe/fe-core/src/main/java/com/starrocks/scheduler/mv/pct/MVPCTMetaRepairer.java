@@ -26,9 +26,12 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.DelegatingConnectorMetadata;
 import com.starrocks.connector.HivePartitionDataInfo;
-import com.starrocks.connector.TableUpdateArbitrator;
+import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.mv.MVMetaVersionRepairer;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.DmlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -110,9 +113,6 @@ public class MVPCTMetaRepairer {
     }
 
     public static boolean isTableSupportedPCTRepair(Table baseTable) {
-        if (baseTable == null) {
-            return false;
-        }
         return baseTable instanceof HiveTable;
     }
 
@@ -148,15 +148,12 @@ public class MVPCTMetaRepairer {
             autoRefreshPartitionsLimit = mv.getTableProperty().getAutoRefreshPartitionsLimit();
         }
         List<String> partitionNames = Lists.newArrayList(partitionInfoMap.keySet());
-        TableUpdateArbitrator.UpdateContext updateContext = new TableUpdateArbitrator.UpdateContext(
-                table,
-                autoRefreshPartitionsLimit,
-                partitionNames);
-        TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-        if (arbitrator == null) {
+        Optional<Map<String, Optional<HivePartitionDataInfo>>> partitionDataInfosOpt =
+                getHivePartitionRepairInfo(table, partitionNames, autoRefreshPartitionsLimit);
+        if (partitionDataInfosOpt.isEmpty()) {
             return;
         }
-        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+        Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = partitionDataInfosOpt.get();
         List<String> updatedPartitionNames =
                 getUpdatedPartitionNames(partitionNames, partitionInfoMap, partitionDataInfos);
         LOG.info("try to get updated partitions names based on data.partitionNames:{}, isAutoRefresh:{}," +
@@ -225,11 +222,10 @@ public class MVPCTMetaRepairer {
 
         // collect repair info for partition should not affect the main flow since the table may not need repair.
         try {
-            TableUpdateArbitrator.UpdateContext updateContext = new TableUpdateArbitrator.UpdateContext(
-                    table, -1, Lists.newArrayList(partitionName));
-            TableUpdateArbitrator arbitrator = TableUpdateArbitrator.create(updateContext);
-            if (arbitrator != null) {
-                Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = arbitrator.getPartitionDataInfos();
+            Optional<Map<String, Optional<HivePartitionDataInfo>>> partitionDataInfosOpt =
+                    getHivePartitionRepairInfo(table, Lists.newArrayList(partitionName), -1);
+            if (partitionDataInfosOpt.isPresent()) {
+                Map<String, Optional<HivePartitionDataInfo>> partitionDataInfos = partitionDataInfosOpt.get();
                 Preconditions.checkState(partitionDataInfos.size() == 1);
                 if (partitionDataInfos.get(partitionName).isPresent()) {
                     HivePartitionDataInfo hivePartitionDataInfo = partitionDataInfos.get(partitionName).get();
@@ -241,5 +237,34 @@ public class MVPCTMetaRepairer {
             LOG.warn("collect partition repair info failed, table:{}, partition:{}",
                     table.getName(), partitionName, e);
         }
+    }
+
+    private static Optional<Map<String, Optional<HivePartitionDataInfo>>> getHivePartitionRepairInfo(
+            Table table, List<String> partitionNames, int partitionLimit) {
+        if (!(table instanceof HiveTable hiveTable)) {
+            return Optional.empty();
+        }
+        Optional<ConnectorMetadata> metadata = resolveLeafMetadata(table);
+        if (metadata.isPresent() && metadata.get() instanceof HiveMetadata hiveMetadata) {
+            return hiveMetadata.getHivePartitionDataInfos(hiveTable, partitionNames, partitionLimit);
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<ConnectorMetadata> resolveLeafMetadata(Table table) {
+        Optional<ConnectorMetadata> metadata = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getOptionalMetadata(table.getCatalogName());
+        if (metadata.isEmpty()) {
+            return Optional.empty();
+        }
+
+        ConnectorMetadata current = metadata.get();
+        while (current instanceof DelegatingConnectorMetadata delegating) {
+            ConnectorMetadata next = delegating.delegateFor(table);
+            Preconditions.checkState(next != current,
+                    "delegating metadata returned itself for table: %s", table);
+            current = next;
+        }
+        return Optional.of(current);
     }
 }

@@ -133,13 +133,6 @@ RuntimeProfile* MultiOlapTableSink::profile() {
     return profile;
 }
 
-Status MultiOlapTableSink::reset_epoch(RuntimeState* state) {
-    for (auto& sink : _sinks) {
-        RETURN_IF_ERROR(sink->reset_epoch(state));
-    }
-    return Status::OK();
-}
-
 void MultiOlapTableSink::add_olap_table_sink(std::unique_ptr<OlapTableSink> sink) {
     _sinks.emplace_back(std::move(sink));
 }

@@ -72,6 +72,7 @@ import com.starrocks.connector.share.iceberg.SerializableTable;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.metric.ConnectorMetricsMgr;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -131,6 +132,7 @@ import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.SnapshotUpdate;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.StarRocksIcebergTableScan;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -195,6 +197,7 @@ import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -676,6 +679,23 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
+    static void checkUnsupportedEncryption(org.apache.iceberg.Table icebergTable) {
+        if (icebergTable.properties().containsKey(ENCRYPTION_TABLE_KEY)) {
+            throw new StarRocksConnectorException(
+                    "Iceberg table encryption is not supported. Table '%s' has encryption property '%s' set.",
+                    icebergTable.name(), ENCRYPTION_TABLE_KEY);
+        }
+
+        if (icebergTable instanceof BaseTable) {
+            TableMetadata metadata = ((BaseTable) icebergTable).operations().current();
+            if (metadata.encryptionKeys() != null && !metadata.encryptionKeys().isEmpty()) {
+                throw new StarRocksConnectorException(
+                        "Iceberg table encryption is not supported. Table '%s' has encryption keys set.",
+                        icebergTable.name());
+            }
+        }
+    }
+
     public static long getSnapshotIdFromVersion(org.apache.iceberg.Table table, ConnectorTableVersion version) {
         switch (version.getPointerType()) {
             case TEMPORAL:
@@ -766,12 +786,20 @@ public class IcebergMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         // fromSnapshotExclusive can be empty, but toSnapshotInclusive must have a valid snapshot ID
-        final long fromSnapshotIdExclusive = fromSnapshotExclusive.getSnapshotId();
+        final Long fromSnapshotIdExclusive = fromSnapshotExclusive.isEmpty() ? null : fromSnapshotExclusive.getSnapshotId();
         final long toSnapshotIdInclusive =
                 toSnapshotInclusive.end().orElseThrow(() -> new StarRocksConnectorException(
                         "toSnapshotInclusive must have a valid snapshot ID"));
         final IcebergTable icebergTable = (IcebergTable) table;
         final org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
+
+        if (fromSnapshotIdExclusive != null &&
+                !SnapshotUtil.isParentAncestorOf(nativeTable, toSnapshotIdInclusive, fromSnapshotIdExclusive)) {
+            throw new StarRocksConnectorException(
+                    "Starting snapshot (exclusive) %s is not a parent ancestor of end snapshot %s",
+                    fromSnapshotIdExclusive, toSnapshotIdInclusive);
+        }
+
         long lastSnapshotId = toSnapshotIdInclusive;
 
         final List<TvrTableDeltaTrait> tvrDeltaTraits = Lists.newArrayList();
@@ -854,6 +882,15 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                             ConnectorMetadatRequestContext requestContext) {
+        long snapshotId = requestContext.getSnapshotId();
+        List<Partition> ans =
+                icebergCatalog.getPartitionsByNames((IcebergTable) table, snapshotId, null, partitionNames);
+        return new ArrayList<>(ans);
+    }
+
+    @Override
     public boolean prepareMetadata(MetaPreparationItem item, Tracers tracers, ConnectContext connectContext) {
         IcebergTable icebergTable;
         icebergTable = (IcebergTable) item.getTable();
@@ -894,6 +931,13 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public SerializedMetaSpec getSerializedMetaSpec(String dbName, String tableName, long snapshotId, String serializedPredicate,
                                                     MetadataTableType metadataTableType) {
+        ConnectContext connectContext = ConnectContext.get();
+        if (connectContext == null || !connectContext.isMetadataContext()) {
+            MetricRepo.COUNTER_ICEBERG_METADATA_TABLE_QUERY_TOTAL
+                    .getMetric(metadataTableType.typeString)
+                    .increase(1L);
+        }
+
         List<RemoteMetaSplit> remoteMetaSplits = new ArrayList<>();
         IcebergTable icebergTable = (IcebergTable) getTable(new ConnectContext(), dbName, tableName);
         org.apache.iceberg.Table nativeTable = icebergTable.getNativeTable();
@@ -1230,6 +1274,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = icebergTable.getCatalogTableName();
 
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
+        checkUnsupportedEncryption(nativeTbl);
         traceIcebergMetricsConfig(nativeTbl);
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(

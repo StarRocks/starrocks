@@ -23,7 +23,7 @@
 #include "base/container/raw_container.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/agg/stream/stream_detail_state.h"
 #include "gutil/casts.h"

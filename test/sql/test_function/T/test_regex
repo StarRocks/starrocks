@@ -24,6 +24,8 @@ select regexp_replace(NULL, '', 'xx');
 select regexp_replace('abc中文def', '中文', 'xx');
 select regexp_replace('abc中文def', '[\\p{Han}]+', 'xx');
 select regexp_replace('a b c', " ", "-");
+select regexp_replace('a b c', '(b)', '<\\1>');
+select regexp_replace('abcd', '^a.*$', 'xx');
 select regexp_replace('           XXXX', '       ', '');
 select regexp_replace('xxxx', "x", "-");
 select regexp_replace('xxxx', "xx", "-"); 

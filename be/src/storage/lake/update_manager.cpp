@@ -743,6 +743,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
         new_rows_op.add_del_encryption_metas(op_write.del_encryption_metas(i));
     }
+    // Carry over the per-del shared flag populated by tablet-split cross-publish.
+    // Without this, apply_opwrite(new_rows_op) would drop the flag and the del file
+    // would be written into rowset.del_files with shared=false, exposing it to
+    // premature deletion by vacuum on sibling split tablets.
+    for (int i = 0; i < op_write.shared_dels_size(); i++) {
+        new_rows_op.add_shared_dels(op_write.shared_dels(i));
+    }
     if (new_rows_op.rowset().segments_size() > 0 || new_rows_op.dels_size() > 0) {
         builder->apply_opwrite(new_rows_op, {}, {});
         if (!segment_id_to_add_dels_new_acc.empty()) {
@@ -1529,6 +1536,25 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
             continue;
         }
         num_dels += delvec->cardinality();
+    }
+    return num_dels;
+}
+
+size_t UpdateManager::get_rowset_num_deletes(const TabletMetadata& metadata, const RowsetMetadataPB& rowset_meta) {
+    size_t num_dels = 0;
+    LakeIOOptions lake_io_opts;
+    lake_io_opts.fill_data_cache = false;
+    for (int i = 0; i < rowset_meta.segments_size(); i++) {
+        DelVector delvec;
+        uint32_t segment_id = get_rssid(rowset_meta, i);
+        auto st = lake::get_del_vec(_tablet_mgr, metadata, segment_id, false /*fill_cache*/, lake_io_opts, &delvec);
+        if (!st.ok()) {
+            LOG(WARNING) << "get_rowset_num_deletes: error get del vector"
+                         << " tablet_id=" << metadata.id() << " metadata_version=" << metadata.version()
+                         << " segment_id=" << segment_id << " status=" << st;
+            continue;
+        }
+        num_dels += delvec.cardinality();
     }
     return num_dels;
 }

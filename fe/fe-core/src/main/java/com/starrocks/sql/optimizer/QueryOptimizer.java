@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.ivm.IvmRewriter;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
@@ -548,9 +549,9 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
 
-        // tvr rule rewrite
+        // IVM rule rewrite
         if (context.getSessionVariable().isEnableIVMRefresh()) {
-            scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.TVR_REWRITE_RULES);
+            IvmRewriter.rewrite(tree, rootTaskContext, scheduler, requiredColumns);
         }
 
         if (sessionVariable.isEnableFineGrainedRangePredicate()) {
@@ -679,6 +680,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new RewriteMultiDistinctRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PUSH_DOWN_PREDICATE_RULES);
+        scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_EMPTY_OPERATOR_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new CTEProduceAddProjectionRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_PROJECT_RULES);
@@ -983,20 +985,16 @@ public class QueryOptimizer extends Optimizer {
             context.getRuleSet().addOuterJoinTransformationRules();
         }
 
-        if (!sessionVariable.isMVPlanner()) {
-            // add join implementRule
-            String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
-            if ("merge".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addMergeJoinImplementationRule();
-            } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addHashJoinImplementationRule();
-            } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
-                context.getRuleSet().addNestLoopJoinImplementationRule();
-            } else {
-                context.getRuleSet().addAutoJoinImplementationRule();
-            }
+        // Legacy MV planner mode is inert, so use the normal join implementation rules unconditionally.
+        String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
+        if ("merge".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addMergeJoinImplementationRule();
+        } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addHashJoinImplementationRule();
+        } else if ("nestloop".equalsIgnoreCase(joinImplementationMode)) {
+            context.getRuleSet().addNestLoopJoinImplementationRule();
         } else {
-            context.getRuleSet().addRealtimeMVRules();
+            context.getRuleSet().addAutoJoinImplementationRule();
         }
 
         if (mvRewriteStrategy.enableCBOBasedMvRewrite && mvRewriteStrategy.enableMultiTableRewrite) {

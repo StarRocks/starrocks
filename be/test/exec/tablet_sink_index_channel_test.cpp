@@ -50,7 +50,8 @@ protected:
     std::unique_ptr<RuntimeState> _build_runtime_state(TQueryOptions& query_options) {
         TUniqueId fragment_id;
         TQueryGlobals query_globals;
-        auto runtime_state = std::make_unique<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+        auto runtime_state = std::make_unique<RuntimeState>(fragment_id, query_options, query_globals,
+                                                            &_exec_env->query_execution_services(), _exec_env);
         _fragment_dict_states.emplace_back(std::make_unique<FragmentDictState>());
         runtime_state->set_fragment_dict_state(_fragment_dict_states.back().get());
         return runtime_state;
@@ -323,7 +324,7 @@ void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& erro
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
     ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
-    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(1L));
+    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     ASSERT_FALSE(sink->close(runtime_state.get(), Status::OK()).ok());
     ASSERT_EQ(expected_num_stack_trace, num_stack_trace);
@@ -471,7 +472,7 @@ TEST_F(TabletSinkIndexChannelTest, send_request_releases_protobuf_memory) {
     auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
     ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
     chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(1));
-    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(1L));
+    chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(int64_t(1)));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     // close() flushes the buffered chunk and triggers _send_request with eos=true,
     // which serializes the chunk data and dispatches the RPC.

@@ -35,6 +35,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
@@ -72,7 +73,9 @@ StatusOr<size_t> LocalLookUpRequestContext::fill_response(const ChunkPtr& result
 }
 
 void LocalLookUpRequestContext::callback(const Status& status) {
-    fetch_ctx->unit->finished_request_num++;
+    if (auto unit = fetch_ctx->unit.lock(); unit != nullptr) {
+        unit->finished_request_num++;
+    }
 }
 
 // Deserialize remote request payload into a reusable chunk for processing.

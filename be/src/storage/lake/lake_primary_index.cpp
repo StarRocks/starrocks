@@ -306,9 +306,9 @@ Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& 
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            std::vector<Slice> keys;
+            Buffer<Slice> keys;
             std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
-            const Slice* vkeys = build_persistent_keys(pks, _key_size, 0, pks.size(), &keys);
+            ASSIGN_OR_RETURN(const Slice* vkeys, build_persistent_keys(pks, _key_size, 0, pks.size(), &keys));
             // Cloud native index need to setup rowset id as rebuild point when erase.
             RETURN_IF_ERROR(lake_persistent_index->erase(pks.size(), vkeys,
                                                          reinterpret_cast<IndexValue*>(old_values.data()), rowset_id));
@@ -361,6 +361,24 @@ Status LakePrimaryIndex::flush_memtable(bool force) {
     }
 
     return Status::OK();
+}
+
+void LakePrimaryIndex::reset_publish_sst_stats() {
+    if (!_enable_persistent_index) return;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (idx != nullptr) idx->reset_publish_sst_stats();
+}
+
+int32_t LakePrimaryIndex::publish_sst_flush_count() const {
+    if (!_enable_persistent_index) return 0;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    return idx != nullptr ? idx->publish_sst_flush_count() : 0;
+}
+
+int64_t LakePrimaryIndex::publish_sst_flush_bytes() const {
+    if (!_enable_persistent_index) return 0;
+    auto* idx = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    return idx != nullptr ? idx->publish_sst_flush_bytes() : 0;
 }
 
 // Query index for existing rows matching primary keys from all segments.

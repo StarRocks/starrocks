@@ -24,7 +24,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exec/aggregator_fwd.h"
 #include "exprs/agg/aggregate.h"
@@ -714,7 +714,7 @@ public:
             size_t new_size = old_size + result_value.size();
 
             auto& data = binary_column->get_bytes();
-            data.resize(old_size + new_size);
+            data.resize(new_size);
 
             memcpy(data.data() + old_size, result_value.data(), result_value.size());
 

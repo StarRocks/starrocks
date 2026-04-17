@@ -263,17 +263,17 @@ TEST(TestRuntimeProfile, testConflictInfoString) {
     auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
     const std::set<std::string> expected_values{"value1", "value2", "value3", "value4", "value5", "value6"};
     std::set<std::string> actual_values;
-    ASSERT_TRUE(merged_profile->get_info_string("key1") != nullptr);
+    ASSERT_TRUE(merged_profile->get_info_string("key1").has_value());
     actual_values.insert(*(merged_profile->get_info_string("key1")));
-    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(0)") != nullptr);
+    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(0)").has_value());
     actual_values.insert(*(merged_profile->get_info_string("key1__DUP(0)")));
-    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(1)") != nullptr);
+    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(1)").has_value());
     actual_values.insert(*(merged_profile->get_info_string("key1__DUP(1)")));
-    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(2)") != nullptr);
+    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(2)").has_value());
     actual_values.insert(*(merged_profile->get_info_string("key1__DUP(2)")));
-    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(3)") != nullptr);
+    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(3)").has_value());
     actual_values.insert(*(merged_profile->get_info_string("key1__DUP(3)")));
-    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(4)") != nullptr);
+    ASSERT_TRUE(merged_profile->get_info_string("key1__DUP(4)").has_value());
     actual_values.insert(*(merged_profile->get_info_string("key1__DUP(4)")));
 
     ASSERT_EQ(expected_values, actual_values);
@@ -292,7 +292,7 @@ static void test_mass_conflict_info_string(int num) {
 
     auto* merged_profile = RuntimeProfile::merge_isomorphic_profiles(obj_pool.get(), profiles);
     for (int i = 0; i < num - 1; ++i) {
-        ASSERT_TRUE(merged_profile->get_info_string("key__DUP(" + std::to_string(i) + ")") != nullptr);
+        ASSERT_TRUE(merged_profile->get_info_string("key__DUP(" + std::to_string(i) + ")").has_value());
     }
 }
 

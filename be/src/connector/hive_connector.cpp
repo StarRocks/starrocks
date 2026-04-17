@@ -34,6 +34,7 @@
 #include "fs/fs_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -732,7 +733,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     if (native_file_path.empty()) {
         bool start_with_slash = !scan_range.relative_path.empty() && scan_range.relative_path.at(0) == '/';
-        native_file_path = _hive_table->get_base_path() +
+        native_file_path = std::string(_hive_table->get_base_path()) +
                            (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
 

@@ -125,6 +125,23 @@ __hash_memory(const void* __ptr, size_t __size) noexcept {
 EOF
 }
 
+ensure_macos_libtool_wrapper() {
+    local wrapper_dir="${TP_DIR}/build/libtool-wrapper"
+    local wrapper_path="${wrapper_dir}/libtool"
+
+    mkdir -p "${wrapper_dir}"
+    cat > "${wrapper_path}" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$1" == "-V" ]]; then
+    /usr/bin/libtool -V 2>&1
+    exit $?
+fi
+exec /usr/bin/libtool "$@"
+EOF
+    chmod +x "${wrapper_path}"
+    echo "${wrapper_path}"
+}
+
 append_object_to_archive() {
     local archive="$1"
     local object_file="$2"
@@ -229,12 +246,16 @@ link_formula_metadata() {
 
 sync_lib64_links() {
     local lib
+    local dst
     mkdir -p "${TP_INSTALL_DIR}/lib64"
     for lib in "${TP_INSTALL_DIR}"/lib/*; do
         [[ -e "${lib}" || -L "${lib}" ]] || continue
         case "$(basename "${lib}")" in
             *.a|*.dylib|*.so|*.so.*)
-                link_if_missing "../lib/$(basename "${lib}")" "${TP_INSTALL_DIR}/lib64/$(basename "${lib}")"
+                dst="${TP_INSTALL_DIR}/lib64/$(basename "${lib}")"
+                if [[ ! -e "${dst}" && ! -L "${dst}" ]]; then
+                    ln -s "../lib/$(basename "${lib}")" "${dst}"
+                fi
                 ;;
         esac
     done
@@ -320,6 +341,44 @@ ensure_java_home() {
     JAVA_HOME="$(resolve_java_home "${java_home_candidate}")"
     export JAVA_HOME
     export PATH="${JAVA_HOME}/bin:${PATH}"
+}
+
+detect_java_jni_platform_include() {
+    local java_home_root="$1"
+    local candidate
+
+    for candidate in darwin linux; do
+        if [[ -f "${java_home_root}/include/${candidate}/jni_md.h" ]]; then
+            printf '%s\n' "${candidate}"
+            return 0
+        fi
+    done
+
+    for candidate in "${java_home_root}"/include/*; do
+        [[ -d "${candidate}" ]] || continue
+        if [[ -f "${candidate}/jni_md.h" ]]; then
+            basename "${candidate}"
+            return 0
+        fi
+    done
+
+    echo "Unable to locate jni_md.h under ${java_home_root}/include" >&2
+    return 1
+}
+
+ensure_hadoop_libhdfs_makefile_uses_platform_include() {
+    local makefile="$1"
+
+    if ! grep -Fq 'JNI_PLATFORM_INCLUDE ?= linux' "${makefile}"; then
+        perl -0pi -e 's@CC\s+:=\s+gcc@JNI_PLATFORM_INCLUDE ?= linux\n\nCC      := gcc@' "${makefile}"
+    fi
+
+    perl -0pi -e 's@-I\$\(JAVA_HOME\)/include/linux@-I\$(JAVA_HOME)/include/\$(JNI_PLATFORM_INCLUDE)@g' "${makefile}"
+
+    if ! grep -Fq -- '-I$(JAVA_HOME)/include/$(JNI_PLATFORM_INCLUDE)' "${makefile}"; then
+        echo "Failed to update ${makefile} to use JNI_PLATFORM_INCLUDE" >&2
+        return 1
+    fi
 }
 
 restore_env_var() {
@@ -1307,7 +1366,7 @@ build_formula_grpc() {
     local prefix
     prefix="$(formula_prefix grpc)"
     link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libgrpc"*.a "${prefix}/lib/libgrpc"*.dylib "${prefix}/lib/libgpr"*.a "${prefix}/lib/libgpr"*.dylib "${prefix}/lib/libaddress_sorting"*.a "${prefix}/lib/libaddress_sorting"*.dylib
+    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libgrpc"*.a "${prefix}/lib/libgrpc"*.dylib "${prefix}/lib/libgpr"*.a "${prefix}/lib/libgpr"*.dylib "${prefix}/lib/libaddress_sorting"*.a "${prefix}/lib/libaddress_sorting"*.dylib "${prefix}/lib/libupb"*.a "${prefix}/lib/libupb"*.dylib "${prefix}/lib/libutf8_range"*.a "${prefix}/lib/libutf8_range"*.dylib
     link_matching_if_missing "${TP_INSTALL_DIR}/bin" "${prefix}/bin/grpc"* "${prefix}/bin/protoc-gen-grpc"* "${prefix}/bin/grpc_cpp_plugin"
     link_formula_metadata "${prefix}"
     sync_lib64_links
@@ -1333,13 +1392,130 @@ build_formula_brotli() {
     sync_lib64_links
 }
 
-build_formula_arrow() {
-    ensure_formula apache-arrow
-    local prefix
-    prefix="$(formula_prefix apache-arrow)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libarrow"*.a "${prefix}/lib/libarrow"*.dylib "${prefix}/lib/libparquet"*.a "${prefix}/lib/libparquet"*.dylib "${prefix}/lib/libgandiva"*.a "${prefix}/lib/libgandiva"*.dylib
-    link_formula_metadata "${prefix}"
+build_arrow() {
+    if [[ -f "${TP_INSTALL_DIR}/lib/libarrow.a" && -f "${TP_INSTALL_DIR}/lib/libparquet.a" && -f "${TP_INCLUDE_DIR}/arrow/api.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${ARROW_SOURCE}"
+    safe_remove_glob \
+        "${TP_INSTALL_DIR}/lib/libarrow"* \
+        "${TP_INSTALL_DIR}/lib/libparquet"* \
+        "${TP_INSTALL_DIR}/lib/libgandiva"* \
+        "${TP_INSTALL_DIR}/lib64/libarrow"* \
+        "${TP_INSTALL_DIR}/lib64/libparquet"* \
+        "${TP_INSTALL_DIR}/lib64/libgandiva"* \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/arrow"*.pc \
+        "${TP_INSTALL_DIR}/lib/pkgconfig/parquet"*.pc
+    rm -rf \
+        "${TP_INCLUDE_DIR}"/arrow* \
+        "${TP_INCLUDE_DIR}/parquet" \
+        "${TP_INCLUDE_DIR}/gandiva" \
+        "${TP_INSTALL_DIR}/lib/cmake"/Arrow* \
+        "${TP_INSTALL_DIR}/lib/cmake"/Parquet* \
+        "${TP_INSTALL_DIR}/lib/cmake"/Gandiva*
+
+    cd "${TP_SOURCE_DIR}/${ARROW_SOURCE}/cpp"
+    rm -rf release
+    mkdir -p release
+    cd release
+
+    export ARROW_BROTLI_URL="${TP_SOURCE_DIR}/${BROTLI_NAME}"
+    export ARROW_GLOG_URL="${TP_SOURCE_DIR}/${GLOG_NAME}"
+    export ARROW_LZ4_URL="${TP_SOURCE_DIR}/${LZ4_NAME}"
+    export ARROW_SNAPPY_URL="${TP_SOURCE_DIR}/${SNAPPY_NAME}"
+    export ARROW_ZLIB_URL="${TP_SOURCE_DIR}/${ZLIB_NAME}"
+    export ARROW_FLATBUFFERS_URL="${TP_SOURCE_DIR}/${FLATBUFFERS_NAME}"
+    export ARROW_ZSTD_URL="${TP_SOURCE_DIR}/${ZSTD_NAME}"
+    export ARROW_THRIFT_URL="${TP_SOURCE_DIR}/${THRIFT_NAME}"
+
+    local formula
+    for formula in rapidjson zlib lz4 snappy zstd brotli flatbuffers; do
+        ensure_formula "${formula}"
+    done
+
+    local rapidjson_prefix
+    local zlib_prefix
+    local lz4_prefix
+    local snappy_prefix
+    local brotli_prefix
+    local flatbuffers_prefix
+    rapidjson_prefix="$(formula_prefix rapidjson)"
+    zlib_prefix="$(formula_prefix zlib)"
+    lz4_prefix="$(formula_prefix lz4)"
+    snappy_prefix="$(formula_prefix snappy)"
+    brotli_prefix="$(formula_prefix brotli)"
+    flatbuffers_prefix="$(formula_prefix flatbuffers)"
+
+    local arrow_simd_level="DEFAULT"
+    local arrow_runtime_simd_level="SSE4_2"
+    if [[ "${THIRD_PARTY_BUILD_WITH_AVX2}" != "OFF" ]]; then
+        arrow_simd_level="AVX2"
+        arrow_runtime_simd_level="AVX2"
+    fi
+
+    local arrow_prefix_path="${TP_INSTALL_DIR};${flatbuffers_prefix};${snappy_prefix};${lz4_prefix};${brotli_prefix};${zlib_prefix};${rapidjson_prefix}"
+    local libtool_wrapper
+    libtool_wrapper="$(ensure_macos_libtool_wrapper)"
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_LIBTOOL="${libtool_wrapper}" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DARROW_BUILD_STATIC=ON \
+        -DARROW_BUILD_SHARED=OFF \
+        -DARROW_BUILD_TESTS=OFF \
+        -DARROW_BUILD_EXAMPLES=OFF \
+        -DARROW_BUILD_INTEGRATION=OFF \
+        -DARROW_BUILD_UTILITIES=OFF \
+        -DARROW_BUILD_BENCHMARKS=OFF \
+        -DARROW_GANDIVA=OFF \
+        -DARROW_PARQUET=ON \
+        -DARROW_JSON=ON \
+        -DARROW_IPC=ON \
+        -DARROW_USE_GLOG=OFF \
+        -DARROW_WITH_BROTLI=ON \
+        -DARROW_WITH_LZ4=ON \
+        -DARROW_WITH_SNAPPY=ON \
+        -DARROW_WITH_ZLIB=ON \
+        -DARROW_WITH_ZSTD=ON \
+        -DARROW_WITH_UTF8PROC=OFF \
+        -DARROW_WITH_RE2=OFF \
+        -DARROW_JEMALLOC=OFF \
+        -DARROW_MIMALLOC=OFF \
+        -DARROW_SIMD_LEVEL="${arrow_simd_level}" \
+        -DARROW_RUNTIME_SIMD_LEVEL="${arrow_runtime_simd_level}" \
+        -DARROW_GFLAGS_USE_SHARED=OFF \
+        -DJEMALLOC_HOME="${TP_INSTALL_DIR}/jemalloc" \
+        -Dzstd_SOURCE=BUNDLED \
+        -DRapidJSON_ROOT="${rapidjson_prefix}" \
+        -DARROW_SNAPPY_USE_SHARED=OFF \
+        -DZLIB_ROOT="${zlib_prefix}" \
+        -DLZ4_INCLUDE_DIR="${lz4_prefix}/include" \
+        -DARROW_LZ4_USE_SHARED=OFF \
+        -DBROTLI_ROOT="${brotli_prefix}" \
+        -DARROW_BROTLI_USE_SHARED=OFF \
+        -Dgflags_ROOT="${TP_INSTALL_DIR}" \
+        -DSnappy_ROOT="${snappy_prefix}" \
+        -DGLOG_ROOT="${TP_INSTALL_DIR}" \
+        -DLZ4_ROOT="${lz4_prefix}" \
+        -DBoost_DIR="${TP_INSTALL_DIR}" \
+        -DBoost_ROOT="${TP_INSTALL_DIR}" \
+        -DARROW_BOOST_USE_SHARED=OFF \
+        -DBoost_NO_BOOST_CMAKE=ON \
+        -DARROW_FLIGHT=OFF \
+        -DARROW_FLIGHT_SQL=OFF \
+        -Dflatbuffers_ROOT="${flatbuffers_prefix}" \
+        -DCMAKE_PREFIX_PATH="${arrow_prefix_path}" \
+        -DThrift_ROOT="${TP_INSTALL_DIR}" \
+        -Dthrift_SOURCE=SYSTEM \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
     sync_lib64_links
 }
 
@@ -1387,6 +1563,12 @@ build_formula_aws_cpp_sdk() {
     link_children_if_missing "${prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${crt_prefix}/include/aws" "${TP_INCLUDE_DIR}/aws"
     link_children_if_missing "${HOMEBREW_PREFIX}/include/aws" "${TP_INCLUDE_DIR}/aws"
+    if [[ -L "${TP_INCLUDE_DIR}/smithy" ]]; then
+        rm -f "${TP_INCLUDE_DIR}/smithy"
+    fi
+    mkdir -p "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${prefix}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
+    link_children_if_missing "${HOMEBREW_PREFIX}/include/smithy" "${TP_INCLUDE_DIR}/smithy"
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libaws"*.a "${prefix}/lib/libaws"*.dylib
     link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${crt_prefix}/lib/libaws-crt-cpp"*.a "${crt_prefix}/lib/libaws-crt-cpp"*.dylib
     link_formula_metadata "${prefix}"
@@ -1432,13 +1614,73 @@ build_formula_jansson() {
     sync_lib64_links
 }
 
-build_formula_poco() {
-    ensure_formula poco
-    local prefix
-    prefix="$(formula_prefix poco)"
-    link_children_if_missing "${prefix}/include" "${TP_INCLUDE_DIR}"
-    link_matching_if_missing "${TP_INSTALL_DIR}/lib" "${prefix}/lib/libPoco"*.a "${prefix}/lib/libPoco"*.dylib
-    link_formula_metadata "${prefix}"
+clean_poco_install_artifacts() {
+    rm -rf "${TP_INCLUDE_DIR}/Poco" \
+        "${TP_INSTALL_DIR}/lib/cmake/Poco" \
+        "${TP_INSTALL_DIR}/share/cmake/Poco"
+    safe_remove_glob "${TP_INSTALL_DIR}/lib/libPoco"* "${TP_INSTALL_DIR}/lib64/libPoco"*
+}
+
+remove_stale_homebrew_poco_symlinks() {
+    find "${TP_INSTALL_DIR}/lib" "${TP_INSTALL_DIR}/lib64" \
+        -maxdepth 1 \
+        -type l \
+        -name 'libPoco*' \
+        -lname "${HOMEBREW_PREFIX%/}/*" \
+        -exec rm -f {} +
+}
+
+build_poco() {
+    remove_stale_homebrew_poco_symlinks
+    if [[ -f "${TP_INSTALL_DIR}/lib/libPocoNet.a" &&
+          -f "${TP_INSTALL_DIR}/lib/libPocoNetSSL.a" &&
+          -f "${TP_INCLUDE_DIR}/Poco/Net/HTTPResponse.h" ]]; then
+        return 0
+    fi
+
+    check_if_source_exist "${POCO_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${POCO_SOURCE}"
+    rm -rf "${BUILD_DIR}"
+    mkdir -p "${BUILD_DIR}"
+    clean_poco_install_artifacts
+    cd "${BUILD_DIR}"
+
+    "${CMAKE_CMD}" .. \
+        -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DPOCO_UNBUNDLED=ON \
+        -DOPENSSL_ROOT_DIR="${TP_INSTALL_DIR}" \
+        -DZLIB_ROOT="${TP_INSTALL_DIR}" \
+        -DPCRE2_ROOT_DIR="${HOMEBREW_PREFIX}/opt/pcre2" \
+        -DENABLE_XML=OFF \
+        -DENABLE_JSON=OFF \
+        -DENABLE_NET=ON \
+        -DENABLE_NETSSL=ON \
+        -DENABLE_CRYPTO=OFF \
+        -DENABLE_JWT=OFF \
+        -DENABLE_DATA=OFF \
+        -DENABLE_DATA_SQLITE=OFF \
+        -DENABLE_DATA_MYSQL=OFF \
+        -DENABLE_DATA_POSTGRESQL=OFF \
+        -DENABLE_DATA_ODBC=OFF \
+        -DENABLE_MONGODB=OFF \
+        -DENABLE_REDIS=OFF \
+        -DENABLE_UTIL=OFF \
+        -DENABLE_ZIP=OFF \
+        -DENABLE_APACHECONNECTOR=OFF \
+        -DENABLE_ENCODINGS=OFF \
+        -DENABLE_PAGECOMPILER=OFF \
+        -DENABLE_PAGECOMPILER_FILE2PAGE=OFF \
+        -DENABLE_ACTIVERECORD=OFF \
+        -DENABLE_ACTIVERECORD_COMPILER=OFF \
+        -DENABLE_PROMETHEUS=OFF \
+        -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
     sync_lib64_links
 }
 
@@ -1558,10 +1800,18 @@ build_s2() {
 }
 
 build_hadoop_src() {
+    local libhdfs_dir
+    local jni_platform_include
+
     ensure_java_home
     check_if_source_exist "${HADOOPSRC_SOURCE}"
-    cd "${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs"
-    make
+    libhdfs_dir="${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs"
+    jni_platform_include="$(detect_java_jni_platform_include "${JAVA_HOME}")"
+    ensure_hadoop_libhdfs_makefile_uses_platform_include "${libhdfs_dir}/Makefile"
+
+    cd "${libhdfs_dir}"
+    make clean >/dev/null 2>&1 || true
+    make JNI_PLATFORM_INCLUDE="${jni_platform_include}"
     mkdir -p "${TP_INSTALL_DIR}/include/hdfs"
     cp "${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/include/hdfs/hdfs.h" "${TP_INSTALL_DIR}/include/hdfs/"
     cp "${TP_SOURCE_DIR}/${HADOOPSRC_SOURCE}/hadoop-hdfs-project/hadoop-hdfs-native-client/src/main/native/libhdfs/libhdfs.a" "${TP_INSTALL_DIR}/lib/"
@@ -1620,11 +1870,10 @@ build_benchmark() {
         -DBENCHMARK_DOWNLOAD_DEPENDENCIES=OFF \
         -DBENCHMARK_ENABLE_TESTING=OFF \
         -DBENCHMARK_ENABLE_GTEST_TESTS=OFF \
+        -DBENCHMARK_INSTALL_DOCS=OFF \
+        -DBENCHMARK_INSTALL_TOOLS=OFF \
         -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
         -DCMAKE_INSTALL_LIBDIR=lib64 \
-        -DRUN_HAVE_STD_REGEX=0 \
-        -DRUN_HAVE_POSIX_REGEX=0 \
-        -DCOMPILE_HAVE_GNU_POSIX_REGEX=0 \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     "${BUILD_SYSTEM}" -j"${PARALLEL}"
@@ -2003,7 +2252,7 @@ for package in "${packages[@]}"; do
             build_formula_brotli
             ;;
         arrow)
-            build_formula_arrow
+            build_arrow
             ;;
         librdkafka)
             build_formula_librdkafka
@@ -2076,7 +2325,7 @@ for package in "${packages[@]}"; do
             build_formula_llvm
             ;;
         poco)
-            build_formula_poco
+            build_poco
             ;;
         xsimd)
             build_formula_xsimd

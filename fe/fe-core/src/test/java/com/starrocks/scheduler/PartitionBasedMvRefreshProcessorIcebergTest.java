@@ -14,6 +14,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
@@ -197,6 +198,9 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
+        Assertions.assertNotNull(mvContext.getPartitionTopology());
+        Assertions.assertNotNull(mvContext.getRefreshScope());
+        Assertions.assertTrue(Strings.isNullOrEmpty(taskRun.getStatus().getErrorMessage()));
         assertPlanContains(execPlan, "3: date >= '2020-01-02', 3: date < '2020-01-03'");
 
         Map<String, Long> partitionVersionMap = new HashMap<>();
@@ -398,9 +402,10 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                         Assertions.assertTrue(queryCacheStats != null);
                         queryCacheStats.getCounter().forEach((key, value) -> {
                             if (key.contains("cache_partitionNames_")) {
-                                Assertions.assertEquals(2L, value.longValue());
-                            } else if (key.contains("cache_getPartitionKeyRange_")) {
-                                Assertions.assertEquals(4L, value.longValue());
+                                // After removing getPartitionKeyRange from CachedPartitionTraits,
+                                // MVPartitionCellBuilder calls getPartitionNames directly each time,
+                                // increasing cache hits while the actual remote call remains cached.
+                                Assertions.assertTrue(value.longValue() >= 2L);
                             } else if (key.contains("cache_getPartitionNameWithPartitionInfo_")) {
                                 Assertions.assertEquals(1L, value.longValue());
                             } else if (key.contains("cache_getUpdatedPartitionNames_")) {

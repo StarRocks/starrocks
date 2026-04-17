@@ -143,9 +143,7 @@ inline StatusOr<ColumnPtr> HashFunctions::crc32_hash(FunctionContext* context, c
     const auto& col = columns[0];
     const size_t row_size = col->size();
 
-    if (col->only_null()) {
-        return col;
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     if (col->is_constant()) {
         uint32_t hash_value = 0;

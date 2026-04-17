@@ -142,7 +142,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
-import com.starrocks.sql.optimizer.operator.stream.LogicalBinlogScanOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.TextMatchBasedRewriteRule;
@@ -164,6 +163,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static com.starrocks.sql.ast.CTERelation.CTEMaterializationHint.MATERIALIZED;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -219,8 +219,8 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     public LogicalPlan transform(Relation relation) {
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
             QueryRelation queryRelation = (QueryRelation) relation;
-            if (queryRelation.getCteRelations().stream().noneMatch(c -> c.getRefs() > 1)) {
-                // all cte is only referenced once, no need to reuse
+            if (queryRelation.getCteRelations().stream().noneMatch(c -> c.getRefs() > 1
+                    || c.getMaterializationHint() == MATERIALIZED)) {
                 return visit(relation);
             }
 
@@ -242,11 +242,19 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         OptExprBuilder root = null;
         OptExprBuilder anchorOptBuilder = null;
         for (CTERelation cteRelation : node.getCteRelations()) {
-            if (cteRelation.getRefs() <= 1 || cteContext.isForceInline()) {
+            boolean shouldInline = switch (cteRelation.getMaterializationHint()) {
+                case NOT_MATERIALIZED -> true;
+                case MATERIALIZED -> false;
+                case NONE -> cteRelation.getRefs() <= 1 || cteContext.isForceInline();
+            };
+            if (shouldInline) {
                 continue;
             }
 
             int cteId = cteContext.registerCte(cteRelation.getCteMouldId());
+            if (cteRelation.getMaterializationHint() == MATERIALIZED) {
+                cteContext.addForceCTE(cteId);
+            }
             LogicalCTEAnchorOperator anchorOperator = new LogicalCTEAnchorOperator(cteId);
             LogicalCTEProduceOperator produceOperator = new LogicalCTEProduceOperator(cteId);
             LogicalPlan producerPlan =
@@ -614,7 +622,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             columnMetaToColRefMapBuilder.put(column.getValue(), columnRef);
         }
 
-        boolean isMVPlanner = session.getSessionVariable().isMVPlanner();
         Map<Column, ColumnRefOperator> columnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
         List<ColumnRefOperator> outputVariables = outputVariablesBuilder.build();
 
@@ -662,7 +669,7 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                                 node.getPartitionNames().getPartitionNames())
                         .setSelectedTabletIds(node.getTabletIds())
                         .build();
-            } else if (!isMVPlanner) {
+            } else {
                 scanOperator = LogicalOlapScanOperator.builder()
                         .setTable(node.getTable())
                         .setColRefToColumnMetaMap(colRefToColumnMetaMapBuilder.build())
@@ -680,12 +687,6 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                         .setUsePkIndex(node.isUsePkIndex())
                         .setSample(node.getSampleClause())
                         .build();
-            } else {
-                scanOperator = new LogicalBinlogScanOperator(
-                        node.getTable(),
-                        colRefToColumnMetaMapBuilder.build(),
-                        columnMetaToColRefMap,
-                        Operator.DEFAULT_LIMIT);
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
@@ -854,16 +855,10 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         int forceReuseThreshold = session.getSessionVariable().getCboCTEForceReuseNodeCount();
 
-        if (forceReuseThreshold <= 0 || producerNodeCount < forceReuseThreshold) {
-            LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
-            Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = checkCtePlanOutput(cteId, childPlan, node);
-            LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
-            consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
-                    new ExpressionMapping(node.getScope(), childPlan.getOutputColumn(),
-                            childPlan.getRootBuilder().getColumnRefToConstOperators()));
-            outputColumns = childPlan.getOutputColumn();
-        } else {
-            // Force reuse for CTE with excessive nodes to avoid long optimizer time.
+        if (cteContext.isForceCTE(cteId) || (forceReuseThreshold > 0 && producerNodeCount >= forceReuseThreshold)) {
+            // Force materialization when
+            // 1. the CTE is specified as MATERIALIZED in the query string, or
+            // 2. the CTE has excessive nodes (to avoid long optimizer time)
             ExpressionMapping expressionMapping = cteContext.getCteExpressions().get(cteId);
             ImmutableMap.Builder<ColumnRefOperator, ColumnRefOperator> mapBuilder = ImmutableMap.builder();
 
@@ -874,9 +869,16 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
             }
 
             LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, mapBuilder.build());
-            consumeBuilder = new OptExprBuilder(consume, List.of(),
-                    new ExpressionMapping(node.getScope(), outputColumns, null)
-            );
+            consumeBuilder = new OptExprBuilder(consume, List.of(), new ExpressionMapping(node.getScope(), outputColumns, null));
+        } else {
+            // Leave the optimizer to decide later whether to materialize or inline
+            LogicalPlan childPlan = transform(node.getCteQueryStatement().getQueryRelation());
+            Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap = checkCtePlanOutput(cteId, childPlan, node);
+            LogicalCTEConsumeOperator consume = new LogicalCTEConsumeOperator(cteId, cteOutputColumnRefMap);
+            consumeBuilder = new OptExprBuilder(consume, Lists.newArrayList(childPlan.getRootBuilder()),
+                    new ExpressionMapping(node.getScope(), childPlan.getOutputColumn(),
+                            childPlan.getRootBuilder().getColumnRefToConstOperators()));
+            outputColumns = childPlan.getOutputColumn();
         }
 
         return new LogicalPlan(consumeBuilder, outputColumns, List.of());

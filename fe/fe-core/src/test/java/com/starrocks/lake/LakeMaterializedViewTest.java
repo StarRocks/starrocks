@@ -512,13 +512,13 @@ public class LakeMaterializedViewTest extends StarRocksTestBase {
                 (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv6");
         Assertions.assertTrue(mv.isCloudNativeMaterializedView());
         ColocateTableIndex index = GlobalStateMgr.getCurrentState().getColocateTableIndex();
-        Assertions.assertTrue(index.isLakeColocateTable(mv.getId()));
+        Assertions.assertTrue(index.isMetaGroupColocateTable(mv.getId()));
 
         String alterMvSql = "alter materialized view mv6 set ('colocate_with'='');";
         StatementBase statement = SqlParser.parseSingleStatement(alterMvSql, connectContext.getSessionVariable().getSqlMode());
         StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statement);
         stmtExecutor.execute();
-        Assertions.assertFalse(index.isLakeColocateTable(mv.getId()));
+        Assertions.assertFalse(index.isMetaGroupColocateTable(mv.getId()));
 
         starRocksAssert.dropMaterializedView("mv6");
         Assertions.assertNull(GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "mv6"));

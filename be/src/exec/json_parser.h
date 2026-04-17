@@ -245,6 +245,39 @@ private:
     bool _curr_ready = false;
 };
 
+// DebeziumJsonDocumentStreamParser parses Debezium CDC JSON envelope format.
+// It extracts data from the payload.after (for insert/update) or payload.before (for delete),
+// and exposes the CDC operation type for __op column mapping.
+// eg:
+// input:
+//   {"payload":{"before":null,"after":{"id":1,"name":"foo"},"op":"c",...}}
+//   {"before":null,"after":{"id":1,"name":"foo"},"op":"c",...}
+// For op=c/u/r: returns the "after" object
+// For op=d: returns the "before" object
+class DebeziumJsonDocumentStreamParser final : public JsonDocumentStreamParser {
+public:
+    explicit DebeziumJsonDocumentStreamParser(simdjson::ondemand::parser* parser) : JsonDocumentStreamParser(parser) {}
+    Status get_current(simdjson::ondemand::object* row) noexcept override;
+    Status advance() noexcept override;
+
+    // Returns the CDC operation for the current row: 0 = upsert, 1 = delete
+    uint8_t current_op() const { return _current_op; }
+
+private:
+    static constexpr std::string_view kFieldPayload = "payload";
+    static constexpr std::string_view kFieldOp = "op";
+    static constexpr std::string_view kFieldBefore = "before";
+    static constexpr std::string_view kFieldAfter = "after";
+    static constexpr std::string_view kOpCreate = "c";
+    static constexpr std::string_view kOpUpdate = "u";
+    static constexpr std::string_view kOpRead = "r";
+    static constexpr std::string_view kOpDelete = "d";
+
+    uint8_t _current_op = 0;
+    simdjson::ondemand::object _curr;
+    bool _curr_ready = false;
+};
+
 Status status_from_json_parse_error(const std::string& error_msg);
 
 } // namespace starrocks

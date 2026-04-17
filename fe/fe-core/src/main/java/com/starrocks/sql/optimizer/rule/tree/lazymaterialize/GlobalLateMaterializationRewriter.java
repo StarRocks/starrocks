@@ -83,6 +83,11 @@ public class GlobalLateMaterializationRewriter {
         if (!hasLimit(root)) {
             return root;
         }
+
+        boolean enableCostBased = context.getSessionVariable().isEnableGlobalLateMaterializationCostBased();
+        if (enableCostBased && !hasTopNWithLimit(root) && !hasLimitAfterJoin(root)) {
+            return root;
+        }
         // stage A split projection
         root = root.getOp().accept(new SplitProjectionRewriter(), root, null);
 
@@ -92,10 +97,7 @@ public class GlobalLateMaterializationRewriter {
         root.getOp().accept(columnCollector, root, collectorContext);
 
         mergeFetchPosition(root, collectorContext, context);
-        boolean enableCostBased = context.getSessionVariable().isEnableGlobalLateMaterializationCostBased();
-        if (enableCostBased && !hasTopNWithLimit(root) && !hasLimitAfterJoin(root)) {
-            return root;
-        }
+
         collectorContext.costBasedGlm = enableCostBased;
         root = rewrite(root, collectorContext);
 
@@ -166,19 +168,22 @@ public class GlobalLateMaterializationRewriter {
                 // remove projection from the original operator and create a new one
                 PhysicalProjectOperator projectOperator = new PhysicalProjectOperator(
                         projection.getColumnRefMap(), projection.getCommonSubOperatorMap());
+                RowOutputInfo projectedRowOutputInfo = optExpression.getRowOutputInfo();
 
                 op.setProjection(null);
                 op.clearRowOutputInfo();
 
-                RowOutputInfo newRowOutputInfo = optExpression.getRowOutputInfo();
-                LogicalProperty newLogicalProperty = new LogicalProperty(optExpression.getLogicalProperty());
+                RowOutputInfo childRowOutputInfo = optExpression.getRowOutputInfo();
+                LogicalProperty childLogicalProperty = new LogicalProperty(optExpression.getLogicalProperty());
 
-                newLogicalProperty.setOutputColumns(newRowOutputInfo.getOutputColumnRefSet());
+                childLogicalProperty.setOutputColumns(childRowOutputInfo.getOutputColumnRefSet());
 
-                optExpression.setLogicalProperty(newLogicalProperty);
+                optExpression.setLogicalProperty(childLogicalProperty);
 
                 OptExpression result = OptExpression.create(projectOperator, optExpression);
-                result.setLogicalProperty(optExpression.getLogicalProperty());
+                LogicalProperty projectLogicalProperty = new LogicalProperty(childLogicalProperty);
+                projectLogicalProperty.setOutputColumns(projectedRowOutputInfo.getOutputColumnRefSet());
+                result.setLogicalProperty(projectLogicalProperty);
                 result.setStatistics(optExpression.getStatistics());
                 return result;
             }

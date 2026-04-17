@@ -30,6 +30,7 @@
 #include "gutil/casts.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 

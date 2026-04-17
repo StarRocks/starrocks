@@ -79,7 +79,7 @@ TEST(StructColumnTest, test_column_downgrade) {
         fields.emplace_back(std::move(name));
         auto column = StructColumn::create(std::move(fields), field_name);
 
-        for (size_t i = 0; i < 10; i++) {
+        for (uint64_t i = 0; i < 10; i++) {
             column->append_datum(DatumStruct{i, Slice(std::to_string(i))});
         }
 
@@ -89,7 +89,7 @@ TEST(StructColumnTest, test_column_downgrade) {
         ASSERT_TRUE(ret.value() == nullptr);
         ASSERT_FALSE(column->has_large_column());
         ASSERT_EQ(column->size(), 10);
-        for (size_t i = 0; i < 10; i++) {
+        for (uint64_t i = 0; i < 10; i++) {
             DatumStruct datum = column->get(i).get_struct();
             ASSERT_EQ(i, datum[0].get_uint64());
             ASSERT_EQ(std::to_string(i), datum[1].get_slice());

@@ -384,6 +384,43 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
+    public void testCreateResourceGroupClassifierAllowsDigitLeadingUserName() throws Exception {
+        String sql = "create resource group rg_digit_user\n" +
+                "to\n" +
+                "    (user='123abc')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'mem_limit' = '20%',\n" +
+                "    'concurrency_limit' = '1',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+
+        starRocksAssert.executeResourceGroupDdlSql(sql);
+        List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource group rg_digit_user");
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).get(rows.get(0).size() - CLASSIFIER_COLUMN_IDX_REVERSE)).contains("user=123abc");
+
+        dropResourceGroup("rg_digit_user");
+    }
+
+    @Test
+    public void testCreateResourceGroupClassifierRejectsInvalidUserName() {
+        String sql = "create resource group rg_invalid_user\n" +
+                "to\n" +
+                "    (user='aaa~bbb')\n" +
+                "with (\n" +
+                "    'cpu_core_limit' = '10',\n" +
+                "    'mem_limit' = '20%',\n" +
+                "    'concurrency_limit' = '1',\n" +
+                "    'type' = 'normal'\n" +
+                ");";
+
+        assertThatThrownBy(() -> starRocksAssert.executeResourceGroupDdlSql(sql))
+                .isInstanceOf(SemanticException.class)
+                .hasMessageContaining("Illegal classifier specifier 'user'");
+    }
+
+    @Test
     public void testAlterResourceGroupDropManyClassifiers() throws Exception {
         createResourceGroups();
         List<List<String>> rows = starRocksAssert.executeResourceGroupShowSql("show verbose resource groups all");

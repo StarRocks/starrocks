@@ -15,7 +15,6 @@
 #pragma once
 #include <span>
 
-#ifndef __APPLE__
 #include "common/status.h"
 #include "gen_cpp/lake_service.pb.h"
 
@@ -140,4 +139,3 @@ private:
 std::string get_txn_ids_string(const PublishVersionRequest* request);
 
 } // namespace starrocks
-#endif // __APPLE__

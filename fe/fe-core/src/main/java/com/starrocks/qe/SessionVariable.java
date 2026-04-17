@@ -68,6 +68,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.BackendResourceStat;
+import com.starrocks.thrift.TBinaryEncodingFormat;
+import com.starrocks.thrift.TBinaryEncodingLevel;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
@@ -92,10 +94,12 @@ import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
@@ -119,6 +123,71 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
         }
         SETTER_MAP = builder.build();
+    }
+
+    public enum BinaryEncodingFormat {
+        RAW("raw", TBinaryEncodingFormat.RAW),
+        HEX("hex", TBinaryEncodingFormat.HEX),
+        BASE64("base64", TBinaryEncodingFormat.BASE64);
+
+        private final String sessionValue;
+        private final TBinaryEncodingFormat thriftValue;
+
+        BinaryEncodingFormat(String sessionValue, TBinaryEncodingFormat thriftValue) {
+            this.sessionValue = sessionValue;
+            this.thriftValue = thriftValue;
+        }
+
+        public String sessionValue() {
+            return sessionValue;
+        }
+
+        public TBinaryEncodingFormat thriftValue() {
+            return thriftValue;
+        }
+
+        public static BinaryEncodingFormat fromString(String value) {
+            for (BinaryEncodingFormat format : values()) {
+                if (format.sessionValue.equalsIgnoreCase(value)) {
+                    return format;
+                }
+            }
+            String legalValues = Joiner.on(", ").join(
+                    Arrays.stream(values()).map(BinaryEncodingFormat::sessionValue).collect(Collectors.toList()));
+            throw new IllegalArgumentException("Legal values of binary_encoding_format are " + legalValues);
+        }
+    }
+
+    public enum BinaryEncodingLevel {
+        ALL("all", TBinaryEncodingLevel.ALL),
+        NESTED("nested", TBinaryEncodingLevel.NESTED);
+
+        private final String sessionValue;
+        private final TBinaryEncodingLevel thriftValue;
+
+        BinaryEncodingLevel(String sessionValue, TBinaryEncodingLevel thriftValue) {
+            this.sessionValue = sessionValue;
+            this.thriftValue = thriftValue;
+        }
+
+        public String sessionValue() {
+            return sessionValue;
+        }
+
+        public TBinaryEncodingLevel thriftValue() {
+            return thriftValue;
+        }
+
+        public static BinaryEncodingLevel fromString(String value) {
+            for (BinaryEncodingLevel level : values()) {
+                if (level.sessionValue.equalsIgnoreCase(value)) {
+                    return level;
+                }
+            }
+            String legalValues = Joiner.on(", ").join(
+                    Arrays.stream(values()).map(BinaryEncodingLevel::sessionValue).collect(Collectors.toList()));
+            throw new IllegalArgumentException("Legal values of binary_encoding_level are " + legalValues);
+        }
     }
 
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
@@ -170,6 +239,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
+    public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -1099,6 +1170,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
 
+    public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1258,6 +1331,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
+
+    @VariableMgr.VarAttr(name = BINARY_ENCODING_FORMAT)
+    private String binaryEncodingFormat = BinaryEncodingFormat.HEX.sessionValue();
+
+    @VariableMgr.VarAttr(name = BINARY_ENCODING_LEVEL)
+    private String binaryEncodingLevel = BinaryEncodingLevel.NESTED.sessionValue();
 
     // Toggle ANSI color in explain output
     @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
@@ -2326,6 +2405,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT)
     private boolean enableLabeledColumnStatisticOutput = false;
+
+    @VarAttr(name = DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT)
+    private int dynamicPartitionPruneValuesLimit = 4096;
+
+    public int getDynamicPartitionPruneValuesLimit() {
+        return dynamicPartitionPruneValuesLimit;
+    }
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4404,19 +4490,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isMVPlanner() {
-        return enableMVPlanner;
+        return false;
     }
 
     public void setMVPlanner(boolean enable) {
-        this.enableMVPlanner = enable;
+        // Deprecated no-op kept for dump/session replay compatibility.
     }
 
     public boolean isEnableIncrementalRefreshMV() {
-        return enableIncrementalRefreshMV;
+        return false;
     }
 
     public void setEnableIncrementalRefreshMv(boolean enable) {
-        this.enableIncrementalRefreshMV = enable;
+        // Deprecated no-op kept for dump/session replay compatibility.
     }
 
     public long getLogRejectedRecordNum() {
@@ -4567,6 +4653,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableAsyncProfile() {
         return enableAsyncProfile;
+    }
+
+    public String getBinaryEncodingFormat() {
+        return binaryEncodingFormat;
+    }
+
+    public void setBinaryEncodingFormat(String binaryEncodingFormat) {
+        BinaryEncodingFormat format = binaryEncodingFormat == null ? BinaryEncodingFormat.HEX
+                : BinaryEncodingFormat.fromString(binaryEncodingFormat);
+        this.binaryEncodingFormat = format.sessionValue();
+    }
+
+    public String getBinaryEncodingLevel() {
+        return binaryEncodingLevel;
+    }
+
+    public void setBinaryEncodingLevel(String binaryEncodingLevel) {
+        BinaryEncodingLevel level = binaryEncodingLevel == null ? BinaryEncodingLevel.NESTED
+                : BinaryEncodingLevel.fromString(binaryEncodingLevel);
+        this.binaryEncodingLevel = level.sessionValue();
     }
 
     public void setEnableAsyncProfile(boolean enableAsyncProfile) {
@@ -6108,6 +6214,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         }
         tResult.setEnable_profile(enableProfile);
+        tResult.setBinary_encoding_format(BinaryEncodingFormat.fromString(binaryEncodingFormat).thriftValue());
+        tResult.setBinary_encoding_level(BinaryEncodingLevel.fromString(binaryEncodingLevel).thriftValue());
         tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
         tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
@@ -6259,6 +6367,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_hash_join_range_direct_mapping_opt(enableHashJoinRangeDirectMappingOpt);
         tResult.setEnable_hash_join_linear_chained_opt(enableHashJoinLinearChainedOpt);
         tResult.setEnable_hash_join_serialize_fixed_size_string(enableHashJoinSerializeFixedSizeString);
+
+        // http_request function SSL verification (admin-enforced setting from Config)
+        tResult.setHttp_request_ssl_verification_required(Config.http_request_ssl_verification_required);
+
+        // http_request function SSRF protection settings (admin-enforced from Config)
+        tResult.setHttp_request_security_level(Config.http_request_security_level);
+        tResult.setHttp_request_ip_allowlist(Config.http_request_ip_allowlist);
+        tResult.setHttp_request_host_allowlist_regexp(Config.http_request_host_allowlist_regexp);
+        tResult.setHttp_request_allow_private_in_allowlist(Config.http_request_allow_private_in_allowlist);
 
         return tResult;
     }

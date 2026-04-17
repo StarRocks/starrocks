@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 
 namespace starrocks {

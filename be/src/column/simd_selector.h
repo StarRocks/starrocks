@@ -15,7 +15,7 @@
 #pragma once
 
 #include "base/simd/selector.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

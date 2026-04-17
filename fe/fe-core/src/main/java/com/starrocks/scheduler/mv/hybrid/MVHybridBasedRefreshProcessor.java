@@ -31,19 +31,13 @@ import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshParams;
 import com.starrocks.scheduler.mv.ivm.MVIVMBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.ivm.TvrTableSnapshotInfo;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
-import com.starrocks.sql.common.PCellSortedSet;
-import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
 
 public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor {
     private final MVPCTBasedRefreshProcessor pctProcessor;
     private final MVIVMBasedRefreshProcessor ivmProcessor;
-
-    // This map is used to store the temporary tvr version range for each base table
-    private final Map<BaseTableInfo, TvrVersionRange> tempMvTvrVersionRangeMap = Maps.newConcurrentMap();
 
     public MVHybridBasedRefreshProcessor(Database db,
                                          MaterializedView mv,
@@ -105,26 +99,41 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
         });
         // reset the task run id for pct
         this.mvContext.getCtx().setQueryId(UUIDUtil.genUUID());
-        // If the refresh is transferred to pct, we need to refresh the changed partitions once
-        // and cannot generate multi-task-runs.
-        pctProcessor.getMvRefreshParams().setCanGenerateNextTaskRun(false);
 
-        // try get the tvr version range map from ivm processor
-        final Map<BaseTableInfo, TvrVersionRange> mvTvrVersionRangeMap =
-                mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableInfoTvrVersionRangeMap();
-        for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
-            TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableChangedVersionRange(snapshotInfo,
-                    mvTvrVersionRangeMap, this.currentRefreshMode);
-            logger.info("Base table: {}, changed version range: {}",
-                    snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
-            // collect changed version range
-            TvrTableSnapshotInfo tvrTableSnapshotInfo = new TvrTableSnapshotInfo(snapshotInfo.getBaseTableInfo(),
-                    snapshotInfo.getBaseTable());
-            tempMvTvrVersionRangeMap.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
-            // update the snapshot info with the changed version range
-            tvrTableSnapshotInfo.setTvrSnapshot(changedVersionRange);
+        // Clear stale temp TVR state from any prior attempt (explain-only, failed run, etc.)
+        // before starting a fresh complete-refresh cycle. Without this, a SKIPPED result below
+        // would leave the stale map/owner intact, risking incorrect TVR promotion by a later run.
+        if (mvRefreshParams.isCompleteRefresh()) {
+            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
         }
-        return pctProcessor.getProcessExecPlan(taskRunContext);
+
+        // ① Execute PCT first — this calls syncAndCheckPCTPartitions() internally,
+        //    which refreshes external tables and re-collects snapshotBaseTables.
+        //    After this returns, snapshotBaseTables reflects the snapshot that PCT will actually process.
+        ProcessExecPlan result = pctProcessor.getProcessExecPlan(taskRunContext);
+
+        // ② Freeze TVR from the SAME snapshotBaseTables that PCT uses.
+        //    This guarantees the persisted TVR matches the snapshot that PCT will scan.
+        //    Skip freeze if PCT found nothing to refresh (SKIPPED) — no subsequent batches will follow.
+        if (mvRefreshParams.isCompleteRefresh()
+                && result.state() == Constants.TaskRunState.SUCCESS) {
+            MaterializedView.AsyncRefreshContext refreshContext =
+                    mv.getRefreshScheme().getAsyncRefreshContext();
+            final Map<BaseTableInfo, TvrVersionRange> committedMap =
+                    refreshContext.getBaseTableInfoTvrVersionRangeMap();
+            Map<BaseTableInfo, TvrVersionRange> frozen = Maps.newHashMap();
+            for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+                TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableMaxChangedDelta(
+                        snapshotInfo, committedMap);
+                logger.info("Base table: {}, changed version range: {}",
+                        snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
+                frozen.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
+            }
+            String owner = mvContext.getStatus().getStartTaskRunId();
+            refreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, frozen);
+        }
+
+        return result;
     }
 
     @VisibleForTesting
@@ -153,19 +162,4 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
         getCurrentProcessor().generateNextTaskRunIfNeeded();
     }
 
-    @Override
-    public void updateVersionMeta(ExecPlan execPlan,
-                                  PCellSortedSet mvRefreshedPartitions,
-                                  Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        if (this.currentRefreshMode == MaterializedView.RefreshMode.INCREMENTAL) {
-            ivmProcessor.updateVersionMeta(execPlan, mvRefreshedPartitions, refTableAndPartitionNames);
-        } else {
-            if (mvContext.hasNextBatchPartition()) {
-                updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, Maps.newHashMap());
-            } else {
-                // if this is the last task run for a refresh job, update tempMvTvrVersionRangeMap instead.
-                updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, tempMvTvrVersionRangeMap);
-            }
-        }
-    }
 }

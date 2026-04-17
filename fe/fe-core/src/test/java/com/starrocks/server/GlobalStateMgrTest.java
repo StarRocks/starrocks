@@ -232,6 +232,96 @@ public class GlobalStateMgrTest {
         Config.metadata_enable_recovery_mode = originVal;
     }
 
+    @Test
+    public void testLeaderLeaseActivation() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.ACTIVATING, globalStateMgr.getLeaderRoleState());
+        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
+
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(101L);
+
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+        Assertions.assertEquals(101L, lease.getHaEpoch());
+        Assertions.assertEquals(1L, lease.getGeneration());
+        Assertions.assertTrue(globalStateMgr.isLeaderLeaseValid(lease));
+        Assertions.assertTrue(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.ACTIVE, globalStateMgr.getLeaderRoleState());
+        Assertions.assertNull(globalStateMgr.getPendingDemotionTargetType());
+    }
+
+    @Test
+    public void testLeaderLeaseActivationAllowsEpochZero() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(0L);
+
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+        Assertions.assertEquals(0L, lease.getHaEpoch());
+        Assertions.assertTrue(lease.isValid());
+        Assertions.assertTrue(globalStateMgr.isLeaderLeaseValid(lease));
+    }
+
+    @Test
+    public void testLeaderLeaseInvalidatedByDemotionSkeleton() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(102L);
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+
+        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertTrue(globalStateMgr.isLeaderDemoting());
+        Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(lease));
+        Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.DEMOTING, globalStateMgr.getLeaderRoleState());
+        Assertions.assertEquals(FrontendNodeType.FOLLOWER, globalStateMgr.getPendingDemotionTargetType());
+        Assertions.assertThrows(IllegalStateException.class, globalStateMgr::captureLeaderLeaseOrThrow);
+    }
+
+    @Test
+    public void testLeaderGenerationBumpsAcrossDemotionAndReelection() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(103L);
+        LeaderLease firstLease = globalStateMgr.captureLeaderLeaseOrThrow();
+
+        globalStateMgr.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.FOLLOWER);
+
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(104L);
+        LeaderLease secondLease = globalStateMgr.captureLeaderLeaseOrThrow();
+
+        Assertions.assertTrue(secondLease.getGeneration() > firstLease.getGeneration());
+        Assertions.assertEquals(104L, secondLease.getHaEpoch());
+        Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(firstLease));
+    }
+
+    @Test
+    public void testLeaderLeaseRollbackAfterActivationFailure() {
+        GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+        globalStateMgr.beginLeaderActivation();
+        globalStateMgr.setFrontendNodeType(FrontendNodeType.LEADER);
+        globalStateMgr.publishLeaderLease(105L);
+        LeaderLease lease = globalStateMgr.captureLeaderLeaseOrThrow();
+
+        globalStateMgr.rollbackLeaderActivation();
+
+        Assertions.assertFalse(globalStateMgr.isLeaderWorkAdmissionOpen());
+        Assertions.assertFalse(globalStateMgr.isLeaderLeaseValid(lease));
+        Assertions.assertEquals(LeaderLease.INVALID, globalStateMgr.captureLeaderLease());
+        Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, globalStateMgr.getLeaderRoleState());
+        Assertions.assertNull(globalStateMgr.getPendingDemotionTargetType());
+    }
+
     private static class MyGlobalStateMgr extends GlobalStateMgr {
         public static final String ERROR_MESSAGE = "Create Exception here.";
         private final boolean throwException;

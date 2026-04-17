@@ -159,6 +159,8 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static boolean enable_audit_sql = true;
+    @ConfField(mutable = true, comment = "Whether to emit BEFORE_QUERY audit events before each statement executes.")
+    public static boolean audit_stmt_before_execute = false;
     @ConfField
     public static boolean enable_internal_sql = true;
     @ConfField
@@ -1332,10 +1334,12 @@ public class Config extends ConfigBase {
     public static int max_broker_load_job_concurrency = 5;
 
     /**
-     * Push down target table schema to files() in `insert from files()`
+     * Push down target table column types to files() in `insert from files()`.
+     * Only rewrites types of columns that already exist in the inferred files schema.
+     * For full schema push-down (column names + types), use the insert property "enable_push_down_schema".
      */
-    @ConfField(mutable = true)
-    public static boolean files_enable_insert_push_down_schema = true;
+    @ConfField(mutable = true, aliases = {"files_enable_insert_push_down_schema"})
+    public static boolean files_enable_insert_push_down_column_type = true;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -2355,8 +2359,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The interval to persist predicate columns state")
     public static long statistic_predicate_columns_persist_interval_sec = 60L;
 
-    @ConfField(mutable = true, comment = "The TTL of predicate columns, it would not be considered as predicate " +
-            "columns after this period")
+    @ConfField(mutable = true, comment = "The TTL of predicate columns in hours; entries older than this are " +
+            "removed by vacuum. A negative value (e.g. -1) disables predicate column vacuum.")
     public static long statistic_predicate_columns_ttl_hours = 24;
 
     @ConfField(mutable = true, comment = "Enable predicate columns collection. If disabled, predicate columns " +
@@ -2538,7 +2542,7 @@ public class Config extends ConfigBase {
             "the partition_id filter will be skipped to avoid performance overhead. Default 1000.")
     public static int statistic_load_max_partition_filter_num = 1000;
 
-    @ConfField(mutable = true, comment = "Synchronously load statistics for testing purpose")
+    @ConfField(mutable = true, comment = "Synchronously load statistics (may cause query delay)")
     public static boolean enable_sync_statistics_load = false;
 
     /**
@@ -3068,7 +3072,8 @@ public class Config extends ConfigBase {
     /**
      * fe sync with star mgr meta interval in seconds
      */
-    @ConfField
+    @ConfField(mutable = true, comment = "The interval in seconds at which StarMgrMetaSyncer runs periodical" +
+            " metadata synchronization between FE and StarMgr in a shared-data cluster.")
     public static long star_mgr_meta_sync_interval_sec = 600L;
 
     /**
@@ -4336,6 +4341,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The max number of new tablets that an old tablet can be split into.")
     public static int tablet_reshard_max_split_count = 1024;
 
+    @ConfField(mutable = true, comment = "Whether to enable tablet merge in tablet reshard. " +
+            "Only takes effect for tables in clusters with run_mode=shared_data.")
+    public static boolean tablet_reshard_enable_tablet_merge = false;
+
     /**
      * Whether to enable tracing historical nodes when cluster scale
      */
@@ -4371,4 +4380,33 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_hudi_lib_internal_metadata_table = true;
+
+    /**
+     * http_request function settings
+     * Admin-enforced SSL verification for http_request function.
+     * If true, SSL peer and host verification cannot be disabled via session variables.
+     */
+    @ConfField(mutable = true, comment = "Enforce SSL verification for http_request function (cannot be disabled by users)")
+    public static boolean http_request_ssl_verification_required = true;
+
+    /**
+     * http_request function SSRF protection settings
+     * Security level: 1=TRUSTED (allow all), 2=PUBLIC (block private IPs),
+     * 3=RESTRICTED (require allowlist, default), 4=PARANOID (block all requests)
+     */
+    @ConfField(mutable = true, comment = "HTTP request security level for SSRF protection: " +
+            "1=TRUSTED (allow all), 2=PUBLIC (block private IPs), " +
+            "3=RESTRICTED (require allowlist, default), 4=PARANOID (block all requests)")
+    public static int http_request_security_level = 3;
+
+    @ConfField(mutable = true, comment = "Comma-separated list of allowed IPv4 addresses for http_request function. " +
+            "Example: '192.168.1.1' or '10.0.0.1,172.16.0.1'")
+    public static String http_request_ip_allowlist = "";
+
+    @ConfField(mutable = true, comment = "Comma-separated list of regex patterns for allowed hostnames in http_request function")
+    public static String http_request_host_allowlist_regexp = "";
+
+    @ConfField(mutable = true, comment = "Allow private IPs (127.x, 10.x, 192.168.x, 172.16-31.x) if in allowlist. " +
+            "Default false for security. Set true to allow internal service calls.")
+    public static boolean http_request_allow_private_in_allowlist = false;
 }

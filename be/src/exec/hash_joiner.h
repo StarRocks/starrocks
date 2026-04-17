@@ -31,6 +31,7 @@
 #include "exec/spill/spiller.h"
 #include "exprs/in_const_predicate.hpp"
 #include "gen_cpp/PlanNodes_types.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
 
@@ -172,6 +173,7 @@ struct HashJoinProbeMetrics {
 };
 
 struct HashJoinBuildMetrics {
+    RuntimeProfile* runtime_profile = nullptr;
     RuntimeProfile::Counter* build_ht_timer = nullptr;
     RuntimeProfile::Counter* copy_right_table_chunk_timer = nullptr;
     RuntimeProfile::Counter* build_runtime_filter_timer = nullptr;
@@ -182,7 +184,6 @@ struct HashJoinBuildMetrics {
     RuntimeProfile::Counter* hash_table_memory_usage = nullptr;
     RuntimeProfile::Counter* partial_runtime_bloom_filter_bytes = nullptr;
     RuntimeProfile::Counter* partition_nums = nullptr;
-    std::string* hash_map_type_info = nullptr;
 
     void prepare(RuntimeProfile* runtime_profile);
 };
@@ -269,13 +270,7 @@ public:
 
     size_t runtime_in_filter_row_limit() const { return 1024; }
 
-    size_t runtime_bloom_filter_row_limit() const {
-        uint64_t runtime_join_filter_pushdown_limit = 1024000;
-        if (_runtime_state->query_options().__isset.runtime_join_filter_pushdown_limit) {
-            runtime_join_filter_pushdown_limit = _runtime_state->query_options().runtime_join_filter_pushdown_limit;
-        }
-        return runtime_join_filter_pushdown_limit;
-    }
+    size_t runtime_bloom_filter_row_limit() const;
 
     // hash table param.
     // this function only valid in hash_joiner_builder

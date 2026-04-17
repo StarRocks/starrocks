@@ -41,7 +41,6 @@
 #include <memory>
 #include <sstream>
 
-#include "agent/master_info.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/network/network_util.h"
 #include "base/uid_util.h"
@@ -51,6 +50,7 @@
 #include "common/config_runtime_fwd.h"
 #include "common/object_pool.h"
 #include "common/system/backend_options.h"
+#include "common/system/master_info.h"
 #include "common/thread/thread.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"
@@ -180,7 +180,7 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
           _backend_num(backend_num),
           _exec_env(exec_env),
           _coord_addr(coord_addr),
-          _executor(exec_env,
+          _executor(&exec_env->query_execution_services(),
                     std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this, std::placeholders::_1,
                                     std::placeholders::_2, std::placeholders::_3, std::placeholders::_3)) {
     _start_time = DateTimeValue::local_time();
@@ -193,8 +193,10 @@ FragmentExecState::~FragmentExecState() {
 }
 
 Status FragmentExecState::prepare(const TExecPlanFragmentParams& params) {
+    const auto* query_execution_services = &_exec_env->query_execution_services();
     _runtime_state = std::make_shared<RuntimeState>(params.params.query_id, params.params.fragment_instance_id,
-                                                    params.query_options, params.query_globals, _exec_env);
+                                                    params.query_options, params.query_globals,
+                                                    query_execution_services, _exec_env);
     _runtime_state->set_fragment_dict_state(_fragment_dict_state.get());
     int func_version = params.__isset.func_version ? params.func_version
                                                    : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
@@ -430,6 +432,10 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
     RETURN_IF_ERROR(
             GlobalEnv::GetInstance()->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
+    if (params.__isset.is_stream_pipeline && params.is_stream_pipeline) {
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
+    }
+
     const TUniqueId& fragment_instance_id = params.params.fragment_instance_id;
     std::shared_ptr<FragmentExecState> exec_state;
     {
@@ -504,7 +510,8 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
                                          const std::shared_ptr<const RuntimeFilter>& shared_rf) {
     std::shared_ptr<FragmentExecState> exec_state;
     const PUniqueId& query_id = params.query_id();
-    _exec_env->add_rf_event({query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
+    _exec_env->runtime_filter_cache()->add_rf_event(
+            {query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});
     size_t size = params.probe_finst_ids_size();
     for (size_t i = 0; i < size; i++) {
         TUniqueId frag_inst_id;
@@ -634,7 +641,7 @@ void FragmentMgr::report_fragments_with_same_host(
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
                 reported[i] = true;
-                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                _exec_env->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 continue;
             }
@@ -699,7 +706,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
 
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
-                ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                _exec_env->profile_report_worker()->unregister_non_pipeline_load(
                         fragment_exec_state->fragment_instance_id());
                 continue;
             }
@@ -768,7 +775,7 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
     }
 
     for (const auto& fragment_instance_id : fragments_non_exist) {
-        ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
+        _exec_env->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
     }
 }
 
@@ -863,7 +870,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         if (!output_names.empty()) {
             col.__set_name(output_names[i]);
         } else {
-            col.__set_name(slot_desc->col_name());
+            col.__set_name(std::string(slot_desc->col_name()));
         }
         col.__set_type(to_thrift(slot_desc->type().type));
         selected_columns->emplace_back(std::move(col));

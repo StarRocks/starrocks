@@ -187,10 +187,6 @@ public interface ConnectorMetadata {
         return RemoteFileInfoDefaultSource.EMPTY;
     }
 
-    default List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        return Lists.newArrayList();
-    }
-
     /**
      * Get table meta serialized specification
      *
@@ -208,6 +204,15 @@ public interface ConnectorMetadata {
 
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         return Lists.newArrayList();
+    }
+
+    /**
+     * Get partition info at a specific snapshot identified by the request context.
+     * Default implementation ignores the context and falls back to the live-snapshot variant.
+     */
+    default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
+                                              ConnectorMetadatRequestContext requestContext) {
+        return getPartitions(table, partitionNames);
     }
 
     /**

@@ -280,15 +280,17 @@ public class AlterJobExecutor implements AstVisitorExtendInterface<Void, Connect
         }
         try {
             MaterializedView materializedView = (MaterializedView) table;
+            if (materializedView.getRefreshScheme().getType()
+                    == com.starrocks.catalog.MaterializedViewRefreshType.INCREMENTAL) {
+                throw new AlterJobException(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance());
+            }
             // check materialized view state
             if (materializedView.getState() != OlapTable.OlapTableState.NORMAL) {
                 throw new AlterJobException("Materialized view [" + materializedView.getName() + "]'s state is not NORMAL. "
                         + "Do not allow to do ALTER ops");
             }
 
-            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().stopMaintainMV(materializedView);
             visit(stmt.getAlterTableClause());
-            GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
             return null;
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);

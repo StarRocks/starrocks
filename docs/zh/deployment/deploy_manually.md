@@ -2,15 +2,15 @@
 displayed_sidebar: docs
 ---
 
-# 手动部署 StarRocks
+import ManualPrep from '../_assets/deployment/manual_prep.mdx'
 
-:::tip
-手动部署前的准备工作在 [部署前提条件](./deployment_prerequisites.md) 以及 [检查环境配置](./environment_configurations.md) 文档中有详细说明。如果您计划部署生产集群，请参照以上两篇文档。如果您刚开始使用 StarRocks，希望按照快速入门教程进行操作，请参考 [快速入门](../quick_start/quick_start.mdx)。
-:::
+# 手动部署存算一体 StarRocks
+
+<ManualPrep />
 
 本文介绍如何手动部署 StarRocks 存算一体集群（BE 同时做数据存储和计算）。其他安装方式请参考[部署概览](../deployment/deployment_overview.md)。
 
-如果要部署存算分离集群，参见 [部署使用 StarRocks 存算分离集群](./shared_data/s3.md)。
+如果要部署存算分离集群，参见 [手动部署存算分离 StarRocks](./deploy_shared_data_manually.md)。
 
 ## 第一步：启动 Leader FE 节点
 
@@ -63,7 +63,7 @@ displayed_sidebar: docs
       JAVA_HOME = <path_to_JDK>
       ```
 
-   e.  更多高级配置项请参考 [参数配置 - FE 配置项](../administration/management/FE_configuration.md)。
+   更多高级配置项请参考 [参数配置 - FE 配置项](../administration/management/FE_configuration.md)。
 
 3. 启动 FE 节点。
 
@@ -95,11 +95,11 @@ displayed_sidebar: docs
 
    "2022-08-10 16:12:29,911 INFO (UNKNOWN x.x.x.x_9010_1660119137253(-1)|1) [FeServer.start():52] thrift server started with port 9020."
 
-## 第二步：（存算一体）启动 BE 服务
+## 第二步：启动 BE 服务
 
 :::note
 
-只能将 BE 节点添加到存算一体集群中。不建议在存算分离集群中添加 BE 节点，否则可能导致未知行为。
+只能将 BE 节点添加到存算一体集群中，或将 CN 节点添加到存算分离集群中。否则，可能会导致无法预料的行为。
 
 :::
 
@@ -114,10 +114,10 @@ displayed_sidebar: docs
 
 2. 进入先前准备好的 [StarRocks BE 部署文件](../deployment/prepare_deployment_files.md)所在路径，修改 BE 配置文件 **be/conf/be.conf**。
 
-   a. 在配置项 `storage_root_path` 中指定数据存储路径。
+   a. 在配置项 `storage_root_path` 中指定数据路径。多块盘配置使用分号（;）隔开。例如：`/data1;/data2`。
 
       ```YAML
-      # 将 <storage_root_path> 替换为您创建的数据存储路径。
+      # 将 <storage_root_path> 替换为您创建的数据路径。
       storage_root_path = <storage_root_path>
       ```
 
@@ -128,6 +128,7 @@ displayed_sidebar: docs
       be_http_port = xxxx              # 默认值：8040
       heartbeat_service_port = yyyy    # 默认值：9050
       brpc_port = zzzz                 # 默认值：8060
+      starlet_port = uuuu              # 默认值：9070
       ```
 
    c. 如需为集群启用 IP 地址访问，您必须在配置文件中添加配置项 `priority_networks`，为 BE 节点分配一个专有的 IP 地址（CIDR格式）。如需为集群启用 FQDN 访问，则可以忽略该配置项。
@@ -148,7 +149,7 @@ displayed_sidebar: docs
       JAVA_HOME = <path_to_JDK>
       ```
 
-   e.  更多高级配置项请参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md)。
+   更多高级配置项请参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md)。
 
 3. 启动 BE 节点。
 
@@ -175,14 +176,14 @@ displayed_sidebar: docs
 
 > **说明**
 >
-> 在一个 StarRocks 集群中部署并添加至少 3 个 BE 节点后，这些节点将自动形成一个 BE 高可用集群。
-> 如果您只想部署一个 BE 节点，您必须在 FE 配置文件 **fe/conf/fe.conf** 中设置 `default_replication_num` 为 `1`。
+> - 在一个 StarRocks 集群中部署并添加至少 3 个 BE 节点后，这些节点将自动形成一个 BE 高可用集群。
+> - 如果您只想部署一个 BE 节点，您必须在 FE 配置文件 **fe/conf/fe.conf** 中设置 `default_replication_num` 为 `1`。
+>
+>   ```YAML
+>   default_replication_num = 1
+>   ```
 
-      ```YAML
-      default_replication_num = 1
-      ```
-
-## 第二步：（存算分离）启动 CN 服务
+## 第二步：启动 CN 服务
 
 :::note
 
@@ -221,7 +222,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
       JAVA_HOME = <path_to_JDK>
       ```
 
-   d.  由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md) 了解更多 CN 高级配置项。
+   由于大部分 CN 参数都继承自 BE 节点，您可以参考 [参数配置 - BE 配置项](../administration/management/BE_configuration.md) 了解更多 CN 高级配置项。
 
 2. 启动 CN 节点。
 
@@ -248,7 +249,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
 
 ## 第三步：搭建集群
 
-当所有 FE 和 BE/CN 节点启动成功后，即可搭建 StarRocks 集群。
+当所有 FE 和 BE 节点启动成功后，即可搭建 StarRocks 集群。
 
 以下过程在 MySQL 客户端实例上执行。您必须安装 MySQL 客户端（5.5.0 或更高版本）。
 
@@ -294,9 +295,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    - 如果字段 `Role` 为 `FOLLOWER`，说明该 FE 节点有资格被选为 Leader FE 节点。
    - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
-3. 添加 BE/CN 节点至集群。
-
-   - （存算一体）添加 BE 节点。
+3. 添加 BE 节点至集群。
 
    ```SQL
    -- 将 <be_address> 替换为 BE 节点的 IP 地址（priority_networks）或 FQDN，
@@ -308,21 +307,7 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    >
    > 您可以通过一条 SQL 添加多个 BE 节点。每对 `<be_address>:<heartbeat_service_port>` 代表一个 BE 节点。
 
-   - （存算分离）添加 CN 节点。
-
-   ```SQL
-   -- 将 <cn_address> 替换为 CN 节点的 IP 地址（priority_networks）或 FQDN，
-   -- 并将 <heartbeat_service_port>（默认：9050）替换为您在 cn.conf 中指定的 heartbeat_service_port。
-   ALTER SYSTEM ADD COMPUTE NODE "<cn_address>:<heartbeat_service_port>", "<cn2_address>:<heartbeat_service_port>", "<cn3_address>:<heartbeat_service_port>";
-   ```
-
-   > **说明**
-   >
-   > 您可以通过一条 SQL 添加多个 CN 节点。每对 `<cn_address>:<heartbeat_service_port>` 代表一个 CN 节点。
-
 4. 执行以下 SQL 查看 BE/CN 节点状态。
-
-   - 查看 BE 节点状态。
 
    ```SQL
    SHOW PROC '/backends'\G
@@ -362,37 +347,6 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
    ```
 
    如果字段 `Alive` 为 `true`，说明该 BE 节点正常启动并加入集群。
-
-   - 查看 CN 节点状态。
-
-   ```SQL
-   SHOW PROC '/compute_nodes'\G
-   ```
-
-   示例：
-
-   ```Plain
-   MySQL [(none)]> SHOW PROC '/compute_nodes'\G
-   *************************** 1. row ***************************
-           ComputeNodeId: 10003
-                      IP: x.x.x.x
-           HeartbeatPort: 9050
-                  BePort: 9060
-                HttpPort: 8040
-                BrpcPort: 8060
-           LastStartTime: 2023-03-13 15:11:13
-           LastHeartbeat: 2023-03-13 15:11:13
-                   Alive: true
-    SystemDecommissioned: false
-   ClusterDecommissioned: false
-                  ErrMsg: 
-                 Version: 2.5.2-c3772fb
-   1 row in set (0.00 sec)
-   ```
-
-   如果字段 `Alive` 为 `true`，说明该 CN 节点正常启动并加入集群。
-
-   如果执行查询时需要使用 CN 节点扩展算力，则需要设置系统变量 `SET prefer_compute_node = true;` 和 `SET use_compute_nodes = -1;`。系统变量的更多信息，请参见[系统变量](../sql-reference/System_variable.md#支持的变量)。
 
 ## 第四步：（可选）部署高可用 FE 集群
 
@@ -542,15 +496,9 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
   ./be/bin/stop_be.sh
   ```
 
-- 停止 CN 节点。
-
-  ```Bash
-  ./be/bin/stop_cn.sh
-  ```
-
 ## 故障排除
 
-如果启动 FE、BE 或 CN 节点失败，尝试以下步骤来发现问题：
+如果启动 FE 或 BE 节点失败，尝试以下步骤来发现问题：
 
 - 如果 FE 节点没有正常启动，您可以通过查看 **fe/log/fe.warn.log** 中的日志来确定问题所在。
 
@@ -567,14 +515,6 @@ Compute Node（CN）是一种无状态的计算服务，本身不存储数据。
   ```
 
   确定并解决问题后，您首先需要终止当前 BE 进程，删除现有的 **storage** 路径，新建数据存储路径，然后以正确的配置重启该 BE 节点。
-
-- 如果 CN 节点没有正常启动，您可以通过查看 **be/log/cn.WARNING** 中的日志来确定问题所在。
-
-  ```Bash
-  cat be/log/cn.WARNING
-  ```
-
-  确定并解决问题后，您首先需要终止当前 CN 进程，然后以正确的配置重启该 CN 节点。
 
 ## 下一步
 

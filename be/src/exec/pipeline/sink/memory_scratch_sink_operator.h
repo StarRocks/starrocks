@@ -18,7 +18,7 @@
 
 #include "base/concurrency/blocking_queue.hpp"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/result_queue_mgr.h"
 

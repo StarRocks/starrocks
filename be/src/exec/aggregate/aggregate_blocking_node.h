@@ -14,8 +14,9 @@
 
 #pragma once
 
+#include "common/statusor.h"
 #include "exec/aggregate/aggregate_base_node.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 
 // Aggregate means this node handle query with aggregate functions.
 // Blocking means this node will consume all input and build hash map in open phase.
@@ -25,11 +26,12 @@ public:
     AggregateBlockingNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
             : AggregateBaseNode(pool, tnode, descs) {}
 
-    pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
     template <class AggFactory, class SourceFactory, class SinkFactory>
-    pipeline::OpFactories _decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
-                                                 pipeline::PipelineBuilderContext* context, bool per_bucket_optimize);
+    StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                           pipeline::PipelineBuilderContext* context,
+                                                           bool per_bucket_optimize);
 };
 } // namespace starrocks
