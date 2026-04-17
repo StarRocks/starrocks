@@ -17,6 +17,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/debug/debug_action.h"
 #include "column/vectorized_fwd.h"
 #include "exec/limited_pipeline_chunk_buffer.h"
 #include "exec/pipeline/operator_factory.h"
@@ -49,12 +50,11 @@ struct WaitContext {
 class WaitSourceOperator final : public SourceOperator {
 public:
     WaitSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                       WaitContext* wait_context, int32_t wait_times_ms)
+                       WaitContext* wait_context, int32_t wait_times_ms, EnumDebugAction action)
             : SourceOperator(factory, id, "wait_source", plan_node_id, true, driver_sequence),
               _wait_context(wait_context),
-              _wait_time_ns(wait_times_ms * 1000L * 1000L) {}
-
-    ~WaitSourceOperator() override;
+              _wait_time_ns(wait_times_ms * 1000L * 1000L),
+              _action(action) {}
 
     Status prepare(RuntimeState* state) override;
 
@@ -75,20 +75,26 @@ public:
     }
 
 private:
+    bool _source_should_block() const {
+        return _action == EnumDebugAction::WAIT || _action == EnumDebugAction::BLOCK_SOURCE_OPERATOR;
+    }
+
     mutable bool _reached_timeout = false;
     MonotonicStopWatch* _mono_timer = nullptr;
     WaitContext* _wait_context = nullptr;
     int64_t _wait_time_ns = 0;
+    EnumDebugAction _action = EnumDebugAction::WAIT;
     std::unique_ptr<PipelineTimerTask> _wait_timer_task;
 };
 
 class WaitSinkOperator final : public Operator {
 public:
     WaitSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                     WaitContext* wait_context)
-            : Operator(factory, id, "wait_sink", plan_node_id, true, driver_sequence), _wait_context(wait_context) {}
-
-    ~WaitSinkOperator() override = default;
+                     WaitContext* wait_context, int32_t wait_times_ms, EnumDebugAction action)
+            : Operator(factory, id, "wait_sink", plan_node_id, true, driver_sequence),
+              _wait_context(wait_context),
+              _wait_time_ns(wait_times_ms * 1000L * 1000L),
+              _action(action) {}
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
@@ -104,24 +110,35 @@ public:
 
     bool ignore_empty_eos() const override { return false; }
 
+    void close(RuntimeState* state) override;
+
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
 private:
+    bool _sink_should_block() const { return _action == EnumDebugAction::BLOCK_SINK_OPERATOR; }
+
     std::unique_ptr<BufferMetrics> _metrics;
+    MonotonicStopWatch* _mono_timer = nullptr;
     WaitContext* _wait_context = nullptr;
+    int64_t _wait_time_ns = 0;
+    EnumDebugAction _action = EnumDebugAction::WAIT;
+    mutable bool _reached_timeout = false;
+    std::unique_ptr<PipelineTimerTask> _wait_timer_task;
 };
 
 class WaitContextFactory {
 public:
     size_t wait_times_ms() const { return _wait_time_ms; }
+    EnumDebugAction action() const { return _action; }
     void resize(int dop) { _buffer.resize(dop); }
     WaitContext* get(int driver_sequence) { return &_buffer[driver_sequence]; }
 
-    WaitContextFactory(size_t wait_time_ms) : _wait_time_ms(wait_time_ms) {}
+    WaitContextFactory(size_t wait_time_ms, EnumDebugAction action) : _wait_time_ms(wait_time_ms), _action(action) {}
 
 private:
     size_t _wait_time_ms = 0;
+    EnumDebugAction _action = EnumDebugAction::WAIT;
     std::vector<WaitContext> _buffer;
 };
 
@@ -139,7 +156,7 @@ public:
         _buffer_factory->resize(degree_of_parallelism);
         auto single_chunk_buffer = _buffer_factory->get(driver_sequence);
         return std::make_shared<WaitSourceOperator>(this, _id, _plan_node_id, driver_sequence, single_chunk_buffer,
-                                                    _buffer_factory->wait_times_ms());
+                                                    _buffer_factory->wait_times_ms(), _buffer_factory->action());
     }
 
 private:
@@ -157,7 +174,9 @@ public:
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         _wait_context_factory->resize(degree_of_parallelism);
         auto wait_context = _wait_context_factory->get(driver_sequence);
-        return std::make_shared<WaitSinkOperator>(this, _id, _plan_node_id, driver_sequence, wait_context);
+        return std::make_shared<WaitSinkOperator>(this, _id, _plan_node_id, driver_sequence, wait_context,
+                                                  _wait_context_factory->wait_times_ms(),
+                                                  _wait_context_factory->action());
     }
 
 private:

@@ -501,9 +501,9 @@ OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState
 OpFactories PipelineBuilderContext::maybe_interpolate_debug_ops(RuntimeState* state, int32_t plan_node_id,
                                                                 OpFactories& pred_operators) {
     auto action_opt = runtime_state()->debug_action_mgr().get_debug_action(plan_node_id);
-    if (action_opt.has_value() && action_opt.value().is_wait_action()) {
+    if (action_opt.has_value() && action_opt.value().is_pipeline_break_action()) {
         auto* pred_source_op = source_operator(pred_operators);
-        auto wait_context_factory = std::make_shared<WaitContextFactory>(action_opt->value);
+        auto wait_context_factory = std::make_shared<WaitContextFactory>(action_opt->value, action_opt->action);
         auto wait_sink =
                 std::make_shared<WaitOperatorSinkFactory>(next_operator_id(), plan_node_id, wait_context_factory);
 

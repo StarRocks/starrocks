@@ -104,7 +104,9 @@ enum TExecNodePhase {
 // what to do when hitting a debug point (TQueryOptions.DEBUG_ACTION)
 enum TDebugAction {
   WAIT,
-  FAIL
+  FAIL,
+  BLOCK_SOURCE_OPERATOR,
+  BLOCK_SINK_OPERATOR
 }
 
 struct TKeyRange {
