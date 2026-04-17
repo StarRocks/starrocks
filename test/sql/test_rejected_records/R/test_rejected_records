@@ -50,7 +50,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -97,7 +97,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -144,7 +144,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -196,7 +196,7 @@ Fail
 select * from t order by dt;
 -- result:
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -242,7 +242,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -286,7 +286,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -338,7 +338,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -395,7 +395,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -443,7 +443,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -495,7 +495,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
@@ -563,7 +563,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: sleep 15
+shell: sleep 30
 -- result:
 0
 
