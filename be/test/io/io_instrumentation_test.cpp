@@ -70,17 +70,16 @@ private:
 } // namespace
 
 TEST_F(IOInstrumentationTest, DefaultStateUsesNoopHooks) {
-    EXPECT_FALSE(IOInstrumentation::enabled());
-    EXPECT_EQ(IOInstrumentation::get_hooks(), IOInstrumentation::set_hooks(nullptr));
-    EXPECT_FALSE(IOInstrumentation::enabled());
+    const IOEventHooks* default_hooks = IOInstrumentation::get_hooks();
+    EXPECT_EQ(default_hooks, IOInstrumentation::set_hooks(nullptr));
+    EXPECT_EQ(default_hooks, IOInstrumentation::get_hooks());
 }
 
 TEST_F(IOInstrumentationTest, NoopHooksAcceptEvents) {
-    EXPECT_FALSE(IOInstrumentation::enabled());
+    EXPECT_EQ(IOInstrumentation::get_hooks(), IOInstrumentation::set_hooks(nullptr));
     IOInstrumentation::record_read(1, 2);
     IOInstrumentation::record_write(3, 4);
     IOInstrumentation::record_sync(5);
-    EXPECT_FALSE(IOInstrumentation::enabled());
 }
 
 TEST_F(IOInstrumentationTest, InstalledHooksReceiveEvents) {
@@ -89,7 +88,6 @@ TEST_F(IOInstrumentationTest, InstalledHooksReceiveEvents) {
 
     const IOEventHooks* previous = IOInstrumentation::set_hooks(&kCaptureHooks);
     EXPECT_NE(previous, &kCaptureHooks);
-    EXPECT_TRUE(IOInstrumentation::enabled());
     EXPECT_EQ(IOInstrumentation::get_hooks(), &kCaptureHooks);
 
     IOInstrumentation::record_read(11, 12);
@@ -106,17 +104,14 @@ TEST_F(IOInstrumentationTest, InstalledHooksReceiveEvents) {
     EXPECT_EQ(capture.sync_latency_ns, 31);
 }
 
-TEST_F(IOInstrumentationTest, RestoringNullDisablesHooks) {
+TEST_F(IOInstrumentationTest, RestoringNullRestoresNoopHooks) {
     HookCapture capture;
     g_capture = &capture;
 
-    const IOEventHooks* previous = IOInstrumentation::set_hooks(&kCaptureHooks);
-    EXPECT_TRUE(IOInstrumentation::enabled());
+    (void)IOInstrumentation::set_hooks(&kCaptureHooks);
 
     const IOEventHooks* restored = IOInstrumentation::set_hooks(nullptr);
     EXPECT_EQ(restored, &kCaptureHooks);
-    EXPECT_NE(previous, restored);
-    EXPECT_FALSE(IOInstrumentation::enabled());
 
     IOInstrumentation::record_read(41, 42);
     EXPECT_EQ(capture.read_calls, 0);

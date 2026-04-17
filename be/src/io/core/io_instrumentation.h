@@ -27,11 +27,13 @@ struct IOEventHooks {
 
 class IOInstrumentation {
 public:
+    // Installed hook tables must stay immutable and remain alive for the rest
+    // of the process. Production code is expected to publish the active table
+    // once during startup before concurrent record_*() calls begin. Tests may
+    // still swap hooks before exercising the API.
     static const IOEventHooks* set_hooks(const IOEventHooks* hooks) noexcept;
 
     static inline const IOEventHooks* get_hooks() noexcept { return s_hooks.load(std::memory_order_relaxed); }
-
-    static inline bool enabled() noexcept { return get_hooks() != &kNoopHooks; }
 
     static inline void record_read(int64_t bytes, int64_t latency_ns) noexcept {
         const auto* hooks = get_hooks();
