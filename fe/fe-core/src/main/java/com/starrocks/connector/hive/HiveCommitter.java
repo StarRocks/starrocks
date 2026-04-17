@@ -296,6 +296,12 @@ public class HiveCommitter {
             Path oldPartitionStagingPath = new Path(targetPath.getParent(), "_temp_" + targetPath.getName()
                     + "_" + ConnectContext.get().getQueryId().toString());
 
+            if (!fileOps.pathExists(targetPath)) {
+                LOG.warn("Partition location {} does not exist before overwrite; creating empty directory for rename",
+                        targetPath);
+                fileOps.ensureDirectoryExists(targetPath);
+            }
+
             fileOps.renameDirectory(
                     targetPath,
                     oldPartitionStagingPath,
@@ -394,8 +400,10 @@ public class HiveCommitter {
         String dbName = firstPartition.getDatabaseName();
         String tableName = firstPartition.getTableName();
         List<List<String>> rollbackFailedPartitions = addPartitionsTask.rollback(hmsOps);
-        LOG.error("Failed to rollback: add_partition for partition values {}.{}.{}",
-                dbName, tableName, rollbackFailedPartitions);
+        if (!rollbackFailedPartitions.isEmpty()) {
+            LOG.error("Failed to rollback: add_partition for partition values {}.{}.{}",
+                    dbName, tableName, rollbackFailedPartitions);
+        }
     }
 
     private void waitAsyncFsTaskSuppressThrowable() {

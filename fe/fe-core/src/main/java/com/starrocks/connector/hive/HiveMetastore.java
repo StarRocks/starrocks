@@ -207,6 +207,11 @@ public class HiveMetastore implements IHiveMetastore {
         ImmutableMap.Builder<String, Partition> resultBuilder = ImmutableMap.builder();
         for (Map.Entry<String, List<String>> entry : partitionNameToPartitionValues.entrySet()) {
             Partition partition = partitionValuesToPartition.get(entry.getValue());
+            if (partition == null) {
+                throw new StarRocksConnectorException(
+                        "Hive metastore did not return partition [%s] for table %s.%s (requested %s partitions, got %s)",
+                        entry.getKey(), dbName, tblName, partitionNames.size(), partitions.size());
+            }
             resultBuilder.put(entry.getKey(), partition);
         }
         return resultBuilder.build();

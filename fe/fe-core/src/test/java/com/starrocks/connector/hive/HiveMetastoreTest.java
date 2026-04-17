@@ -181,6 +181,22 @@ public class HiveMetastoreTest {
     }
 
     @Test
+    public void testGetPartitionsByNamesThrowsWhenHmsReturnsPartialList() {
+        HiveMetaClient client = new MockedHiveMetaClient() {
+            @Override
+            public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
+                return super.getPartitionsByNames(dbName, tblName, Lists.newArrayList(partitionNames.get(0)));
+            }
+        };
+        HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
+        List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metastore.getPartitionsByNames("db1", "table1", partitionNames));
+        Assertions.assertTrue(e.getMessage().contains("Hive metastore did not return partition"));
+        Assertions.assertTrue(e.getMessage().contains("requested 2 partitions, got 1"));
+    }
+
+    @Test
     public void testGetTableStatistics() {
         HiveMetaClient client = new MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
