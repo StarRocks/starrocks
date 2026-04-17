@@ -1,0 +1,48 @@
+-- name: test_materialize_basic_types
+-- Test materialize() with basic scalar types
+select materialize(true);
+select materialize(cast(1 as tinyint));
+select materialize(cast(2 as smallint));
+select materialize(cast(3 as int));
+select materialize(cast(4 as bigint));
+select materialize(cast(5 as largeint));
+select materialize(cast(1.5 as float));
+select materialize(cast(2.5 as double));
+select materialize('hello');
+select materialize(cast('2024-01-01' as date));
+select materialize(cast('2024-01-01 12:00:00' as datetime));
+select materialize(cast(3.14 as decimal(10, 2)));
+select materialize(parse_json('{"a": 1}'));
+select materialize(cast('binary' as varbinary));
+
+-- name: test_materialize_null
+-- Test materialize() with NULL input
+select materialize(null);
+select materialize(cast(null as int));
+select materialize(cast(null as varchar));
+select materialize(cast(null as date));
+
+-- name: test_materialize_expression
+-- Test materialize() preserves expression results
+select materialize(1 + 2);
+select materialize(concat('hello', ' ', 'world'));
+select materialize(cast('2024-06-15' as date) > cast('2024-01-01' as date));
+
+-- name: test_materialize_nested
+-- Test nested materialize() calls
+select materialize(materialize(42));
+select materialize(materialize('nested'));
+
+-- name: test_materialize_on_table
+-- Test materialize() against table columns (predicate / select / aggregate)
+create database test_db_${uuid0};
+use test_db_${uuid0};
+create table t1 (c1 int, c2 varchar(64), c3 date) properties("replication_num" = "1");
+insert into t1 values (1, 'aaa', '2024-01-01'), (2, 'bbb', '2024-06-15'), (3, 'ccc', '2024-12-31');
+select * from t1 where materialize(c1) > 1 order by c1;
+select * from t1 where materialize(c2) = 'bbb';
+select * from t1 where materialize(c3) >= '2024-06-01' order by c1;
+select * from t1 where materialize(c1) in (1, 3) order by c1;
+select materialize(c1), materialize(c2), materialize(c3) from t1 order by c1;
+select sum(materialize(c1)), count(materialize(c2)) from t1;
+drop database test_db_${uuid0};

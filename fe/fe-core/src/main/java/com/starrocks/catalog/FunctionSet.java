@@ -309,6 +309,10 @@ public class FunctionSet {
     public static final String ISNOTNULL = "isnotnull";
     public static final String ASSERT_TRUE = "assert_true";
     public static final String HOST_NAME = "host_name";
+    // materialize: identity function that acts as an optimization barrier.
+    // Returns the input unchanged but is opaque to the FE optimizer,
+    // preventing constant folding, partition pruning, and other rewrites.
+    public static final String MATERIALIZE = "materialize";
     // NOTE: those functions are used to encode the fingerprint of the data, it is used to identify the data in the database.
     // Don't change the implementation of these functions, otherwise it may cause compatibility issues for incrmental mvs.
     public static final String ENCODE_SORT_KEY = "encode_sort_key";
