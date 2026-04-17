@@ -198,11 +198,13 @@ The partitioning method divides a table into multiple partitions. Partitioning p
 
 The bucketing method divides a partition into multiple buckets. Data in a bucket is referred to as a tablet.
 
-The supported bucketing methods are [random bucketing](#random-bucketing-since-v31) (from v3.1) and [hash bucketing](#hash-bucketing).
+The supported bucketing methods are [random bucketing](#random-bucketing-since-v31) (from v3.1), [hash bucketing](#hash-bucketing), and [range-based bucketing](#range-based-bucketing) (from v4.1).
 
 - Random bucketing: When creating a table or adding partitions, you do not need to set a bucketing key. Data within a partition is randomly distributed into different buckets.
 
 - Hash Bucketing: When creating a table or adding partitions, you need to specify a bucketing key. Data within the same partition is divided into buckets based on the values of the bucketing key, and rows with the same value in the bucketing key are distributed to the corresponding and unique bucket.
+
+- Range-based bucketing: From v4.1, if the FE configuration `enable_range_distribution` is enabled, a table that specifies an explicit key type or an `ORDER BY` clause but no `DISTRIBUTED BY` clause distributes data within a partition by the range of those columns. Tablets can be automatically split or merged to mitigate data skew. This semantic is disabled by default.
 
 The number of buckets: By default, StarRocks automatically sets the number of buckets (from v2.5.7). You can also manually set the number of buckets. For more information, please refer to [determining the number of buckets](#set-the-number-of-buckets).
 
