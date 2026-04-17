@@ -18,6 +18,7 @@
 #include <cstdlib>
 
 #include "common/logging.h"
+#include "fmt/format.h"
 
 namespace starrocks {
 

@@ -57,7 +57,7 @@ const std::string Connector::BINLOG = "binlog";
 const std::string Connector::ICEBERG = "iceberg";
 const std::string Connector::BENCHMARK = "benchmark";
 const std::string Connector::CACHE_STATS = "cache_stats";
-const std::string Connector::ADBC = "adbc";
+const std::string Connector::ADBC_CONN = "adbc";
 
 class ConnectorManagerInit {
 public:
@@ -75,7 +75,7 @@ public:
 #ifndef __APPLE__
         cm->put(Connector::ICEBERG, std::make_unique<IcebergConnector>());
 #endif
-        cm->put(Connector::ADBC, std::make_unique<ADBCConnector>());
+        cm->put(Connector::ADBC_CONN, std::make_unique<ADBCConnector>());
     }
 };
 

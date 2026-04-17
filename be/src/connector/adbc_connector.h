@@ -45,7 +45,7 @@ public:
     DataSourceProviderPtr create_data_source_provider(ConnectorScanNode* scan_node,
                                                       const TPlanNode& plan_node) const override;
 
-    ConnectorType connector_type() const override { return ConnectorType::ADBC; }
+    ConnectorType connector_type() const override { return ConnectorType::ADBC_CONN; }
 };
 
 class ADBCDataSource;
