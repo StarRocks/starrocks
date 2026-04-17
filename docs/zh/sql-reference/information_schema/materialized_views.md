@@ -37,3 +37,4 @@ displayed_sidebar: docs
 | CREATOR                              | 物化视图的创建者。                               |
 | LAST_REFRESH_PROCESS_TIME            | 最近一次刷新任务的处理时间。                     |
 | LAST_REFRESH_JOB_ID                  | 最近一次刷新任务的作业 ID。                      |
+| LAST_REFRESH_TIME                    | 物化视图已反映基表更新的最新时间。               |

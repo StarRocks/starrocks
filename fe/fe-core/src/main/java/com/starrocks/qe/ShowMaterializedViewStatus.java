@@ -354,7 +354,6 @@ public class ShowMaterializedViewStatus {
             status.setTaskId(task.getId());
             status.setTaskName(task.getName());
         }
-        // last refresh time (data version timestamp used for staleness check)
         if (refreshScheme != null) {
             status.setLastRefreshTime(refreshScheme.getLastRefreshTime());
         }
@@ -488,6 +487,14 @@ public class ShowMaterializedViewStatus {
         this.taskName = taskName;
     }
 
+    public long getLastRefreshTime() {
+        return lastRefreshTime;
+    }
+
+    public void setLastRefreshTime(long lastRefreshTime) {
+        this.lastRefreshTime = lastRefreshTime;
+    }
+
     public void setLastJobTaskRunStatus(List<TaskRunStatus> lastJobTaskRunStatus) {
         if (lastJobTaskRunStatus != null) {
             // sort by process start time
@@ -605,14 +612,6 @@ public class ShowMaterializedViewStatus {
         this.queryRewriteStatus = queryRewriteStatus;
     }
 
-    public long getLastRefreshTime() {
-        return lastRefreshTime;
-    }
-
-    public void setLastRefreshTime(long lastRefreshTime) {
-        this.lastRefreshTime = lastRefreshTime;
-    }
-
     /**
      * Return the thrift of show materialized views command from be's request.
      */
@@ -672,8 +671,8 @@ public class ShowMaterializedViewStatus {
         // creator
         status.setCreator(refreshJobStatus.getTaskOwner());
         // last refresh time (data version timestamp used for staleness check)
-        if (this.lastRefreshTime > 0) {
-            status.setLast_refresh_time(TimeUtils.longToTimeString(this.lastRefreshTime));
+        if (lastRefreshTime > 0) {
+            status.setLast_refresh_time(TimeUtils.longToTimeString(lastRefreshTime));
         }
 
         return status;
@@ -749,7 +748,7 @@ public class ShowMaterializedViewStatus {
         // last refresh job id
         addField(resultRow, refreshJobStatus.getJobId());
         // last refresh time (data version timestamp used for staleness check)
-        addField(resultRow, this.lastRefreshTime > 0 ? TimeUtils.longToTimeString(this.lastRefreshTime) : "");
+        addField(resultRow, lastRefreshTime > 0 ? TimeUtils.longToTimeString(lastRefreshTime) : "");
 
         return resultRow;
     }
