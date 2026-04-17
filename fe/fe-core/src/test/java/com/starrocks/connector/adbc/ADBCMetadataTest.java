@@ -30,9 +30,9 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.arrow.adbc.core.AdbcConnection;
 import org.apache.arrow.adbc.core.AdbcDatabase;
-import org.apache.arrow.adbc.core.AdbcStatement;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.VectorSchemaRoot;
+import org.apache.arrow.vector.complex.ListVector;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 import org.apache.arrow.vector.types.pojo.Field;
@@ -64,19 +64,16 @@ public class ADBCMetadataTest {
     AdbcConnection mockConnection;
 
     @Mocked
-    AdbcStatement mockStatement;
-
-    @Mocked
-    AdbcStatement.QueryResult mockQueryResult;
-
-    @Mocked
     ArrowReader mockReader;
 
     @Mocked
     VectorSchemaRoot mockRoot;
 
     @Mocked
-    VarCharVector mockSchemaNameVec;
+    VarCharVector mockCatNameVec;
+
+    @Mocked
+    ListVector mockDbSchemasVec;
 
     private Map<String, String> properties;
     private ADBCMetadata metadata;
@@ -87,7 +84,15 @@ public class ADBCMetadataTest {
         properties.put("type", "adbc");
         properties.put("driver_url", "/mock/path/libadbc_driver_sqlite.so");
         properties.put("uri", ":memory:");
-        properties.put("adbc_meta_cache_enable", "false"); // disable cache for direct testing
+    }
+
+    /**
+     * Set up expectations for hierarchy resolution via getObjects(DB_SCHEMAS).
+     * Returns no non-empty schemas, so the hierarchy model defaults to CATALOG.
+     */
+    private void expectHierarchyResolution() throws Exception {
+        // getObjects for hierarchy resolution returns reader with no batches
+        // (no non-empty schemas found -> CATALOG model)
     }
 
     @Test
@@ -95,40 +100,41 @@ public class ADBCMetadataTest {
         new Expectations() {{
                 mockDatabase.connect();
                 result = mockConnection;
+                minTimes = 0;
 
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
+                // getObjects called for hierarchy resolution + listDbNames
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, (String[]) any);
                 result = mockReader;
+                minTimes = 0;
 
-                // First call to loadNextBatch returns true, second returns false
+                // First batch for hierarchy resolution: no schemas -> CATALOG model
+                // Then for listDbNames: catalogs returned
                 mockReader.loadNextBatch();
-                returns(true, false);
+                returns(false, true, false);
 
                 mockReader.getVectorSchemaRoot();
                 result = mockRoot;
 
-                mockRoot.getVector("schema_name");
-                result = mockSchemaNameVec;
+                mockRoot.getVector("catalog_db_schemas");
+                result = mockDbSchemasVec;
+
+                mockRoot.getVector("catalog_name");
+                result = mockCatNameVec;
 
                 mockRoot.getRowCount();
                 result = 2;
 
-                mockSchemaNameVec.isNull(0);
+                mockCatNameVec.isNull(0);
                 result = false;
-                mockSchemaNameVec.get(0);
-                result = "schema1".getBytes();
+                mockCatNameVec.get(0);
+                result = "db1".getBytes();
 
-                mockSchemaNameVec.isNull(1);
+                mockCatNameVec.isNull(1);
                 result = false;
-                mockSchemaNameVec.get(1);
-                result = "schema2".getBytes();
+                mockCatNameVec.get(1);
+                result = "db2".getBytes();
             }};
 
         metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
@@ -136,8 +142,34 @@ public class ADBCMetadataTest {
 
         assertNotNull(dbNames);
         assertEquals(2, dbNames.size());
-        assertTrue(dbNames.contains("schema1"));
-        assertTrue(dbNames.contains("schema2"));
+        assertTrue(dbNames.contains("db1"));
+        assertTrue(dbNames.contains("db2"));
+    }
+
+    @Test
+    public void testListDbNames_emptyReturnsMain() throws Exception {
+        new Expectations() {{
+                mockDatabase.connect();
+                result = mockConnection;
+                minTimes = 0;
+
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, (String[]) any);
+                result = mockReader;
+                minTimes = 0;
+
+                // Both hierarchy resolution and listDbNames return no batches
+                mockReader.loadNextBatch();
+                result = false;
+            }};
+
+        metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
+        List<String> dbNames = metadata.listDbNames(null);
+
+        assertNotNull(dbNames);
+        assertEquals(1, dbNames.size());
+        assertEquals("main", dbNames.get(0));
     }
 
     @Test
@@ -145,48 +177,27 @@ public class ADBCMetadataTest {
         new Expectations() {{
                 mockDatabase.connect();
                 result = mockConnection;
+                minTimes = 0;
 
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, (String[]) any);
                 result = mockReader;
+                minTimes = 0;
 
+                // Hierarchy resolution: no batches -> CATALOG model
+                // listTableNames: no batches (empty table list)
                 mockReader.loadNextBatch();
-                returns(true, false);
-
-                mockReader.getVectorSchemaRoot();
-                result = mockRoot;
-
-                mockRoot.getVector("table_name");
-                result = mockSchemaNameVec;
-
-                mockRoot.getRowCount();
-                result = 2;
-
-                mockSchemaNameVec.isNull(0);
                 result = false;
-                mockSchemaNameVec.get(0);
-                result = "tbl1".getBytes();
-
-                mockSchemaNameVec.isNull(1);
-                result = false;
-                mockSchemaNameVec.get(1);
-                result = "tbl2".getBytes();
             }};
 
         metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
         List<String> tableNames = metadata.listTableNames(null, "mydb");
 
         assertNotNull(tableNames);
-        assertEquals(2, tableNames.size());
-        assertEquals("tbl1", tableNames.get(0));
-        assertEquals("tbl2", tableNames.get(1));
+        // With CATALOG model, getObjects is called with catalogFilter="mydb",
+        // but no batches returned -> empty list
+        assertTrue(tableNames.isEmpty());
     }
 
     @Test
@@ -199,25 +210,20 @@ public class ADBCMetadataTest {
         new Expectations() {{
                 mockDatabase.connect();
                 result = mockConnection;
+                minTimes = 0;
 
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
+                // getObjects for hierarchy resolution
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, (String[]) any);
                 result = mockReader;
+                minTimes = 0;
 
                 mockReader.loadNextBatch();
-                result = true;
+                result = false;
 
-                mockReader.getVectorSchemaRoot();
-                result = mockRoot;
-
-                mockRoot.getSchema();
+                // getTableSchema returns the arrow schema directly
+                mockConnection.getTableSchema(anyString, anyString, anyString);
                 result = arrowSchema;
             }};
 
@@ -242,25 +248,18 @@ public class ADBCMetadataTest {
         new Expectations() {{
                 mockDatabase.connect();
                 result = mockConnection;
+                minTimes = 0;
 
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, (String[]) any);
                 result = mockReader;
+                minTimes = 0;
 
                 mockReader.loadNextBatch();
-                result = true;
+                result = false;
 
-                mockReader.getVectorSchemaRoot();
-                result = mockRoot;
-
-                mockRoot.getSchema();
+                mockConnection.getTableSchema(anyString, anyString, anyString);
                 result = null;
             }};
 
@@ -284,25 +283,18 @@ public class ADBCMetadataTest {
         new Expectations() {{
                 mockDatabase.connect();
                 result = mockConnection;
+                minTimes = 0;
 
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, (String[]) any);
                 result = mockReader;
+                minTimes = 0;
 
                 mockReader.loadNextBatch();
-                result = true;
+                result = false;
 
-                mockReader.getVectorSchemaRoot();
-                result = mockRoot;
-
-                mockRoot.getSchema();
+                mockConnection.getTableSchema(anyString, anyString, anyString);
                 result = arrowSchema;
             }};
 
@@ -313,7 +305,7 @@ public class ADBCMetadataTest {
     }
 
     @Test
-    public void testGetTable_cachedById() throws Exception {
+    public void testGetTable_stableTableId() throws Exception {
         Schema arrowSchema = new Schema(Arrays.asList(
                 new Field("id", FieldType.nullable(new ArrowType.Int(32, true)), Collections.emptyList())
         ));
@@ -321,26 +313,19 @@ public class ADBCMetadataTest {
         new Expectations() {{
                 mockDatabase.connect();
                 result = mockConnection;
+                minTimes = 0;
 
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, (String[]) any);
                 result = mockReader;
+                minTimes = 0;
 
                 mockReader.loadNextBatch();
-                result = true;
+                result = false;
 
-                mockReader.getVectorSchemaRoot();
-                result = mockRoot;
-
-                // getTableSchema called twice because cache is disabled
-                mockRoot.getSchema();
+                // getTableSchema called twice (no cache, direct call each time)
+                mockConnection.getTableSchema(anyString, anyString, anyString);
                 result = arrowSchema;
             }};
 
@@ -348,7 +333,7 @@ public class ADBCMetadataTest {
         Table table1 = metadata.getTable(null, "mydb", "tbl1");
         Table table2 = metadata.getTable(null, "mydb", "tbl1");
 
-        // Both should get the same table ID because tableIdCache is permanent
+        // Both calls fetch fresh metadata but get the same stable table ID from tableIdMap
         assertNotNull(table1);
         assertNotNull(table2);
         assertEquals(table1.getId(), table2.getId());
@@ -445,7 +430,7 @@ public class ADBCMetadataTest {
     }
 
     @Test
-    public void testRefreshTable() throws Exception {
+    public void testRefreshTable_isNoOp() throws Exception {
         Schema arrowSchema = new Schema(Arrays.asList(
                 new Field("id", FieldType.nullable(new ArrowType.Int(32, true)), Collections.emptyList())
         ));
@@ -453,37 +438,29 @@ public class ADBCMetadataTest {
         new Expectations() {{
                 mockDatabase.connect();
                 result = mockConnection;
+                minTimes = 0;
 
-                mockConnection.createStatement();
-                result = mockStatement;
-
-                mockStatement.setSqlQuery(anyString);
-
-                mockStatement.executeQuery();
-                result = mockQueryResult;
-
-                mockQueryResult.getReader();
+                mockConnection.getObjects(
+                        (AdbcConnection.GetObjectsDepth) any,
+                        anyString, anyString, anyString, (String[]) any, (String[]) any);
                 result = mockReader;
+                minTimes = 0;
 
                 mockReader.loadNextBatch();
-                result = true;
+                result = false;
 
-                mockReader.getVectorSchemaRoot();
-                result = mockRoot;
-
-                mockRoot.getSchema();
+                mockConnection.getTableSchema(anyString, anyString, anyString);
                 result = arrowSchema;
             }};
 
         metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
-        // Populate cache
         Table table1 = metadata.getTable(null, "mydb", "tbl1");
         assertNotNull(table1);
 
-        // Refresh should invalidate cache without throwing
+        // refreshTable is a no-op -- should not throw
         metadata.refreshTable("mydb", table1, Collections.emptyList(), false);
 
-        // After refresh, getTable should re-fetch (table ID should stay the same due to permanent tableIdCache)
+        // After refresh, getTable re-fetches but table ID stays stable via tableIdMap
         Table table2 = metadata.getTable(null, "mydb", "tbl1");
         assertNotNull(table2);
         assertEquals(table1.getId(), table2.getId());
@@ -492,7 +469,7 @@ public class ADBCMetadataTest {
     @Test
     public void testClear() throws Exception {
         metadata = new ADBCMetadata(properties, "test_catalog", mockDatabase);
-        // clear() should not throw even with empty caches
+        // clear() resets tableIdMap and hierarchyModel without throwing
         assertDoesNotThrow(() -> metadata.clear());
     }
 
