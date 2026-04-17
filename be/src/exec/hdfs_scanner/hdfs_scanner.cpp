@@ -655,6 +655,16 @@ void HdfsScannerContext::update_min_max_columns() {
             updated_columns.emplace_back(column);
         }
     }
+    // When can_use_any_column is set, also drain reserved_field_slots (e.g. _pos, _row_id)
+    // into not_existed_slots.  reserved_field_slots are meta/hidden columns whose
+    // values are irrelevant to the min/max query result, so filling them with defaults
+    // is safe and allows can_use_min_max_optimization() to return true.
+    if (can_use_any_column) {
+        for (SlotDescriptor* slot_desc : reserved_field_slots) {
+            update_with_none_existed_slot(slot_desc);
+        }
+        reserved_field_slots.clear();
+    }
     materialized_columns.swap(updated_columns);
 }
 
