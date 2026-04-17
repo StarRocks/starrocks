@@ -159,8 +159,8 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — BE deletions (smoke tests, CMakeLists), build workaround reverts, .gitignore cleanup, BE GSD reference removal
-- [ ] 06-02-PLAN.md — FE cleanup (legacy detection, GSD refs, user->username rename), test infrastructure fix (delete IT, pure mock), partition TODOs
+- [x] 06-01-PLAN.md — BE deletions (smoke tests, CMakeLists), build workaround reverts, .gitignore cleanup, BE GSD reference removal
+- [x] 06-02-PLAN.md — FE cleanup (legacy detection, GSD refs, user->username rename), test infrastructure fix (delete IT, pure mock), partition TODOs
 - [ ] 06-03-PLAN.md — Cache removal (delete ADBCMetaCache, Config entries, rewrite ADBCMetadata), update ADBCMetadataTest
 
 ---
