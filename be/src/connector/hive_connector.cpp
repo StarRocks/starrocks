@@ -435,6 +435,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
     }
+    // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
+    // a partition column and a placeholder materialized column was injected to satisfy
+    // the "at least one materialized column" requirement.  We propagate this flag so that
+    // the scanner can avoid reading that placeholder column from the data file when
+    // min/max optimization is active.
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
@@ -704,8 +712,7 @@ Status HiveDataSource::_init_global_dicts(HdfsScannerParams* params) {
             std::stringstream ss;
             ss << "slot_id: " << slot->id() << " global dict: ";
             for (const auto& kv : dict_map) {
-                ss << "<" << kv.first << " " << kv.second << ">"
-                   << ", ";
+                ss << "<" << kv.first << " " << kv.second << ">" << ", ";
             }
             LOG(INFO) << ss.str();
 #endif
@@ -828,6 +835,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_file_pagecache = _use_file_pagecache;
 
     scanner_params.use_min_max_opt = _use_min_max_opt;
+    scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.use_count_opt = _use_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
     if (!_disable_column_access_path_hints && !_column_access_paths.empty()) {
