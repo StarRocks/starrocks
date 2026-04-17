@@ -32,11 +32,10 @@ namespace starrocks {
 // exceed UINT32_MAX.
 //
 // Intended usage modes
-//   1. Generic scalar access (get/set/push_back) for fallback paths that do
+//   1. Generic scalar access for fallback paths that do
 //      not know the final offset upper bound in advance.
 //   2. Width-resolved fast paths for callers that can decide small-vs-large
-//      storage once up front, via ensure_width_for_value() plus either
-//      visit_storage() for loops or the typed scalar helpers for scalar code.
+//      storage once up front, via ensure_width_for_value() plus visit_storage().
 //   3. Whole-buffer ownership transfer APIs for boundary/helper paths such as
 //      serde, builders, or column conversion.
 //
@@ -90,8 +89,8 @@ public:
 
     // For builders that know the final offset upper bound up front. This is
     // the primitive behind width-resolved fast paths: decide small-vs-large
-    // storage once, then enter either visit_storage() or typed scalar helpers
-    // without paying the generic per-element checks.
+    // storage once, then enter visit_storage() without paying generic
+    // per-element checks.
     ALWAYS_INLINE void ensure_width_for_value(uint64_t v) {
         if (UNLIKELY(!_large && v > std::numeric_limits<uint32_t>::max())) {
             _promote_to_large();
@@ -122,57 +121,6 @@ public:
         if (LIKELY(!_large)) return _u32.back();
         return _u64.back();
     }
-
-    // ========================= typed scalar fast paths =========================
-
-    // Direct small/large scalar accessors for callers that have already
-    // resolved width once and do not want the generic per-element checks in
-    // get/set/push_back. Prefer visit_storage() for loops over many elements;
-    // these helpers are mainly for scalar code that still benefits from
-    // width-specialized access.
-    ALWAYS_INLINE uint32_t get_small(size_t i) const {
-        DCHECK(!_large);
-        return _u32[i];
-    }
-
-    ALWAYS_INLINE uint64_t get_large(size_t i) const {
-        DCHECK(_large);
-        return _u64[i];
-    }
-
-    ALWAYS_INLINE uint32_t back_small() const {
-        DCHECK(!_large);
-        return _u32.back();
-    }
-
-    ALWAYS_INLINE uint64_t back_large() const {
-        DCHECK(_large);
-        return _u64.back();
-    }
-
-    ALWAYS_INLINE void set_small(size_t i, uint32_t v) {
-        DCHECK(!_large);
-        _u32[i] = v;
-    }
-
-    ALWAYS_INLINE void set_large(size_t i, uint64_t v) {
-        DCHECK(_large);
-        _u64[i] = v;
-    }
-
-    ALWAYS_INLINE void push_back_small(uint32_t v) {
-        DCHECK(!_large);
-        _u32.push_back(v);
-    }
-
-    ALWAYS_INLINE void push_back_large(uint64_t v) {
-        DCHECK(_large);
-        _u64.push_back(v);
-    }
-
-    ALWAYS_INLINE void emplace_back_small(uint32_t v) { push_back_small(v); }
-
-    ALWAYS_INLINE void emplace_back_large(uint64_t v) { push_back_large(v); }
 
     // ========================= size modifiers =========================
 
@@ -237,6 +185,14 @@ public:
 
     ALWAYS_INLINE void emplace_back(uint64_t v) { push_back(v); }
 
+    ALWAYS_INLINE void append_empty_values(size_t count) {
+        if (LIKELY(!_large)) {
+            _u32.insert(_u32.end(), count, _u32.back());
+        } else {
+            _u64.insert(_u64.end(), count, _u64.back());
+        }
+    }
+
     // ========================= bulk allocation helpers =========================
 
     // Replace the active storage with |n| uninitialized slots. Existing
@@ -281,9 +237,7 @@ public:
     // ========================= storage visitation =========================
 
     // For boundary paths or hot loops that need one-time width dispatch and
-    // direct typed buffer access. Prefer this over the scalar fast-path
-    // helpers when processing many offsets in a loop. Prefer the const
-    // overload where possible.
+    // direct typed buffer access. Prefer the const overload where possible.
     //
     // Usage:
     //   offsets.visit_storage([&](auto& buf) {
@@ -300,6 +254,16 @@ public:
     ALWAYS_INLINE decltype(auto) visit_storage(F&& f) const {
         if (LIKELY(!_large)) return f(_u32);
         return f(_u64);
+    }
+
+    template <typename Left, typename Right, typename F>
+    static ALWAYS_INLINE decltype(auto) visit_storage_pair(Left&& left, Right&& right, F&& f) {
+        return std::forward<Left>(left).visit_storage([&](auto&& left_buf) -> decltype(auto) {
+            return std::forward<Right>(right).visit_storage([&](auto&& right_buf) -> decltype(auto) {
+                return std::forward<F>(f)(std::forward<decltype(left_buf)>(left_buf),
+                                          std::forward<decltype(right_buf)>(right_buf));
+            });
+        });
     }
 
     // ========================= ownership transfer =========================
