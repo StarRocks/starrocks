@@ -59,6 +59,7 @@ set(EXEC_FILES
         ./exec/pipeline/schedule/observer_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/pipeline/multi_level_concurrent_queue_test.cpp
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
@@ -87,10 +88,6 @@ set(EXEC_FILES
         ./exec/schema_scanner/schema_fe_metrics_scanner_test.cpp
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
-        ./exec/stream/mem_state_table_test.cpp
-        ./exec/stream/stream_aggregator_test.cpp
-        ./exec/stream/stream_operators_test.cpp
-        ./exec/stream/stream_pipeline_test.cpp
         ./exec/tablet_info_test.cpp
         ./exec/agg_hash_map_test.cpp
         ./exec/hash_variant_test.cpp
@@ -264,7 +261,6 @@ set(EXEC_FILES
         ./io/fd_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
-        ./io/spill_block_manager_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./runtime/arrow_result_writer_test.cpp
         ./runtime/buffer_control_block_test.cpp
@@ -373,6 +369,8 @@ add_subdirectory(runtime)
 add_subdirectory(exprs)
 add_subdirectory(io)
 add_subdirectory(fs)
+add_subdirectory(http)
+add_subdirectory(spill)
 
 if (APPLE)
     set(TEST_EXTRA_SOURCES ${CMAKE_SOURCE_DIR}/src/service/macos_link_stubs.cpp)
@@ -452,6 +450,7 @@ SET(DW_TEST_FILES
     ./storage/lake/persistent_index_sstable_test.cpp
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
+    ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/replication_txn_manager_test.cpp
     ./storage/lake/rowset_test.cpp

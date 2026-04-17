@@ -96,6 +96,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.LabelAlreadyUsedException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.StarRocksException;
@@ -188,7 +189,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
-import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
 import com.starrocks.thrift.TAllocateAutoIncrementIdParam;
@@ -2954,11 +2954,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TMVReportEpochResponse mvReport(TMVMaintenanceTasks request) throws TException {
-        LOG.info("Recieve mvReport: {}", request);
-        if (!request.getTask_type().equals(MVTaskType.REPORT_EPOCH)) {
-            throw new TException("Only support report_epoch task");
-        }
-        GlobalStateMgr.getCurrentState().getMaterializedViewMgr().onReportEpoch(request);
+        LOG.warn("Ignore legacy mvReport request because {}: {}",
+                MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(), request);
         return new TMVReportEpochResponse();
     }
 

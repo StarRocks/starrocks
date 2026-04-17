@@ -142,8 +142,8 @@ public class MvTaskRunContext extends TaskRunContext {
     public Set<String> getExternalTableRealPartitionName(Table table, String mvPartitionName) {
         if (!table.isNativeTableOrMaterializedView()) {
             Preconditions.checkState(partitionTopology != null
-                    && partitionTopology.getExternalRefBaseTableMVPartitionMap().containsKey(table));
-            return partitionTopology.getExternalRefBaseTableMVPartitionMap().get(table).get(mvPartitionName);
+                    && partitionTopology.getRefBaseTableToCellMap().containsKey(table));
+            return partitionTopology.getRefBaseTableToCellMap().get(table).getSourceNames(mvPartitionName);
         } else {
             return Sets.newHashSet(mvPartitionName);
         }

@@ -43,9 +43,6 @@
 #include <sstream>
 #include <utility>
 
-#include "agent/agent_server.h"
-#include "agent/publish_version.h"
-#include "agent/task_worker_pool.h"
 #include "base/brpc/brpc.h"
 #include "base/concurrency/stopwatch.hpp"
 #include "base/failpoint/fail_point.h"
@@ -54,7 +51,6 @@
 #include "base/uid_util.h"
 #include "brpc/errno.pb.h"
 #include "cache/datacache.h"
-#include "column/stream_chunk.h"
 #include "common/compiler_util.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
@@ -67,13 +63,10 @@
 #include "exec/pipeline/lookup_request.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
-#include "exec/pipeline/stream_epoch_manager.h"
 #include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/MVMaintenance_types.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/buffer_control_block.h"
@@ -99,6 +92,9 @@ namespace starrocks {
 
 using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
+
+static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params);
+static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params);
 
 template <typename T>
 PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
@@ -354,6 +350,10 @@ void PInternalServiceImplBase<T>::_exec_batch_plan_fragments(google::protobuf::R
             return;
         }
     }
+    if (Status status = reject_legacy_stream_pipeline(*t_batch_requests); !status.ok()) {
+        status.to_protobuf(response->mutable_status());
+        return;
+    }
 
     bool is_pipeline = t_batch_requests->common_param.__isset.is_pipeline && t_batch_requests->common_param.is_pipeline;
     if (!is_pipeline) {
@@ -536,6 +536,25 @@ static void copy_result_from_thrift_to_protobuf(const TExecPlanFragmentResult& t
     }
 }
 
+static Status reject_legacy_stream_pipeline(const TExecPlanFragmentParams& params) {
+    if (params.__isset.is_stream_pipeline && params.is_stream_pipeline) {
+        return Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
+    }
+    return Status::OK();
+}
+
+static Status reject_legacy_stream_pipeline(const TExecBatchPlanFragmentsParams& params) {
+    if (params.__isset.common_param) {
+        RETURN_IF_ERROR(reject_legacy_stream_pipeline(params.common_param));
+    }
+    if (params.__isset.unique_param_per_instance) {
+        for (const auto& unique_param : params.unique_param_per_instance) {
+            RETURN_IF_ERROR(reject_legacy_stream_pipeline(unique_param));
+        }
+    }
+    return Status::OK();
+}
+
 template <typename T>
 void PInternalServiceImplBase<T>::get_load_replica_status(google::protobuf::RpcController* controller,
                                                           const PLoadReplicaStatusRequest* request,
@@ -557,6 +576,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl, 
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, request->attachment_protocol(), &t_request));
     }
+    RETURN_IF_ERROR(reject_legacy_stream_pipeline(t_request));
     // incremental scan ranges deployment.
     if (!t_request.__isset.fragment) {
         TExecPlanFragmentResult t_result;
@@ -1173,182 +1193,15 @@ void PInternalServiceImplBase<T>::submit_mv_maintenance_task(google::protobuf::R
                                                              PMVMaintenanceTaskResult* response,
                                                              google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
-    auto* cntl = static_cast<brpc::Controller*>(controller);
-    Status st = _submit_mv_maintenance_task(cntl);
+    (void)controller;
+    (void)request;
+
+    Status st = Status::NotSupported("Legacy incremental MV maintenance is no longer supported");
     if (!st.ok()) {
         LOG(WARNING) << "submit mv maintenance task failed, errmsg=" << st.message();
     }
     st.to_protobuf(response->mutable_status());
     return;
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_submit_mv_maintenance_task(brpc::Controller* cntl) {
-    auto ser_request = cntl->request_attachment().to_string();
-    TMVMaintenanceTasks t_request;
-    {
-        const auto* buf = (const uint8_t*)ser_request.data();
-        uint32_t len = ser_request.size();
-        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
-    }
-    LOG(INFO) << "[MV] mv maintenance task, query_id=" << t_request.query_id << ", mv_task_type:" << t_request.task_type
-              << ", db_name=" << t_request.db_name << ", mv_name=" << t_request.mv_name
-              << ", job_id=" << t_request.job_id << ", task_id=" << t_request.task_id
-              << ", signature=" << t_request.signature;
-    VLOG(2) << "[MV] mv maintenance task, plan=" << apache::thrift::ThriftDebugString(t_request);
-
-    auto mv_task_type = t_request.task_type;
-    const TUniqueId& query_id = t_request.query_id;
-
-    // Check the existence of job
-    auto query_ctx = _exec_env->query_context_mgr()->get(query_id);
-    if (mv_task_type != MVTaskType::START_MAINTENANCE && !query_ctx) {
-        std::string msg = fmt::format("execute maintenance task failed, query id not found:", print_id(query_id));
-        LOG(WARNING) << msg;
-        return Status::InternalError(msg);
-    }
-
-    switch (mv_task_type) {
-    case MVTaskType::START_MAINTENANCE: {
-        if (query_ctx) {
-            std::string msg = fmt::format("MV Job already existed: {}", print_id(query_id));
-            LOG(WARNING) << msg;
-            return Status::InternalError(msg);
-        }
-        RETURN_IF_ERROR(_mv_start_maintenance(t_request));
-        break;
-    }
-    case MVTaskType::START_EPOCH: {
-        RETURN_IF_ERROR(_mv_start_epoch(query_ctx, t_request));
-        break;
-    }
-    case MVTaskType::COMMIT_EPOCH: {
-        RETURN_IF_ERROR(_mv_commit_epoch(query_ctx, t_request));
-
-        auto& commit_epoch = t_request.commit_epoch;
-        auto& version_info = commit_epoch.partition_version_infos;
-        if (VLOG_ROW_IS_ON) {
-            std::stringstream version_str;
-            version_str << " version_info=[";
-            for (auto& part : version_info) {
-                version_str << part;
-            }
-            version_str << "]";
-            VLOG(2) << "MV commit_epoch: epoch=" << commit_epoch.epoch << version_str.str();
-        }
-
-        break;
-    }
-    // TODO(murphy)
-    // case MVTaskType: {
-    //     break;
-    // }
-    case MVTaskType::STOP_MAINTENANCE: {
-        // Find the fragment context for the specific MV job
-        TUniqueId query_id;
-        auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
-        if (!existing_query_ctx) {
-            return Status::InternalError(fmt::format("MV Job has been cancelled: {}.", print_id(query_id)));
-        }
-        auto stream_epoch_manager = existing_query_ctx->stream_epoch_manager();
-        RETURN_IF_ERROR(stream_epoch_manager->set_finished(_exec_env, existing_query_ctx.get()));
-        break;
-    }
-    default:
-        return Status::NotSupported(fmt::format("Unsupported MVTaskType: {}", mv_task_type));
-    }
-    return Status::OK();
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_mv_start_maintenance(const TMVMaintenanceTasks& task) {
-    RETURN_IF(!task.__isset.start_maintenance, Status::InternalError("must be start_maintenance task"));
-    auto& start_maintenance = task.start_maintenance;
-    auto& fragments = start_maintenance.fragments;
-    for (const auto& fragment : fragments) {
-        pipeline::FragmentExecutor fragment_executor;
-        RETURN_IF_ERROR(fragment_executor.prepare(_exec_env, fragment, fragment));
-        RETURN_IF_ERROR(fragment_executor.execute(_exec_env));
-    }
-
-    // Prepare EpochManager
-    const TUniqueId& query_id = task.query_id;
-    auto&& existing_query_ctx = _exec_env->query_context_mgr()->get(query_id);
-    if (!existing_query_ctx) {
-        LOG(WARNING) << "start maintenance failed, query id not found:" << print_id(query_id);
-        return Status::InternalError(fmt::format("MV Job has not been prepared: {}.", print_id(query_id)));
-    }
-    std::vector<pipeline::FragmentContext*> fragment_ctxs;
-    for (auto& fragment : fragments) {
-        auto fragment_instance_id = fragment.params.fragment_instance_id;
-        auto&& fragment_ctx = existing_query_ctx->fragment_mgr()->get(fragment_instance_id);
-        if (!fragment_ctx) {
-            LOG(WARNING) << "start_epoch maintenance failed, fragment instance id not found:"
-                         << print_id(fragment_instance_id);
-            return Status::InternalError(
-                    fmt::format("MV Job fragment_instance_id has been cancelled: {}.", print_id(fragment_instance_id)));
-        }
-        fragment_ctxs.push_back(fragment_ctx.get());
-    }
-    auto stream_epoch_manager = existing_query_ctx->stream_epoch_manager();
-    DCHECK(stream_epoch_manager);
-    auto maintenance_task = MVMaintenanceTaskInfo::from_maintenance_task(task);
-    RETURN_IF_ERROR(stream_epoch_manager->prepare(maintenance_task, fragment_ctxs));
-    return Status::OK();
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_mv_start_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                    const TMVMaintenanceTasks& task) {
-    RETURN_IF(!task.__isset.start_epoch, Status::InternalError("must be start_epoch task"));
-    auto& start_epoch_task = task.start_epoch;
-    auto stream_epoch_manager = query_ctx->stream_epoch_manager();
-    EpochInfo epoch_info = EpochInfo::from_start_epoch_task(start_epoch_task);
-    pipeline::ScanRangeInfo scan_info = pipeline::ScanRangeInfo::from_start_epoch_start(start_epoch_task);
-
-    std::vector<pipeline::FragmentContext*> fragment_ctxs;
-    for (auto& [fragment_instance_id, node_to_scan_ranges] : start_epoch_task.per_node_scan_ranges) {
-        // Find the fragment_ctx by fragment_instance_id;
-        auto&& fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id);
-        if (!fragment_ctx) {
-            LOG(WARNING) << "start_epoch maintenance failed, fragment instance id not found:"
-                         << print_id(fragment_instance_id);
-            return Status::InternalError(
-                    fmt::format("MV Job fragment_instance_id has been cancelled: {}.", print_id(fragment_instance_id)));
-        }
-        fragment_ctxs.push_back(fragment_ctx.get());
-    }
-
-    // Update state in the runtime state.
-    return stream_epoch_manager->start_epoch(_exec_env, query_ctx.get(), fragment_ctxs, epoch_info, scan_info);
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_mv_abort_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                    const TMVMaintenanceTasks& task) {
-    return Status::NotSupported("TODO");
-}
-
-template <typename T>
-Status PInternalServiceImplBase<T>::_mv_commit_epoch(const pipeline::QueryContextPtr& query_ctx,
-                                                     const TMVMaintenanceTasks& task) {
-    RETURN_IF(!task.__isset.commit_epoch, Status::InternalError("must be commit_epoch task"));
-    auto& commit_epoch_task = task.commit_epoch;
-    auto* agent_server = ExecEnv::GetInstance()->agent_server();
-    auto token =
-            agent_server->get_thread_pool(TTaskType::PUBLISH_VERSION)->new_token(ThreadPool::ExecutionMode::CONCURRENT);
-
-    std::unordered_set<DataDir*> affected_dirs;
-    TFinishTaskRequest finish_task_request;
-    finish_task_request.__set_backend(BackendOptions::get_localBackend());
-    finish_task_request.__set_report_version(curr_report_version());
-    TPublishVersionRequest publish_version_req;
-    publish_version_req.partition_version_infos = commit_epoch_task.partition_version_infos;
-    publish_version_req.transaction_id = commit_epoch_task.transaction_id;
-
-    run_publish_version_task(token.get(), publish_version_req, finish_task_request, affected_dirs, 0);
-    StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
-    return Status::OK();
 }
 
 template <typename T>

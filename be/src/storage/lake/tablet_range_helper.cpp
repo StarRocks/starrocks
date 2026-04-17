@@ -19,6 +19,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
+#include "column/raw_data_visitor.h"
 #include "column/schema.h"
 #include "common/logging.h"
 #include "fmt/format.h"
@@ -222,7 +223,9 @@ StatusOr<SstSeekRange> TabletRangeHelper::create_sst_seek_range_from(const Table
         if (pk_column->is_binary()) {
             return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
         } else {
-            return std::string(reinterpret_cast<const char*>(pk_column->raw_data()), pk_column->type_size());
+            RawDataVisitor visitor;
+            RETURN_IF_ERROR(pk_column->accept(&visitor));
+            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
         }
     };
 

@@ -72,8 +72,7 @@ public class MVPCTRefreshRangePartitionerTest {
                 PCellSortedSet.of(),
                 Maps.newHashMap(),
                 Maps.<Table, PCellSetMapping>newHashMap(),
-                mvToBaseNameRefs,
-                Maps.newHashMap()));
+                mvToBaseNameRefs));
         // TODO: make range cells
         List<PCellWithName> partitions = Arrays.asList(PCellWithName.of("mv_p1", new PCellNone()),
                 PCellWithName.of("mv_p2", new PCellNone()));

@@ -18,6 +18,7 @@
 #include "connector/file_chunk_sink.h"
 #include "exec/data_sink.h"
 #include "exec/hdfs_scanner/hdfs_scanner_text.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/sink/connector_sink_operator.h"
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
@@ -115,6 +116,14 @@ Status TableFunctionTableSink::decompose_to_pipeline(pipeline::OpFactories prev_
     }
     if (target_table.__isset.csv_include_header && target_table.csv_include_header) {
         sink_ctx->options[formats::CSVWriterOptions::INCLUDE_HEADER] = "true";
+    }
+    if (target_table.__isset.csv_enclose) {
+        sink_ctx->options[formats::CSVWriterOptions::ENCLOSE] =
+                std::string(1, static_cast<char>(target_table.csv_enclose));
+    }
+    if (target_table.__isset.csv_escape) {
+        sink_ctx->options[formats::CSVWriterOptions::ESCAPE] =
+                std::string(1, static_cast<char>(target_table.csv_escape));
     }
     if (target_table.__isset.parquet_use_legacy_encoding && target_table.parquet_use_legacy_encoding) {
         sink_ctx->options[formats::ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING] = "true";

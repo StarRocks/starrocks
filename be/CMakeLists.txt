@@ -543,6 +543,7 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
+    HttpClient
     IO
     Serde
     Storage
@@ -563,6 +564,7 @@ set(STARROCKS_LINK_LIBS
     ${WL_END_GROUP}
     ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     RuntimeCore
+    $<TARGET_FILE:HttpCore>
     $<TARGET_FILE:ChunkCore>
     $<TARGET_FILE:ColumnCore>
     $<TARGET_FILE:TypesCore>

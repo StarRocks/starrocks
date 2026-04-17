@@ -328,9 +328,7 @@ DEFINE_MATH_BINARY_WITH_OUTPUT_NAN_CHECK_FN_WITH_IMPL(atan2, TYPE_DOUBLE, TYPE_D
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal(FunctionContext* context, const Columns& columns) {
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const int size = columns[0]->size();
     ColumnViewer<Type> viewer(columns[0]);
@@ -371,9 +369,7 @@ template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_decimal<TYPE_DECIMA
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int(FunctionContext* context, const Columns& columns) {
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const int size = columns[0]->size();
     ColumnViewer<Type> viewer(columns[0]);
@@ -404,9 +400,7 @@ template StatusOr<ColumnPtr> MathFunctions::iceberg_truncate_int<TYPE_BIGINT>(Fu
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int(FunctionContext* context, const Columns& columns) {
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const int size = columns[0]->size();
     ColumnViewer<Type> viewer(columns[0]);
@@ -430,9 +424,7 @@ template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_INT>(Functio
 template StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_int<TYPE_BIGINT>(FunctionContext*, const Columns&);
 
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* context, const Columns& columns) {
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const int size = columns[0]->size();
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
@@ -453,9 +445,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_string(FunctionContext* contex
 }
 
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context, const Columns& columns) {
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const int size = columns[0]->size();
     ColumnViewer<TYPE_DATE> viewer(columns[0]);
@@ -476,9 +466,7 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_date(FunctionContext* context,
 }
 
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_datetime(FunctionContext* context, const Columns& columns) {
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const int size = columns[0]->size();
     ColumnViewer<TYPE_DATETIME> viewer(columns[0]);
@@ -527,9 +515,7 @@ template vector<uint8_t> MathFunctions::int_to_byte_array<int128_t>(int128_t val
 
 template <LogicalType Type>
 StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_decimal(FunctionContext* context, const Columns& columns) {
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return ColumnHelper::create_const_null_column(columns[0]->size());
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     const int size = columns[0]->size();
     ColumnViewer<Type> viewer(columns[0]);
@@ -740,11 +726,10 @@ template <DecimalRoundRule rule>
 StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const Columns& columns) {
     const auto& type = context->get_return_type();
 
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
     ColumnPtr c0 = columns[0];
     ColumnPtr c1 = columns[1];
-    if (c0->only_null() || c1->only_null()) {
-        return ColumnHelper::create_const_null_column(c0->size());
-    }
 
     NullColumn::MutablePtr null_flags;
     bool has_null = false;

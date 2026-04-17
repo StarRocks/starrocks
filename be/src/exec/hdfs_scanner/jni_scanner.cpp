@@ -528,7 +528,7 @@ std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOpti
     } else if (dynamic_cast<const HdfsTableDescriptor*>(hive_table)) {
         const auto* hdfs_table = down_cast<const HdfsTableDescriptor*>(hive_table);
         auto* partition_desc = hdfs_table->get_partition(scan_range.partition_id);
-        std::string partition_full_path = partition_desc->location();
+        std::string partition_full_path(partition_desc->location());
         data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
 
         hive_column_names = hdfs_table->get_hive_column_names();
@@ -583,7 +583,7 @@ std::unique_ptr<JniScanner> create_hudi_jni_scanner(const JniScanner::CreateOpti
     const auto& scan_range = *(options.scan_range);
     const auto* hudi_table = dynamic_cast<const HudiTableDescriptor*>(options.hive_table);
     auto* partition_desc = hudi_table->get_partition(scan_range.partition_id);
-    std::string partition_full_path = partition_desc->location();
+    std::string partition_full_path(partition_desc->location());
 
     std::string delta_file_paths;
     if (!scan_range.hudi_logs.empty()) {

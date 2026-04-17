@@ -36,6 +36,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_state.h"
 #include "runtime/runtime_state_helper.h"
 #include "util/global_metrics_registry.h"
 #include "util/thrift_rpc_helper.h"
@@ -57,7 +58,6 @@ QueryContext::QueryContext()
           _num_active_fragments(0),
           _wg_running_query_token_ptr(nullptr) {
     _sub_plan_query_statistics_recvr = std::make_shared<QueryStatisticsRecvr>();
-    _stream_epoch_manager = std::make_shared<StreamEpochManager>();
     _lifetime_sw.start();
 }
 

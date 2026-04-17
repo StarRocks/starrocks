@@ -30,36 +30,22 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
-import com.starrocks.planner.DataPartition;
-import com.starrocks.planner.OlapTableSink;
-import com.starrocks.planner.PlanFragment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.KeysType;
-import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.lang.reflect.Field;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
-
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.spy;
 
 public class MaterializedViewMgrEditLogTest {
     private static final String DB_NAME = "test_mv_mgr_editlog";
@@ -125,150 +111,54 @@ public class MaterializedViewMgrEditLogTest {
         baseTableInfos.add(baseTableInfo);
         mv.setBaseTableInfos(baseTableInfos);
         
-        // Set maintenance plan (required for MVMaintenanceJob)
-        ExecPlan execPlan = new ExecPlan();
-        mv.setMaintenancePlan(execPlan);
-        
         return mv;
     }
 
-    private CreateMaterializedViewStatement createCreateMaterializedViewStatement(MaterializedView mv) throws Exception {
-        // Create a mock CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = new CreateMaterializedViewStatement(
-                null, false, null, null, null, null, null, null, null, null, null, 0, 0, null, null);
-        
-        // Create ExecPlan with PlanFragment and OlapTableSink
-        ExecPlan execPlan = new ExecPlan();
-        PlanFragment fragment = new PlanFragment(new com.starrocks.planner.PlanFragmentId(1), null, DataPartition.UNPARTITIONED);
-        // Create OlapTableSink with required parameters
-        OlapTableSink tableSink = new OlapTableSink(mv, null, mv.getAllPartitionIds(),
-                TWriteQuorumType.MAJORITY, false, false, false);
-        fragment.setSink(tableSink);
-        execPlan.getFragments().add(fragment);
-        
-        // Set physicalPlan to avoid NullPointerException in IMTCreator.createIMT
-        // Create a simple OptExpression to satisfy IMTCreator.createIMT requirements
-        OptExpression physicalPlan = OptExpression.create(null);
-        Field physicalPlanField = ExecPlan.class.getDeclaredField("physicalPlan");
-        physicalPlanField.setAccessible(true);
-        physicalPlanField.set(execPlan, physicalPlan);
-        
-        // Set maintenance plan with ColumnRefFactory
-        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        stmt.setMaintenancePlan(execPlan, columnRefFactory);
-        return stmt;
+    private static MVMaintenanceJob createLegacyJob(MaterializedView mv) {
+        return new MVMaintenanceJob(mv);
+    }
+
+    private static void logLegacyJob(MaterializedViewMgr mvMgr, MVMaintenanceJob job) {
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        editLog.logMVJobState(job, wal -> {
+            try {
+                mvMgr.replay((MVMaintenanceJob) wal);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     @Test
-    public void testPrepareMaintenanceWorkJobAlreadyExists() throws Exception {
-        // Mock IMTCreator.createIMT to avoid exceptions during testing
-        new MockUp<IMTCreator>() {
-            @Mock
-            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) {
-                // Do nothing - skip IMT creation for testing
-            }
-        };
-
-        // 1. Create materialized view
+    public void testReplayLegacyJobFromEditLog() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
         db.registerTableUnlocked(mv);
 
-        // 2. Create CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
-
-        // 3. Create job first time
         MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
         MvId mvId = new MvId(DB_ID, MV_ID);
-        mvMgr.prepareMaintenanceWork(stmt, mv);
+        MVMaintenanceJob job = createLegacyJob(mv);
+        logLegacyJob(mvMgr, job);
 
-        // 4. Verify job was created
-        Assertions.assertNotNull(mvMgr.getJob(mvId), "Job should be created after first call");
-
-        // 5. Try to create job again - should fail silently (exception is caught)
-        // The method catches DdlException and removes the job from jobMap
-        mvMgr.prepareMaintenanceWork(stmt, mv);
-    }
-
-    @Test
-    public void testPrepareMaintenanceWorkNonIncremental() throws Exception {
-        // 1. Create materialized view with non-incremental refresh
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
-        // Change refresh type to non-incremental
-        MaterializedView.MvRefreshScheme refreshScheme = new MaterializedView.MvRefreshScheme();
-        refreshScheme.setType(MaterializedViewRefreshType.ASYNC);
-        mv.setRefreshScheme(refreshScheme);
-        db.registerTableUnlocked(mv);
-
-        // 2. Create CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
-
-        // 3. Call prepareMaintenanceWork - should return early for non-incremental MV
-        MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
-        mvMgr.prepareMaintenanceWork(stmt, mv);
-
-        // 4. Verify no job was created
-        MvId mvId = new MvId(DB_ID, MV_ID);
-        Assertions.assertNull(mvMgr.getJob(mvId), "Job should not be created for non-incremental MV");
-    }
-
-    @Test
-    public void testPrepareMaintenanceWorkReplay() throws Exception {
-        // Mock IMTCreator.createIMT to avoid exceptions during testing
-        new MockUp<IMTCreator>() {
-            @Mock
-            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) {
-                // Do nothing - skip IMT creation for testing
-            }
-        };
-
-        // 1. Create materialized view
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
-        MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
-        db.registerTableUnlocked(mv);
-
-        // 2. Create CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
-
-        // 3. Call prepareMaintenanceWork on master
-        MaterializedViewMgr masterMvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
-        MvId mvId = new MvId(DB_ID, MV_ID);
-        masterMvMgr.prepareMaintenanceWork(stmt, mv);
-
-        // 4. Verify master state - job was created
-        MVMaintenanceJob masterJob = masterMvMgr.getJob(mvId);
+        MVMaintenanceJob masterJob = mvMgr.getJob(mvId);
         Assertions.assertNotNull(masterJob, "Job should be created on master");
         Assertions.assertEquals(MV_ID, masterJob.getJobId());
         Assertions.assertEquals(DB_ID, masterJob.getDbId());
         Assertions.assertEquals(MV_ID, masterJob.getViewId());
         Assertions.assertEquals(MVMaintenanceJob.JobState.INIT, masterJob.getState());
 
-        // 5. Test follower replay
         MVMaintenanceJob replayJob = (MVMaintenanceJob) UtFrameUtils
                 .PseudoJournalReplayer.replayNextJournal(OperationType.OP_MV_JOB_STATE);
 
-        // Verify replay job
         Assertions.assertNotNull(replayJob);
         Assertions.assertEquals(MV_ID, replayJob.getJobId());
         Assertions.assertEquals(DB_ID, replayJob.getDbId());
         Assertions.assertEquals(MV_ID, replayJob.getViewId());
         Assertions.assertEquals(MVMaintenanceJob.JobState.INIT, replayJob.getState());
 
-        // 6. Create follower metastore and the same id objects, then replay
-        LocalMetastore followerMetastore = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        Database followerDb = new Database(DB_ID, DB_NAME);
-        followerMetastore.unprotectCreateDb(followerDb);
-
-        // Create materialized view with same ID
-        MaterializedView followerMv = createMaterializedView(MV_ID, MV_NAME);
-        followerDb.registerTableUnlocked(followerMv);
-
-        // Replay the operation
         MaterializedViewMgr followerMvMgr = new MaterializedViewMgr();
         followerMvMgr.replay(replayJob);
 
-        // 7. Verify follower state
         MVMaintenanceJob followerJob = followerMvMgr.getJob(mvId);
         Assertions.assertNotNull(followerJob, "Job should be created on follower after replay");
         Assertions.assertEquals(MV_ID, followerJob.getJobId());
@@ -276,7 +166,6 @@ public class MaterializedViewMgrEditLogTest {
         Assertions.assertEquals(MV_ID, followerJob.getViewId());
         Assertions.assertEquals(MVMaintenanceJob.JobState.INIT, followerJob.getState());
 
-        // Verify job properties match original
         Assertions.assertEquals(masterJob.getJobId(), followerJob.getJobId());
         Assertions.assertEquals(masterJob.getDbId(), followerJob.getDbId());
         Assertions.assertEquals(masterJob.getViewId(), followerJob.getViewId());
@@ -284,41 +173,80 @@ public class MaterializedViewMgrEditLogTest {
     }
 
     @Test
-    public void testPrepareMaintenanceWorkEditLogException() throws Exception {
-        // Mock IMTCreator.createIMT to avoid exceptions during testing
-        new MockUp<IMTCreator>() {
-            @Mock
-            public static void createIMT(CreateMaterializedViewStatement stmt, MaterializedView view) {
-                // Do nothing - skip IMT creation for testing
-            }
-        };
-
-        // 1. Create materialized view
+    public void testLoadLegacyJobFromImage() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
         db.registerTableUnlocked(mv);
 
-        // 2. Create CreateMaterializedViewStatement with maintenance plan
-        CreateMaterializedViewStatement stmt = createCreateMaterializedViewStatement(mv);
-
-        // 3. Mock EditLog.logMVJobState to throw exception
-        EditLog currentEditLog = GlobalStateMgr.getCurrentState().getEditLog();
-        EditLog spyEditLog = spy(currentEditLog);
-        doThrow(new RuntimeException("EditLog write failed"))
-            .when(spyEditLog).logMVJobState(any(MVMaintenanceJob.class), any());
-
-        // Temporarily set spy EditLog
-        GlobalStateMgr.getCurrentState().setEditLog(spyEditLog);
-
-        // 4. Verify initial state - no job in MaterializedViewMgr
         MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
         MvId mvId = new MvId(DB_ID, MV_ID);
-        Assertions.assertNull(mvMgr.getJob(mvId), "Job should not exist initially");
+        MVMaintenanceJob masterJob = createLegacyJob(mv);
+        mvMgr.replay(masterJob);
 
-        // 5. Execute prepareMaintenanceWork - exception is caught internally, so it won't throw
-        // But the job should not be added to jobMap if EditLog fails
-        mvMgr.prepareMaintenanceWork(stmt, mv);
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        mvMgr.save(image.getImageWriter());
 
-        Assertions.assertNull(mvMgr.getJob(mvId));
+        MaterializedViewMgr restoredMvMgr = new MaterializedViewMgr();
+        restoredMvMgr.load(image.getMetaBlockReader());
+
+        MVMaintenanceJob restoredJob = restoredMvMgr.getJob(mvId);
+        Assertions.assertNotNull(restoredJob, "Job should be restored from image");
+        Assertions.assertEquals(masterJob.getJobId(), restoredJob.getJobId());
+        Assertions.assertEquals(masterJob.getDbId(), restoredJob.getDbId());
+        Assertions.assertEquals(masterJob.getViewId(), restoredJob.getViewId());
+        Assertions.assertEquals(masterJob.getState(), restoredJob.getState());
+    }
+
+    @Test
+    public void testReplayLegacyEpochFromEditLog() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
+        db.registerTableUnlocked(mv);
+
+        MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
+        MvId mvId = new MvId(DB_ID, MV_ID);
+        mvMgr.replay(createLegacyJob(mv));
+
+        MVEpoch epoch = new MVEpoch(mvId);
+        epoch.setState(MVEpoch.EpochState.COMMITTED);
+        GlobalStateMgr.getCurrentState().getEditLog().logMVEpochChange(epoch);
+
+        MVEpoch replayEpoch = (MVEpoch) UtFrameUtils.PseudoJournalReplayer
+                .replayNextJournal(OperationType.OP_MV_EPOCH_UPDATE);
+        Assertions.assertNotNull(replayEpoch);
+        Assertions.assertEquals(MVEpoch.EpochState.COMMITTED, replayEpoch.getState());
+
+        MaterializedViewMgr followerMvMgr = new MaterializedViewMgr();
+        followerMvMgr.replay(createLegacyJob(mv));
+        followerMvMgr.replayEpoch(replayEpoch);
+
+        Assertions.assertEquals(MVEpoch.EpochState.COMMITTED, followerMvMgr.getJob(mvId).getEpoch().getState());
+    }
+
+    @Test
+    public void testLoadLegacyJobWithMissingTargetMvSkipsJobAndEpochReplay() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        MaterializedView mv = createMaterializedView(MV_ID, MV_NAME);
+        db.registerTableUnlocked(mv);
+
+        MaterializedViewMgr mvMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr();
+        MvId mvId = new MvId(DB_ID, MV_ID);
+        mvMgr.replay(createLegacyJob(mv));
+
+        UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
+        mvMgr.save(image.getImageWriter());
+
+        db.dropTable(mv.getName());
+
+        MaterializedViewMgr restoredMvMgr = new MaterializedViewMgr();
+        restoredMvMgr.load(image.getMetaBlockReader());
+
+        Assertions.assertNull(restoredMvMgr.getJob(mvId), "Missing target MV should skip legacy job restore");
+
+        MVEpoch epoch = new MVEpoch(mvId);
+        epoch.setState(MVEpoch.EpochState.COMMITTED);
+        restoredMvMgr.replayEpoch(epoch);
+
+        Assertions.assertNull(restoredMvMgr.getJob(mvId), "Epoch replay should remain a no-op for skipped legacy jobs");
     }
 }

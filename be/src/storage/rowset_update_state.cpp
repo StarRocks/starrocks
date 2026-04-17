@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
@@ -90,7 +91,6 @@ Status RowsetUpdateState::_load_deletes(Rowset* rowset, uint32_t idx, Column* pk
     auto col = pk_column->clone();
     const auto* end = read_buffer.data() + read_buffer.size();
     RETURN_IF_ERROR(serde::ColumnArraySerde::deserialize(read_buffer.data(), end, col.get()));
-    TRY_CATCH_BAD_ALLOC(col->raw_data());
     _memory_usage += col != nullptr ? col->memory_usage() : 0;
     _deletes[idx] = std::move(col);
     return Status::OK();
@@ -150,10 +150,6 @@ Status RowsetUpdateState::_load_upserts(Rowset* rowset, uint32_t idx, Column* pk
         itr->close();
     }
     dest = std::move(col);
-    // This is a little bit trick. If pk column is a binary column, we will call function `raw_data()` in the following
-    // And the function `raw_data()` will build slice of pk column which will increase the memory usage of pk column
-    // So we try build slice in advance in here to make sure the correctness of memory statistics
-    TRY_CATCH_BAD_ALLOC(dest->raw_data());
     _memory_usage += dest != nullptr ? dest->memory_usage() : 0;
 
     return Status::OK();
@@ -552,8 +548,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
     */
     _auto_increment_partial_update_states[idx].delete_pks = _upserts[idx]->clone_empty();
     std::vector<uint32_t> delete_idxes;
-    const auto* data =
-            reinterpret_cast<const int64*>(_auto_increment_partial_update_states[idx].write_column->raw_data());
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_auto_increment_partial_update_states[idx].write_column->accept(&visitor));
+    const auto* data = reinterpret_cast<const int64*>(visitor.result());
 
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user

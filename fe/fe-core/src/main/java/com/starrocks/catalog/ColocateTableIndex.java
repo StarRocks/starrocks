@@ -43,6 +43,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.PlacementPolicy;
+import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ColocatePropertyInfo;
@@ -145,8 +147,9 @@ public class ColocateTableIndex implements Writable {
     @SerializedName("crm")
     private ColocateRangeMgr colocateRangeMgr = new ColocateRangeMgr();
 
-    // lake group, in memory
-    private final Set<GroupId> lakeGroups = Sets.newHashSet();
+    // Colocate groups that use StarOS MetaGroup (hash colocate lake tables only), in memory.
+    // Range colocate uses PACK shard groups instead.
+    private final Set<GroupId> metaGroups = Sets.newHashSet();
 
     private final transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
@@ -179,13 +182,21 @@ public class ColocateTableIndex implements Writable {
     }
 
     public boolean addTableToGroup(Database db,
-                                   OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
+                                   OlapTable olapTable, String colocateGroup, boolean afterTabletCreation)
             throws DdlException {
         if (Strings.isNullOrEmpty(colocateGroup)) {
             return false;
         }
 
-        if (olapTable.isCloudNativeTableOrMaterializedView() != expectLakeTable) {
+        boolean isLakeTable = olapTable.isCloudNativeTableOrMaterializedView();
+        boolean isRangeColocate = olapTable.getDefaultDistributionInfo().getType()
+                == DistributionInfoType.RANGE;
+        // Hash colocate lake tables: handle after tablet creation,
+        //   because MetaGroup creation needs shard group IDs.
+        // All others (non-lake tables, range colocate lake tables): handle before tablet creation,
+        //   because range colocate needs PACK shard group to exist before tablets are created.
+        boolean requiresAfterTabletCreation = isLakeTable && !isRangeColocate;
+        if (requiresAfterTabletCreation != afterTabletCreation) {
             return false;
         }
 
@@ -234,7 +245,13 @@ public class ColocateTableIndex implements Writable {
 
             if (groupName2Id.containsKey(fullGroupName)) {
                 groupId = groupName2Id.get(fullGroupName);
-                group2Schema.get(groupId).checkColocateSchema(tbl, colocateGroup);
+                ColocateGroupSchema existingSchema = group2Schema.get(groupId);
+                existingSchema.checkColocateSchema(tbl, colocateGroup);
+                // Fail fast if range colocate metadata is missing (e.g., not yet restored via image/edit log)
+                if (existingSchema.isRangeColocate() && !colocateRangeMgr.containsColocateGroup(groupId.grpId)) {
+                    throw new DdlException("Range colocate group '" + colocateGroup
+                            + "' exists but colocate range metadata is missing");
+                }
             } else {
                 if (assignedGroupId != null) {
                     // use the given group id, eg, in replay process or cross db colocation
@@ -253,9 +270,14 @@ public class ColocateTableIndex implements Writable {
                             0, tbl.getDefaultReplicationNum(),
                             distributionInfo.getType());
 
-                    if (!colocateRangeMgr.containsColocateGroup(groupId.grpId)) {
-                        // TODO: create actual PACK shard group via StarOSAgent
-                        colocateRangeMgr.initColocateGroup(groupId.grpId, 0);
+                    if (!isReplay && !colocateRangeMgr.containsColocateGroup(groupId.grpId)) {
+                        long packShardGroupId = GlobalStateMgr.getCurrentState()
+                                .getStarOSAgent().createShardGroup(
+                                        dbId, tbl.getId(),
+                                        0 /* partitionId: not partition-specific */,
+                                        0 /* indexId: not index-specific */,
+                                        PlacementPolicy.PACK);
+                        colocateRangeMgr.initColocateGroup(groupId.grpId, packShardGroupId);
                     }
                 } else if (distributionInfo instanceof HashDistributionInfo) {
                     HashDistributionInfo hashDistInfo = (HashDistributionInfo) distributionInfo;
@@ -286,8 +308,8 @@ public class ColocateTableIndex implements Writable {
                     && tbl.isCloudNativeTableOrMaterializedView()) {
                 if (!isReplay) { // leader create or update meta group
                     List<Long> shardGroupIds = tbl.getShardGroupIds();
-                    // check the group existence in lakeGroups
-                    boolean groupAlreadyExist = lakeGroups.stream().anyMatch(gid -> Objects.equals(gid.grpId, groupId.grpId));
+                    // check the group existence in metaGroups
+                    boolean groupAlreadyExist = metaGroups.stream().anyMatch(gid -> Objects.equals(gid.grpId, groupId.grpId));
                     if (!groupAlreadyExist) {
                         GlobalStateMgr.getCurrentState().getStarOSAgent().createMetaGroup(groupId.grpId, shardGroupIds);
                     } else {
@@ -295,7 +317,7 @@ public class ColocateTableIndex implements Writable {
                                 .updateMetaGroup(groupId.grpId, shardGroupIds, true /* isJoin */);
                     }
                 }
-                lakeGroups.add(groupId);
+                metaGroups.add(groupId);
             }
 
             group2Tables.put(groupId, tbl.getId());
@@ -385,12 +407,16 @@ public class ColocateTableIndex implements Writable {
             GroupId groupId = table2Group.remove(tableId);
 
             if (tbl != null && tbl.isCloudNativeTableOrMaterializedView() && !isReplay) {
-                List<Long> shardGroupIds = tbl.getShardGroupIds();
-                try {
-                    GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
-                            false /* isJoin */);
-                } catch (DdlException e) {
-                    LOG.error(e.getMessage(), e);
+                // Range colocate uses PACK shard groups instead of MetaGroup, skip.
+                ColocateGroupSchema schema = group2Schema.get(groupId);
+                if (schema == null || !schema.isRangeColocate()) {
+                    List<Long> shardGroupIds = tbl.getShardGroupIds();
+                    try {
+                        GlobalStateMgr.getCurrentState().getStarOSAgent().updateMetaGroup(groupId.grpId, shardGroupIds,
+                                false /* isJoin */);
+                    } catch (DdlException e) {
+                        LOG.error(e.getMessage(), e);
+                    }
                 }
             }
 
@@ -400,7 +426,7 @@ public class ColocateTableIndex implements Writable {
                 group2BackendsPerBucketSeq.remove(groupId);
                 group2Schema.remove(groupId);
                 unstableGroups.remove(groupId);
-                lakeGroups.remove(groupId);
+                metaGroups.remove(groupId);
                 String fullGroupName = null;
                 for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
                     if (entry.getValue().equals(groupId)) {
@@ -422,7 +448,7 @@ public class ColocateTableIndex implements Writable {
     public boolean isGroupUnstable(GroupId groupId) {
         readLock();
         try {
-            if (lakeGroups.contains(groupId)) {
+            if (metaGroups.contains(groupId)) {
                 return !GlobalStateMgr.getCurrentState().getStarOSAgent().queryMetaGroupStable(groupId.grpId);
             } else {
                 return unstableGroups.contains(groupId);
@@ -441,14 +467,14 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public boolean isLakeColocateTable(long tableId) {
+    public boolean isMetaGroupColocateTable(long tableId) {
         readLock();
         try {
             GroupId groupId = table2Group.get(tableId);
             if (groupId == null) {
                 return false;
             }
-            return lakeGroups.contains(groupId);
+            return metaGroups.contains(groupId);
         } finally {
             readUnlock();
         }
@@ -807,7 +833,7 @@ public class ColocateTableIndex implements Writable {
         this.colocateRangeMgr = data.colocateRangeMgr != null ? data.colocateRangeMgr : new ColocateRangeMgr();
 
         cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
-        constructLakeGroups(GlobalStateMgr.getCurrentState());
+        constructMetaGroups(GlobalStateMgr.getCurrentState());
         LOG.info("finished replay colocateTableIndex from image");
     }
 
@@ -1064,6 +1090,12 @@ public class ColocateTableIndex implements Writable {
                 groupId = table2Group.get(olapTable.getId());
             }
 
+            // Range colocate uses PACK shard groups instead of MetaGroup, skip.
+            ColocateGroupSchema schema = group2Schema.get(groupId);
+            if (schema != null && schema.isRangeColocate()) {
+                return;
+            }
+
             List<Long> shardGroupIds = olapTable.getShardGroupIds();
             LOG.info("update meta group id {}, table {}, shard groups: {}, join: {}",
                     groupId.grpId, olapTable.getId(), shardGroupIds, isJoin);
@@ -1073,7 +1105,7 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
+    private void constructMetaGroups(GlobalStateMgr globalStateMgr) {
         if (RunMode.isSharedNothingMode()) {
             return;
         }
@@ -1085,7 +1117,13 @@ public class ColocateTableIndex implements Writable {
             Database database = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
             Table table = globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(database, tableId);
             if (table.isCloudNativeTableOrMaterializedView()) {
-                lakeGroups.add(entry.getValue());
+                // metaGroups tracks hash colocate groups that use MetaGroup.
+                // Range colocate uses PACK shard groups instead, skip.
+                ColocateGroupSchema schema = group2Schema.get(entry.getValue());
+                if (schema != null && schema.isRangeColocate()) {
+                    continue;
+                }
+                metaGroups.add(entry.getValue());
             }
         }
     }

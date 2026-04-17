@@ -72,8 +72,7 @@ public class PCTRefreshScopeCalculatorTest {
                 PCellSortedSet.of(),
                 Maps.newHashMap(),
                 Maps.newHashMap(),
-                mvToBasePartitions,
-                Maps.newHashMap());
+                mvToBasePartitions);
 
         Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = new LinkedHashMap<>();
         snapshotBaseTables.put(1L, snapshotInfoA);
@@ -113,8 +112,7 @@ public class PCTRefreshScopeCalculatorTest {
                 PCellSortedSet.of(),
                 Maps.newHashMap(),
                 Maps.newHashMap(),
-                mvToBasePartitions,
-                Maps.newHashMap());
+                mvToBasePartitions);
 
         Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = Map.of(1L, snapshotInfo);
 
@@ -162,8 +160,7 @@ public class PCTRefreshScopeCalculatorTest {
                 PCellSortedSet.of(),
                 Maps.newHashMap(),
                 Maps.newHashMap(),
-                mvToBasePartitions,
-                Maps.newHashMap());
+                mvToBasePartitions);
 
         Map<Long, BaseTableSnapshotInfo> snapshotBaseTables = new LinkedHashMap<>();
         snapshotBaseTables.put(1L, snapshotInfoA);

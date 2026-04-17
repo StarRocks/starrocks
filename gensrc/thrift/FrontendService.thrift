@@ -1002,6 +1002,8 @@ struct TStreamLoadPutRequest {
     54: optional byte escape
     55: optional Types.TPartialUpdateMode partial_update_mode
     56: optional string payload_compression_type
+    // CDC envelope format
+    57: optional PlanNodes.TEnvelopeType envelope
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse

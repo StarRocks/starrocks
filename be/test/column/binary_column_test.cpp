@@ -392,9 +392,8 @@ PARALLEL_TEST(BinaryColumnTest, test_reserve) {
     auto c1 = BinaryColumn::create();
     c1->reserve(10, 40);
 
-    ASSERT_FALSE(c1->_slices_cache);
-    ASSERT_EQ(c1->_offsets.capacity(), 11);
-    ASSERT_EQ(c1->_bytes.capacity(), 40);
+    ASSERT_EQ(c1->get_offset().capacity(), 11);
+    ASSERT_EQ(c1->get_bytes().capacity(), 40);
 }
 
 // NOLINTNEXTLINE

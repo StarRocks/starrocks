@@ -19,6 +19,8 @@
 
 #include "base/utility/pretty_printer.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "gutil/stl_util.h"
@@ -63,6 +65,8 @@ struct MergeEntry {
     // rssid_rowids will be empty, when `need_rssid_rowids` is false.
     bool need_rssid_rowids = false;
     std::vector<uint64_t> rssid_rowids;
+    // TODO: Remove slice buf
+    Buffer<Slice> _slice_buf; // used only when T == Slice
 
     MergeEntry() = default;
     ~MergeEntry() { close(); }
@@ -128,7 +132,14 @@ struct MergeEntry {
             DCHECK(chunk_pk_column->size() > 0);
             DCHECK(chunk_pk_column->size() == chunk->num_rows());
             // 2. setup pk cursor
-            pk_start = reinterpret_cast<const T*>(chunk_pk_column->raw_data());
+            if constexpr (std::is_same_v<T, Slice>) {
+                ColumnHelper::build_slices(chunk_pk_column.get(), _slice_buf);
+                pk_start = _slice_buf.data();
+            } else {
+                RawDataVisitor visitor;
+                RETURN_IF_ERROR(chunk_pk_column->accept(&visitor));
+                pk_start = reinterpret_cast<const T*>(visitor.result());
+            }
             pk_cur = pk_start;
             pk_last = pk_start + chunk_pk_column->size() - 1;
             return Status::OK();

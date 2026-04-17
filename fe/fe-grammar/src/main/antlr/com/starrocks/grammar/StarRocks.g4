@@ -2443,7 +2443,7 @@ limitElement
 querySpecification
     : SELECT setQuantifier? selectItem (',' selectItem)*
       fromClause
-      ((WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?
+      ((WHERE where=expression)? (GROUP BY (groupByAll=ALL | groupingElement))? (HAVING having=expression)?
        (QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?)
     ;
 
@@ -3048,7 +3048,6 @@ alterModifyDefaultBuckets
 refreshSchemeDesc
     : REFRESH (IMMEDIATE | DEFERRED)? (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
-    | INCREMENTAL
     | MANUAL)
     ;
 

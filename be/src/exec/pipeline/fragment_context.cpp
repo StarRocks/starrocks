@@ -29,9 +29,11 @@
 #include "exec/data_sink.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/timeout_tasks.h"
-#include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/pipeline_executor_set.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/batch_write/batch_write_mgr.h"
@@ -457,26 +459,6 @@ TQueryType::type FragmentContext::query_type() const {
         return TQueryType::EXTERNAL;
     }
     return _runtime_state->query_options().query_type;
-}
-
-Status FragmentContext::reset_epoch() {
-    _num_finished_epoch_pipelines = 0;
-    const std::function<Status(Pipeline*)> caller = [this](Pipeline* pipeline) {
-        RETURN_IF_ERROR(_runtime_state->reset_epoch());
-        RETURN_IF_ERROR(pipeline->reset_epoch(_runtime_state.get()));
-        return Status::OK();
-    };
-    return iterate_pipeline(caller);
-}
-
-void FragmentContext::count_down_epoch_pipeline(RuntimeState* state, size_t val) {
-    size_t total_execution_groups = _execution_groups.size();
-    bool all_groups_finished = _num_finished_epoch_pipelines.fetch_add(val) + val == total_execution_groups;
-    if (!all_groups_finished) {
-        return;
-    }
-
-    state->query_ctx()->stream_epoch_manager()->count_down_fragment_ctx(state, this);
 }
 
 void FragmentContext::init_jit_profile() {

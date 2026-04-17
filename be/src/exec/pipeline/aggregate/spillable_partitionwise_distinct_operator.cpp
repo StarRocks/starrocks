@@ -16,6 +16,7 @@
 #include "exec/pipeline/aggregate/spillable_partitionwise_distinct_operator.h"
 
 #include "base/failpoint/fail_point.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state_helper.h"
 
 namespace starrocks::pipeline {

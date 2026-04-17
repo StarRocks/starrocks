@@ -48,6 +48,7 @@
 #include "column/column_helper.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "common/statusor.h"
@@ -812,7 +813,9 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
         size_t op_column_id = chunk->num_columns() - 1;
         const auto& op_col = chunk->get_column_by_index(op_column_id);
-        auto* ops = reinterpret_cast<const uint8_t*>(op_col->raw_data());
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(op_col->accept(&visitor));
+        const auto* ops = visitor.result();
         size_t row = chunk->num_rows();
 
         for (size_t i = 0; i < row; ++i) {
@@ -1192,16 +1195,6 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
             }
         }
     }
-}
-
-Status OlapTableSink::reset_epoch(RuntimeState* state) {
-    pipeline::StreamEpochManager* stream_epoch_manager = state->query_ctx()->stream_epoch_manager();
-    DCHECK(stream_epoch_manager);
-    _txn_id = stream_epoch_manager->epoch_info().txn_id;
-    _channels.clear();
-    _node_channels.clear();
-    _failed_channels.clear();
-    return Status::OK();
 }
 
 } // namespace starrocks

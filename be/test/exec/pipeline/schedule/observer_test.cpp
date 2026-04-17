@@ -27,15 +27,20 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/empty_set_operator.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/noop_sink_operator.h"
+#include "exec/pipeline/pipeline.h"
 #include "exec/pipeline/pipeline_driver.h"
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/pipeline_driver_queue.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/query_context.h"
+#include "exec/pipeline/schedule/event_scheduler.h"
 #include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/pipeline/schedule/utils.h"
 #include "gtest/gtest.h"
 #include "runtime/exec_env.h"
+#include "runtime/runtime_state.h"
 
 #pragma GCC push_options
 #pragma GCC optimize("no-inline")

@@ -57,17 +57,18 @@ import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.UnionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
-import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaAggregateRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaFilterRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaIcebergScanRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaJoinRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaProjectRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmDeltaUnionRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionAggregateRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionFilterRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionIcebergScanRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionJoinRule;
 import com.starrocks.sql.optimizer.rule.ivm.IvmVersionProjectRule;
+import com.starrocks.sql.optimizer.rule.ivm.IvmVersionUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
@@ -445,10 +446,14 @@ public class RuleSet {
     public static final Rule IVM_DELTA_REWRITE_RULES =
             new CombinationRule(RuleType.GP_IVM_DELTA_REWRITE, ImmutableList.of(
                     new IvmDeltaAggregateRule(),
+                    new IvmDeltaJoinRule(),
+                    new IvmDeltaUnionRule(),
                     new IvmDeltaIcebergScanRule(),
                     new IvmDeltaFilterRule(),
                     new IvmDeltaProjectRule(),
                     new IvmVersionAggregateRule(),
+                    new IvmVersionJoinRule(),
+                    new IvmVersionUnionRule(),
                     new IvmVersionIcebergScanRule(),
                     new IvmVersionFilterRule(),
                     new IvmVersionProjectRule()
@@ -504,12 +509,6 @@ public class RuleSet {
 
     public List<Rule> getImplementRules() {
         return implementRules;
-    }
-
-    public void addRealtimeMVRules() {
-        this.implementRules.add(StreamJoinImplementationRule.getInstance());
-        this.implementRules.add(StreamAggregateImplementationRule.getInstance());
-        this.implementRules.add(StreamScanImplementationRule.getInstance());
     }
 
     public void addHashJoinImplementationRule() {

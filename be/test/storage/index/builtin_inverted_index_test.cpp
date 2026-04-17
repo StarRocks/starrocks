@@ -123,6 +123,55 @@ TEST_F(BuiltinInvertedIndexTest, test_parser_none_equal_query) {
     delete iter;
 }
 
+TEST_F(BuiltinInvertedIndexTest, test_parser_none_match_all_uses_whole_query) {
+    std::vector<std::string> values = {"hello world", "hello", "world"};
+    std::vector<Slice> slices;
+    slices.reserve(values.size());
+    for (auto& v : values) {
+        slices.emplace_back(v.data(), v.size());
+    }
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_NONE);
+
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/parser_none_match_all";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        writer->add_nulls(0);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
+
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    roaring::Roaring bitmap;
+    Slice query("hello world");
+    ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
+    ASSERT_EQ(1, bitmap.cardinality());
+    ASSERT_TRUE(bitmap.contains(0));
+
+    delete iter;
+}
+
 // Test tokenized english parser: verify equality and prefix wildcard behaviour.
 TEST_F(BuiltinInvertedIndexTest, test_english_parser_queries) {
     // Values:
@@ -276,10 +325,10 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
         ASSERT_FALSE(bitmap.contains(3));
     }
 
-    // MATCH_ANY with wildcard tokens "he% wor%" should behave the same as above.
+    // MATCH_ANY with punctuation-delimited tokens should use the configured parser instead of space splitting.
     {
         roaring::Roaring bitmap;
-        std::string pattern = std::string("he% wor%");
+        std::string pattern = std::string("hello,world");
         Slice query(pattern);
         ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
         ASSERT_EQ(3, bitmap.cardinality());
@@ -289,10 +338,10 @@ TEST_F(BuiltinInvertedIndexTest, test_english_parser_match_any_all_queries) {
         ASSERT_FALSE(bitmap.contains(3));
     }
 
-    // MATCH_ALL with wildcard tokens "he% wor%" should also hit only row 0.
+    // MATCH_ALL with punctuation-delimited tokens should also follow parser tokenization.
     {
         roaring::Roaring bitmap;
-        std::string pattern = std::string("he% wor%");
+        std::string pattern = std::string("hello,world");
         Slice query(pattern);
         ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
         ASSERT_EQ(1, bitmap.cardinality());
@@ -685,22 +734,71 @@ TEST_F(BuiltinInvertedIndexTest, test_mixed_token_queries) {
     InvertedIndexIterator* iter = nullptr;
     ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
 
-    // MATCH_ANY: "apple banan%" should hit all 3 rows
+    // MATCH_ANY follows parser tokenization, so use plain tokens here.
     {
         roaring::Roaring bitmap;
-        Slice query("apple banan%");
+        Slice query("apple banana");
         ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ANY_QUERY, &bitmap));
         ASSERT_EQ(3, bitmap.cardinality());
     }
 
-    // MATCH_ALL: "apple fru%" should hit only row 1
+    // MATCH_ALL follows parser tokenization, so use plain tokens here.
     {
         roaring::Roaring bitmap;
-        Slice query("apple fru%");
+        Slice query("apple fruit");
         ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
         ASSERT_EQ(1, bitmap.cardinality());
         ASSERT_TRUE(bitmap.contains(1));
     }
+
+    delete iter;
+}
+
+TEST_F(BuiltinInvertedIndexTest, test_chinese_parser_low_cardinality_match_all) {
+    std::vector<std::string> values = {"低基数", "低基数", "高基数", "高基数", "低基数优化"};
+    std::vector<Slice> slices;
+    slices.reserve(values.size());
+    for (auto& v : values) {
+        slices.emplace_back(v.data(), v.size());
+    }
+
+    TabletIndex tablet_index;
+    tablet_index.add_index_properties(INVERTED_INDEX_PARSER_KEY, INVERTED_INDEX_PARSER_CHINESE);
+    TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+    std::string file_name = kTestDir + "/chinese_low_cardinality";
+    ColumnMetaPB meta;
+    {
+        ASSIGN_OR_ABORT(auto wfile, _fs->new_writable_file(file_name));
+        std::unique_ptr<InvertedWriter> writer;
+        ASSERT_OK(BuiltinInvertedWriter::create(type_info, &tablet_index, &writer));
+        ASSERT_OK(writer->init());
+        writer->add_values(slices.data(), slices.size());
+        writer->add_nulls(0);
+        ASSERT_OK(writer->finish(wfile.get(), &meta));
+        ASSERT_TRUE(wfile->close().ok());
+    }
+
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(file_name));
+    _opts.read_file = rfile.get();
+    _opts.segment_rows = slices.size();
+    auto tablet_index_sp = std::make_shared<TabletIndex>(tablet_index);
+    std::unique_ptr<InvertedReader> reader;
+    ASSERT_OK(BuiltinInvertedReader::create(tablet_index_sp, TYPE_VARCHAR, &reader));
+    BuiltinInvertedIndexPB builtin_meta_copy = meta.indexes(0).builtin_inverted_index();
+    ASSERT_OK(reader->load(_opts, &builtin_meta_copy));
+
+    InvertedIndexIterator* iter = nullptr;
+    ASSERT_OK(reader->new_iterator(tablet_index_sp, &iter, _opts));
+
+    roaring::Roaring bitmap;
+    Slice query("低基数");
+    ASSERT_OK(iter->read_from_inverted_index("c0", &query, InvertedIndexQueryType::MATCH_ALL_QUERY, &bitmap));
+    ASSERT_EQ(3, bitmap.cardinality());
+    ASSERT_TRUE(bitmap.contains(0));
+    ASSERT_TRUE(bitmap.contains(1));
+    ASSERT_TRUE(bitmap.contains(4));
+    ASSERT_FALSE(bitmap.contains(2));
+    ASSERT_FALSE(bitmap.contains(3));
 
     delete iter;
 }

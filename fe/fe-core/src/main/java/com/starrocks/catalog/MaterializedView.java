@@ -87,7 +87,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -345,6 +344,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         @SerializedName("tempBaseTableInfoTvrVersionRangeMap")
         private final Map<BaseTableInfo, TvrVersionRange> tempBaseTableInfoTvrDeltaMap = Maps.newConcurrentMap();
 
+        // Identifies which refresh job (by START_TASK_RUN_ID) owns the current temp TVR data.
+        // Used by pinned PCT mode to detect stale batches from superseded jobs.
+        @SerializedName("tempTvrOwnerStartTaskRunId")
+        private String tempTvrOwnerStartTaskRunId;
+
         @SerializedName(value = "defineStartTime")
         private boolean defineStartTime;
 
@@ -392,8 +396,29 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return tempBaseTableInfoTvrDeltaMap;
         }
 
-        public void clearTempBaseTableInfoTvrDeltaMap() {
+        public String getTempTvrOwnerStartTaskRunId() {
+            return tempTvrOwnerStartTaskRunId;
+        }
+
+        /**
+         * Atomically replace the temp TVR delta map and set the owner tag.
+         * The owner identifies which refresh job (by START_TASK_RUN_ID) owns this pending state.
+         */
+        public void replaceTempBaseTableInfoTvrDeltaMap(
+                String ownerStartTaskRunId,
+                Map<BaseTableInfo, TvrVersionRange> tvrMap) {
             this.tempBaseTableInfoTvrDeltaMap.clear();
+            this.tempBaseTableInfoTvrDeltaMap.putAll(tvrMap);
+            this.tempTvrOwnerStartTaskRunId = ownerStartTaskRunId;
+        }
+
+        /**
+         * Clear both the temp TVR delta map and its owner tag.
+         * Replaces the old clearTempBaseTableInfoTvrDeltaMap() which only cleared the map.
+         */
+        public void clearTempBaseTableInfoTvrDeltaState() {
+            this.tempBaseTableInfoTvrDeltaMap.clear();
+            this.tempTvrOwnerStartTaskRunId = null;
         }
 
         public void clearVisibleVersionMap() {
@@ -485,6 +510,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             arc.baseTableInfoVisibleVersionMap.putAll(this.baseTableInfoVisibleVersionMap);
             arc.baseTableInfoTvrDeltaMap.putAll(this.baseTableInfoTvrDeltaMap);
             arc.tempBaseTableInfoTvrDeltaMap.putAll(this.tempBaseTableInfoTvrDeltaMap);
+            arc.tempTvrOwnerStartTaskRunId = this.tempTvrOwnerStartTaskRunId;
             arc.mvPartitionNameRefBaseTablePartitionMap.putAll(this.mvPartitionNameRefBaseTablePartitionMap);
             arc.defineStartTime = this.defineStartTime;
             arc.startTime = this.startTime;
@@ -627,9 +653,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private List<ExpressionSerializedObject> serializedPartitionRefTableExprs;
     @Deprecated
     private List<Expr> partitionRefTableExprs;
-
-    // Maintenance plan for this MV
-    private transient ExecPlan maintenancePlan;
 
     // NOTE: The `maxMVRewriteStaleness` option helps you achieve consistently high performance
     // with controlled costs when processing large, frequently changing datasets.
@@ -1658,9 +1681,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return
      */
     public boolean isLoadTriggeredRefresh() {
-        if (this.refreshScheme.getType() == MaterializedViewRefreshType.INCREMENTAL) {
-            return true;
-        }
         AsyncRefreshContext asyncRefreshContext = this.refreshScheme.asyncRefreshContext;
         return this.refreshScheme.getType() == MaterializedViewRefreshType.ASYNC &&
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
@@ -2108,14 +2128,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     MvUtils.formatBaseTableInfos(baseTableInfos)));
         }
         return result;
-    }
-
-    public ExecPlan getMaintenancePlan() {
-        return maintenancePlan;
-    }
-
-    public void setMaintenancePlan(ExecPlan maintenancePlan) {
-        this.maintenancePlan = maintenancePlan;
     }
 
     /**

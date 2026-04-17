@@ -627,8 +627,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     convert_to_arrow(struct_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
-    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
-                                                       R"([
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, R"([
                         {"id": 1, "name": "test1"},
                         {"id": null, "name": "test2"},
                         {"id": 2, "name": null},
@@ -663,8 +662,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::shared_ptr<arrow::Array> expect_array;
-    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
-                                                       R"([
+    auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, R"([
                         {"id": 1, "name": "test1"},
                         null,
                         {"id": null, "name": "test2"},

@@ -42,6 +42,10 @@
 namespace starrocks::spill {
 DEFINE_FAIL_POINT(spill_restore_sleep);
 
+TQueryType::type spill_query_type(RuntimeState* state) {
+    return state->query_options().query_type;
+}
+
 SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile, std::atomic_int64_t* total_spill_bytes_) {
     DCHECK(profile != nullptr);
     total_spill_bytes = total_spill_bytes_;

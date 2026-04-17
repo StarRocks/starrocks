@@ -28,6 +28,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.ast.expression.Expr;
@@ -91,14 +92,15 @@ public class PCTPredicateBuilder {
                                               List<Expr> mvPartitionSlotRefs) throws AnalysisException {
         List<Range<PartitionKey>> sourceTablePartitionRange = Lists.newArrayList();
         PCTPartitionTopology partitionTopology = partitioner.mvContext.getPartitionTopology();
-        Map<Table, PCellSortedSet> refBaseTablePartitionCells =
+        Map<Table, BaseToMVPartitionMapping> refBaseTableMappings =
                 partitionTopology == null ? null : partitionTopology.getRefBaseTableToCellMap();
-        if (refBaseTablePartitionCells == null || !refBaseTablePartitionCells.containsKey(table)) {
+        if (refBaseTableMappings == null || !refBaseTableMappings.containsKey(table)) {
             throw new AnalysisException("Cannot generate mv refresh partition predicate because cannot find "
                     + "the ref base table partition cells for table:" + table.getName());
         }
+        PCellSortedSet refBaseTablePartitionCells = refBaseTableMappings.get(table).cells();
         for (String partitionName : refBaseTablePartitionNames.getPartitionNames()) {
-            PRangeCell rangeCell = (PRangeCell) refBaseTablePartitionCells.get(table).getPCell(partitionName);
+            PRangeCell rangeCell = (PRangeCell) refBaseTablePartitionCells.getPCell(partitionName);
             sourceTablePartitionRange.add(rangeCell.getRange());
         }
         sourceTablePartitionRange = MvUtils.mergeRanges(sourceTablePartitionRange);
@@ -197,15 +199,16 @@ public class PCTPredicateBuilder {
                                              PCellSortedSet refBaseTablePartitionNames,
                                              List<Expr> mvPartitionSlotRefs) throws AnalysisException {
         PCTPartitionTopology partitionTopology = partitioner.mvContext.getPartitionTopology();
-        Map<Table, PCellSortedSet> basePartitionMaps =
+        Map<Table, BaseToMVPartitionMapping> basePartitionMappings =
                 partitionTopology == null ? Map.of() : partitionTopology.getRefBaseTableToCellMap();
-        if (basePartitionMaps.isEmpty()) {
+        if (basePartitionMappings.isEmpty()) {
             return null;
         }
-        PCellSortedSet baseListPartitionMap = basePartitionMaps.get(refBaseTable);
+        BaseToMVPartitionMapping mapping = basePartitionMappings.get(refBaseTable);
+        PCellSortedSet baseListPartitionMap = mapping == null ? null : mapping.cells();
         if (baseListPartitionMap == null) {
             partitioner.logger.warn("Generate incremental partition predicate failed, "
-                    + "basePartitionMaps:{} contains no refBaseTable:{}", basePartitionMaps, refBaseTable);
+                    + "basePartitionMappings:{} contains no refBaseTable:{}", basePartitionMappings, refBaseTable);
             return null;
         }
         if (baseListPartitionMap.isEmpty()) {

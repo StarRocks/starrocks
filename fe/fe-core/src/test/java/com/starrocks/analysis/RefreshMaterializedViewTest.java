@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MaterializedViewRefreshType;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
@@ -30,6 +31,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.schema.MTable;
@@ -288,6 +291,29 @@ public class RefreshMaterializedViewTest extends MVTestBase {
             Assertions.assertEquals("Getting analyzing error from line 1, column 56 to line 1, column 90. " +
                             "Detail message: Batch build partition EVERY is date type but START or END does not type match.",
                     e.getMessage());
+        }
+    }
+
+    @Test
+    public void testLegacyIncrementalRefreshRejected() throws Exception {
+        String mvName = "legacy_incremental_refresh_mv";
+        starRocksAssert.withMaterializedView("create materialized view test." + mvName + "\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "as select k2, sum(v1) as total from test.tbl_with_mv group by k2;");
+        try {
+            MaterializedView mv = getMv("test", mvName);
+            mv.getRefreshScheme().setType(MaterializedViewRefreshType.INCREMENTAL);
+
+            RefreshMaterializedViewStatement statement =
+                    (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(
+                            "refresh materialized view test." + mvName, connectContext);
+            DdlException exception = Assertions.assertThrows(DdlException.class,
+                    () -> GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(statement));
+            Assertions.assertEquals(MaterializedViewExceptions.unsupportedReasonForLegacyIncrementalMaintenance(),
+                    exception.getMessage());
+        } finally {
+            starRocksAssert.dropMaterializedView("test." + mvName);
         }
     }
 

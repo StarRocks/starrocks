@@ -346,6 +346,7 @@ public class VariantPathRewriteRule extends TransformationRule {
             return type.isBoolean()
                     || type.isIntegerType()
                     || type.isFloatingPointType()
+                    || (type.isDecimalV3() && !type.isDecimal256())
                     || type.isStringType()
                     || type.isDate()
                     || type.isDatetime()

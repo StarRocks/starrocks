@@ -1,5 +1,16 @@
 package com.starrocks.lab;
 
+import java.io.File;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
@@ -19,6 +30,7 @@ import org.apache.iceberg.io.FileAppender;
 import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.parquet.Parquet;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.variants.PhysicalType;
 import org.apache.iceberg.variants.ShreddedObject;
 import org.apache.iceberg.variants.Variant;
 import org.apache.iceberg.variants.VariantMetadata;
@@ -26,17 +38,6 @@ import org.apache.iceberg.variants.Variants;
 import org.apache.parquet.schema.OriginalType;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 import org.apache.parquet.schema.Type;
-
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 /**
  * Example: Using pure Java Iceberg API (1.10.0) to create a table with a variant column and write some fake data (by writing
@@ -100,20 +101,52 @@ public class IcebergVariantShreddingTest {
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.DOUBLE).named("typed_value")))
                 .named("typed_value");
 
-        Type profileTyped = org.apache.parquet.schema.Types.optionalGroup()
-                .addField(shreddedField("salary",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.DOUBLE).named("typed_value")))
-                .addField(shreddedField("department",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("typed_value")))
-                .addField(shreddedField("rank",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
-                .addField(shreddedField("metrics",
-                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
-                        metricsTyped))
-                .named("typed_value");
+        Type profileTyped =
+                org.apache.parquet.schema.Types.optionalGroup()
+                        .addField(shreddedField("salary",
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.DOUBLE)
+                                        .named("typed_value")))
+                        // price: DECIMAL(5,2) → DECIMAL4 (INT32). Rows 0-4: 10.50,11.00,11.50,12.00,12.50
+                        // Out-of-range: price > 100 → 0 rows; price < 0 → 0 rows; >= 11.50 → 3 rows
+                        .addField(shreddedField("price",
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32)
+                                        .as(OriginalType.DECIMAL)
+                                        .precision(5)
+                                        .scale(2)
+                                        .named("typed_value")))
+                        // amount: DECIMAL(16,2) → DECIMAL8 (INT64). Rows 0-4: 10000000000.10, 20000000000.20, ...
+                        // Out-of-range: amount > 99999999999999.99 → 0 rows; >= 30000000000.30 → 3 rows
+                        .addField(shreddedField("amount",
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT64)
+                                        .as(OriginalType.DECIMAL)
+                                        .precision(16)
+                                        .scale(2)
+                                        .named("typed_value")))
+                        // balance: DECIMAL(22,4) → DECIMAL16 (FIXED_LEN_BYTE_ARRAY(16)).
+                        // Rows 0-4: 1000000000000000.0001, 2000000000000000.0002, ...
+                        // Out-of-range: balance > 9999999999999999.9999 → 0 rows; >= 3000000000000000.0003 → 3 rows
+                        .addField(shreddedField("balance",
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY)
+                                        .length(10)
+                                        .as(OriginalType.DECIMAL)
+                                        .precision(22)
+                                        .scale(4)
+                                        .named("typed_value")))
+                        .addField(shreddedField("department",
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY)
+                                        .named("typed_value")))
+                        .addField(shreddedField("rank",
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
+                        .addField(shreddedField("metrics",
+                                org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                                metricsTyped))
+                        .named("typed_value");
         // Intentionally omit one field from typed_value so array element.value keeps
         // a non-empty base object for overlay reconstruction tests.
         Type eventObjectTyped = org.apache.parquet.schema.Types.optionalGroup()
@@ -142,12 +175,23 @@ public class IcebergVariantShreddingTest {
                         scoresTypedValue))
                 .named("typed_value");
 
-        return org.apache.parquet.schema.Types.optionalGroup()
+        return org.apache.parquet.schema.Types
+                .optionalGroup()
                 // typed_value holds shredded fields; must itself be a group
                 .id(fieldId)
                 .addField(shreddedField("id",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT64).named("typed_value")))
+                .addField(shreddedField("created_at",
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32)
+                                .as(OriginalType.DATE)
+                                .named("typed_value")))
+                .addField(shreddedField("updated_at",
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
+                        org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT64)
+                                .as(OriginalType.TIMESTAMP_MICROS)
+                                .named("typed_value")))
                 .addField(shreddedField("age",
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.BINARY).named("value"),
                         org.apache.parquet.schema.Types.optional(PrimitiveTypeName.INT32).named("typed_value")))
@@ -309,8 +353,16 @@ public class IcebergVariantShreddingTest {
     private static List<Record> buildRecords(boolean multiTypes) {
         List<Record> records = new ArrayList<>();
         VariantMetadata metadata = Variants.metadata("id", "age", "city", "score", "status", "name", "email", "profile",
-                "salary", "department", "rank", "metrics", "views", "ratio", "events", "type", "count", "numbers",
-                "groups", "scores", "detail", "note");
+                "salary", "price", "amount", "balance", "department", "rank", "metrics", "views", "ratio", "events",
+                "type", "count", "numbers", "groups", "scores", "detail", "note", "created_at", "updated_at");
+        // created_at: 2024-01-01 to 2024-01-05 (DATE, shredded INT32+DATE)
+        //   2024-01-01 = 19723 days since Unix epoch (1970-01-01)
+        // updated_at: 2024-01-01 00:00 to 04:00 UTC (TIMESTAMP, shredded INT64+TIMESTAMP_MICROS)
+        //   2024-01-01 00:00:00 UTC = 1703980800000000 μs since epoch
+        // Out-of-range tests: created_at > '2025-01-01' → 0 rows; created_at < '2023-01-01' → 0 rows
+        // In-range test: created_at >= '2024-01-03' → 3 rows (rows 2,3,4)
+        final int BASE_DATE_DAYS = 19723; // 2024-01-01 in days since 1970-01-01
+        final long BASE_TS_MICROS = 1704067200_000000L; // 2024-01-01 00:00:00 UTC in μs since epoch
         for (int i = 0; i < 5; i++) {
             Record rec = GenericRecord.create(SCHEMA.asStruct());
             ShreddedObject obj = Variants.object(metadata);
@@ -345,6 +397,14 @@ public class IcebergVariantShreddingTest {
             obj.put("numbers", numbers);
             ShreddedObject profile = Variants.object(metadata);
             profile.put("salary", Variants.of(50000.0 + i * 1000));
+            // price: DECIMAL(5,2) → DECIMAL4 (INT32), precision=4, row i: 10.50 + i*0.50
+            profile.put("price",
+                    Variants.of(new BigDecimal("10.50").add(new BigDecimal("0.50").multiply(BigDecimal.valueOf(i)))));
+            // amount: DECIMAL(16,2) → DECIMAL8 (INT64), precision=14, row i: (i+1)*10000000000.10
+            profile.put("amount", Variants.of(new BigDecimal("10000000000.10").multiply(BigDecimal.valueOf(i + 1))));
+            // balance: DECIMAL(22,4) → DECIMAL16 (FLBA 16 bytes), row i: (i+1)*1000000000000000.0001
+            profile.put("balance",
+                    Variants.of(new BigDecimal("1000000000000000.0001").multiply(BigDecimal.valueOf(i + 1))));
             profile.put("department", Variants.of("dept_" + i));
             if (i % 2 == 0 || !multiTypes) {
                 profile.put("rank", Variants.of(i + 1));
@@ -372,6 +432,10 @@ public class IcebergVariantShreddingTest {
             }
             obj.put("groups", groups);
             obj.put("email", Variants.of("user" + i + "@example.com"));
+            // DATE: 2024-01-01 + i days → shredded into INT32+DATE typed_value
+            obj.put("created_at", Variants.of(PhysicalType.DATE, BASE_DATE_DAYS + i));
+            // TIMESTAMP: 2024-01-01 T(i*1h) UTC → shredded into INT64+TIMESTAMP_MICROS typed_value
+            obj.put("updated_at", Variants.of(PhysicalType.TIMESTAMPTZ, BASE_TS_MICROS + (long) i * 3600 * 1_000_000L));
             Variant value = Variant.of(metadata, obj);
             rec.setField("data", value);
             // Mirror key fields as top-level physical columns for Phase-2 filter testing

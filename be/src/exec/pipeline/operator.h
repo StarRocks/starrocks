@@ -19,8 +19,8 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
-#include "exec/pipeline/runtime_filter_types.h"
-#include "exec/pipeline/schedule/observer.h"
+#include "exec/pipeline/primitives/operator_runtime_access.h"
+#include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
 #include "exec/spill/operator_mem_resource_manager.h"
 #include "gutil/strings/substitute.h"
@@ -37,17 +37,19 @@ using RuntimeFilterProbeCollector = starrocks::RuntimeFilterProbeCollector;
 namespace pipeline {
 class Operator;
 class OperatorFactory;
+class PipelineObserver;
+class RuntimeFilterHolder;
+class RuntimeFilterHub;
 using OperatorPtr = std::shared_ptr<Operator>;
 using Operators = std::vector<OperatorPtr>;
 using LocalRFWaitingSet = std::set<TPlanNodeId>;
 
 class Operator {
     friend class PipelineDriver;
-    friend class StreamPipelineDriver;
 
 public:
     Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, bool is_subordinate,
-             int32_t driver_sequence);
+             int32_t driver_sequence, OperatorRuntimeAccess* runtime_access = nullptr);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -162,18 +164,9 @@ public:
 
     std::string get_raw_name() const { return _name; }
 
-    virtual const LocalRFWaitingSet& rf_waiting_set() const;
-
-    RuntimeFilterHub* runtime_filter_hub();
-
     std::vector<ExprContext*>& runtime_in_filters();
 
-    virtual RuntimeFilterProbeCollector* runtime_bloom_filters();
-    virtual const RuntimeFilterProbeCollector* runtime_bloom_filters() const;
-
     virtual int64_t global_rf_wait_timeout_ns() const;
-
-    const std::vector<SlotId>& filter_null_value_columns() const;
 
     // equal to ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, Chunk* chunk,
@@ -203,37 +196,8 @@ public:
         return res;
     }
 
-    RuntimeState* runtime_state() const;
-
     void set_prepare_time(int64_t cost_ns);
     void set_local_prepare_time(int64_t cost_ns);
-
-    // INCREMENTAL MV Methods
-    //
-    // The operator will run periodically which is triggered by FE from PREPARED to EPOCH_FINISHED in one Epoch,
-    // and then reentered into PREPARED state by `reset_epoch` at the next new Epoch.
-    //
-    //                          `reset_epoch`
-    //    ┌───────────────────────────────────────────────────────┐
-    //    │                                                       │
-    //    │                                                       │
-    //    │                                                       │
-    //    ▼                                                       │
-    //  PREPARED ────► PROCESSING ───► EPOCH_FINISHING ──► EPOCH_FINISHED ───► FINISHING ──► FINISHED ────►[CANCELED] ────► CLOSED
-
-    // Mark whether the operator is finishing in one Epoch, `epoch_finishing` is the
-    // state that one operator starts finishing like `is_finishing`.
-    virtual bool is_epoch_finishing() const { return false; }
-    // Mark whether the operator is finished in one Epoch, `epoch_finished` is the
-    // state that one operator finished and not be scheduled again like `is_finished`.
-    virtual bool is_epoch_finished() const { return false; }
-    // Called when the operator's input has been finished, and the operator(self) starts
-    // epoch finishing.
-    virtual Status set_epoch_finishing(RuntimeState* state) { return Status::OK(); }
-    // Called when the operator(self) has been finished.
-    virtual Status set_epoch_finished(RuntimeState* state) { return Status::OK(); }
-    // Called when the new Epoch starts at first to reset operator's internal state.
-    virtual Status reset_epoch(RuntimeState* state) { return Status::OK(); }
 
     // Adjusts the execution mode of the operator (will only be called by the OperatorMemoryResourceManager component)
     virtual void set_execute_mode(int performance_level) {}
@@ -286,6 +250,7 @@ public:
 
 protected:
     OperatorFactory* _factory;
+    OperatorRuntimeAccess* _runtime_access;
     const int32_t _id;
     const std::string _name;
     // Which plan node this operator belongs to
@@ -350,113 +315,6 @@ private:
     std::shared_ptr<MemTracker> _mem_tracker;
     std::vector<ExprContext*> _runtime_in_filters;
 };
-
-class OperatorFactory {
-public:
-    OperatorFactory(int32_t id, std::string name, int32_t plan_node_id);
-    virtual ~OperatorFactory() = default;
-    // Create the operator for the specific sequence driver
-    // For some operators, when share some status, need to know the degree_of_parallelism
-    virtual OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) = 0;
-    virtual bool is_source() const { return false; }
-    int32_t id() const { return _id; }
-    int32_t plan_node_id() const { return _plan_node_id; }
-    virtual Status prepare(RuntimeState* state);
-    virtual void close(RuntimeState* state);
-    std::string get_name() const { return _name + "_(" + std::to_string(_plan_node_id) + ")"; }
-    std::string get_raw_name() const { return _name; }
-    // Local rf that take effects on this operator, and operator must delay to schedule to execution on core
-    // util the corresponding local rf generated.
-    const LocalRFWaitingSet& rf_waiting_set() const { return _rf_waiting_set; }
-
-    // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
-    void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
-                             const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
-                             const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,
-                             const std::vector<SlotId>& filter_null_value_columns,
-                             const std::vector<TupleSlotMapping>& tuple_slot_mappings) {
-        _runtime_filter_hub = runtime_filter_hub;
-        _tuple_ids = tuple_ids;
-        _rf_waiting_set = rf_waiting_set;
-        _row_desc = row_desc;
-        _runtime_filter_collector = runtime_filter_collector;
-        _filter_null_value_columns = filter_null_value_columns;
-        _tuple_slot_mappings = tuple_slot_mappings;
-    }
-    // when a operator that waiting for local runtime filters' completion is waked, it call prepare_runtime_in_filters
-    // to bound its runtime in-filters.
-    void prepare_runtime_in_filters(RuntimeState* state) {
-        // TODO(satanson): at present, prepare_runtime_in_filters is called in the PipelineDriverPoller thread sequentially,
-        //  std::call_once's cost can be ignored, in the future, if mulitple PipelineDriverPollers are employed to dectect
-        //  and wake blocked driver, std::call_once is sound but may be blocked.
-        std::call_once(_prepare_runtime_in_filters_once, [this, state]() { this->_prepare_runtime_in_filters(state); });
-    }
-
-    RuntimeFilterHub* runtime_filter_hub() { return _runtime_filter_hub; }
-
-    std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
-    // acquire local colocate runtime filter
-    std::vector<ExprContext*> get_colocate_runtime_in_filters(size_t driver_sequence);
-    RuntimeFilterProbeCollector* get_runtime_bloom_filters() {
-        if (_runtime_filter_collector == nullptr) {
-            return nullptr;
-        }
-        return _runtime_filter_collector->get_rf_probe_collector();
-    }
-    const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const {
-        if (_runtime_filter_collector == nullptr) {
-            return nullptr;
-        }
-        return _runtime_filter_collector->get_rf_probe_collector();
-    }
-
-    const std::vector<SlotId>& get_filter_null_value_columns() const { return _filter_null_value_columns; }
-
-    void set_runtime_state(RuntimeState* state) { this->_state = state; }
-
-    RuntimeState* runtime_state() const { return _state; }
-
-    RowDescriptor* row_desc() { return &_row_desc; }
-
-    // Whether it has any runtime in-filter or bloom-filter.
-    // MUST be invoked after init_runtime_filter.
-    bool has_runtime_filters() const;
-
-    // Whether it has any runtime filter built by TopN node.
-    bool has_topn_filter() const;
-
-    // try to get runtime filter from cache
-    void acquire_runtime_filter(RuntimeState* state);
-
-    virtual bool support_event_scheduler() const { return false; }
-
-protected:
-    void _prepare_runtime_in_filters(RuntimeState* state);
-    void _prepare_runtime_holders(const std::vector<RuntimeFilterHolder*>& holders,
-                                  std::vector<ExprContext*>* runtime_in_filters);
-
-    const int32_t _id;
-    const std::string _name;
-    const int32_t _plan_node_id;
-    std::shared_ptr<RuntimeProfile> _runtime_profile;
-    RuntimeFilterHub* _runtime_filter_hub = nullptr;
-    std::vector<TupleId> _tuple_ids;
-    // a set of TPlanNodeIds of HashJoinNode who generates Local RF that take effects on this operator.
-    LocalRFWaitingSet _rf_waiting_set;
-    std::once_flag _prepare_runtime_in_filters_once;
-    RowDescriptor _row_desc;
-    std::vector<ExprContext*> _runtime_in_filters;
-    std::shared_ptr<RefCountedRuntimeFilterProbeCollector> _runtime_filter_collector = nullptr;
-    std::vector<SlotId> _filter_null_value_columns;
-    // Mappings from input slot to output slot of ancestor exec nodes (include itself).
-    // It is used to rewrite runtime in filters.
-    std::vector<TupleSlotMapping> _tuple_slot_mappings;
-
-    RuntimeState* _state = nullptr;
-};
-
-using OpFactoryPtr = std::shared_ptr<OperatorFactory>;
-using OpFactories = std::vector<OpFactoryPtr>;
 
 } // namespace pipeline
 } // namespace starrocks

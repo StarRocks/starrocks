@@ -16,13 +16,13 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.mv.pct.PCTPartitionTopology;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.sql.common.PCellNone;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
-import com.starrocks.sql.common.PartitionNameSetMap;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -52,24 +52,23 @@ public class MvTaskRunContextTest {
 
         PCellSortedSet refBaseTableToCell = PCellSortedSet.of();
         refBaseTableToCell.add(PCellWithName.of("base_p1", new PCellNone()));
-        Map<Table, PCellSortedSet> refBaseTableToCellMap = Maps.newHashMap();
-        refBaseTableToCellMap.put(refBaseTable, refBaseTableToCell);
+        BaseToMVPartitionMapping refBaseTableMapping = BaseToMVPartitionMapping.of(
+                refBaseTableToCell, Map.of("mv_p1", Set.of("base_p1")));
+        Map<Table, BaseToMVPartitionMapping> refBaseTableToCellMap = Maps.newHashMap();
+        refBaseTableToCellMap.put(refBaseTable, refBaseTableMapping);
 
         PCellSetMapping refBaseTableMVIntersectedPartitions = PCellSetMapping.of();
         refBaseTableMVIntersectedPartitions.put("base_p1", PCellWithName.of("mv_p1", new PCellNone()));
         Map<Table, PCellSetMapping> baseToMvNameRef = Maps.newHashMap();
         baseToMvNameRef.put(refBaseTable, refBaseTableMVIntersectedPartitions);
 
+        Map<Table, PCellSortedSet> refBaseTableToCellMapRaw = Maps.newHashMap();
+        refBaseTableToCellMapRaw.put(refBaseTable, refBaseTableToCell);
         Map<String, Map<Table, PCellSortedSet>> mvToBaseNameRef = Maps.newHashMap();
-        mvToBaseNameRef.put("mv_p1", refBaseTableToCellMap);
-
-        PartitionNameSetMap externalRefBaseTableMVPartitionMap = PartitionNameSetMap.of();
-        externalRefBaseTableMVPartitionMap.put("mv_p1", "base_p1");
-        Map<Table, PartitionNameSetMap> externalMap = Maps.newHashMap();
-        externalMap.put(refBaseTable, externalRefBaseTableMVPartitionMap);
+        mvToBaseNameRef.put("mv_p1", refBaseTableToCellMapRaw);
 
         PCTPartitionTopology topology = new PCTPartitionTopology(mvToCellMap, refBaseTableToCellMap,
-                baseToMvNameRef, mvToBaseNameRef, externalMap);
+                baseToMvNameRef, mvToBaseNameRef);
 
         context.setPartitionTopology(topology);
 

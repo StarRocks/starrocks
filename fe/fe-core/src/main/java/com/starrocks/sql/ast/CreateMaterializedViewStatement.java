@@ -23,9 +23,7 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.parser.NodePosition;
-import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.List;
 import java.util.Map;
@@ -83,10 +81,6 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private MaterializedView.RefreshMode currentRefreshMode = MaterializedView.RefreshMode.PCT;
     // the encode row id version deduced by analyzer
     private int encodeRowIdVersion = 0;
-
-    // Maintenance information
-    ExecPlan maintenancePlan;
-    ColumnRefFactory columnRefFactory;
 
     // Sink table information
     private List<Column> mvColumnItems = Lists.newArrayList();
@@ -341,25 +335,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.partitionRefTableExprs = partitionRefTableExprs;
     }
 
-    public ExecPlan getMaintenancePlan() {
-        return maintenancePlan;
-    }
-
-    public ColumnRefFactory getColumnRefFactory() {
-        return columnRefFactory;
-    }
-
     public List<Integer> getQueryOutputIndices() {
         return queryOutputIndices;
     }
 
     public void setQueryOutputIndices(List<Integer> queryOutputIndices) {
         this.queryOutputIndices = queryOutputIndices;
-    }
-
-    public void setMaintenancePlan(ExecPlan maintenancePlan, ColumnRefFactory columnRefFactory) {
-        this.maintenancePlan = maintenancePlan;
-        this.columnRefFactory = columnRefFactory;
     }
 
     public Map<Integer, Column> getGeneratedPartitionCols() {

@@ -91,6 +91,7 @@ Lowest-level BE primitives. Keep it free of higher-level StarRocks module depend
 Standalone utility substrate. Do not couple it to BE modules.
 - Targets: `Gutil`
 - Allowed internal include prefixes: `gutil/`
+- Allowed target deps: `Common`, `Base`, `Gutil`
 - Remediation: Keep Gutil independent; move BE-specific logic out instead of importing BE modules.
 
 ### Common (`common`)
@@ -100,6 +101,14 @@ Core shared infrastructure above Base/Gutil only. Higher-level BE modules must n
 - Allowed target deps: `Base`, `Gutil`
 - Core tests: `common_test`
 - Remediation: Move the dependency upward or add a lower-level abstraction; Common may only depend on Base, Gutil, and generated headers.
+
+### HttpCore (`httpcore`)
+Reusable HTTP transport and request primitives above Common without BE admin or page-handler code.
+- Targets: `HttpCore`
+- Allowed internal include prefixes: `http/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `Common`, `Base`, `Gutil`
+- Core tests: `http_core_test`
+- Remediation: Keep HttpCore limited to reusable HTTP transport and request primitives; move BE-specific pages, actions, auth helpers, and client/download helpers upward.
 
 ### IOCore (`iocore`)
 Minimal IO foundation used by upper IO/FS layers.
@@ -116,6 +125,14 @@ Minimal filesystem core on top of IOCore.
 - Allowed target deps: `IOCore`, `Common`, `Base`, `Gutil`
 - Core tests: `fs_core_test`
 - Remediation: Keep FSCore limited to IOCore plus core FS abstractions; move backend-specific behavior into FileSystem.
+
+### SpillCore (`spillcore`)
+Core spill block and directory primitives without pipeline/query/runtime-service coupling.
+- Targets: `SpillCore`
+- Allowed internal include prefixes: `exec/spill/`, `fs/`, `io/`, `common/`, `base/`, `gutil/`, `gen_cpp/`
+- Allowed target deps: `FSCore`, `IOCore`, `Common`, `Base`, `Gutil`, `StarRocksGen`
+- Core tests: `spill_core_test`
+- Remediation: Keep SpillCore limited to reusable spill block and directory infrastructure; move query bootstrap, pipeline ownership, and runtime-service integration upward.
 
 ### TypesCore (`typecore`)
 Core type system without runtime/storage/exec coupling.
