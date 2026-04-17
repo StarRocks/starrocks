@@ -36,16 +36,7 @@
 
 #include <memory>
 
-<<<<<<< HEAD
 #include "common/closure_guard.h"
-=======
-#include "base/container/lru_cache.h"
-#include "base/string/faststring.h"
-#include "base/testutil/sync_point.h"
-#include "common/config_exec_flow_fwd.h"
-#include "common/config_ingest_fwd.h"
-#include "common/runtime_profile.h"
->>>>>>> 6f3d52e399 ([BugFix] Fix use-after-free in LoadChannel::get_load_replica_status caused by temporary shared_ptr destruction (#71843))
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "runtime/diagnose_daemon.h"
@@ -54,9 +45,9 @@
 #include "runtime/load_channel_mgr.h"
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
+#include "testutil/sync_point.h"
 #include "util/compression/block_compression.h"
 #include "util/faststring.h"
-#include "util/lru_cache.h"
 #include "util/runtime_profile.h"
 #include "util/starrocks_metrics.h"
 #include "util/thrift_util.h"
