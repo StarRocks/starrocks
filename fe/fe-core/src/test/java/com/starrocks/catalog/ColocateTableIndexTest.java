@@ -1106,5 +1106,15 @@ public class ColocateTableIndexTest {
         // Verify via isGroupUnstable: for non-metaGroups, it checks unstableGroups (not MetaGroup).
         // Since we didn't mark it unstable, it should return false.
         Assertions.assertFalse(colocateTableIndex.isGroupUnstable(groupId));
+
+        // New in PR-1: isRangeColocateGroup distinguishes range vs hash groups.
+        Assertions.assertTrue(colocateTableIndex.isRangeColocateGroup(groupId));
+    }
+
+    @Test
+    public void testIsRangeColocateGroupForUnknownGroup() {
+        ColocateTableIndex colocateTableIndex = new ColocateTableIndex();
+        ColocateTableIndex.GroupId unknown = new ColocateTableIndex.GroupId(1L, 2L);
+        Assertions.assertFalse(colocateTableIndex.isRangeColocateGroup(unknown));
     }
 }
