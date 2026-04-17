@@ -15,7 +15,6 @@
 #pragma once
 
 #include <atomic>
-#include <mutex>
 #include <string>
 #include <unordered_map>
 
@@ -153,6 +152,7 @@ public:
     // How to use `RowsetUpdateState` when publish:
     //
     // init()
+    // prepare()
     //
     // for each segment:
     //      load_segment()
@@ -168,7 +168,11 @@ public:
     // init params in RowsetUpdateState.
     void init(const RowsetUpdateStateParams& params);
 
-    // Load `segment_id`-th segment file's state.
+    // Initialize shared state (rowset, segment iterators, per-segment vectors, column expr values).
+    // Must be called once before any load_segment call, for both serial and parallel paths.
+    Status prepare(const RowsetUpdateStateParams& params);
+
+    // Load `segment_id`-th segment file's state. Requires prepare() called first.
     Status load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
                         bool need_resolve_conflict, bool need_lock);
 
@@ -181,9 +185,6 @@ public:
 
     // Release partial update state (write_columns) for a segment, but keep upserts for Phase 2.
     void release_segment_partial_state(uint32_t segment_id);
-
-    // Pre-initialize shared state so that load_segment can be called in parallel for different segments.
-    Status prepare_for_parallel(const RowsetUpdateStateParams& params);
 
     // Load `del_id`-th delete file's state.
     Status load_delete(uint32_t del_id, const RowsetUpdateStateParams& params);
@@ -258,10 +259,6 @@ private:
     OlapReaderStatistics _stats;
     std::vector<ChunkIteratorPtr> _segment_iters;
     std::map<string, string> _column_to_expr_value;
-
-    // Protects shared state initialization (_rowset_ptr, per-segment vectors, _segment_iters,
-    // _column_to_expr_value) against concurrent load_segment calls in the parallel path.
-    std::mutex _shared_init_mutex;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetUpdateState& o) {

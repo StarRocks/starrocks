@@ -279,6 +279,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             .container = rssid_fileinfo_container,
     };
     state.init(params);
+    RETURN_IF_ERROR(state.prepare(params));
     // Init delvec state.
     // Map from rssid (rowset id + segment offset) to the list of deleted rowids collected during this publish.
     PrimaryIndex::DeletesMap new_deletes;
@@ -321,9 +322,6 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // 2. Process segments in batches. In parallel mode, each batch runs Phase 1 (parallel
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
     // prevent memory accumulation. In serial mode, batch_size=1 degenerates to original logic.
-    if (use_parallel_partial_update) {
-        RETURN_IF_ERROR(state.prepare_for_parallel(params));
-    }
     const uint32_t batch_size =
             use_parallel_partial_update ? ExecEnv::GetInstance()->lake_partial_update_thread_pool()->max_threads() : 1;
 
