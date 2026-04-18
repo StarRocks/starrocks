@@ -786,6 +786,8 @@ struct TLakeScanNode {
 
   57: optional TVectorSearchOptions vector_search_options
 
+  58: optional TTableSampleOptions sample_options;
+
   60: optional list<Exprs.TExpr> partition_conjuncts
 
   // Per-scan decision (session flag on AND not disabled by the duplicate-lake-table gate), made at plan
