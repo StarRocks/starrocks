@@ -23,7 +23,6 @@ import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
-import com.starrocks.type.Type;
 import org.apache.iceberg.FileFormat;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Schema;
