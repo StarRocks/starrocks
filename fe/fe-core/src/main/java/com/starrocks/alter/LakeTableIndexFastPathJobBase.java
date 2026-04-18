@@ -22,12 +22,15 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
@@ -35,6 +38,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -360,18 +364,28 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
 
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
-        List<Comparable> info = new ArrayList<>();
+        // Column layout must match SchemaChangeProcDir.TITLE_NAMES. There is
+        // no shadow index in this fast path, so IndexId / OriginIndexId are
+        // emitted as -1 and the schema-version placeholder is "0:0".
+        List<Comparable> info = Lists.newArrayList();
         info.add(jobId);
         info.add(tableName);
-        info.add(createTimeMs);
-        info.add(finishedTimeMs);
-        info.add(""); // index name placeholder; subclass may override via getInfo
-        info.add(type.name());
-        info.add(""); // schema version placeholder
+        info.add(TimeUtils.longToTimeString(createTimeMs));
+        info.add(TimeUtils.longToTimeString(finishedTimeMs));
+        info.add(""); // IndexName
+        info.add(-1L); // IndexId (no shadow index)
+        info.add(-1L); // OriginIndexId
+        info.add("0:0"); // SchemaVersion
         info.add(watershedTxnId);
         info.add(jobState.name());
         info.add(errMsg);
+        info.add(FeConstants.NULL_STRING); // Progress
         info.add(timeoutMs / 1000);
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                    .getWarehouseAllowNull(warehouseId);
+            info.add(warehouse == null ? "null" : warehouse.getName());
+        }
         infos.add(info);
     }
 
