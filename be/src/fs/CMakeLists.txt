@@ -21,7 +21,10 @@ set(CORE_FILES
     fs.cpp
     encrypt_file.cpp
     bundle_file.cpp
+    fd_cache.cpp
     fs_options.cpp
+    fs_memory.cpp
+    fs_posix.cpp
     )
 
 ADD_BE_LIB(FSCore
@@ -31,13 +34,10 @@ ADD_BE_LIB(FSCore
 target_link_libraries(FSCore PUBLIC IOCore)
 
 set(EXEC_FILES
-    fd_cache.cpp
     fs_factory.cpp
     fs_options_helper.cpp
     key_cache.cpp
-    fs_posix.cpp
     fs_broker.cpp
-    fs_memory.cpp
     fs_s3.cpp
     azure/azblob_uri.cpp
     azure/fs_azblob.cpp

@@ -89,19 +89,19 @@
       "owned_targets": ["FSCore"],
       "owned_globs": [
         "be/src/fs/fs.*",
+        "be/src/fs/fd_cache.*",
         "be/src/fs/encrypt_file.*",
         "be/src/fs/bundle_file.*",
-        "be/src/fs/fs_options.*"
+        "be/src/fs/fs_options.*",
+        "be/src/fs/fs_memory.*",
+        "be/src/fs/fs_posix.*"
       ],
       "allowed_include_prefixes": ["fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
       "forbidden_includes": [
-        "fs/fd_cache.h",
         "fs/fs_broker.h",
         "fs/fs_factory.h",
-        "fs/fs_memory.h",
         "fs/fs_options_helper.h",
-        "fs/fs_posix.h",
         "fs/fs_s3.h",
         "fs/fs_starlet.h",
         "fs/fs_util.h",
