@@ -14,6 +14,8 @@
 
 #include "storage/lake/persistent_index_sstable_fileset.h"
 
+#include <algorithm>
+
 #include "base/debug/trace.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
@@ -61,6 +63,7 @@ Status PersistentIndexSstableFileset::init(std::vector<std::unique_ptr<Persisten
             _standalone_sstable = std::move(sstable);
         }
     }
+    _rebuild_sstable_vec();
     return Status::OK();
 }
 
@@ -90,6 +93,7 @@ Status PersistentIndexSstableFileset::init(std::unique_ptr<PersistentIndexSstabl
         }
         _standalone_sstable = std::move(sstable);
     }
+    _rebuild_sstable_vec();
     return Status::OK();
 }
 
@@ -111,30 +115,45 @@ bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstabl
     // This sstable belong to same fileset.
     sstable->set_fileset_id(_fileset_id);
     _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
+    _rebuild_sstable_vec();
     return true;
+}
+
+void PersistentIndexSstableFileset::_rebuild_sstable_vec() {
+    _sstable_vec.clear();
+    _sstable_vec.reserve(_sstable_map.size());
+    for (const auto& [key_pair, sstable] : _sstable_map) {
+        _sstable_vec.push_back({Slice(key_pair.first), Slice(key_pair.second), sstable.get()});
+    }
 }
 
 Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyIndexSet& key_indexes, int64_t version,
                                                 IndexValue* values, KeyIndexSet* found_key_indexes) const {
-    const sstable::Comparator* comparator = sstable::BytewiseComparator();
     // 0. if single standalone sstable, directly get.
     if (_standalone_sstable != nullptr) {
         DCHECK(_sstable_map.empty());
         return _standalone_sstable->multi_get(keys, key_indexes, version, values, found_key_indexes);
     }
-    // 1. divide key_indexes into different groups according to sstables
+    // 1. divide key_indexes into different groups according to sstables.
+    // Use the pre-built _sstable_vec for cache-friendly binary search instead of
+    // tree-based _sstable_map.upper_bound() which has poor cache locality.
     std::unordered_map<PersistentIndexSstable*, KeyIndexSet> sstable_key_indexes_map;
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("fileset_get_divide_us");
+        const auto* comparator = sstable::BytewiseComparator();
         for (auto& key_index : key_indexes) {
-            auto it = _sstable_map.upper_bound(keys[key_index]);
-            if (it != _sstable_map.begin()) {
+            const Slice& key = keys[key_index];
+            // Binary search on contiguous vector: find first entry with start_key > key.
+            auto it = std::upper_bound(_sstable_vec.begin(), _sstable_vec.end(), key,
+                                       [comparator](const Slice& k, const SstableVecEntry& entry) {
+                                           return comparator->Compare(k, entry.start_key) < 0;
+                                       });
+            if (it != _sstable_vec.begin()) {
                 --it;
-                const auto& [key_pair, sstable] = *it;
-                const auto& [start_key, end_key] = key_pair;
-                if (comparator->Compare(keys[key_index], Slice(end_key)) <= 0) {
-                    // key in range [start_key, end_key]
-                    sstable_key_indexes_map[sstable.get()].insert(key_index);
+                if (comparator->Compare(key, it->end_key) <= 0) {
+                    // key_indexes is ordered, so key_index is monotonically increasing per SST bucket.
+                    sstable_key_indexes_map[it->sstable].emplace_hint(
+                            sstable_key_indexes_map[it->sstable].end(), key_index);
                 }
             }
         }

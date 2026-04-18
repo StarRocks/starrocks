@@ -41,7 +41,8 @@ Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexV
         auto key = std::string_view(keys[i].data, keys[i].size);
         const auto value = values[i];
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, value)); inserted) {
-            not_founds->insert(i);
+            // i is monotonically increasing, so hint at end for O(1) amortized insert.
+            not_founds->emplace_hint(not_founds->end(), i);
             _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
             auto& old_index_value_ver = it->second;
@@ -96,7 +97,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
         auto key = std::string_view(keys[i].data, keys[i].size);
         if (auto [it, inserted] = _map.emplace(key, std::make_pair(version, IndexValue(NullIndexValue))); inserted) {
             old_values[i] = NullIndexValue;
-            not_founds->insert(i);
+            not_founds->emplace_hint(not_founds->end(), i);
             _keys_heap_size += is_string_heap_allocated(it->first) ? it->first.capacity() : 0;
         } else {
             auto& old_index_value_ver = it->second;
@@ -156,7 +157,8 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
         auto it = _map.find(key);
         if (it == _map.end()) {
             values[i] = NullIndexValue;
-            not_founds->insert(i);
+            // i is monotonically increasing, so hint at end for O(1) amortized insert.
+            not_founds->emplace_hint(not_founds->end(), i);
         } else {
             // Assuming we want the latest (first) value due to emplace_front in updates/inserts
             auto& index_value_ver = it->second;
@@ -174,11 +176,11 @@ Status PersistentIndexMemtable::get(const Slice* keys, IndexValue* values, const
         auto key = std::string_view(keys[key_index].data, keys[key_index].size);
         auto it = _map.find(key);
         if (it != _map.end()) {
-            // Assuming we want the latest (first) value due to emplace_front in updates/inserts
             auto& index_value_ver = it->second;
             auto& index_value = index_value_ver.second;
             values[key_index] = index_value.get_value();
-            found_key_indexes->insert(key_index);
+            // key_indexes is ordered, so key_index is monotonically increasing.
+            found_key_indexes->emplace_hint(found_key_indexes->end(), key_index);
         }
     }
     return Status::OK();

@@ -222,12 +222,12 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
         if (index_value_with_ver_pb.values_size() > 0) {
             if (version < 0) {
                 values[key_index] = build_index_value(index_value_with_ver_pb.values(0));
-                found_key_indexes->insert(key_index);
+                found_key_indexes->emplace_hint(found_key_indexes->end(), key_index);
             } else {
                 for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
                     if (index_value_with_ver_pb.values(j).version() == version) {
                         values[key_index] = build_index_value(index_value_with_ver_pb.values(j));
-                        found_key_indexes->insert(key_index);
+                        found_key_indexes->emplace_hint(found_key_indexes->end(), key_index);
                         break;
                     }
                 }
