@@ -330,6 +330,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 
         // Phase 1: parallel load + rewrite for this batch.
         if (use_parallel_partial_update && batch_end - batch_start > 1) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("parallel_load_rewrite_seg_latency_us");
             uint32_t batch_count = batch_end - batch_start;
             std::vector<std::map<int, FileInfo>> per_seg_replace(batch_count);
             std::vector<std::vector<FileMetaPB>> per_seg_orphans(batch_count);
