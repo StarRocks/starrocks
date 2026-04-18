@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "exec/pipeline/pipeline_fwd.h"
 #include "exec/spill/query_spill_manager.h"
+#include "runtime/runtime_state_fwd.h"
 
 namespace starrocks::spill {
 enum MEM_RESOURCE {
@@ -42,9 +42,7 @@ public:
         OperatorMemoryResourceManager& _manager;
     };
 
-    using OP = pipeline::Operator;
-
-    void prepare(OP* op, QuerySpillManager* query_spill_manager);
+    void prepare(QuerySpillManager* query_spill_manager, bool spillable, bool releaseable, size_t reserved_bytes);
 
     void close();
 
@@ -52,10 +50,10 @@ public:
 
     bool spillable() const { return _spillable; }
 
-    void to_low_memory_mode();
+    bool enter_low_memory_mode();
 
-    // For the current operator available memory (estimated value)
-    size_t operator_avaliable_memory_bytes();
+    // For the current operator available memory (estimated value).
+    static size_t compute_available_memory_bytes(const RuntimeState& runtime_state);
 
     QuerySpillManager* query_spill_manager() const { return _query_spill_manager; }
 
@@ -65,7 +63,6 @@ private:
     int _performance_level = MEM_RESOURCE_DEFAULE_MEMORY;
     bool _spillable = false;
     bool _releaseable = false;
-    OP* _op = nullptr;
     QuerySpillManager* _query_spill_manager = nullptr;
     ResGuard _res_guard{*this};
 };
