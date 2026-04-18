@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "io/fd_input_stream.h"
+#include "io/core/fd_input_stream.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -22,11 +22,11 @@
 #include "common/logging.h"
 #include "gutil/macros.h"
 #include "io/core/io_error.h"
-#include "io_profiler.h"
+#include "io/core/io_instrumentation.h"
 
 #ifdef USE_STAROS
-#include "fslib/metric_key.h"
-#include "metrics/metrics.h"
+#include <fslib/metric_key.h>
+#include <metrics/metrics.h>
 #endif
 
 #ifdef USE_STAROS
@@ -85,7 +85,7 @@ StatusOr<int64_t> FdInputStream::read(void* data, int64_t count) {
     s_posixread_iosize.Observe(res);
 #endif
     _offset += res;
-    IOProfiler::add_read(res, watch.elapsed_time());
+    IOInstrumentation::record_read(res, watch.elapsed_time());
     return res;
 }
 

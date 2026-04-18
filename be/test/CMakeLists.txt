@@ -255,10 +255,8 @@ set(EXEC_FILES
         ./io/compressed_input_stream_test.cpp
         ./io/formatted_output_stream_file_test.cpp
         ./io/io_profiler_test.cpp
-        ./io/fd_output_stream_test.cpp
         ./io/s3_output_stream_test.cpp
         ./io/s3_input_stream_test.cpp
-        ./io/fd_input_stream_test.cpp
         ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./runtime/agg_state_desc_test.cpp

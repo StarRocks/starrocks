@@ -21,7 +21,7 @@
 #include "common/config_diagnostic_fwd.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "fmt/printf.h"
-#include "io/fd_output_stream.h" // write trace to file
+#include "io/core/fd_output_stream.h" // write trace to file
 #include "util/debug/query_trace.h"
 
 namespace starrocks::debug {

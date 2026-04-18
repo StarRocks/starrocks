@@ -19,6 +19,8 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/io")
 
 ADD_BE_LIB(IOCore
         core/array_input_stream.cpp
+        core/fd_input_stream.cpp
+        core/fd_output_stream.cpp
         core/io_instrumentation.cpp
         core/readable.cpp
         core/seekable_input_stream.cpp
@@ -26,8 +28,6 @@ ADD_BE_LIB(IOCore
 
 ADD_BE_LIB(IO
         compressed_input_stream.cpp
-        fd_output_stream.cpp
-        fd_input_stream.cpp
         io_profiler.cpp
         s3_input_stream.cpp
         s3_output_stream.cpp

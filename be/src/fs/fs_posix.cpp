@@ -40,12 +40,12 @@
 #include "gutil/port.h"
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
-#include "io/fd_input_stream.h"
+#include "io/core/fd_input_stream.h"
 #include "io/io_profiler.h"
 
 #ifdef USE_STAROS
-#include "fslib/metric_key.h"
-#include "metrics/metrics.h"
+#include <fslib/metric_key.h>
+#include <metrics/metrics.h>
 #endif
 
 #ifdef USE_STAROS
