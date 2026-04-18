@@ -8,7 +8,7 @@ displayed_sidebar: docs
 
 **容器镜像问题（v4.1.0）**
 
-由于 v4.1.0 容器镜像存在加载顺序不稳定的问题，BE 进程在容器环境中可能无法可靠启动。**容器环境用户请勿升级至 v4.1.0。** 请等待包含修复的 v4.1.1（[#68912](https://github.com/StarRocks/starrocks/pull/68912)）。
+由于 v4.1.0 容器镜像存在加载顺序不稳定的问题，BE 进程在容器环境中可能无法可靠启动。**容器环境用户请勿升级至 v4.1.0。** 请等待包含修复的 v4.1.1（[#71825](https://github.com/StarRocks/starrocks/pull/71825)）。
 
 :::
 
