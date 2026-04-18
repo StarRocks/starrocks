@@ -152,8 +152,8 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
                 --it;
                 if (comparator->Compare(key, it->end_key) <= 0) {
                     // key_indexes is ordered, so key_index is monotonically increasing per SST bucket.
-                    sstable_key_indexes_map[it->sstable].emplace_hint(
-                            sstable_key_indexes_map[it->sstable].end(), key_index);
+                    sstable_key_indexes_map[it->sstable].emplace_hint(sstable_key_indexes_map[it->sstable].end(),
+                                                                      key_index);
                 }
             }
         }
