@@ -975,4 +975,55 @@ TEST_F(LakePersistentIndexFilesetTest, test_index_concurrent_read_after_reload) 
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
+// Test that multi_get works correctly after append() (verifies _sstable_vec is rebuilt).
+TEST_F(LakePersistentIndexFilesetTest, test_fileset_multi_get_after_append) {
+    auto fileset_id = UniqueId::gen_uid();
+
+    // Init with first sstable (keys 0-99)
+    PersistentIndexSstablePB sst_pb1;
+    ASSERT_OK(create_test_sstable("test_sst_1.sst", 0, 100, &sst_pb1, &fileset_id));
+    ASSIGN_OR_ABORT(auto sst1, open_sstable(sst_pb1));
+
+    PersistentIndexSstableFileset fileset;
+    ASSERT_OK(fileset.init(sst1));
+
+    // Append second sstable (keys 1000-1099)
+    PersistentIndexSstablePB sst_pb2;
+    ASSERT_OK(create_test_sstable("test_sst_2.sst", 1000, 100, &sst_pb2, &fileset_id));
+    ASSIGN_OR_ABORT(auto sst2, open_sstable(sst_pb2));
+    ASSERT_TRUE(fileset.append(sst2));
+
+    // Append third sstable (keys 2000-2099)
+    PersistentIndexSstablePB sst_pb3;
+    ASSERT_OK(create_test_sstable("test_sst_3.sst", 2000, 100, &sst_pb3, &fileset_id));
+    ASSIGN_OR_ABORT(auto sst3, open_sstable(sst_pb3));
+    ASSERT_TRUE(fileset.append(sst3));
+
+    // Query keys from all 3 sstables
+    std::vector<std::string> key_strings;
+    std::vector<Slice> keys;
+    KeyIndexSet key_indexes;
+    for (int sst_idx = 0; sst_idx < 3; sst_idx++) {
+        for (int i = 0; i < 5; i++) {
+            int key_val = sst_idx * 1000 + i * 10;
+            key_strings.push_back(fmt::format("key_{:016X}", key_val));
+            keys.emplace_back(key_strings.back());
+            key_indexes.insert(sst_idx * 5 + i);
+        }
+    }
+
+    std::vector<IndexValue> values(15);
+    KeyIndexSet found_key_indexes;
+    ASSERT_OK(fileset.multi_get(keys.data(), key_indexes, -1, values.data(), &found_key_indexes));
+
+    ASSERT_EQ(15, found_key_indexes.size());
+    for (int sst_idx = 0; sst_idx < 3; sst_idx++) {
+        for (int i = 0; i < 5; i++) {
+            int idx = sst_idx * 5 + i;
+            int expected_val = sst_idx * 1000 + i * 10;
+            ASSERT_EQ(expected_val, values[idx].get_value());
+        }
+    }
+}
+
 } // namespace starrocks::lake
