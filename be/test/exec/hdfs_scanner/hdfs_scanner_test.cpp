@@ -327,6 +327,7 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMi
     SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
     auto* tuple_desc = _create_tuple_desc(descs);
     HdfsScannerContext ctx;
+    ctx.is_first_split = true;
 
     TExprMinMaxValue min_max_value;
     min_max_value.__set_type(TExprNodeType::INT_LITERAL);

@@ -179,6 +179,14 @@ public final class IcebergUtil {
             if (type.typeId() == Type.TypeID.TIMESTAMP) {
                 Types.TimestampType timestampType = (Types.TimestampType) type;
                 if (timestampType.shouldAdjustToUTC() && low instanceof Long && high instanceof Long) {
+                    // Iceberg TIMESTAMP WITH TIME ZONE stores instants in UTC, while StarRocks compares DATETIME
+                    // values in the session timezone, so we convert file-level bounds into session-local micros
+                    // before sending them to BE.
+                    //
+                    // Note that this is an endpoint conversion on file-level min/max only. For timezones whose
+                    // UTC offset changes over time (for example DST or historical rule changes), UTC->local is
+                    // not strictly monotonic over an arbitrary interval, so the converted low/high remain a
+                    // best-effort approximation rather than an exact local min/max for the full file.
                     minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
                     minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
                 }
