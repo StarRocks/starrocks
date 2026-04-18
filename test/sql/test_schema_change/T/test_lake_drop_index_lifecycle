@@ -1,0 +1,47 @@
+-- name: test_lake_drop_index_lifecycle @cloud
+create database lake_idx_drop_${uuid0};
+use lake_idx_drop_${uuid0};
+
+CREATE TABLE t1 (
+    k1 int,
+    v1 int,
+    v2 string
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+
+insert into t1 values (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c');
+
+-- ADD INDEX via fast path
+ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+function: wait_alter_table_finish()
+show index from t1;
+select count(*) from t1 where v1 = 20;
+
+-- DROP INDEX is a metadata-only tombstone; query must still be correct
+drop index idx_v1 on t1;
+function: wait_alter_table_finish()
+show index from t1;
+select count(*) from t1 where v1 = 20;
+select * from t1 order by k1;
+
+-- Re-ADD the same-named index after DROP is legal
+ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+function: wait_alter_table_finish()
+show index from t1;
+select count(*) from t1 where v1 = 20;
+
+-- Insert after re-add still returns correct counts
+insert into t1 values (4, 20, 'd'), (5, 20, 'e');
+select count(*) from t1 where v1 = 20;
+
+-- DROP again + ADD NGRAMBF on a string column to exercise the bloom path drop
+ALTER TABLE t1 ADD INDEX idx_v2(v2) USING NGRAMBF ("gram_num" = "3", "bloom_filter_fpp" = "0.05");
+function: wait_alter_table_finish()
+show index from t1;
+
+drop index idx_v2 on t1;
+function: wait_alter_table_finish()
+show index from t1;
+select count(*) from t1 where v2 = 'a';
+
+drop database lake_idx_drop_${uuid0};

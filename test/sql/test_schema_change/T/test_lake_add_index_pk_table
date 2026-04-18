@@ -1,0 +1,43 @@
+-- name: test_lake_add_index_pk_table @cloud
+create database lake_idx_pk_${uuid0};
+use lake_idx_pk_${uuid0};
+
+-- PK table: fast-path ADD INDEX is allowed for non-PK columns.
+CREATE TABLE t1 (
+    k1 int,
+    k2 int,
+    v1 int,
+    v2 string
+) PRIMARY KEY(k1, k2)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into t1 values (1, 1, 10, 'aa'), (2, 2, 20, 'bb'), (3, 3, 30, 'cc');
+
+-- ADD BITMAP INDEX on a non-PK value column via fast path
+ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+function: wait_alter_table_finish()
+show index from t1;
+
+select count(*) from t1 where v1 = 20;
+
+-- ADD NGRAMBF on another non-PK value column
+ALTER TABLE t1 ADD INDEX idx_v2(v2) USING NGRAMBF ("gram_num" = "2", "bloom_filter_fpp" = "0.05");
+function: wait_alter_table_finish()
+show index from t1;
+
+select count(*) from t1 where v2 = 'bb';
+
+-- Upsert after indexes: rows should stay consistent with indexes
+insert into t1 values (1, 1, 11, 'aa2'), (4, 4, 40, 'dd');
+select count(*) from t1 where v1 = 11;
+select count(*) from t1 where v1 = 10;
+select count(*) from t1 where v2 = 'dd';
+
+-- DROP INDEX on PK table should also be metadata-only
+drop index idx_v1 on t1;
+function: wait_alter_table_finish()
+show index from t1;
+select count(*) from t1 where v1 = 40;
+
+drop database lake_idx_pk_${uuid0};

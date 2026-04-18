@@ -1,0 +1,38 @@
+-- name: test_lake_add_index_fallback @cloud
+create database lake_idx_fb_${uuid0};
+use lake_idx_fb_${uuid0};
+
+-- GIN is intentionally out of scope for the fast path; it must fall back to the
+-- regular schema-change path (which also succeeds, just without IDG).
+CREATE TABLE t1 (
+    k1 int,
+    v1 string
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into t1 values (1, 'hello world'), (2, 'starrocks lake'), (3, 'fast path index');
+
+ALTER TABLE t1 ADD INDEX idx_gin(v1) USING GIN ("parser" = "english");
+function: wait_alter_table_finish()
+show index from t1;
+-- Query correctness after GIN add
+select count(*) from t1;
+
+-- Simultaneously adding multiple indexes in a single ALTER must route to a sane
+-- path (either fast-path per index or fallback); end-state is what matters.
+CREATE TABLE t2 (
+    k1 int,
+    v1 int,
+    v2 string
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+
+insert into t2 values (1, 100, 'x'), (2, 200, 'y'), (3, 300, 'z');
+
+ALTER TABLE t2 ADD INDEX idx_v1(v1) USING BITMAP, ADD INDEX idx_v2(v2) USING NGRAMBF ("gram_num" = "3");
+function: wait_alter_table_finish()
+show index from t2;
+select count(*) from t2 where v1 = 200;
+
+drop database lake_idx_fb_${uuid0};
