@@ -94,7 +94,9 @@
         "be/src/fs/bundle_file.*",
         "be/src/fs/fs_options.*",
         "be/src/fs/fs_memory.*",
-        "be/src/fs/fs_posix.*"
+        "be/src/fs/fs_posix.*",
+        "be/src/fs/fs_registry.*",
+        "be/src/fs/fs_scheme.*"
       ],
       "allowed_include_prefixes": ["fs/", "io/core/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
