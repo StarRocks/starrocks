@@ -114,8 +114,13 @@ bool PersistentIndexSstableFileset::append(std::unique_ptr<PersistentIndexSstabl
     std::string end_key = sstable->sstable_pb().range().end_key();
     // This sstable belong to same fileset.
     sstable->set_fileset_id(_fileset_id);
-    _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
-    _rebuild_sstable_vec();
+    auto [it, inserted] =
+            _sstable_map.emplace(std::make_pair(std::move(start_key), std::move(end_key)), std::move(sstable));
+    DCHECK(inserted);
+    // New entry has the largest start_key (checked above), so push_back keeps
+    // _sstable_vec sorted — no need to rebuild. Slices point into the map node's
+    // strings, which are stable under append-only mutation.
+    _sstable_vec.push_back({Slice(it->first.first), Slice(it->first.second), it->second.get()});
     return true;
 }
 
