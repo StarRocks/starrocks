@@ -298,25 +298,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：控制 Lake shared-data physical split 的兄弟 child morsel，是否复用同一个 chunk source 中已准备好的 scan state，而不是为每个 child morsel 重新构建完整的 `LakeDataSource`。第一版只覆盖 Lake 主路径上的 physical split child morsel；对于 query cache 的 delta-rowsets 读取、logical split morsel、GLM、CACHE SELECT/SST warmup 等暂未支持的场景，会自动回退到原有的按 morsel 重建 reader 路径。将该参数设置为 `false` 可完全关闭该复用优化，便于做 A/B 对比。
-- 引入版本：v4.1
-
-### enable_lake_scan_prepared_read_state_reuse
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：控制 Lake child morsel reuse 在 physical split 兄弟 morsel 之间，是否继续保留同一个 `TabletReader` 以及已准备好的 rowset 或 segment 状态。将该参数设为 `false`，同时保持 `enable_lake_scan_child_morsel_reuse=true`，即可把当前更深一层的复用路径与之前仅复用 chunk source 层的方案直接做 A/B 对比，而不必回退整个 chunk source shell。
-- 引入版本：v4.1
-
-### enable_lake_scan_key_pruning_reuse
-
-- 默认值：false
-- 类型：Boolean
-- 单位：-
-- 是否动态：是
-- 描述：控制 Lake child morsel reuse 在同一 segment 的 physical split 兄弟 morsel 之间，是否继续缓存由 query key-range pruning 计算出的 `SparseRange` 结果。开启后，后续兄弟 split 可直接复用 short-key pruning 结果，跳过重复的 `_lookup_ordinal` 和 row-range 组装。将该参数设为 `false` 可在 A/B 测试时只关闭这一层更深的 key-pruning 复用。
+- 描述：控制 Lake shared-data physical split 的兄弟 child morsel，在顶层 prepared split 路径已经选中的前提下，是否在同一个 slot 内继续复用 chunk source 和 reader 壳层。这只是 slot-local 的次级实现细节开关，不参与 prepared path 与 baseline path 的架构选路。对于 query cache 的 delta-rowsets 读取、logical split morsel、GLM、CACHE SELECT/SST warmup 等暂未支持的场景，会自动回退到原有的按 morsel 重建 reader 路径。
 - 引入版本：v4.1
 
 ### max_hdfs_file_handle

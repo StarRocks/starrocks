@@ -1070,18 +1070,10 @@ CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 // Disable this to fall back to the generic physical split path for A/B comparison.
 CONF_mBool(enable_lake_index_pruned_physical_split, "true");
 
-// Whether to reuse prepared Lake child morsel scan state for physical split siblings within the same chunk source.
-// Disable this to fully fall back to the per-morsel reader construction path for A/B comparison.
+// Whether physical split siblings on the same slot reuse the same Lake chunk source and reader shell after the
+// top-level prepared split path has already been chosen. This is a secondary implementation-detail switch and does
+// not participate in the planner's prepared-vs-baseline path selection.
 CONF_mBool(enable_lake_scan_child_morsel_reuse, "false");
-
-// Whether Lake child morsel reuse also keeps the TabletReader prepared read state and reader instance alive across
-// physical split siblings. Disable this to compare the current deep reuse path against the earlier chunk-source-level
-// reuse while keeping enable_lake_scan_child_morsel_reuse turned on.
-CONF_mBool(enable_lake_scan_prepared_read_state_reuse, "true");
-
-// Whether Lake child morsel reuse also caches per-segment key-pruned SparseRange results derived from query key ranges,
-// so sibling physical splits on the same segment can skip repeated _lookup_ordinal work. Disable this for A/B testing.
-CONF_mBool(enable_lake_scan_key_pruning_reuse, "false");
 
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");

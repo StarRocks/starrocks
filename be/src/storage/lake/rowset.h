@@ -48,23 +48,16 @@ struct PreparedSegmentReadState {
         UNPREPARED = 0,
         PREPARING = 1,
         PREPARED = 2,
-        FINISHED = 3,
-        FAILED = 4,
+        FAILED = 3,
     };
 
     std::atomic<uint32_t> lifecycle{static_cast<uint32_t>(Lifecycle::UNPREPARED)};
     Status prepare_status;
 
-    std::once_flag key_pruned_range_once;
-    Status key_pruned_range_status;
     SparseRangePtr key_pruned_range;
 
-    std::once_flag static_pruned_range_once;
-    Status static_pruned_range_status;
     SparseRangePtr static_pruned_range;
 
-    std::once_flag boundary_cache_once;
-    Status boundary_cache_status;
     std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_bounds;
     std::optional<Range<rowid_t>> tablet_range_rowid_range;
 
@@ -82,7 +75,9 @@ struct PreparedTabletReadState {
 };
 using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
 
-Status prepare_segment_key_pruned_scan_range(const SegmentPtr& segment, const SegmentReadOptions& options,
+Status prepare_segment_boundary_cache(const SegmentPtr& segment, const SegmentReadOptions& options,
+                                      const PreparedSegmentReadStatePtr& prepared_state);
+Status prepare_segment_key_pruned_scan_range(const SegmentPtr& segment,
                                              const PreparedSegmentReadStatePtr& pruning_state,
                                              SparseRangePtr* shared_scan_range);
 Status prepare_segment_static_pruned_scan_range(const Schema& schema, const SegmentPtr& segment,

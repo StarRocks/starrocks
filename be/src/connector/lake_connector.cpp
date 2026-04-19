@@ -195,6 +195,14 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
+void LakeDataSource::get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+    if (_reader == nullptr) {
+        split_tasks->clear();
+        return;
+    }
+    _reader->get_split_tasks(split_tasks);
+}
+
 bool LakeDataSource::can_reuse_with(const pipeline::ScanMorsel& morsel) const {
     return can_reuse_current_morsel(morsel);
 }
@@ -214,7 +222,7 @@ Status LakeDataSource::reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) 
 void LakeDataSource::release_for_reuse(RuntimeState* state) {
     _reuse_pending = false;
     _prepare_only_mode = false;
-    if (!config::enable_lake_scan_prepared_read_state_reuse) {
+    if (!enable_local_child_morsel_reuse()) {
         release_reader(state);
         _prepared_read_state.reset();
         return;
@@ -238,8 +246,7 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
 
 void LakeDataSource::refresh_reuse_signature() {
     _reuse_signature = {};
-    if (!config::enable_lake_scan_child_morsel_reuse || !_reader_schema_inited || has_reuse_blocker() || _morsel == nullptr ||
-        _morsel->from_version() != 0) {
+    if (!enable_local_child_morsel_reuse() || !_reader_schema_inited || _morsel == nullptr || _morsel->from_version() != 0) {
         return;
     }
 
@@ -280,6 +287,18 @@ bool LakeDataSource::can_reuse_with_signature(const pipeline::ScanMorsel& morsel
     return internal_scan_range.tablet_id == _reuse_signature.tablet_id &&
            internal_scan_range.version == _reuse_signature.version &&
            &(morsel.rowsets()) == _reuse_signature.rowsets_identity;
+}
+
+bool LakeDataSource::enable_local_child_morsel_reuse() const {
+    return config::enable_lake_scan_child_morsel_reuse && !has_reuse_blocker();
+}
+
+bool LakeDataSource::should_attach_prepared_read_state() const {
+    if (_prepared_read_state != nullptr) {
+        return true;
+    }
+    return _split_context == nullptr && _provider->could_split_physically() &&
+           config::enable_lake_index_pruned_physical_split;
 }
 
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
@@ -554,7 +573,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 }
 
 bool LakeDataSource::can_reuse_current_morsel(const pipeline::ScanMorsel& morsel) const {
-    return config::enable_lake_scan_child_morsel_reuse && can_reuse_with_signature(morsel);
+    return enable_local_child_morsel_reuse() && can_reuse_with_signature(morsel);
 }
 
 bool LakeDataSource::has_reuse_blocker() const {
@@ -602,7 +621,7 @@ Status LakeDataSource::open_reader_for_current_morsel() {
     if (_reader == nullptr) {
         ASSIGN_OR_RETURN(_reader, _tablet.new_reader(_reader_schema, need_split, _provider->could_split_physically(),
                                                      _morsel->rowsets(), _tablet_schema));
-        if (_prepared_read_state != nullptr || config::enable_lake_scan_prepared_read_state_reuse) {
+        if (should_attach_prepared_read_state()) {
             if (_prepared_read_state == nullptr) {
                 _prepared_read_state = std::make_shared<lake::TabletReader::PreparedReadState>();
             }
@@ -623,13 +642,11 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         _reader->set_is_asc_hint(_provider->is_asc_hint());
         RETURN_IF_ERROR(_reader->prepare());
     }
-    _reader->set_prepared_read_state(_prepared_read_state);
+    _reader->set_prepared_read_state(should_attach_prepared_read_state() ? _prepared_read_state : nullptr);
 
     if (split_context != nullptr && split_context->task_type == pipeline::LakeSplitContext::TaskType::SEGMENT_PREPARE) {
         RowidRangeOptionPtr local_rowid_range;
-        RETURN_IF_ERROR(
-                _reader->prepare_segment_split_task(_params, const_cast<pipeline::LakeSplitContext*>(split_context),
-                                                    &local_rowid_range));
+        RETURN_IF_ERROR(_reader->prepare_segment_split_task(_params, split_context, &local_rowid_range));
         if (local_rowid_range == nullptr) {
             _prepare_only_mode = true;
             return Status::OK();

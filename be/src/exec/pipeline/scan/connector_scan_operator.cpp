@@ -28,6 +28,34 @@
 
 namespace starrocks::pipeline {
 
+namespace {
+
+Status publish_generated_split_tasks(ConnectorScanOperator* scan_op, connector::DataSource* data_source,
+                                     ScanMorsel* current_morsel) {
+    std::vector<ScanSplitContextPtr> split_tasks;
+    data_source->get_split_tasks(&split_tasks);
+    if (split_tasks.empty()) {
+        return Status::OK();
+    }
+
+    if (current_morsel->is_last_split()) {
+        split_tasks.back()->set_last_split(true);
+        current_morsel->set_last_split(false);
+    }
+
+    std::vector<MorselPtr> split_morsels;
+    split_morsels.reserve(split_tasks.size());
+    for (auto& t : split_tasks) {
+        std::unique_ptr<ScanMorsel> m =
+                std::make_unique<ScanMorsel>(current_morsel->get_plan_node_id(), *current_morsel->get_scan_range());
+        m->set_split_context(std::move(t));
+        split_morsels.emplace_back(std::move(m));
+    }
+    return scan_op->append_morsels(std::move(split_morsels));
+}
+
+} // namespace
+
 // ==================== ConnectorScanOperatorFactory ====================
 ConnectorScanOperatorMemShareArbitrator::ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit,
                                                                                  int connector_scan_node_number)
@@ -910,6 +938,8 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         VLOG_OPERATOR << build_debug_string("consume");
     }
     RETURN_IF_ERROR(_data_source->open(state));
+    auto* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
+    RETURN_IF_ERROR(publish_generated_split_tasks(scan_op, _data_source.get(), current_morsel));
     if (!_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
         _ck_acc.set_max_size(_limit);
     } else {
@@ -997,30 +1027,9 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         }
         _ck_acc.reset();
 
-        // before returning eof, we can check if this chunk source generates splits.
-        std::vector<ScanSplitContextPtr> split_tasks;
-        _data_source->get_split_tasks(&split_tasks);
+        // before returning eof, we can still flush any split tasks that became ready while scanning the current morsel.
         auto* current_morsel = down_cast<ScanMorsel*>(_morsel.get());
-        if (split_tasks.size() != 0) {
-            VLOG_OPERATOR << "get_split_tasks. query_id = " << print_id(state->query_id())
-                          << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
-                          << ", split_tasks = " << split_tasks.size();
-
-            std::vector<MorselPtr> split_morsels;
-
-            if (current_morsel->is_last_split()) {
-                split_tasks.back()->set_last_split(true);
-            }
-
-            for (auto& t : split_tasks) {
-                std::unique_ptr<ScanMorsel> m = std::make_unique<ScanMorsel>(current_morsel->get_plan_node_id(),
-                                                                             *current_morsel->get_scan_range());
-                m->set_split_context(std::move(t));
-                split_morsels.emplace_back(std::move(m));
-            }
-
-            RETURN_IF_ERROR(scan_op->append_morsels(std::move(split_morsels)));
-        }
+        RETURN_IF_ERROR(publish_generated_split_tasks(scan_op, _data_source.get(), current_morsel));
         return Status::EndOfFile("");
     }();
 

@@ -310,25 +310,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Controls whether Lake shared-data physical split sibling morsels reuse the prepared scan state cached in the same chunk source instead of rebuilding the full `LakeDataSource` setup for every child morsel. The first version only applies to physical split child morsels on the main Lake scan path, and automatically falls back to the original per-morsel reader construction path for unsupported cases such as query cache delta-rowset reads, logical split morsels, GLM, or CACHE SELECT warmup paths. Set this to `false` to fully disable the reuse optimization for A/B comparison.
-- Introduced in: v4.1
-
-### enable_lake_scan_prepared_read_state_reuse
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Controls whether Lake child morsel reuse also keeps the same `TabletReader` and prepared rowset or segment state alive across physical split siblings. Set this to `false` while keeping `enable_lake_scan_child_morsel_reuse=true` to compare the newer deep reuse path against the earlier chunk-source-level reuse without rebuilding the whole chunk source shell.
-- Introduced in: v4.1
-
-### enable_lake_scan_key_pruning_reuse
-
-- Default: false
-- Type: Boolean
-- Unit: -
-- Is mutable: Yes
-- Description: Controls whether Lake child morsel reuse also caches the per-segment `SparseRange` produced by query key-range pruning, so sibling physical splits on the same segment can reuse the short-key pruning result instead of repeating `_lookup_ordinal` and row-range assembly. Set this to `false` to disable only this deeper key-pruning reuse layer during A/B tests.
+- Description: Controls whether Lake shared-data physical split sibling morsels reuse the same chunk source and reader shell within one slot after the top-level prepared split path has already been chosen. This is a secondary implementation-detail switch for slot-local reuse only; it does not participate in the prepared-vs-baseline path selection. Unsupported cases such as query cache delta-rowset reads, logical split morsels, GLM, or CACHE SELECT warmup paths automatically fall back to the original per-morsel reader construction path.
 - Introduced in: v4.1
 
 ### late_materialization_ratio

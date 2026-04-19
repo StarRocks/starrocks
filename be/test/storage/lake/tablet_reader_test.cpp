@@ -847,7 +847,6 @@ TEST_F(LakeTabletReaderSpit, test_static_prepare_gate_skips_low_fanout_segments)
     create_split_test_tablet();
 
     ConfigResetGuard<bool> split_guard(&config::enable_lake_index_pruned_physical_split, true);
-    ConfigResetGuard<bool> prepared_guard(&config::enable_lake_scan_prepared_read_state_reuse, true);
 
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, true, true);
     auto prepared_state = std::make_shared<TabletReader::PreparedReadState>();
@@ -878,7 +877,6 @@ TEST_F(LakeTabletReaderSpit, test_static_prepare_populates_cache_for_high_fanout
     create_split_test_tablet();
 
     ConfigResetGuard<bool> split_guard(&config::enable_lake_index_pruned_physical_split, true);
-    ConfigResetGuard<bool> prepared_guard(&config::enable_lake_scan_prepared_read_state_reuse, true);
     ConfigResetGuard<bool> zonemap_guard(&config::enable_index_page_level_zonemap_filter, true);
 
     auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema, true, true);

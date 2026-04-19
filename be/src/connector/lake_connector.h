@@ -74,9 +74,7 @@ public:
     int64_t num_bytes_read() const override { return _bytes_read; }
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
-    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
-        _reader->get_split_tasks(split_tasks);
-    }
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
 
     // parse_runtime_filters is used to generate min-max predicates from runtime filters, while LakeDataSource already
     // generates predicates by ScanConjunctsManager, so skip parse_runtime_filters to make the parse logic is consistent
@@ -98,6 +96,8 @@ private:
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
     void update_counter(RuntimeState* state, const OlapReaderStatistics& stats);
+    bool enable_local_child_morsel_reuse() const;
+    bool should_attach_prepared_read_state() const;
     bool can_reuse_current_morsel(const pipeline::ScanMorsel& morsel) const;
     bool can_reuse_with_signature(const pipeline::ScanMorsel& morsel) const;
     bool has_reuse_blocker() const;

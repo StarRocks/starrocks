@@ -103,7 +103,8 @@ public:
     }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
-    Status prepare_segment_split_task(const TabletReaderParams& read_params, pipeline::LakeSplitContext* split_context,
+    Status prepare_segment_split_task(const TabletReaderParams& read_params,
+                                      const pipeline::LakeSplitContext* split_context,
                                       RowidRangeOptionPtr* local_rowid_range) {
         return _prepare_segment_split_task(read_params, split_context, local_rowid_range);
     }
@@ -129,8 +130,9 @@ private:
     Status build_prepared_read_state(const TabletReaderParams& params, PreparedReadState* state);
     Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* rs_opts);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
-    Status _build_index_pruned_physical_split_tasks(const TabletReaderParams& read_params);
-    Status _prepare_segment_split_task(const TabletReaderParams& read_params, pipeline::LakeSplitContext* split_context,
+    Status _build_prepared_physical_split_tasks(const TabletReaderParams& read_params, size_t segment_count);
+    Status _prepare_segment_split_task(const TabletReaderParams& read_params,
+                                       const pipeline::LakeSplitContext* split_context,
                                        RowidRangeOptionPtr* local_rowid_range);
 
     Status init_predicates(const TabletReaderParams& read_params);

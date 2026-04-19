@@ -147,7 +147,6 @@ struct LakeSplitContext : public ScanSplitContext {
     RowidRangeOptionPtr rowid_range;
     // logical split
     ShortKeyRangesOptionPtr short_key_range;
-    std::shared_ptr<SplitMorselQueue> split_morsel_queue = nullptr;
     lake::PreparedTabletReadStatePtr prepared_read_state = nullptr;
     lake::PreparedSegmentReadStatePtr prepared_segment_state = nullptr;
     size_t rowset_index = 0;
