@@ -46,11 +46,7 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
-<<<<<<< HEAD
-=======
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.type.IntegerType;
->>>>>>> bc1de2969d ([BugFix] Fix stale scan ranges accumulation in incremental batch assignment (#71789))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
