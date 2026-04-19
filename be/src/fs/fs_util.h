@@ -21,6 +21,7 @@
 #include "base/testutil/sync_point.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_scheme.h"
 
 namespace starrocks::fs {
 
@@ -211,44 +212,6 @@ inline Status copy_append_file(const std::string& src_path, WritableFile* dst_fi
 inline Status canonicalize(const std::string& path, std::string* real_path) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     return fs->canonicalize(path, real_path);
-}
-
-inline bool starts_with(std::string_view s, std::string_view prefix) {
-    return (s.size() >= prefix.size()) && (memcmp(s.data(), prefix.data(), prefix.size()) == 0);
-}
-
-inline bool is_in_list(std::string_view uri, const std::vector<std::string>& list) {
-    for (const auto& item : list) {
-        if (starts_with(uri, item)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool is_fallback_to_hadoop_fs(std::string_view uri);
-
-bool is_s3_uri(std::string_view uri);
-
-inline bool is_azblob_uri(std::string_view uri) {
-    return starts_with(uri, "wasb://") || starts_with(uri, "wasbs://");
-}
-
-inline bool is_azure_uri(std::string_view uri) {
-    return starts_with(uri, "wasb://") || starts_with(uri, "wasbs://") || starts_with(uri, "adl://") ||
-           starts_with(uri, "abfs://") || starts_with(uri, "abfss://");
-}
-
-inline bool is_gcs_uri(std::string_view uri) {
-    return starts_with(uri, "gs://");
-}
-
-inline bool is_hdfs_uri(std::string_view uri) {
-    return starts_with(uri, "hdfs://");
-}
-
-inline bool is_posix_uri(std::string_view uri) {
-    return (memchr(uri.data(), ':', uri.size()) == nullptr) || starts_with(uri, "posix://");
 }
 
 } // namespace starrocks::fs

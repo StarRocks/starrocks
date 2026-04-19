@@ -25,6 +25,8 @@ set(CORE_FILES
     fs_options.cpp
     fs_memory.cpp
     fs_posix.cpp
+    fs_registry.cpp
+    fs_scheme.cpp
     )
 
 ADD_BE_LIB(FSCore
