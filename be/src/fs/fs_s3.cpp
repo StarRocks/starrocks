@@ -38,6 +38,8 @@
 #include "fs/credential/cloud_configuration_factory.h"
 #include "fs/encrypt_file.h"
 #include "fs/fs_options_helper.h"
+#include "fs/fs_registry.h"
+#include "fs/fs_scheme.h"
 #include "fs/output_stream_adapter.h"
 #include "gutil/casts.h"
 #include "gutil/strings/util.h"
@@ -1255,6 +1257,45 @@ Status S3FileSystem::delete_dir_recursive_v1(const std::string& dirname) {
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options) {
     return std::make_unique<S3FileSystem>(options);
 }
+
+namespace fs {
+namespace {
+
+thread_local std::shared_ptr<FileSystem> tls_fs_s3_registry;
+
+bool match_s3_shared(std::string_view uri) {
+    return is_s3_uri(uri);
+}
+
+bool match_s3_unique(std::string_view uri, const FSOptions&) {
+    return is_s3_uri(uri);
+}
+
+StatusOr<std::shared_ptr<FileSystem>> create_s3_shared(std::string_view) {
+    if (tls_fs_s3_registry == nullptr) {
+        tls_fs_s3_registry.reset(new_fs_s3(FSOptions()).release());
+    }
+    return tls_fs_s3_registry;
+}
+
+StatusOr<std::unique_ptr<FileSystem>> create_s3_unique(std::string_view, const FSOptions& options) {
+    return new_fs_s3(options);
+}
+
+} // namespace
+
+FileSystemProvider new_s3_file_system_provider(int priority) {
+    return {
+            .id = "s3",
+            .priority = priority,
+            .match_shared = match_s3_shared,
+            .create_shared = create_s3_shared,
+            .match_unique = match_s3_unique,
+            .create_unique = create_s3_unique,
+    };
+}
+
+} // namespace fs
 
 void close_s3_clients() {
     S3ClientFactory::instance().close();

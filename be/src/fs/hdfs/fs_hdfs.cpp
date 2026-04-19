@@ -25,6 +25,8 @@
 #include "common/config_hdfs_fwd.h"
 #include "common/system/backend_options.h"
 #include "fs/encrypt_file.h"
+#include "fs/fs_registry.h"
+#include "fs/fs_scheme.h"
 #include "fs/fs_util.h"
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gen_cpp/AgentService_types.h"
@@ -787,5 +789,63 @@ Status HdfsFileSystem::rename_file(const std::string& src, const std::string& ta
 std::unique_ptr<FileSystem> new_fs_hdfs(const FSOptions& options) {
     return std::make_unique<HdfsFileSystem>(options);
 }
+
+namespace fs {
+namespace {
+
+thread_local std::shared_ptr<FileSystem> tls_fs_hdfs_registry;
+
+bool match_hdfs_fallback_shared(std::string_view uri) {
+    return is_fallback_to_hadoop_fs(uri);
+}
+
+bool match_hdfs_fallback_unique(std::string_view uri, const FSOptions&) {
+    return is_fallback_to_hadoop_fs(uri);
+}
+
+bool match_hdfs_default_shared(std::string_view) {
+    return true;
+}
+
+bool match_hdfs_default_unique(std::string_view, const FSOptions&) {
+    return true;
+}
+
+StatusOr<std::shared_ptr<FileSystem>> create_hdfs_shared(std::string_view) {
+    if (tls_fs_hdfs_registry == nullptr) {
+        tls_fs_hdfs_registry.reset(new_fs_hdfs(FSOptions()).release());
+    }
+    return tls_fs_hdfs_registry;
+}
+
+StatusOr<std::unique_ptr<FileSystem>> create_hdfs_unique(std::string_view, const FSOptions& options) {
+    return new_fs_hdfs(options);
+}
+
+} // namespace
+
+FileSystemProvider new_hdfs_fallback_file_system_provider(int priority) {
+    return {
+            .id = "hdfs-fallback",
+            .priority = priority,
+            .match_shared = match_hdfs_fallback_shared,
+            .create_shared = create_hdfs_shared,
+            .match_unique = match_hdfs_fallback_unique,
+            .create_unique = create_hdfs_unique,
+    };
+}
+
+FileSystemProvider new_hdfs_file_system_provider(int priority) {
+    return {
+            .id = "hdfs",
+            .priority = priority,
+            .match_shared = match_hdfs_default_shared,
+            .create_shared = create_hdfs_shared,
+            .match_unique = match_hdfs_default_unique,
+            .create_unique = create_hdfs_unique,
+    };
+}
+
+} // namespace fs
 
 } // namespace starrocks

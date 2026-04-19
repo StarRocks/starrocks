@@ -35,6 +35,9 @@
 #include "fs/encrypt_file.h"
 #include "fs/fd_cache.h"
 #include "fs/fs.h"
+#include "fs/fs_posix.h"
+#include "fs/fs_registry.h"
+#include "fs/fs_scheme.h"
 #include "gutil/gscoped_ptr.h"
 #include "gutil/macros.h"
 #include "gutil/port.h"
@@ -700,5 +703,44 @@ FileSystem* FileSystem::Default() {
 std::unique_ptr<FileSystem> new_fs_posix() {
     return std::make_unique<PosixFileSystem>();
 }
+
+namespace fs {
+namespace {
+
+thread_local std::shared_ptr<FileSystem> tls_fs_posix_registry;
+
+bool match_posix_shared(std::string_view uri) {
+    return is_posix_uri(uri);
+}
+
+bool match_posix_unique(std::string_view uri, const FSOptions&) {
+    return is_posix_uri(uri);
+}
+
+StatusOr<std::shared_ptr<FileSystem>> create_posix_shared(std::string_view) {
+    if (tls_fs_posix_registry == nullptr) {
+        tls_fs_posix_registry = std::make_shared<PosixFileSystem>();
+    }
+    return tls_fs_posix_registry;
+}
+
+StatusOr<std::unique_ptr<FileSystem>> create_posix_unique(std::string_view, const FSOptions&) {
+    return new_fs_posix();
+}
+
+} // namespace
+
+FileSystemProvider new_posix_file_system_provider(int priority) {
+    return {
+            .id = "posix",
+            .priority = priority,
+            .match_shared = match_posix_shared,
+            .create_shared = create_posix_shared,
+            .match_unique = match_posix_unique,
+            .create_unique = create_posix_unique,
+    };
+}
+
+} // namespace fs
 
 } // end namespace starrocks
