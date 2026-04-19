@@ -38,10 +38,10 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
-#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
@@ -411,17 +411,17 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     return do_read(schema, options, &prepared_segments, reusable_segment_iterators, nullptr);
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options,
-                                                     const std::vector<SegmentPtr>& prepared_segments,
-                                                     std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
-                                                     std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(
+        const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
+        std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
+        std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states) {
     return do_read(schema, options, &prepared_segments, reusable_segment_iterators, prepared_segment_read_states);
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, const RowsetReadOptions& options,
-                                                        const std::vector<SegmentPtr>* prepared_segments,
-                                                        std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
-                                                        std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(
+        const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>* prepared_segments,
+        std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
+        std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states) {
     SegmentReadOptions seg_options;
     if (options.lake_io_opts.fs) {
         seg_options.fs = options.lake_io_opts.fs;
@@ -583,9 +583,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
                 seg_options.cached_tablet_range_rowid = &pruning_state->tablet_range_rowid_range;
             }
             if (config::enable_lake_scan_key_pruning_reuse && options.rowid_range_option != nullptr) {
-                RETURN_IF_ERROR(
-                        prepare_segment_key_pruned_scan_range(seg_ptr, seg_options, pruning_state,
-                                                              &seg_options.shared_key_pruned_scan_range));
+                RETURN_IF_ERROR(prepare_segment_key_pruned_scan_range(seg_ptr, seg_options, pruning_state,
+                                                                      &seg_options.shared_key_pruned_scan_range));
             }
             if (pruning_state != nullptr && pruning_state->static_pruned_range != nullptr) {
                 seg_options.shared_static_pruned_scan_range = pruning_state->static_pruned_range;
@@ -599,7 +598,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             } else {
                 RETURN_IF_ERROR(reset_raw_segment_iterator(reusable_iter, seg_options));
             }
-            segment_iterators.emplace_back(new_projection_iterator(schema, make_non_closing_chunk_iterator(reusable_iter)));
+            segment_iterators.emplace_back(
+                    new_projection_iterator(schema, make_non_closing_chunk_iterator(reusable_iter)));
         } else {
             auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
             if (res.status().is_end_of_file()) {

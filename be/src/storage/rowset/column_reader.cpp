@@ -734,11 +734,11 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
             }
             const int64_t page_span = static_cast<int64_t>(end_page) - start_page + 1;
             if (UNLIKELY(page_span > range.span_size())) {
-                return Status::Corruption(fmt::format(
-                        "inconsistent zonemap page span, column={}, num_pages={}, scan_range=[{}, {}), "
-                        "scan_rows={}, start_page={}, end_page={}, page_span={}",
-                        _name, num_pages, range.begin(), range.end(), range.span_size(), start_page, end_page,
-                        page_span));
+                return Status::Corruption(
+                        fmt::format("inconsistent zonemap page span, column={}, num_pages={}, scan_range=[{}, {}), "
+                                    "scan_rows={}, start_page={}, end_page={}, page_span={}",
+                                    _name, num_pages, range.begin(), range.end(), range.span_size(), start_page,
+                                    end_page, page_span));
             }
             candidate_page_ranges.add(Range<int32_t>(start_page, end_page + 1));
         }
