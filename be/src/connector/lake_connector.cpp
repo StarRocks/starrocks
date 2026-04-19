@@ -246,7 +246,8 @@ void LakeDataSource::release_for_reuse(RuntimeState* state) {
 
 void LakeDataSource::refresh_reuse_signature() {
     _reuse_signature = {};
-    if (!enable_local_child_morsel_reuse() || !_reader_schema_inited || _morsel == nullptr || _morsel->from_version() != 0) {
+    if (!enable_local_child_morsel_reuse() || !_reader_schema_inited || _morsel == nullptr ||
+        _morsel->from_version() != 0) {
         return;
     }
 
@@ -274,7 +275,8 @@ bool LakeDataSource::can_reuse_with_signature(const pipeline::ScanMorsel& morsel
     }
 
     const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(morsel.get_split_context());
-    if (split_context == nullptr || split_context->rowid_range == nullptr || split_context->short_key_range != nullptr) {
+    if (split_context == nullptr || split_context->rowid_range == nullptr ||
+        split_context->short_key_range != nullptr) {
         return false;
     }
 
@@ -580,10 +582,9 @@ bool LakeDataSource::has_reuse_blocker() const {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     const bool enable_glm = thrift_lake_scan_node.__isset.enable_global_late_materialization &&
                             thrift_lake_scan_node.enable_global_late_materialization;
-    const bool enable_cache_select = _runtime_state != nullptr &&
-                                     _runtime_state->query_options().__isset.enable_cache_select &&
-                                     _runtime_state->query_options().enable_cache_select &&
-                                     config::lake_cache_select_in_physical_way;
+    const bool enable_cache_select =
+            _runtime_state != nullptr && _runtime_state->query_options().__isset.enable_cache_select &&
+            _runtime_state->query_options().enable_cache_select && config::lake_cache_select_in_physical_way;
     return enable_glm || enable_cache_select;
 }
 

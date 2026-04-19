@@ -635,21 +635,15 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 if (lake_child_reuse_candidate && _lake_child_reuse_attempt_counter != nullptr) {
                     COUNTER_UPDATE(_lake_child_reuse_attempt_counter, 1);
                 }
-                const bool can_reuse = [&]() {
-                    return reusable_chunk_source->can_reuse_with(*morsel);
-                }();
+                const bool can_reuse = [&]() { return reusable_chunk_source->can_reuse_with(*morsel); }();
                 if (can_reuse) {
                     Status status;
-                    {
-                        status = reusable_chunk_source->reset_morsel(state, std::move(morsel));
-                    }
+                    { status = reusable_chunk_source->reset_morsel(state, std::move(morsel)); }
                     if (!status.ok()) {
                         if (lake_child_reuse_candidate && _lake_child_reuse_miss_counter != nullptr) {
                             COUNTER_UPDATE(_lake_child_reuse_miss_counter, 1);
                         }
-                        {
-                            reusable_chunk_source->close(state);
-                        }
+                        { reusable_chunk_source->close(state); }
                         static_cast<void>(set_finishing(state));
                         return status;
                     }
@@ -661,9 +655,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                     if (lake_child_reuse_candidate && _lake_child_reuse_miss_counter != nullptr) {
                         COUNTER_UPDATE(_lake_child_reuse_miss_counter, 1);
                     }
-                    {
-                        reusable_chunk_source->close(state);
-                    }
+                    { reusable_chunk_source->close(state); }
                 }
             } else if (lake_child_reuse_candidate && _lake_child_reuse_no_source_counter != nullptr) {
                 COUNTER_UPDATE(_lake_child_reuse_no_source_counter, 1);
@@ -674,9 +666,7 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                     _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
                 }
                 Status status;
-                {
-                    status = _chunk_sources[chunk_source_index]->prepare(state);
-                }
+                { status = _chunk_sources[chunk_source_index]->prepare(state); }
                 if (!status.ok()) {
                     _chunk_sources[chunk_source_index] = nullptr;
                     static_cast<void>(set_finishing(state));

@@ -137,7 +137,8 @@ private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     bool _is_lake_child_reuse_candidate(const Morsel& morsel) const override;
     ChunkSourcePtr _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index) override;
-    void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) override;
+    void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                      ChunkSourcePtr chunk_source) override;
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
     std::vector<ChunkSourcePtr> _reusable_chunk_sources;

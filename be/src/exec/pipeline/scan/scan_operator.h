@@ -148,7 +148,8 @@ protected:
     // and all cached chunk of this morsel has benn read out
     virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
     virtual ChunkSourcePtr _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index) { return nullptr; }
-    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) {
+    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                              ChunkSourcePtr chunk_source) {
         if (chunk_source != nullptr) {
             chunk_source->close(state);
         }
