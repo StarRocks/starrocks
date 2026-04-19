@@ -39,10 +39,12 @@ class SeekTuple;
 class Segment;
 class TabletSchema;
 class TabletMetadataPB;
+struct RowidRangeOption;
+using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 
 namespace lake {
 
-struct PreparedSegmentPruningState;
+struct PreparedTabletReadState;
 class Rowset;
 class TabletManager;
 
@@ -60,13 +62,8 @@ class TabletReader final : public ChunkIterator {
     using TabletReaderParams = starrocks::TabletReaderParams;
 
 public:
-    struct PreparedReadState {
-        std::vector<RowsetPtr> rowsets;
-        std::vector<std::vector<std::shared_ptr<Segment>>> rowset_segments;
-        std::vector<std::vector<ChunkIteratorPtr>> rowset_iterators;
-        std::vector<std::vector<std::shared_ptr<PreparedSegmentPruningState>>> rowset_pruning_states;
-    };
-    using PreparedReadStatePtr = std::shared_ptr<PreparedReadState>;
+    using PreparedReadState = PreparedTabletReadState;
+    using PreparedReadStatePtr = PreparedTabletReadStatePtr;
 
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
@@ -106,6 +103,10 @@ public:
     }
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
+    Status prepare_segment_split_task(const TabletReaderParams& read_params, pipeline::LakeSplitContext* split_context,
+                                      RowidRangeOptionPtr* local_rowid_range) {
+        return _prepare_segment_split_task(read_params, split_context, local_rowid_range);
+    }
 
     static Status parse_seek_range(const TabletSchema& tablet_schema,
                                    TabletReaderParams::RangeStartOperation range_start_op,
@@ -129,6 +130,8 @@ private:
     Status init_rowset_read_options(const TabletReaderParams& params, RowsetReadOptions* rs_opts);
     Status get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters);
     Status _build_index_pruned_physical_split_tasks(const TabletReaderParams& read_params);
+    Status _prepare_segment_split_task(const TabletReaderParams& read_params, pipeline::LakeSplitContext* split_context,
+                                       RowidRangeOptionPtr* local_rowid_range);
 
     Status init_predicates(const TabletReaderParams& read_params);
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
@@ -148,6 +151,7 @@ private:
     bool _rowsets_inited = false;
     std::vector<RowsetPtr> _rowsets;
     std::vector<SegmentSharedPtr> _segments;
+    std::vector<std::vector<ChunkIteratorPtr>> _reusable_rowset_iterators;
     std::shared_ptr<ChunkIterator> _collect_iter;
 
     DeletePredicates _delete_predicates;

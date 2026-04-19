@@ -71,6 +71,8 @@ Status SegmentReadOptions::convert_to(SegmentReadOptions* dst, const std::vector
     dst->is_first_split_of_segment = is_first_split_of_segment;
     dst->shared_key_pruned_scan_range = shared_key_pruned_scan_range;
     dst->shared_static_pruned_scan_range = shared_static_pruned_scan_range;
+    dst->cached_seek_range_rowid_bounds = cached_seek_range_rowid_bounds;
+    dst->cached_tablet_range_rowid = cached_tablet_range_rowid;
     if (tablet_range.has_value()) {
         dst->tablet_range = SeekRange();
         tablet_range->convert_to(&dst->tablet_range.value(), new_types);

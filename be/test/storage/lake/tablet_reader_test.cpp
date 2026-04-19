@@ -866,7 +866,7 @@ TEST_F(LakeTabletReaderSpit, test_static_prepare_gate_skips_low_fanout_segments)
     ASSERT_OK(reader->open(params));
 
     bool has_static_pruned_range = false;
-    for (const auto& rowset_states : prepared_state->rowset_pruning_states) {
+    for (const auto& rowset_states : prepared_state->rowset_prepared_states) {
         for (const auto& pruning_state : rowset_states) {
             has_static_pruned_range = has_static_pruned_range || pruning_state->static_pruned_range != nullptr;
         }
@@ -901,7 +901,7 @@ TEST_F(LakeTabletReaderSpit, test_static_prepare_populates_cache_for_high_fanout
     ASSERT_OK(reader->open(params));
 
     bool has_static_pruned_range = false;
-    for (const auto& rowset_states : prepared_state->rowset_pruning_states) {
+    for (const auto& rowset_states : prepared_state->rowset_prepared_states) {
         for (const auto& pruning_state : rowset_states) {
             has_static_pruned_range = has_static_pruned_range || pruning_state->static_pruned_range != nullptr;
         }

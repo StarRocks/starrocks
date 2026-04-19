@@ -1089,7 +1089,7 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_prepare_static_pruned_scan_rang
     root.add_child(PredicateColumnNode(pred.get()));
     seg_options.pred_tree_for_zone_map = PredicateTree::create(std::move(root));
 
-    auto pruning_state = std::make_shared<PreparedSegmentPruningState>();
+    auto pruning_state = std::make_shared<PreparedSegmentReadState>();
     SparseRangePtr static_pruned_range;
     const auto schema = ChunkHelper::convert_schema(_tablet_schema, std::vector<ColumnId>{0});
     ASSERT_OK(prepare_segment_static_pruned_scan_range(schema, segments[0], seg_options, pruning_state,

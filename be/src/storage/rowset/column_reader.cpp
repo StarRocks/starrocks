@@ -719,24 +719,37 @@ Status ColumnReader::_zone_map_filter(const std::vector<const ColumnPredicate*>&
     };
 
     if (scan_range != nullptr && !scan_range->empty()) {
+        SparseRange<int32_t> candidate_page_ranges;
         SparseRangeIterator<> iter = scan_range->new_iterator();
-        uint32_t last_page_index = std::numeric_limits<uint32_t>::max();
         while (iter.has_more()) {
             const auto range = iter.next(iter.remaining_rows());
             int32_t start_page = _ordinal_index->seek_at_or_before(range.begin()).page_index();
             int32_t end_page = _ordinal_index->seek_at_or_before(range.end() - 1).page_index();
-            if (end_page + 1 <= num_pages) {
-                end_page++;
+            if (UNLIKELY(start_page < 0 || start_page >= num_pages || end_page < 0 || end_page >= num_pages ||
+                         start_page > end_page)) {
+                return Status::Corruption(fmt::format(
+                        "invalid zonemap page range, column={}, num_pages={}, scan_range=[{}, {}), start_page={}, "
+                        "end_page={}",
+                        _name, num_pages, range.begin(), range.end(), start_page, end_page));
             }
+            const int64_t page_span = static_cast<int64_t>(end_page) - start_page + 1;
+            if (UNLIKELY(page_span > range.span_size())) {
+                return Status::Corruption(fmt::format(
+                        "inconsistent zonemap page span, column={}, num_pages={}, scan_range=[{}, {}), "
+                        "scan_rows={}, start_page={}, end_page={}, page_span={}",
+                        _name, num_pages, range.begin(), range.end(), range.span_size(), start_page, end_page,
+                        page_span));
+            }
+            candidate_page_ranges.add(Range<int32_t>(start_page, end_page + 1));
+        }
 
-            for (int32_t page_index = start_page; page_index < end_page; ++page_index) {
-                if (static_cast<uint32_t>(page_index) == last_page_index) {
-                    continue;
-                }
+        for (size_t i = 0; i < candidate_page_ranges.size(); ++i) {
+            const auto& page_range = candidate_page_ranges[i];
+            for (int32_t page_index = page_range.begin(); page_index < page_range.end(); ++page_index) {
                 RETURN_IF_ERROR(append_page_if_match(page_index));
-                last_page_index = page_index;
             }
         }
+
         return Status::OK();
     }
 

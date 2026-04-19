@@ -39,6 +39,7 @@
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/lake/rowset.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/predicate_parser.h"
@@ -63,6 +64,7 @@ std::string LakeDataSource::name() const {
 
 Status LakeDataSource::open(RuntimeState* state) {
     _runtime_state = state;
+    _prepare_only_mode = false;
     if (_reuse_pending) {
         _reuse_pending = false;
         return open_reader_for_current_morsel();
@@ -140,12 +142,16 @@ Status LakeDataSource::open(RuntimeState* state) {
 
 void LakeDataSource::close(RuntimeState* state) {
     _reuse_pending = false;
+    _prepare_only_mode = false;
     release_reader(state);
     _prepared_read_state.reset();
     _predicate_free_pool.clear();
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+    if (_prepare_only_mode) {
+        return Status::EndOfFile("segment prepare only");
+    }
     ASSIGN_OR_RETURN(auto chunk_ptr,
                      ChunkHelper::new_chunk_pooled_checked(_prj_iter->output_schema(), _runtime_state->chunk_size()));
     chunk->reset(chunk_ptr);
@@ -207,6 +213,7 @@ Status LakeDataSource::reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) 
 
 void LakeDataSource::release_for_reuse(RuntimeState* state) {
     _reuse_pending = false;
+    _prepare_only_mode = false;
     if (!config::enable_lake_scan_prepared_read_state_reuse) {
         release_reader(state);
         _prepared_read_state.reset();
@@ -565,11 +572,15 @@ Status LakeDataSource::open_reader_for_current_morsel() {
     if (!_reader_schema_inited) {
         return Status::InternalError("lake reader schema is not initialized");
     }
+    _prepare_only_mode = false;
 
     _params.rowid_range_option.reset();
     _params.short_key_ranges_option.reset();
+    const auto* split_context = dynamic_cast<const pipeline::LakeSplitContext*>(_split_context);
+    if (split_context != nullptr && split_context->prepared_read_state != nullptr) {
+        _prepared_read_state = split_context->prepared_read_state;
+    }
     if (_split_context != nullptr) {
-        auto* split_context = down_cast<const pipeline::LakeSplitContext*>(_split_context);
         if (_provider->could_split_physically()) {
             _params.rowid_range_option = split_context->rowid_range;
         } else {
@@ -591,7 +602,7 @@ Status LakeDataSource::open_reader_for_current_morsel() {
     if (_reader == nullptr) {
         ASSIGN_OR_RETURN(_reader, _tablet.new_reader(_reader_schema, need_split, _provider->could_split_physically(),
                                                      _morsel->rowsets(), _tablet_schema));
-        if (config::enable_lake_scan_prepared_read_state_reuse) {
+        if (_prepared_read_state != nullptr || config::enable_lake_scan_prepared_read_state_reuse) {
             if (_prepared_read_state == nullptr) {
                 _prepared_read_state = std::make_shared<lake::TabletReader::PreparedReadState>();
             }
@@ -612,6 +623,21 @@ Status LakeDataSource::open_reader_for_current_morsel() {
         _reader->set_is_asc_hint(_provider->is_asc_hint());
         RETURN_IF_ERROR(_reader->prepare());
     }
+    _reader->set_prepared_read_state(_prepared_read_state);
+
+    if (split_context != nullptr && split_context->task_type == pipeline::LakeSplitContext::TaskType::SEGMENT_PREPARE) {
+        RowidRangeOptionPtr local_rowid_range;
+        RETURN_IF_ERROR(
+                _reader->prepare_segment_split_task(_params, const_cast<pipeline::LakeSplitContext*>(split_context),
+                                                    &local_rowid_range));
+        if (local_rowid_range == nullptr) {
+            _prepare_only_mode = true;
+            return Status::OK();
+        }
+        _params.rowid_range_option = std::move(local_rowid_range);
+        _params.short_key_ranges_option.reset();
+    }
+
     RETURN_IF_ERROR(_reader->open(_params));
     return Status::OK();
 }

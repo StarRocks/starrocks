@@ -76,7 +76,6 @@
 namespace starrocks {
 
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
-
 // compare |tuple| with the first row of |chunk|.
 // NULL will be treated as a minimal value.
 static int compare(const SeekTuple& tuple, const Chunk& chunk) {
@@ -132,6 +131,11 @@ protected:
     friend StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_ptr<Segment>& segment,
                                                                         const std::vector<SeekRange>& ranges,
                                                                         const LakeIOOptions& lake_io_opts);
+    friend StatusOr<std::vector<std::optional<Range<>>>> get_segment_rowid_ranges_by_seek_ranges(
+            const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges, const LakeIOOptions& lake_io_opts);
+    friend StatusOr<std::optional<Range<>>> get_segment_rowid_range_by_seek_range(const std::shared_ptr<Segment>& segment,
+                                                                                  const SeekRange& range,
+                                                                                  const LakeIOOptions& lake_io_opts);
     friend StatusOr<SparseRange<>> get_segment_scan_range_after_static_pruning(const std::shared_ptr<Segment>& segment,
                                                                                const Schema& schema,
                                                                                const SegmentReadOptions& options);
@@ -1736,9 +1740,14 @@ Status SegmentIterator::_apply_tablet_range() {
         return Status::OK();
     }
 
-    // _lookup_ordinal() relies on short key index.
-    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
-    ASSIGN_OR_RETURN(auto rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value()));
+    std::optional<Range<>> rowid_range_opt;
+    if (_opts.cached_tablet_range_rowid != nullptr) {
+        rowid_range_opt = *_opts.cached_tablet_range_rowid;
+    } else {
+        // _lookup_ordinal() relies on short key index.
+        RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
+        ASSIGN_OR_RETURN(rowid_range_opt, _seek_range_to_rowid_range(_opts.tablet_range.value()));
+    }
     if (rowid_range_opt.has_value()) {
         _scan_range &= SparseRange<>(rowid_range_opt.value());
     } else {
@@ -1755,6 +1764,16 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
 
     if (_opts.ranges.empty()) {
         res.add(Range<>(0, num_rows()));
+        return res;
+    }
+
+    if (_opts.cached_seek_range_rowid_bounds != nullptr &&
+        _opts.cached_seek_range_rowid_bounds->size() == _opts.ranges.size()) {
+        for (const auto& rowid_range_opt : *_opts.cached_seek_range_rowid_bounds) {
+            if (rowid_range_opt.has_value()) {
+                res.add(rowid_range_opt.value());
+            }
+        }
         return res;
     }
 
@@ -3872,6 +3891,49 @@ StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_p
 
     SegmentIterator iter(segment, Schema(), options);
     return iter._get_row_ranges_by_key_ranges();
+}
+
+StatusOr<std::vector<std::optional<Range<>>>> get_segment_rowid_ranges_by_seek_ranges(
+        const std::shared_ptr<Segment>& segment, const std::vector<SeekRange>& ranges, const LakeIOOptions& lake_io_opts) {
+    if (lake_io_opts.fs == nullptr) {
+        return Status::InvalidArgument("lake_io_opts.fs is null");
+    }
+
+    SegmentReadOptions options;
+    OlapReaderStatistics stats;
+    options.fs = lake_io_opts.fs;
+    options.stats = &stats;
+    options.chunk_size = 1;
+    options.lake_io_opts = lake_io_opts;
+
+    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
+    SegmentIterator iter(segment, Schema(), options);
+    std::vector<std::optional<Range<>>> rowid_ranges;
+    rowid_ranges.reserve(ranges.size());
+    for (const auto& range : ranges) {
+        ASSIGN_OR_RETURN(auto rowid_range_opt, iter._seek_range_to_rowid_range(range));
+        rowid_ranges.emplace_back(std::move(rowid_range_opt));
+    }
+    return rowid_ranges;
+}
+
+StatusOr<std::optional<Range<>>> get_segment_rowid_range_by_seek_range(const std::shared_ptr<Segment>& segment,
+                                                                       const SeekRange& range,
+                                                                       const LakeIOOptions& lake_io_opts) {
+    if (lake_io_opts.fs == nullptr) {
+        return Status::InvalidArgument("lake_io_opts.fs is null");
+    }
+
+    SegmentReadOptions options;
+    OlapReaderStatistics stats;
+    options.fs = lake_io_opts.fs;
+    options.stats = &stats;
+    options.chunk_size = 1;
+    options.lake_io_opts = lake_io_opts;
+
+    RETURN_IF_ERROR(segment->load_index(lake_io_opts));
+    SegmentIterator iter(segment, Schema(), options);
+    return iter._seek_range_to_rowid_range(range);
 }
 
 StatusOr<SparseRange<>> get_segment_scan_range_after_static_pruning(const std::shared_ptr<Segment>& segment,

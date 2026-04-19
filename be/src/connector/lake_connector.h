@@ -14,6 +14,10 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/conjunctive_predicates.h"
@@ -136,6 +140,7 @@ private:
     Schema _output_schema;
     bool _reader_schema_inited = false;
     bool _use_projection_iterator = false;
+    bool _prepare_only_mode = false;
     bool _reuse_pending = false;
     struct ReuseSignature {
         bool valid = false;

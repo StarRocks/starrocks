@@ -15,8 +15,12 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <tuple>
+#include <unordered_map>
+#include <vector>
 
 #include "exec/query_cache/ticket_checker.h"
 #include "gen_cpp/InternalService_types.h"
@@ -49,6 +53,13 @@ struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
 class Schema;
 using SchemaPtr = std::shared_ptr<Schema>;
+
+namespace lake {
+struct PreparedSegmentReadState;
+using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
+struct PreparedTabletReadState;
+using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
+} // namespace lake
 
 namespace pipeline {
 
@@ -125,11 +136,22 @@ private:
 };
 
 struct LakeSplitContext : public ScanSplitContext {
+    enum class TaskType : uint8_t {
+        PHYSICAL_SPLIT,
+        LOGICAL_SPLIT,
+        SEGMENT_PREPARE,
+    };
+
+    TaskType task_type = TaskType::PHYSICAL_SPLIT;
     // physical split
     RowidRangeOptionPtr rowid_range;
     // logical split
     ShortKeyRangesOptionPtr short_key_range;
     std::shared_ptr<SplitMorselQueue> split_morsel_queue = nullptr;
+    lake::PreparedTabletReadStatePtr prepared_read_state = nullptr;
+    lake::PreparedSegmentReadStatePtr prepared_segment_state = nullptr;
+    size_t rowset_index = 0;
+    size_t segment_index = 0;
 };
 
 using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
