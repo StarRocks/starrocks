@@ -20,4 +20,12 @@ namespace starrocks {
 
 std::unique_ptr<FileSystem> new_fs_azblob(FSOptions options);
 
+namespace fs {
+
+struct FileSystemProvider;
+
+FileSystemProvider new_azblob_file_system_provider(int priority = 20);
+
+} // namespace fs
+
 } // namespace starrocks

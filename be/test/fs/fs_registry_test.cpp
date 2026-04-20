@@ -18,6 +18,7 @@
 
 #include "base/testutil/assert.h"
 #include "fs/fs_memory.h"
+#include "fs/fs_posix.h"
 
 namespace starrocks {
 
@@ -205,6 +206,31 @@ TEST(FSRegistryTest, shared_and_unique_modes_use_independent_provider_lists) {
 
     ASSERT_EQ(1, counters.shared_mode_hits);
     ASSERT_EQ(1, counters.unique_mode_hits);
+}
+
+TEST(FSRegistryTest, posix_provider_constructs_shared_and_unique_modes) {
+    auto provider = fs::new_posix_file_system_provider(10);
+    ASSERT_STREQ("posix", provider.id);
+    ASSERT_EQ(10, provider.priority);
+
+    fs::FileSystemProviderRegistry registry;
+    ASSERT_OK(registry.register_provider(provider));
+
+    const auto& frozen = registry.freeze();
+    ASSERT_EQ(1, frozen.num_shared_providers());
+    ASSERT_EQ(1, frozen.num_unique_providers());
+
+    ASSIGN_OR_ABORT(auto shared_fs, frozen.create_shared("posix://"));
+    ASSERT_EQ(FileSystem::POSIX, shared_fs->type());
+
+    ASSIGN_OR_ABORT(auto shared_relative_fs, frozen.create_shared("./relative-path"));
+    ASSERT_EQ(shared_fs.get(), shared_relative_fs.get());
+
+    ASSIGN_OR_ABORT(auto unique_fs, frozen.create_unique("posix://", FSOptions()));
+    ASSERT_EQ(FileSystem::POSIX, unique_fs->type());
+    ASSERT_NE(shared_fs.get(), unique_fs.get());
+
+    ASSERT_TRUE(frozen.create_shared("s3://bucket").status().is_not_supported());
 }
 
 } // namespace starrocks
