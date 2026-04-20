@@ -1,5 +1,5 @@
 -- name: test_iceberg_min_max_opt
-create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="false");
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
 -- result:
 -- !result
 create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
@@ -58,6 +58,19 @@ INSERT INTO ice_tbl_0 (
 (9, 90, 900, 9000, true, 9.9, 10.1, 90.000000000000000009, '2025-06-29 09:20:00', 'iota', '2025-07-07', '09:20:00'),
 (10, 100, 1000, 10000, false, 10.1, 11.2, 100.000000000000000010, '2025-06-29 09:30:00', 'kappa', '2025-07-08', '09:30:00');
 -- result:
+-- !result
+select c_tinyint from ice_tbl_0 order by c_tinyint;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
 -- !result
 set enable_min_max_optimization = true;
 -- result:
@@ -192,6 +205,20 @@ INSERT INTO ice_tbl_0 (
 (null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
 -- result:
 -- !result
+select c_tinyint from ice_tbl_0 order by c_tinyint;
+-- result:
+None
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
 set enable_min_max_optimization = true;
 -- result:
 -- !result
@@ -261,6 +288,10 @@ INSERT overwrite ice_tbl_0 (
 (null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
 -- result:
 -- !result
+select c_tinyint from ice_tbl_0 order by c_tinyint;
+-- result:
+None
+-- !result
 set enable_min_max_optimization = true;
 -- result:
 -- !result
@@ -328,6 +359,12 @@ INSERT INTO ice_tbl_dt (c_int, c_datetime) VALUES
 (3, '2025-06-29 10:20:00');
 -- result:
 -- !result
+select c_int from ice_tbl_dt order by c_int;
+-- result:
+1
+2
+3
+-- !result
 set enable_min_max_optimization = true;
 -- result:
 -- !result
@@ -391,6 +428,10 @@ INSERT INTO ice_tbl_1 (
 (null, null);
 -- result:
 -- !result
+select c_int from ice_tbl_1 order by c_int;
+-- result:
+None
+-- !result
 select min(c_int), max(c_int), min(c_bigint), max(c_bigint) from ice_tbl_1;
 -- result:
 None	None	None	None
@@ -415,6 +456,11 @@ INSERT INTO ice_tbl_2 (
 (10, '2021-01-01 13:00:00'),
 (20, '2022-01-01 14:00:00');
 -- result:
+-- !result
+select c_int from ice_tbl_2 order by c_int;
+-- result:
+10
+20
 -- !result
 select min(c_int), max(c_int) from ice_tbl_2;
 -- result:
@@ -450,6 +496,14 @@ INSERT INTO ice_tbl_3 (id, name) VALUES
 (4, 'dave'),
 (5, 'eve');
 -- result:
+-- !result
+select id from ice_tbl_3 order by id;
+-- result:
+1
+2
+3
+4
+5
 -- !result
 select min(id), max(id) from ice_tbl_3;
 -- result:
