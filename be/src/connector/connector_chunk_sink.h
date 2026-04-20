@@ -44,6 +44,10 @@ public:
 
     void set_operator_mem_mgr(SinkOperatorMemoryManager* op_mem_mgr) { _op_mem_mgr = op_mem_mgr; }
 
+    // Expose the writer list so composite sinks can register it with the
+    // outer SinkOperatorMemoryManager for aggregated memory accounting.
+    std::vector<PartitionChunkWriterPtr>* writers() { return &_writers; }
+
     virtual ~ConnectorChunkSink() = default;
 
     virtual Status init();
@@ -52,7 +56,7 @@ public:
 
     virtual Status finish();
 
-    void rollback();
+    virtual void rollback();
 
     virtual bool is_finished();
 

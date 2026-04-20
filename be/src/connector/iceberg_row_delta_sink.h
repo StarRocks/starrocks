@@ -83,6 +83,8 @@ public:
 
     Status finish() override;
 
+    void rollback() override;
+
     bool is_finished() override;
 
 private:

@@ -50,11 +50,28 @@ Status IcebergRowDeltaSink::init() {
     RETURN_IF_ERROR(_delete_sink->init());
     RETURN_IF_ERROR(_data_sink->init());
 
+    // This composite sink owns no writers of its own (NopPartitionChunkWriterFactory),
+    // so the operator-level kill-victim / backpressure path would see an empty
+    // candidate list. Register sub-sink writer lists with the outer manager so
+    // memory pressure logic can flush real writers held by the sub-sinks.
+    if (_op_mem_mgr != nullptr) {
+        _op_mem_mgr->add_candidates(_delete_sink->writers());
+        _op_mem_mgr->add_candidates(_data_sink->writers());
+    }
+
     return Status::OK();
 }
 
 void IcebergRowDeltaSink::callback_on_commit(const CommitResult& result) {
     // Sub-sinks handle their own callbacks.
+}
+
+void IcebergRowDeltaSink::rollback() {
+    // The outer sink owns no writers; rollback actions are held by the sub-sinks.
+    // On cancel, propagate so uncommitted data / position-delete files get cleaned.
+    _delete_sink->rollback();
+    _data_sink->rollback();
+    ConnectorChunkSink::rollback();
 }
 
 // Filter the original chunk to keep only the specified rows, preserving all

@@ -193,12 +193,13 @@ TEST_F(IcebergRowDeltaSinkTest, op_code_routing) {
     // UPDATE(2) and INSERT(3) go to data sink => 2 rows
     EXPECT_EQ(data_mock->total_rows, 2);
 
-    // Verify delete chunk content: rows 1 and 2 (DELETE and UPDATE)
-    // Delete chunk contains columns [0, data_column_start_index) = columns 0 and 1 (_file and _pos)
+    // Verify delete chunk content: rows 1 and 2 (DELETE and UPDATE).
+    // filter_chunk_by_rows preserves all columns and slot_ids, so sub-sinks receive
+    // the full 4-column chunk (_file, _pos, data, op_code) filtered to matching rows.
     ASSERT_EQ(delete_mock->received_chunks.size(), 1);
     auto& del_chunk = delete_mock->received_chunks[0];
     EXPECT_EQ(del_chunk->num_rows(), 2);
-    EXPECT_EQ(del_chunk->num_columns(), 2);
+    EXPECT_EQ(del_chunk->num_columns(), 4);
 
     // Check _file values in delete chunk
     auto* del_file_col = down_cast<const BinaryColumn*>(del_chunk->get_column_by_index(0).get());
@@ -210,15 +211,15 @@ TEST_F(IcebergRowDeltaSinkTest, op_code_routing) {
     EXPECT_EQ(del_pos_col->get_data()[0], 1);
     EXPECT_EQ(del_pos_col->get_data()[1], 2);
 
-    // Verify data chunk content: rows 2 and 3 (UPDATE and INSERT)
-    // Data chunk contains columns [data_column_start_index, data_column_start_index + data_column_count) = column 2
+    // Verify data chunk content: rows 2 and 3 (UPDATE and INSERT).
+    // Same structural preservation as the delete sink — all 4 columns retained.
     ASSERT_EQ(data_mock->received_chunks.size(), 1);
     auto& dat_chunk = data_mock->received_chunks[0];
     EXPECT_EQ(dat_chunk->num_rows(), 2);
-    EXPECT_EQ(dat_chunk->num_columns(), 1);
+    EXPECT_EQ(dat_chunk->num_columns(), 4);
 
-    // Check data values
-    auto* dat_col = down_cast<const BinaryColumn*>(dat_chunk->get_column_by_index(0).get());
+    // Check data values at column index 2 (the data column in the original chunk layout)
+    auto* dat_col = down_cast<const BinaryColumn*>(dat_chunk->get_column_by_index(2).get());
     EXPECT_EQ(dat_col->get_slice(0).to_string(), "val2");
     EXPECT_EQ(dat_col->get_slice(1).to_string(), "val3");
 }
