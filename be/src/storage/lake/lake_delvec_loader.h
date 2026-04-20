@@ -26,11 +26,12 @@ namespace starrocks::lake {
 class LakeDelvecLoader : public DelvecLoader {
 public:
     LakeDelvecLoader(TabletManager* tablet_manager, const MetaFileBuilder* pk_builder, bool fill_cache,
-                     LakeIOOptions lake_io_opts)
+                     LakeIOOptions lake_io_opts, TabletMetadataPtr cached_metadata = nullptr)
             : _tablet_manager(tablet_manager),
               _pk_builder(pk_builder),
               _fill_cache(fill_cache),
-              _lake_io_opts(std::move(lake_io_opts)) {}
+              _lake_io_opts(std::move(lake_io_opts)),
+              _cached_metadata(std::move(cached_metadata)) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) override;
     Status load_from_meta(const TabletMetadataPtr& metadata, const DelvecPagePB& delvec_page, DelVectorPtr* pdelvec);
     Status load_from_file(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
@@ -40,6 +41,9 @@ private:
     const MetaFileBuilder* _pk_builder = nullptr;
     bool _fill_cache = false;
     LakeIOOptions _lake_io_opts;
+    // Reused across load_from_file calls whose (tablet_id, version) match, to skip
+    // get_tablet_metadata and its TabletMetadataPB deep copy on the hot path.
+    TabletMetadataPtr _cached_metadata;
 };
 
 } // namespace starrocks::lake
