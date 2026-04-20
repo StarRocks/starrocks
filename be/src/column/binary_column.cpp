@@ -367,20 +367,25 @@ bool BinaryColumnBase<T>::append_strings(const Slice* data, size_t size) {
     _offsets.resize_uninitialized(prev_num_offsets + size, dst_end);
     bytes.resize(dst_end);
 
-    auto* bytes_ptr = bytes.data();
     _offsets.visit_storage([&](auto& dst_buf) {
         using DstValue = typename std::decay_t<decltype(dst_buf)>::value_type;
         auto* __restrict dst_offsets = dst_buf.data() + prev_num_offsets;
         uint64_t cur_offset = dst_begin;
 
         for (size_t i = 0; i < size; ++i) {
-            const size_t str_size = data[i].size;
-            const auto* const p = reinterpret_cast<const Bytes::value_type*>(data[i].data);
-            strings::memcpy_inlined(bytes_ptr + cur_offset, p, str_size);
-            cur_offset += str_size;
+            cur_offset += data[i].size;
             dst_offsets[i] = static_cast<DstValue>(cur_offset);
         }
     });
+
+    auto* bytes_ptr = bytes.data();
+    uint64_t cur_offset = dst_begin;
+    for (size_t i = 0; i < size; ++i) {
+        const size_t str_size = data[i].size;
+        const auto* const p = reinterpret_cast<const Bytes::value_type*>(data[i].data);
+        strings::memcpy_inlined(bytes_ptr + cur_offset, p, str_size);
+        cur_offset += str_size;
+    }
 
     invalidate_slice_cache();
     return true;
@@ -931,25 +936,35 @@ size_t BinaryColumnBase<T>::serialize_batch_at_interval_with_null_masks(uint8_t*
         if constexpr (IsNullable) {
             dst++; // reserve one byte for null flag
         }
+        if (UNLIKELY(count == 0)) {
+            return max_row_size;
+        }
 
         const uint8_t* bytes = _data_base();
-        for (size_t i = start; i < start + count; ++i, dst += byte_interval) {
-            if constexpr (IsNullable) {
-                if (null_masks[i]) {
-                    *dst = 0xFF; // Invalid UTF-8 string.
-                    continue;
+        _offsets.visit_storage([&](const auto& offsets_buf) {
+            const auto* __restrict offsets = offsets_buf.data();
+            auto begin = offsets[start];
+            for (size_t i = start; i < start + count; ++i, dst += byte_interval) {
+                const auto end = offsets[i + 1];
+                if constexpr (IsNullable) {
+                    if (null_masks[i]) {
+                        *dst = 0xFF; // Invalid UTF-8 string.
+                        begin = end;
+                        continue;
+                    }
                 }
-            }
 
-            const size_t length = _offsets[i + 1] - _offsets[i];
-            if (length > max_row_size) {
-                *dst = 0xFF;
-            } else if (length > 0 && bytes[_offsets[i + 1] - 1] == 0) {
-                *dst = 0xFF;
-            } else {
-                strings::memcpy_inlined(dst, bytes + _offsets[i], length);
+                const size_t length = end - begin;
+                if (length > max_row_size) {
+                    *dst = 0xFF;
+                } else if (length > 0 && bytes[end - 1] == 0) {
+                    *dst = 0xFF;
+                } else {
+                    strings::memcpy_inlined(dst, bytes + begin, length);
+                }
+                begin = end;
             }
-        }
+        });
 
         return max_row_size;
     };

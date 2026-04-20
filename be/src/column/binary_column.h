@@ -240,8 +240,9 @@ public:
 
     ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) const override {
         // max size of one string is 2^32, so use uint32_t not T
-        auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
-        auto offset = _offsets[idx];
+        const auto offset = _offsets[idx];
+        const auto next_offset = _offsets[idx + 1];
+        auto binary_size = static_cast<uint32_t>(next_offset - offset);
         const uint8_t* base = _data_base();
 
         strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
