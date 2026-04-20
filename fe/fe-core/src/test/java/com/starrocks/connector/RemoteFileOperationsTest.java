@@ -25,7 +25,6 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
-import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import com.starrocks.connector.hive.Partition;
@@ -190,7 +189,7 @@ public class RemoteFileOperationsTest {
     @Test
     public void testEnsureDirectoryExistsCreatesWhenMissing() {
         AtomicInteger createCount = new AtomicInteger(0);
-        new MockUp<HiveUtils>() {
+        new MockUp<HiveWriteUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return false;
@@ -219,7 +218,7 @@ public class RemoteFileOperationsTest {
     @Test
     public void testEnsureDirectoryExistsNoOpWhenPresent() {
         AtomicInteger createCount = new AtomicInteger(0);
-        new MockUp<HiveUtils>() {
+        new MockUp<HiveWriteUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return true;
