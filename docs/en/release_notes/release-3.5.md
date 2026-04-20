@@ -78,7 +78,7 @@ The following issues have been fixed:
 - Ubuntu runtime dependency issues by installing `libssl-dev`. [#70688](https://github.com/StarRocks/starrocks/pull/70688)
 - User authentication strings are not masked in audit logs and SQL redaction. [#70360](https://github.com/StarRocks/starrocks/pull/70360)
 - External materialized view refresh issues for Iceberg-like connectors. [#70589](https://github.com/StarRocks/starrocks/pull/70589) [#70523](https://github.com/StarRocks/starrocks/pull/70523)
-- Fixed `array_map` crashes on null literal arrays and BE crashes when a child iterator is exhausted in `MaskMergeIterator`. [#70629](https://github.com/StarRocks/starrocks/pull/70629) [#70539](https://github.com/StarRocks/starrocks/pull/70539)
+- `array_map` crashes on null literal arrays and BE crashes when a child iterator is exhausted in `MaskMergeIterator`. [#70629](https://github.com/StarRocks/starrocks/pull/70629) [#70539](https://github.com/StarRocks/starrocks/pull/70539)
 - `starlet` configuration updates were incorrectly captured through `std::call_once`. [#70482](https://github.com/StarRocks/starrocks/pull/70482)
 - Robustness issue with Iceberg materialized view refresh when snapshot timestamps are non-monotonic. [#70382](https://github.com/StarRocks/starrocks/pull/70382)
 - Issues that forced materialized view refresh is not supported, and duplicated partition names during materialized view refresh. [#70381](https://github.com/StarRocks/starrocks/pull/70381) [#70354](https://github.com/StarRocks/starrocks/pull/70354)
