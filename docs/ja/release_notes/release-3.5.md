@@ -26,6 +26,75 @@ displayed_sidebar: docs
 
 :::
 
+## 3.5.16
+
+リリース日：2026 年 4 月 20 日
+
+### 改善点
+
+- `WarehouseManager` で握りつぶされていた例外について、より分かりやすい警告ログを追加しました。 [#71215](https://github.com/StarRocks/starrocks/pull/71215)
+- Routine Load で非再試行エラー発生時にジョブを一時停止できるようにしました。 [#71161](https://github.com/StarRocks/starrocks/pull/71161)
+- 「全スレッドのスタック出力」ユーティリティにスレッド名を追加しました。 [#69366](https://github.com/StarRocks/starrocks/pull/69366)
+- FE で `regexp_replace` の定数畳み込みをサポートしました。 [#70804](https://github.com/StarRocks/starrocks/pull/70804)
+- PostgreSQL 外部テーブルの列コメント表示をサポートし、`information_schema.tables` が External Catalog の完全なメタデータを取得できるようにしました。 [#70520](https://github.com/StarRocks/starrocks/pull/70520) [#70197](https://github.com/StarRocks/starrocks/pull/70197)
+- クエリ例外発生時に実行計画を自動ダンプできるようにしました。 [#70387](https://github.com/StarRocks/starrocks/pull/70387)
+- Cloud-native Tablet メタデータ取得と修復の効率を改善しました。 [#70492](https://github.com/StarRocks/starrocks/pull/70492) [#70386](https://github.com/StarRocks/starrocks/pull/70386)
+- FE で Tablet のバッチ削除をサポートし、書き込みロック競合を軽減しました。 [#70052](https://github.com/StarRocks/starrocks/pull/70052)
+- Update Compaction Suspension 向けログを追加し、Iceberg のメタデータテーブルクエリおよび Time Travel クエリ向けのメトリクスを追加しました。 [#70538](https://github.com/StarRocks/starrocks/pull/70538) [#70825](https://github.com/StarRocks/starrocks/pull/70825) [#70788](https://github.com/StarRocks/starrocks/pull/70788)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- `be_tablets.DATA_SIZE` が Rowset 列データサイズをより正確に報告するようになりました。 [#70735](https://github.com/StarRocks/starrocks/pull/70735)
+- Broker ビルドで使われていた古い Maven リポジトリ設定を削除しました。 [#71533](https://github.com/StarRocks/starrocks/pull/71533)
+- `parallel_clone_task_per_path` 更新時のスレッドプールサイズ更新ロジックを修正しました。 [#71484](https://github.com/StarRocks/starrocks/pull/71484)
+- 複数の use-after-free 問題を修正しました。 [#71513](https://github.com/StarRocks/starrocks/pull/71513) [#71276](https://github.com/StarRocks/starrocks/pull/71276) [#71083](https://github.com/StarRocks/starrocks/pull/71083) [#62917](https://github.com/StarRocks/starrocks/pull/62917) [#69926](https://github.com/StarRocks/starrocks/pull/69926) [#69968](https://github.com/StarRocks/starrocks/pull/69968)
+- リソースグループの `user` classifier の検証ルールを `CREATE USER` と一致させました。 [#71470](https://github.com/StarRocks/starrocks/pull/71470)
+- StarMgr Journal のリプレイ同期不足により Follower FE で `no queryable replica` が発生する問題を修正しました。 [#71263](https://github.com/StarRocks/starrocks/pull/71263)
+- 複数の依存関係 CVE を修正しました。 [#71256](https://github.com/StarRocks/starrocks/pull/71256) [#71017](https://github.com/StarRocks/starrocks/pull/71017) [#70862](https://github.com/StarRocks/starrocks/pull/70862)
+- グローバル変数を含む reduce cast 後に `VARCHAR` 長が失われる問題を修正しました。 [#70269](https://github.com/StarRocks/starrocks/pull/70269)
+- `information_schema.tables` の等価述語で特殊文字が正しくエスケープされない問題を修正しました。 [#71273](https://github.com/StarRocks/starrocks/pull/71273)
+- Alter Job 間で `UpdateTabletSchemaTask` のシグネチャが衝突する問題を修正しました。 [#71242](https://github.com/StarRocks/starrocks/pull/71242)
+- `PushDownAggregateRewriter` における `CASE WHEN` / `IF` の共有オブジェクト変更問題を修正しました。 [#71309](https://github.com/StarRocks/starrocks/pull/71309)
+- 非アクティブなマテリアライズドビュー スケジューラが停止しない問題を修正し、TaskManager のスケジューラコールバックに Leader チェックを追加しました。 [#71265](https://github.com/StarRocks/starrocks/pull/71265) [#71156](https://github.com/StarRocks/starrocks/pull/71156)
+- MCV のみを持つヒストグラムで行数推定が `NaN` になる問題を修正しました。 [#71241](https://github.com/StarRocks/starrocks/pull/71241)
+- AWS SDK で `s3-transfer-manager` 依存関係が欠落していたことによるパッケージング問題を修正しました。 [#71230](https://github.com/StarRocks/starrocks/pull/71230)
+- Leader Forward 終了後にスレッドローカル `ConnectContext` が汚染される問題を修正しました。 [#71141](https://github.com/StarRocks/starrocks/pull/71141)
+- 書き込みトランザクションと Compaction トランザクションが同じ publish バッチで適用された場合に、孤立した delvec エントリが生成される問題を修正しました。 [#71001](https://github.com/StarRocks/starrocks/pull/71001)
+- Short-circuit Point Lookup でパーティション述語が欠落する問題を修正しました。 [#71124](https://github.com/StarRocks/starrocks/pull/71124)
+- 集約 Spill の `set_finishing` 中に Hash Table データが失われる可能性がある問題を修正しました。 [#70851](https://github.com/StarRocks/starrocks/pull/70851)
+- `current_queries` に Query Progress HTTP ループバック記録が含まれてしまう問題を修正しました。 [#71032](https://github.com/StarRocks/starrocks/pull/71032)
+- ディスク再マイグレーション（A→B→A）中の GC 競合により Primary Key Tablet の Rowset メタデータが失われる問題を修正しました。 [#70727](https://github.com/StarRocks/starrocks/pull/70727)
+- `SharedDataStorageVolumeMgr` における DB 読み取りロックリークを修正しました。 [#70987](https://github.com/StarRocks/starrocks/pull/70987)
+- `NullableColumn`、`BinaryColumn`、`locate()` で `NullColumn` が不正に共有される問題を修正しました。 [#66037](https://github.com/StarRocks/starrocks/pull/66037) [#70957](https://github.com/StarRocks/starrocks/pull/70957)
+- グローバル Runtime Filter の readiness チェックにおける競合と、`ACCUMULATED` マクロの切り詰めによるメトリクスオーバーフローを修正しました。 [#70920](https://github.com/StarRocks/starrocks/pull/70920) [#70895](https://github.com/StarRocks/starrocks/pull/70895)
+- 回帰的な非表示変更を巻き戻し、`DESC` / `SHOW CREATE TABLE` で生成列が再び表示されるようにしました。 [#70037](https://github.com/StarRocks/starrocks/pull/70037)
+- Load Spill ディレクトリのクリーンアップ時機、Memory Table Spiller の Workgroup 処理に起因する ASAN クラッシュ、物理分割有効時に空の Tablet をスキャンした際の CN クラッシュを修正しました。 [#70778](https://github.com/StarRocks/starrocks/pull/70778) [#64379](https://github.com/StarRocks/starrocks/pull/64379) [#70281](https://github.com/StarRocks/starrocks/pull/70281)
+- `proxy_pass_request_body` が無効な場合の `Content-Length` 処理を修正しました。 [#70821](https://github.com/StarRocks/starrocks/pull/70821)
+- `INSERT INTO BY NAME ... FROM FILES()` における複数の Schema Pushdown 問題を修正しました。 [#70762](https://github.com/StarRocks/starrocks/pull/70762) [#70774](https://github.com/StarRocks/starrocks/pull/70774) [#70622](https://github.com/StarRocks/starrocks/pull/70622) [#70621](https://github.com/StarRocks/starrocks/pull/70621)
+- MySQL / JDBC ScanNode における無効な述語 pushdown により BE で型エラーが発生する問題を修正しました。 [#70694](https://github.com/StarRocks/starrocks/pull/70694)
+- Iceberg Manifest Cache の不完全なキャッシュ、部分書き込み、vended credentials 有効時にキャッシュが適用される問題を修正しました。 [#70675](https://github.com/StarRocks/starrocks/pull/70675) [#70652](https://github.com/StarRocks/starrocks/pull/70652) [#69434](https://github.com/StarRocks/starrocks/pull/69434)
+- Ubuntu Runtime 環境で `libssl-dev` が不足していた問題を修正しました。 [#70688](https://github.com/StarRocks/starrocks/pull/70688)
+- 監査ログと SQL Redaction においてユーザー認証文字列が適切にマスクされない問題を修正しました。 [#70360](https://github.com/StarRocks/starrocks/pull/70360)
+- Iceberg 系 Connector の外部マテリアライズドビュー refresh 問題を修正しました。 [#70589](https://github.com/StarRocks/starrocks/pull/70589) [#70523](https://github.com/StarRocks/starrocks/pull/70523)
+- `array_map` が null リテラル配列を処理する際のクラッシュと、`MaskMergeIterator` で子イテレータが枯渇した場合の BE クラッシュを修正しました。 [#70629](https://github.com/StarRocks/starrocks/pull/70629) [#70539](https://github.com/StarRocks/starrocks/pull/70539)
+- `starlet` 設定更新が `std::call_once` により誤って固定される問題を修正しました。 [#70482](https://github.com/StarRocks/starrocks/pull/70482)
+- Iceberg マテリアライズドビュー refresh が非単調な Snapshot タイムスタンプに依存して不安定になる問題を修正しました。 [#70382](https://github.com/StarRocks/starrocks/pull/70382)
+- 強制 MV refresh を支援する `mv_refresh_force_partition_type` を追加し、MV refresh 中の重複パーティション名問題を修正しました。 [#70381](https://github.com/StarRocks/starrocks/pull/70381) [#70354](https://github.com/StarRocks/starrocks/pull/70354)
+- `OlapTableSink` が異なるパーティションで誤った分散列を使用する問題を修正しました。 [#70310](https://github.com/StarRocks/starrocks/pull/70310)
+- `REFRESH EXTERNAL TABLE FORCE` サポートを、より安全な再実装までの間いったん巻き戻しました。 [#70114](https://github.com/StarRocks/starrocks/pull/70114)
+- 欠損ファイルチェック時に、Tablet メタデータの複数バージョン間で同じオブジェクトストレージ確認を繰り返す問題を修正しました。 [#70364](https://github.com/StarRocks/starrocks/pull/70364)
+- RESTORE 時に `dataVersion` が設定されない問題を修正し、関連 MV Rewrite ロジックも修正しました。 [#70373](https://github.com/StarRocks/starrocks/pull/70373) [#69751](https://github.com/StarRocks/starrocks/pull/69751)
+- 取り込み時に `query_pool` のメモリ統計が負になる問題を修正し、高並行時の FE OOM リスクを低減しました。 [#70228](https://github.com/StarRocks/starrocks/pull/70228) [#68444](https://github.com/StarRocks/starrocks/pull/68444)
+- SLF4J のパラメータ化ログ記法の誤りを修正しました。 [#70330](https://github.com/StarRocks/starrocks/pull/70330)
+- `AuditEventProcessor` が `OutOfMemoryException` 発生時に終了してしまう問題を修正しました。 [#70206](https://github.com/StarRocks/starrocks/pull/70206)
+- Primary Key テーブルの column-mode partial update に関する扱いを調整しました。このリリース期間中に導入された初期の破損修正は、後続対応のためいったん巻き戻されています。 [#69652](https://github.com/StarRocks/starrocks/pull/69652)
+- `InformationFunction` の等価性判定および重複排除の問題を修正しました。 [#70464](https://github.com/StarRocks/starrocks/pull/70464)
+- 例外が `NoSuchElementException` にラップされている場合の `brpc` リトライ処理を修正しました。 [#70203](https://github.com/StarRocks/starrocks/pull/70203)
+- lock-free MV Rewrite が live metadata にフォールバックする際の問題を修正しました。 [#70475](https://github.com/StarRocks/starrocks/pull/70475)
+- `JoinHashTable::merge_ht()` が式ベース Join Key 列で Dummy Row をスキップしない問題を修正しました。 [#70465](https://github.com/StarRocks/starrocks/pull/70465)
+
 ## 3.5.15
 
 リリース日：2026 年 3 月 26 日
