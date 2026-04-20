@@ -422,10 +422,13 @@ INSERT INTO ice_tbl_1 (
 (null, null);
 -- result:
 -- !result
+<<<<<<< HEAD
 select c_int from ice_tbl_1 order by c_int;
 -- result:
 None
 -- !result
+=======
+>>>>>>> e6761a8bf1 ([Enhancement] Support Iceberg datetime min/max optimization and fix timestamp conversion (#71870))
 select min(c_int), max(c_int), min(c_bigint), max(c_bigint) from ice_tbl_1;
 -- result:
 None	None	None	None
