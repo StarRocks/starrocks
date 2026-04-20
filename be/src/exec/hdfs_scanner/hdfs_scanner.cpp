@@ -199,6 +199,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.orc_use_column_names = _scanner_params.orc_use_column_names;
     ctx.use_min_max_opt = _scanner_params.use_min_max_opt;
+    ctx.can_use_any_column = _scanner_params.can_use_any_column;
     ctx.use_count_opt = _scanner_params.use_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.use_file_pagecache = _scanner_params.use_file_pagecache;
@@ -637,12 +638,32 @@ void HdfsScannerContext::update_min_max_columns() {
     const std::map<int32_t, TExprMinMaxValue>& min_max_values = scan_range->min_max_values;
     for (auto& column : materialized_columns) {
         if (min_max_values.find(column.slot_id()) != min_max_values.end()) {
-            // handled in non existed slot
+            // This column has file-level min/max statistics.  Move it to
+            // not_existed_slots so that append_or_update_min_max_column_to_chunk()
+            // fills the column with the statistics values instead of reading the
+            // actual data from the file.
             update_with_none_existed_slot(column.slot_desc);
-            continue;
+        } else if (can_use_any_column) {
+            // This column has no min/max statistics (e.g. STRING or TIMESTAMP type
+            // which are not yet supported, or a placeholder column injected by
+            // PruneHDFSScanColumnRule when every queried column is a partition column).
+            // Because can_use_any_column is set we know its value is irrelevant to the
+            // query result, so fill it with a default value and skip reading the file.
+            update_with_none_existed_slot(column.slot_desc);
         } else {
+            // This column genuinely needs to be read from the data file.
             updated_columns.emplace_back(column);
         }
+    }
+    // When can_use_any_column is set, also drain reserved_field_slots (e.g. _pos, _row_id)
+    // into not_existed_slots.  reserved_field_slots are meta/hidden columns whose
+    // values are irrelevant to the min/max query result, so filling them with defaults
+    // is safe and allows can_use_min_max_optimization() to return true.
+    if (can_use_any_column) {
+        for (SlotDescriptor* slot_desc : reserved_field_slots) {
+            update_with_none_existed_slot(slot_desc);
+        }
+        reserved_field_slots.clear();
     }
     materialized_columns.swap(updated_columns);
 }
