@@ -50,6 +50,7 @@ protected:
 TEST_F(IndexFileWriterReaderTest, RoundTripMultipleEntries) {
     MemoryFileSystem fs;
     auto* fsp = &fs;
+    ASSERT_OK(fsp->create_dir_recursive("/idx"));
     const std::string path = "/idx/test.idx";
 
     // Writer: three entries spanning two (col_uid, index_type) pairs to
@@ -94,6 +95,7 @@ TEST_F(IndexFileWriterReaderTest, RoundTripMultipleEntries) {
 TEST_F(IndexFileWriterReaderTest, BadMagicIsCorruption) {
     MemoryFileSystem fs;
     auto* fsp = &fs;
+    ASSERT_OK(fsp->create_dir_recursive("/idx"));
     const std::string path = "/idx/bad.idx";
     // Write 8 bytes of junk that happen to be the wrong magic.
     {
@@ -110,6 +112,7 @@ TEST_F(IndexFileWriterReaderTest, BadMagicIsCorruption) {
 TEST_F(IndexFileWriterReaderTest, TooSmallIsCorruption) {
     MemoryFileSystem fs;
     auto* fsp = &fs;
+    ASSERT_OK(fsp->create_dir_recursive("/idx"));
     const std::string path = "/idx/tiny.idx";
     {
         ASSIGN_OR_ABORT(auto wfile, fsp->new_writable_file(path));
@@ -125,6 +128,7 @@ TEST_F(IndexFileWriterReaderTest, TooSmallIsCorruption) {
 TEST_F(IndexFileWriterReaderTest, FinalizeTwiceFails) {
     MemoryFileSystem fs;
     auto* fsp = &fs;
+    ASSERT_OK(fsp->create_dir_recursive("/idx"));
     const std::string path = "/idx/double.idx";
     ASSIGN_OR_ABORT(auto wfile, fsp->new_writable_file(path));
     IndexFileWriter w(std::move(wfile));
