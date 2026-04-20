@@ -56,6 +56,8 @@ public class IndexParams {
                 true, "false", null);
         register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.INDEX_BUILD_THRESHOLD,
                 false, false, null, null);
+        register(builder, IndexType.VECTOR, IndexParamType.COMMON, VectorIndexParams.CommonIndexParamKey.INDEX_BUILD_MODE,
+                false, false, null, null);
 
         // index
         register(builder, IndexType.VECTOR, IndexParamType.INDEX, VectorIndexParams.IndexParamsKey.M, false, true, "16", null);

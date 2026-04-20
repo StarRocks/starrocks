@@ -760,7 +760,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 if (useAggregatePublish) {
-                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null, null);
                 }
             }
             return true;

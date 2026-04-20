@@ -874,7 +874,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 if (isFileBundling) {
-                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null);
+                    Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null, null);
                 }
             }
             return true;

@@ -331,8 +331,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                     }
                 }
                 if (useAggregatePublish) {
-                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion, 
-                                null, null, computeResource, null);
+                    Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion,
+                                null, null, computeResource, null, null);
                 }
             }
             return true;

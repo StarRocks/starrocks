@@ -748,6 +748,17 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
+    public ComputeResource getVectorIndexBuildComputeResource(long tableId) {
+        TransactionWarehouseInfo info = tableLastTransactionWarehouseInfo.get(tableId);
+        if (info == null) {
+            return acquireComputeResource(
+                    CRAcquireContext.of(getWarehouse(Config.lake_vector_index_build_warehouse).getId()));
+        }
+        Warehouse warehouse = getWarehouseForTable(tableId, info, false /* isCompaction */);
+        return acquireComputeResource(CRAcquireContext.of(warehouse.getId(), info.getComputeResource()));
+    }
+
+    @Override
     public Warehouse getBackgroundWarehouse() {
         return getWarehouse(Config.lake_background_warehouse);
     }

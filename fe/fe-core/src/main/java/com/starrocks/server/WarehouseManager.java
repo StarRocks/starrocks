@@ -407,6 +407,10 @@ public class WarehouseManager implements Writable {
         return DEFAULT_RESOURCE;
     }
 
+    public ComputeResource getVectorIndexBuildComputeResource(long tableId) {
+        return DEFAULT_RESOURCE;
+    }
+
     public Warehouse getBackgroundWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
     }

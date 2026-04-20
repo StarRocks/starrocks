@@ -401,6 +401,57 @@ public class WarehouseManagerEPackTest {
     }
 
     @Test
+    public void testGetVectorIndexBuildComputeResource() throws DdlException {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+            @Mock
+            public BaseSlotManager getSlotManager() {
+                return slotManager;
+            }
+        };
+        long workerGroupId = GlobalStateMgr.getCurrentState().getNextId();
+        new MockUp<StarOSAgentEpack>() {
+            @Mock
+            public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                          WarmupLevel warmupLevel) throws DdlException {
+                return workerGroupId;
+            }
+        };
+        WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+        mgr.initDefaultWarehouse();
+
+        CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "vi_wh", Maps.newHashMap(), "");
+        ExceptionChecker.expectThrowsNoException(() -> mgr.createWarehouse(createStmt));
+        Warehouse warehouse = mgr.getWarehouse("vi_wh");
+
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public ComputeResource acquireComputeResource(CRAcquireContext acquireContext) {
+                return CNGroupResource.of(acquireContext.getWarehouseId(), 10);
+            }
+        };
+
+        // Cold path: no prior transaction warehouse — uses Config.lake_vector_index_build_warehouse.
+        String prevConfig = Config.lake_vector_index_build_warehouse;
+        try {
+            Config.lake_vector_index_build_warehouse = "vi_wh";
+            ComputeResource cold = mgr.getVectorIndexBuildComputeResource(200);
+            Assert.assertEquals(warehouse.getId(), cold.getWarehouseId());
+
+            // Warm path: prior transaction warehouse recorded for table — reuses it.
+            CNGroupResource resource = CNGroupResource.of(warehouse.getId(), 77);
+            mgr.recordWarehouseInfoForTable(200, resource);
+            ComputeResource warm = mgr.getVectorIndexBuildComputeResource(200);
+            Assert.assertEquals(warehouse.getId(), warm.getWarehouseId());
+        } finally {
+            Config.lake_vector_index_build_warehouse = prevConfig;
+        }
+    }
+
+    @Test
     public void testSuspendWarehouseAndReplay() throws IOException, DdlException {
         new MockUp<GlobalStateMgr>() {
             @Mock
