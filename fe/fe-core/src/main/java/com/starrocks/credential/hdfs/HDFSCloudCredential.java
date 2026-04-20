@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.HDFSFileStoreInfo;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
@@ -65,7 +66,9 @@ public class HDFSCloudCredential implements CloudCredential {
     public void applyToConfiguration(Configuration configuration) {
         if (hadoopConfiguration != null) {
             for (Map.Entry<String, String> entry : hadoopConfiguration.entrySet()) {
-                configuration.set(entry.getKey(), entry.getValue());
+                if (!isReservedHadoopExtProperty(entry.getKey())) {
+                    configuration.set(entry.getKey(), entry.getValue());
+                }
             }
         }
     }
@@ -88,7 +91,11 @@ public class HDFSCloudCredential implements CloudCredential {
     @Override
     public void toThrift(Map<String, String> properties) {
         if (hadoopConfiguration != null) {
-            properties.putAll(hadoopConfiguration);
+            for (Map.Entry<String, String> entry : hadoopConfiguration.entrySet()) {
+                if (!isReservedHadoopExtProperty(entry.getKey())) {
+                    properties.put(entry.getKey(), entry.getValue());
+                }
+            }
         }
     }
 
@@ -118,5 +125,9 @@ public class HDFSCloudCredential implements CloudCredential {
         hdfsFileStoreInfo.putAllConfiguration(hadoopConfiguration);
         fileStore.setHdfsFsInfo(hdfsFileStoreInfo.build());
         return fileStore.build();
+    }
+
+    private boolean isReservedHadoopExtProperty(String key) {
+        return HadoopExt.HADOOP_CLOUD_CONFIGURATION_STRING.equals(key);
     }
 }
