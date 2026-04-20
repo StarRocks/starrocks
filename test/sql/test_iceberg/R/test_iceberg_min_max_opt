@@ -391,7 +391,7 @@ INSERT INTO ice_tbl_1 (
 (null, null);
 -- result:
 -- !result
-select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_1;
+select min(c_int), max(c_int), min(c_bigint), max(c_bigint) from ice_tbl_1;
 -- result:
 None	None	None	None
 -- !result

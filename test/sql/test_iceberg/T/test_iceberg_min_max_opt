@@ -326,7 +326,7 @@ INSERT INTO ice_tbl_1 (
 ) VALUES
 (null, null);
 
-select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_1;
+select min(c_int), max(c_int), min(c_bigint), max(c_bigint) from ice_tbl_1;
 select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
 drop table ice_tbl_1 force;
