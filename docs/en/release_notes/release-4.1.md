@@ -4,6 +4,14 @@ displayed_sidebar: docs
 
 # StarRocks version 4.1
 
+:::danger
+
+**Container Image Issue (v4.1.0)**
+
+Due to an unstable load order issue in the v4.1.0 container image, BE processes may fail to start reliably in container environments. **Container environment users should NOT upgrade to v4.1.0.** Please wait for v4.1.1, which includes the fix ([#71825](https://github.com/StarRocks/starrocks/pull/71825)).
+
+:::
+
 :::warning
 
 **Downgrade Notes**

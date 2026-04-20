@@ -4,6 +4,14 @@ displayed_sidebar: docs
 
 # StarRocks version 4.1
 
+:::danger
+
+**容器镜像问题（v4.1.0）**
+
+由于 v4.1.0 容器镜像存在加载顺序不稳定的问题，BE 进程在容器环境中可能无法可靠启动。**容器环境用户请勿升级至 v4.1.0。** 请等待包含修复的 v4.1.1（[#71825](https://github.com/StarRocks/starrocks/pull/71825)）。
+
+:::
+
 :::warning
 
 **降级注意事项**
