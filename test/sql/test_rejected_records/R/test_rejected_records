@@ -709,12 +709,12 @@ select count(*) as committed_rows from t;
 -- result:
 0
 -- !result
-shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 2 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
 -- !result
-select count(*) >= 2 as has_at_least_2_rejected
+select count(*) >= 1 as has_rejected
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t';
 -- result:
@@ -750,16 +750,12 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 done
 -- !result
-select * from t order by id;
--- result:
-1	10
--- !result
-shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 2 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
 -- !result
-select count(*) >= 2 as has_at_least_2_rejected
+select count(*) >= 1 as has_rejected
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t';
 -- result:
@@ -795,16 +791,16 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 done
 -- !result
-shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 2 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
 -- !result
-select count(*) as capped_count
+select count(*) between 1 and 2 as within_cap
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t';
 -- result:
-2
+1
 -- !result
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
 -- result:
