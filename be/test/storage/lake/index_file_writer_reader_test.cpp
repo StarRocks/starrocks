@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 
+#include "base/testutil/assert.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"

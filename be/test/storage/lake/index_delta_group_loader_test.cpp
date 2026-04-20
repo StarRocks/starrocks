@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "base/testutil/assert.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/types.pb.h"
 #include "storage/lake/tablet_metadata.h"
