@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "agent/agent_server.h"
+#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/nullable_column.h"
@@ -52,23 +53,56 @@ namespace starrocks::lake {
 
 namespace {
 
+// BinaryColumn / LargeBinaryColumn store string data as a bytes buffer plus
+// an offsets array; BitmapIndexWriter expects a Slice* stride, so we
+// materialize one ad-hoc for the requested row range.
+template <typename BinaryT>
+static void fill_slice_buffer(const BinaryT& bin, size_t start_row, size_t run_len, std::vector<Slice>* out) {
+    out->resize(run_len);
+    for (size_t i = 0; i < run_len; ++i) {
+        (*out)[i] = bin.get_slice(start_row + i);
+    }
+}
+
 // Walk a run of [start_row, start_row+run_len) in `col` and feed it to the
-// BitmapIndexWriter, replicating the ByteIterator-style pattern used by the
-// standard ColumnWriter (be/src/storage/rowset/column_writer.cpp:815-840):
-// contiguous NULL runs go through add_nulls(); non-null runs go through
-// add_values() at type-sized strides. Works for any LogicalType whose
-// CppType matches the Column's raw_data() layout (fixed-size or Slice).
-Status feed_bitmap_from_column(BitmapIndexWriter* writer, const Column& col, size_t start_row, size_t run_len,
-                               size_t type_size) {
+// given Writer (BitmapIndexWriter or BloomFilterIndexWriter; both share the
+// add_values/add_nulls signature), replicating the ByteIterator-style
+// pattern used by the standard ColumnWriter
+// (be/src/storage/rowset/column_writer.cpp:815-840): contiguous NULL runs
+// go through add_nulls(); non-null runs go through add_values() at
+// type-sized strides. Fixed-length columns read via RawDataVisitor;
+// variable-length string columns materialize a local Slice[] because the
+// writer expects a Slice-stride array for string CppTypes.
+template <typename Writer>
+Status feed_index_from_column(Writer* writer, const Column& col, size_t start_row, size_t run_len, size_t type_size) {
     if (run_len == 0) return Status::OK();
+
+    // Binary / LargeBinary: sidestep the raw_data flow entirely; we need a
+    // Slice array anchored at start_row.
+    std::vector<Slice> slice_buf;
+    auto get_pdata = [&](const Column& data_col) -> StatusOr<const uint8_t*> {
+        if (auto* bin = dynamic_cast<const BinaryColumn*>(&data_col); bin != nullptr) {
+            DCHECK_EQ(type_size, sizeof(Slice));
+            fill_slice_buffer(*bin, start_row, run_len, &slice_buf);
+            return reinterpret_cast<const uint8_t*>(slice_buf.data());
+        }
+        if (auto* lbin = dynamic_cast<const LargeBinaryColumn*>(&data_col); lbin != nullptr) {
+            DCHECK_EQ(type_size, sizeof(Slice));
+            fill_slice_buffer(*lbin, start_row, run_len, &slice_buf);
+            return reinterpret_cast<const uint8_t*>(slice_buf.data());
+        }
+        RawDataVisitor data_visitor;
+        RETURN_IF_ERROR(data_col.accept(&data_visitor));
+        // For fixed-length columns, offset by start_row here; for Slice path
+        // the slice buffer is already anchored at start_row.
+        return data_visitor.result() + start_row * type_size;
+    };
 
     if (col.is_nullable()) {
         const auto& nc = down_cast<const NullableColumn&>(col);
         const auto* data_col = nc.data_column().get();
         const uint8_t* null_flags = nc.immutable_null_column_data().data() + start_row;
-        RawDataVisitor data_visitor;
-        RETURN_IF_ERROR(data_col->accept(&data_visitor));
-        const uint8_t* pdata = data_visitor.result() + start_row * type_size;
+        ASSIGN_OR_RETURN(const uint8_t* pdata, get_pdata(*data_col));
 
         // Collapse contiguous runs of null / non-null values to minimize
         // per-call overhead into add_values / add_nulls.
@@ -90,9 +124,7 @@ Status feed_bitmap_from_column(BitmapIndexWriter* writer, const Column& col, siz
         return Status::OK();
     }
 
-    RawDataVisitor data_visitor;
-    RETURN_IF_ERROR(col.accept(&data_visitor));
-    const uint8_t* pdata = data_visitor.result() + start_row * type_size;
+    ASSIGN_OR_RETURN(const uint8_t* pdata, get_pdata(col));
     writer->add_values(pdata, run_len);
     return Status::OK();
 }
@@ -329,7 +361,7 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
             break;
         }
         if (!st.ok()) return st;
-        RETURN_IF_ERROR(feed_bitmap_from_column(bitmap_writer.get(), *col, 0, n, type_size));
+        RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size));
     }
 
     // Write the bitmap blob to the shared target file and emit the
@@ -427,33 +459,9 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
         }
         if (!st.ok()) return st;
         // BloomFilterIndexWriter shares the add_values/add_nulls signature
-        // with BitmapIndexWriter; reuse the feeder from the anonymous
-        // namespace by adapting it inline — simpler than adding an overload.
-        if (col->is_nullable()) {
-            auto& nc = down_cast<NullableColumn&>(*col);
-            const auto* data_col = nc.data_column().get();
-            const uint8_t* null_flags = nc.immutable_null_column_data().data();
-            RawDataVisitor data_visitor;
-            RETURN_IF_ERROR(data_col->accept(&data_visitor));
-            const uint8_t* pdata = data_visitor.result();
-            size_t i = 0;
-            while (i < n) {
-                bool is_null = null_flags[i] != 0;
-                size_t j = i + 1;
-                while (j < n && (null_flags[j] != 0) == is_null) ++j;
-                size_t sub = j - i;
-                if (is_null) {
-                    bf_writer->add_nulls(static_cast<uint32_t>(sub));
-                } else {
-                    bf_writer->add_values(pdata + i * type_size, sub);
-                }
-                i = j;
-            }
-        } else {
-            RawDataVisitor data_visitor;
-            RETURN_IF_ERROR(col->accept(&data_visitor));
-            bf_writer->add_values(data_visitor.result(), n);
-        }
+        // with BitmapIndexWriter; reuse the common feeder so Binary / string
+        // columns get the Slice-buffer treatment automatically.
+        RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size));
         // BloomFilterIndexWriter accumulates per-page filters; flush at
         // chunk boundaries so memory stays bounded even for large columns.
         RETURN_IF_ERROR(bf_writer->flush());
