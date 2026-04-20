@@ -25,7 +25,6 @@ raw_record	json	YES
 source_info	json	YES
 backend_id	bigint	YES
 -- !result
-
 -- name: test_rejected_records_csv_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
@@ -38,7 +37,7 @@ create table t (id int not null, val int not null, name varchar(64))
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -51,10 +50,10 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select load_type,
        error_code is not null as has_error_code,
@@ -73,7 +72,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_csv_null_violation @sequential
 create database db_${uuid0};
 -- result:
@@ -86,7 +84,7 @@ create table t (id int not null, val int not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -99,10 +97,10 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select load_type,
        error_message like '%NULL%' as msg_mentions_null,
@@ -121,7 +119,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_csv_string_too_long @sequential
 create database db_${uuid0};
 -- result:
@@ -134,7 +131,7 @@ create table t (id int not null, name varchar(5) not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -147,10 +144,10 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select error_message like '%too long%' as msg_mentions_length,
        raw_record is not null as has_raw_record
@@ -168,7 +165,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_csv_partition_miss @sequential
 create database db_${uuid0};
 -- result:
@@ -187,7 +183,7 @@ distributed by hash(dt) buckets 1
 properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -200,10 +196,10 @@ Fail
 select * from t order by dt;
 -- result:
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select error_message like '%partition%' as msg_mentions_partition,
        raw_record is not null as has_raw_record
@@ -221,7 +217,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_csv_column_count @sequential
 create database db_${uuid0};
 -- result:
@@ -234,7 +229,7 @@ create table t (id int not null, val int not null, name varchar(64) not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -247,10 +242,10 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select count(*) as rejected_count
 from _statistics_.rejected_records
@@ -266,7 +261,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_json_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
@@ -279,7 +273,7 @@ create table t (id int not null, val int not null, name varchar(64))
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -292,10 +286,10 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select load_type,
        error_code is not null as has_error_code,
@@ -314,7 +308,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_parquet_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
@@ -327,7 +320,7 @@ create table t (id int not null, val int not null, name varchar(64))
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -356,10 +349,10 @@ select * from t order by id;
 1	100	alice
 3	200	carol
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select load_type,
        error_code is not null as has_error_code,
@@ -383,7 +376,6 @@ shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; for h in $({ ${mysql_cmd} -Ne "s
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_orc_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
@@ -396,7 +388,7 @@ create table t (id int not null, val int not null, name varchar(64))
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -411,18 +403,24 @@ shell: for h in $({ ${mysql_cmd} -Ne "show frontends" | awk '{print $3}'; ${mysq
 0
 0
 -- !result
-shell: ${mysql_cmd} -D db_${uuid0} -e "set log_rejected_record_num=-1; set insert_max_filter_ratio=1.0; insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_orc_${uuid0}.orc','format'='orc');" 2>&1 | sed -E 's/BE:[0-9]+/BE:<masked>/'
+set log_rejected_record_num = -1;
 -- result:
-0
-ERROR 5609 (22000) at line 1: only support csv/json/parquet format to log rejected record: BE:<masked>
+-- !result
+set insert_max_filter_ratio = 1.0;
+-- result:
+-- !result
+insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_orc_${uuid0}.orc','format'='orc');
+-- result:
 -- !result
 select * from t order by id;
 -- result:
+1	100	alice
+3	200	carol
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select load_type,
        error_code is not null as has_error_code,
@@ -431,6 +429,7 @@ from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 -- result:
+INSERT	1	1
 -- !result
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
 -- result:
@@ -457,7 +456,7 @@ create table t (id int not null, val int not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -467,10 +466,10 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select
     length(id) = 36 as id_is_uuid,
@@ -497,7 +496,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_idempotency @sequential
 create database db_${uuid0};
 -- result:
@@ -510,7 +508,7 @@ create table t (id int not null, val int not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -520,10 +518,10 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select count(*) as cnt_after_first_sync
 from _statistics_.rejected_records
@@ -531,7 +529,7 @@ where target_database='db_${uuid0}' and target_table='t';
 -- result:
 1
 -- !result
-shell: sleep 10
+shell: sleep 3
 -- result:
 0
 
@@ -550,7 +548,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_row_access_policy @sequential
 create database db_a_${uuid0};
 -- result:
@@ -574,7 +571,7 @@ CREATE USER testuser_${uuid0} IDENTIFIED BY 'Test1234!';
 GRANT SELECT ON db_a_${uuid0}.ta TO testuser_${uuid0};
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -589,10 +586,10 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select count(*) >= 2 as root_sees_both
 from _statistics_.rejected_records
@@ -624,7 +621,6 @@ drop database db_a_${uuid0};
 drop database db_b_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_insert @sequential
 create database db_${uuid0};
 -- result:
@@ -645,7 +641,7 @@ create table dst (id int not null, val int not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -664,10 +660,10 @@ select * from dst order by id;
 1	100
 3	200
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select load_type,
        load_label is not null as has_label,
@@ -687,7 +683,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_max_filter_ratio_fail @sequential
 create database db_${uuid0};
 -- result:
@@ -700,7 +695,7 @@ create table t (id int not null, val int not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -714,10 +709,10 @@ select count(*) as committed_rows from t;
 -- result:
 0
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select count(*) >= 2 as has_at_least_2_rejected
 from _statistics_.rejected_records
@@ -733,7 +728,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_max_filter_ratio_pass @sequential
 create database db_${uuid0};
 -- result:
@@ -746,7 +740,7 @@ create table t (id int not null, val int not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -760,10 +754,10 @@ select * from t order by id;
 -- result:
 1	10
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select count(*) >= 2 as has_at_least_2_rejected
 from _statistics_.rejected_records
@@ -779,7 +773,6 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
-
 -- name: test_rejected_records_log_num_cap @sequential
 create database db_${uuid0};
 -- result:
@@ -792,7 +785,7 @@ create table t (id int not null, val int not null)
     properties("replication_num" = "1");
 -- result:
 -- !result
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 -- result:
 0
 0
@@ -802,10 +795,10 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: sleep 30
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
-
+0
 -- !result
 select count(*) as capped_count
 from _statistics_.rejected_records
