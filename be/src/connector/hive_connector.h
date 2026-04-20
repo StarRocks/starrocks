@@ -167,6 +167,11 @@ private:
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
     bool _use_min_max_opt = false;
+    // Mirrors THdfsScanNode.can_use_any_column: set when PruneHDFSScanColumnRule
+    // injected a placeholder materialized column because every queried column was
+    // a partition column.  Used together with _use_min_max_opt to avoid reading
+    // that placeholder column from the data file.
+    bool _can_use_any_column = false;
     bool _use_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
