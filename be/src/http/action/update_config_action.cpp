@@ -303,6 +303,13 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+        _config_callback.emplace("lake_partial_update_thread_pool_max_threads", [&]() -> Status {
+            auto thread_pool = _exec_env->lake_partial_update_thread_pool();
+            if (thread_pool != nullptr) {
+                return thread_pool->update_max_threads(config::lake_partial_update_thread_pool_max_threads);
+            }
+            return Status::OK();
+        });
         _config_callback.emplace("pk_index_memtable_flush_threadpool_max_threads", [&]() -> Status {
             auto thread_pool = _exec_env->pk_index_memtable_flush_thread_pool();
             if (thread_pool != nullptr) {
