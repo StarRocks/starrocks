@@ -28,6 +28,7 @@ src/service/internal_service.cpp
 src/service/service_be/arrow_flight_sql_service.cpp
 src/service/service_be/lake_service.cpp
 src/service/service_be/starrocks_be.cpp
+src/storage/lake/column_mode_partial_update_handler.cpp
 src/storage/lake/compaction_policy.cpp
 src/storage/lake/lake_persistent_index.cpp
 src/storage/lake/lake_replication_txn_manager.cpp
