@@ -195,28 +195,58 @@ committed T files stick to a single ALTER per case to stay within the
   / `shouldUseDropIndexFastPath` and route to the new Job classes when
   true. Existing classifier file already in tree.
 
-### Tests
-- BE UTs: index_file_writer/reader round-trip, IDG loader version filter
-  + tombstone, AddIndexSchemaChange end-to-end on a synthetic segment,
-  compaction-vs-add-index conflict fail-fast.
-- FE UTs: classifier decision matrix, Job state-machine happy paths.
-- SQL e2e under `test/sql/test_schema_change/T/`:
-  `test_lake_add_bitmap_index`, `test_lake_drop_index_lifecycle`,
-  `test_lake_add_index_fallback`, `test_lake_add_index_pk_table`.
+### Tests (all green as of 2026-04-20)
+- **BE UTs** (8 cases, `starrocks_test` target, ASAN docker):
+  - `IndexFileWriterReaderTest`: RoundTripMultipleEntries, BadMagicIsCorruption,
+    TooSmallIsCorruption, FinalizeTwiceFails.
+  - `IndexDeltaGroupLoaderTest`: EmptyMetadataReturnsEmpty, VersionVisibilityFilter,
+    TombstonedKeysStripped, FullyTombstonedEntryOmitted.
+  - Run via `./run-be-ut.sh --build-target starrocks_test --enable-shared-data
+    --gtest_filter "IndexFileWriterReaderTest*:IndexDeltaGroupLoaderTest*"`
+    inside the dev-env-ubuntu docker with `--ulimit nofile=131072`.
+- **FE UTs** (17 cases, `fe-core` module):
+  - `SchemaChangeIndexFastPathClassifierTest` (12 cases — full decision matrix
+    for shouldUseAddIndexFastPath / shouldUseDropIndexFastPath / isSupportedIndexType).
+  - `LakeTableIndexFastPathJobTest` (5 cases — copyForPersist,
+    LakeTableAddIndexJob ctor, LakeTableDropIndexJob ctor, replay state, etc.).
+  - Run via `mvn test -pl fe-core -am -Dtest="SchemaChangeIndexFastPathClassifierTest,
+    LakeTableIndexFastPathJobTest" -Dsurefire.failIfNoSpecifiedTests=false`
+    inside the dev-env-ubuntu docker.
+- **SQL e2e** (4 cases, `test/sql/test_schema_change/`):
+  - `test_lake_add_bitmap_index`: BITMAP ADD + index-backed queries.
+  - `test_lake_drop_index_lifecycle`: ADD then DROP (tombstone-only), verify
+    queries still correct.
+  - `test_lake_add_index_fallback`: GIN ADD captures
+    `enable_experimental_gin=false` FE error (flag off by default).
+  - `test_lake_add_index_pk_table`: PK table + non-PK column BITMAP index.
+  - Both record (`-r`) and validate (`-v`) pass against a real shared-data
+    cluster. Run from `$SSH_HOST:/home/disk4/hujie/claude/add-index/starrocks/test`
+    with `sr.conf` pointing at a TSP-built cluster; see
+    `handbook/domains/sql-integration.md` (if present) for invocation details.
 
-### Docs
-- `docs/en/administration/management/BE_configuration.md` and
-  `docs/zh/`: document `lake_schema_change_per_tablet_parallelism`.
-- `docs/en/administration/management/monitoring/metrics.md`: add IDG
-  metrics once implemented (`lake_add_index_duration`,
-  `lake_index_delta_group_files`, etc.).
+### Out of scope for this PR (follow-ups)
+- GIN real-fallback e2e: requires `enable_experimental_gin=true` cluster config
+  and a GIN reader-side bridge (per plan, reader bridge itself is deferred).
+  Current `test_lake_add_index_fallback` covers only the "GIN flag off" path.
+- Multi-ALTER interleaved with INSERT e2e: blocked on lake publish-daemon
+  cadence. Single-ALTER e2e + `IndexDeltaGroupLoaderTest.VersionVisibilityFilter`
+  already cover multi-version IDG selection.
+- IDG-specific user metrics (`lake_add_index_duration`,
+  `lake_index_delta_group_files`): not implemented; commit them when adding
+  grafana dashboards.
 
-## Risks
+### Docs (landed)
+- `docs/en/administration/management/BE_parameters/stats_storage.md:135` and
+  `docs/zh/.../stats_storage.md:126`: `lake_schema_change_per_tablet_parallelism`
+  documented with its `alter_tablet_worker_count * …` derived-capacity note.
+- Thread-pool health metrics (`lake_schema_change_*`) are exposed but deliberately
+  not listed in `metrics.md`; this follows the existing precedent for
+  `alter_tablet_*` / `update_schema_*` etc., which are pool-internals surfaced
+  only via `/metrics` scrape.
 
-- All code below the proto/thrift layer is unreviewed by a build run in
-  the implementation environment; first BE compile will likely surface
-  small issues (header includes, namespace collisions, signature drift).
-  These are easy fixes.
-- FE Job classes are not yet in tree; until LakeTableAddIndexJob lands
-  the BE plumbing is reachable only via direct `TAlterTabletReqV2`
-  injection (test-only).
+## Risks (current state)
+
+- Lake publish-version daemon on freshly-provisioned TSP clusters occasionally
+  takes 10+ minutes to reach `FinishTime` on plain inserts. Unrelated to the
+  fast-path code (fast-path jobs themselves publish in ~10s in e2e), but does
+  bound the e2e scenarios that interleave INSERT with a follow-up ALTER.
