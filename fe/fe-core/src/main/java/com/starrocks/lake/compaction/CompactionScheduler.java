@@ -337,7 +337,7 @@ public class CompactionScheduler extends Daemon {
 
             // Note: call `beginTransaction()` in the scope of database reader lock to make sure no shadow index will
             // be added to this table(i.e., no schema change) before calling `beginTransaction()`.
-            txnId = beginTransaction(partitionIdentifier, info.computeResource);
+            txnId = beginTransaction(partitionIdentifier, partition, info.computeResource);
 
             partition.setMinRetainVersion(currentVersion);
 
@@ -516,8 +516,9 @@ public class CompactionScheduler extends Daemon {
         return beToTablets;
     }
 
-    // REQUIRE: has acquired the exclusive lock of Database.
-    protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource)
+    // REQUIRE: has acquired the read lock of Database.
+    protected long beginTransaction(PartitionIdentifier partition, PhysicalPartition physicalPartition,
+            ComputeResource computeResource)
             throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
@@ -528,8 +529,21 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
 
-        return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
+        long txnId = transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
                 loadJobSourceType, Config.lake_compaction_default_timeout_second, computeResource);
+
+        // Register loaded indexes so preCommit() validates the same indexes that were collected,
+        // not the latest (which may change due to tablet split).
+        TransactionState txnState = transactionMgr.getTransactionState(dbId, txnId);
+        if (txnState != null) {
+            List<Long> indexIds = physicalPartition.getLatestMaterializedIndices(
+                    MaterializedIndex.IndexExtState.VISIBLE)
+                    .stream().map(MaterializedIndex::getId)
+                    .collect(Collectors.toList());
+            txnState.addPartitionLoadedIndexes(tableId, physicalPartition.getId(), indexIds);
+        }
+
+        return txnId;
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)
