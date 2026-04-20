@@ -472,6 +472,11 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
+        // Register tasks in AgentTaskQueue *before* submitting so that
+        // LeaderImpl.finishTask() can find them when CNs report back.
+        // Without this, CN reports arrive as "cannot find task" warnings and
+        // the batchTask never transitions to finished.
+        AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
         LOG.info("index fast-path job {} dispatched {} AlterReplicaTasks", jobId, batchTask.getTaskNum());
     }
