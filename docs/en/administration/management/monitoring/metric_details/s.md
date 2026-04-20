@@ -46,6 +46,12 @@ description: "Alphabetical s"
 - Unit: Count
 - Description: Number of small file caches.
 
+## `spill_disk_bytes_used`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Current disk bytes reserved across all spill storage directories. The `storage_type=local` variant aggregates the live reserved bytes across every directory managed by the BE's spill `DirManager`. The `storage_type=remote` variant is reported for completeness and is currently always 0 because remote spill storage is tracked per-query rather than globally.
+
 ## `snmp`
 
 - Unit: -
