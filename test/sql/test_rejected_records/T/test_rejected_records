@@ -235,11 +235,20 @@ shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; for h in $({ ${mysql_cmd} -Ne "s
 drop database db_${uuid0};
 
 -- =============================================================
--- ORC rejection via INSERT FROM FILES (stream load does not accept orc).
+-- ORC via INSERT FROM FILES: regression guard for the "feature limit"
+-- -------------------------------------------------------------
+-- OrcChunkReader does not yet have a per-row error-capture path the way the
+-- Parquet arrow converter does (arrow_to_starrocks_converter.report_error_message
+-- feeds RejectedRecordWriter::append_from_slices). BE therefore rejects the
+-- whole query with error 5609 when ORC is combined with log_rejected_record_num.
+-- This case captures that status. If ORC grows a per-row capture path in the
+-- future, the insert will succeed and the assertion block below will show
+-- actual rejected rows — the R diff is the signal to update the expectation.
 -- =============================================================
 
 -- name: test_rejected_records_orc_type_mismatch @sequential
--- INSERT INTO ... SELECT * FROM FILES('format'='orc'): bad row rejected in tablet_sink.
+-- INSERT INTO ... FROM FILES('format'='orc') with log_rejected_record_num is
+-- rejected by the BE today (error 5609). See comment block above.
 
 create database db_${uuid0};
 use db_${uuid0};
