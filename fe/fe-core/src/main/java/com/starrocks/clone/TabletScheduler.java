@@ -1096,8 +1096,9 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         Locker locker = new Locker();
+        List<Long> tableIds = Lists.newArrayList(tabletCtx.getTblId());
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.WRITE);
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1114,7 +1115,7 @@ public class TabletScheduler extends FrontendDaemon {
                 throw new SchedException(Status.FINISHED, "redundant replica is deleted");
             }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.WRITE);
         }
         throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas. replicas: " +
                 tabletCtx.getTablet().getReplicaInfos());
@@ -1337,8 +1338,9 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         Locker locker = new Locker();
+        List<Long> tableIds = Lists.newArrayList(tabletCtx.getTblId());
         try {
-            locker.lockDatabase(db.getId(), LockType.WRITE);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.WRITE);
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
@@ -1360,7 +1362,7 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas. replicas: " +
                     tabletCtx.getTablet().getReplicaInfos() + ", backend set: " + backendSet);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.WRITE);
         }
     }
 
