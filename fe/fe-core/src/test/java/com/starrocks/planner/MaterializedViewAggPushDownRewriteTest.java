@@ -1373,4 +1373,120 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "mv_hourly_events");
     }
+
+    @Test
+    public void testAggPushDown_ValidMv_GroupByNotCovered() {
+        // MV only groups by LO_ORDERDATE; query needs (LO_ORDERDATE, LO_LINENUMBER).
+        // MV group-by is too coarse → must be pruned.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum " +
+                "from lineorder group by LO_ORDERDATE";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.LO_ORDERDATE, l.LO_LINENUMBER, sum(l.LO_REVENUE) " +
+                    "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                    "group by l.LO_ORDERDATE, l.LO_LINENUMBER";
+            sql(query).nonMatch("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_GroupByCovered() {
+        // MV groups by (LO_ORDERDATE, LO_LINENUMBER); query only needs LO_ORDERDATE (rollup).
+        // MV group-by is a superset → should be used.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, LO_LINENUMBER, sum(LO_REVENUE) as revenue_sum " +
+                "from lineorder group by LO_ORDERDATE, LO_LINENUMBER";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.LO_ORDERDATE, sum(l.LO_REVENUE) " +
+                    "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                    "group by l.LO_ORDERDATE";
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_WhereColNotInGroupBy() {
+        // MV groups by LO_ORDERDATE only; query has WHERE LO_LINENUMBER > 3.
+        // LO_LINENUMBER is aggregated away in MV → cannot apply the filter → must be pruned.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, sum(LO_REVENUE) as revenue_sum " +
+                "from lineorder group by LO_ORDERDATE";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.LO_ORDERDATE, sum(l.LO_REVENUE) " +
+                    "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                    "where l.LO_LINENUMBER > 3 " +
+                    "group by l.LO_ORDERDATE";
+            sql(query).nonMatch("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_WhereColInGroupBy() {
+        // MV groups by (LO_ORDERDATE, LO_LINENUMBER); query has WHERE LO_LINENUMBER > 3.
+        // LO_LINENUMBER is in MV group-by → filter can be applied → should be used.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select LO_ORDERDATE, LO_LINENUMBER, sum(LO_REVENUE) as revenue_sum " +
+                "from lineorder group by LO_ORDERDATE, LO_LINENUMBER";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.LO_ORDERDATE, sum(l.LO_REVENUE) " +
+                    "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                    "where l.LO_LINENUMBER > 3 " +
+                    "group by l.LO_ORDERDATE,concat(d.d_datekey,'a')";
+            sql(query).contains("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_MvPredicateNotInQueryPredicate() {
+        // MV has WHERE lo_linenumber = 1 (predicate column: lo_linenumber).
+        // Query has no predicate on lineorder → MV data is a strict subset of query's
+        // required data → MV must be pruned to avoid incorrect aggregation results.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select lo_orderdate, lo_linenumber, sum(lo_revenue) as revenue_sum " +
+                "from lineorder where lo_linenumber = 1 group by lo_orderdate, lo_linenumber";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.lo_orderdate, sum(l.lo_revenue) " +
+                    "from lineorder l join dates d on l.lo_orderdate = d.d_datekey " +
+                    "group by l.lo_orderdate";
+            sql(query).nonMatch("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_MvPredicateExceedsQueryPredicate() {
+        // MV has WHERE lo_linenumber = 1 AND lo_custkey = 100 (predicate columns: {lo_linenumber, lo_custkey}).
+        // Query only has WHERE lo_linenumber = 1 (predicate columns: {lo_linenumber}).
+        // MV predicate columns ⊄ query predicate columns → MV data is over-filtered
+        // relative to query → must be pruned.
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select lo_orderdate, lo_linenumber, lo_custkey, sum(lo_revenue) as revenue_sum " +
+                "from lineorder where lo_linenumber = 1 and lo_custkey = 100 " +
+                "group by lo_orderdate, lo_linenumber, lo_custkey";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.lo_orderdate, sum(l.lo_revenue) " +
+                    "from lineorder l join dates d on l.lo_orderdate = d.d_datekey " +
+                    "where l.lo_linenumber = 1 " +
+                    "group by l.lo_orderdate";
+            sql(query).nonMatch("mv0");
+        });
+    }
+
+    @Test
+    public void testAggPushDown_ValidMv_MvNoPredicateQueryHasPredicate() {
+        // MV has no predicate (predicate column set is empty).
+        // Query has WHERE lo_linenumber > 3.
+        // Empty set ⊆ any set → predicate check passes.
+        // lo_linenumber is in MV group-by → group-by coverage check passes.
+        // MV should be used (not pruned by the new predicate-column check).
+        String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                "select lo_orderdate, lo_linenumber, sum(lo_revenue) as revenue_sum " +
+                "from lineorder group by lo_orderdate, lo_linenumber";
+        starRocksAssert.withMaterializedView(mv, () -> {
+            String query = "select l.lo_orderdate, sum(l.lo_revenue) " +
+                    "from lineorder l join dates d on l.lo_orderdate = d.d_datekey " +
+                    "where l.lo_linenumber > 3 " +
+                    "group by l.lo_orderdate";
+            sql(query).contains("mv0");
+        });
+    }
 }

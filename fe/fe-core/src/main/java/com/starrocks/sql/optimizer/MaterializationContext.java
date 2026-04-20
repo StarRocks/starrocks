@@ -157,6 +157,13 @@ public class MaterializationContext {
 
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
     private Map<LogicalScanOperator, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
+
+    // Cache group by columns referring to baseTable's column if mv is SPG.
+    private Set<String> groupingColumns;
+
+    // Cache predicate columns referring to baseTable's column if mv is SPG.
+    private Set<String> predicateColumns;
+
     private final int level;
 
     public MaterializationContext(OptimizerContext optimizerContext,
@@ -270,6 +277,22 @@ public class MaterializationContext {
 
     public List<ColumnRefOperator> getMvOutputColumnRefs() {
         return mvOutputColumnRefs;
+    }
+
+    public Set<String> getGroupingColumns() {
+        return groupingColumns;
+    }
+
+    public void setGroupingColumns(Set<String> groupingColumns) {
+        this.groupingColumns = groupingColumns;
+    }
+
+    public Set<String> getPredicateColumns() {
+        return predicateColumns;
+    }
+
+    public void setPredicateColumns(Set<String> predicateColumns) {
+        this.predicateColumns = predicateColumns;
     }
 
     public int getLevel() {
