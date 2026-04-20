@@ -27,12 +27,7 @@
 #include "runtime/global_dict/parser.h"
 #include "storage/predicate_parser.h"
 #include "storage/runtime_range_pruner.hpp"
-<<<<<<< HEAD:be/src/exec/hdfs_scanner.cpp
-=======
-#include "storage/type_info_allocator_adapter.h"
-#include "storage/types.h"
 #include "types/timestamp_value.h"
->>>>>>> e6761a8bf1 ([Enhancement] Support Iceberg datetime min/max optimization and fix timestamp conversion (#71870)):be/src/exec/hdfs_scanner/hdfs_scanner.cpp
 #include "util/compression/compression_utils.h"
 #include "util/compression/stream_compression.h"
 namespace starrocks {
