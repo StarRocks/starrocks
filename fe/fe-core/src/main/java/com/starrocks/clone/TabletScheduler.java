@@ -1096,9 +1096,8 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         Locker locker = new Locker();
-        List<Long> tableIds = Lists.newArrayList(tabletCtx.getTblId());
         try {
-            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
@@ -1115,7 +1114,7 @@ public class TabletScheduler extends FrontendDaemon {
                 throw new SchedException(Status.FINISHED, "redundant replica is deleted");
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
         }
         throw new SchedException(Status.UNRECOVERABLE, "unable to delete any redundant replicas. replicas: " +
                 tabletCtx.getTablet().getReplicaInfos());
@@ -1338,9 +1337,8 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         Locker locker = new Locker();
-        List<Long> tableIds = Lists.newArrayList(tabletCtx.getTblId());
         try {
-            locker.lockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.WRITE);
+            locker.lockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
             checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
@@ -1362,7 +1360,7 @@ public class TabletScheduler extends FrontendDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas. replicas: " +
                     tabletCtx.getTablet().getReplicaInfos() + ", backend set: " + backendSet);
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIds, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), tabletCtx.getTblId(), LockType.WRITE);
         }
     }
 
