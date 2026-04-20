@@ -22,17 +22,7 @@ COPY . ${BUILD_ROOT}
 WORKDIR ${BUILD_ROOT}
 # clean and build Frontend and Spark Dpp application
 RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --with-maven-batch-mode ON --clean
-
-
-FROM ${builder} as broker-builder
-ARG RELEASE_VERSION
-ARG MAVEN_OPTS
-ARG BUILD_ROOT
-COPY . ${BUILD_ROOT}
-WORKDIR ${BUILD_ROOT}
-# clean and build Frontend and Spark Dpp application
 RUN --mount=type=cache,target=/root/.m2/ cd fs_brokers/apache_hdfs_broker/ && STARROCKS_VERSION=${RELEASE_VERSION} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh
-
 
 FROM ${builder} as be-builder
 ARG RELEASE_VERSION
@@ -75,7 +65,7 @@ LABEL org.starrocks.version=${RELEASE_VERSION:-"UNKNOWN"}
 
 COPY --from=fe-builder ${BUILD_ROOT}/output /release/fe_artifacts
 COPY --from=be-builder ${BUILD_ROOT}/output /release/be_artifacts
-COPY --from=broker-builder ${BUILD_ROOT}/fs_brokers/apache_hdfs_broker/output /release/broker_artifacts
+COPY --from=fe-builder ${BUILD_ROOT}/fs_brokers/apache_hdfs_broker/output /release/broker_artifacts
 
 COPY --from=downloader /arthas/arthas-boot.jar /release/fe_artifacts/fe/arthas/arthas-boot.jar
 COPY --from=downloader /datadog/dd-java-agent.jar /release/fe_artifacts/fe/datadog/dd-java-agent.jar
