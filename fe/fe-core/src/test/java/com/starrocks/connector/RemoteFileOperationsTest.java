@@ -50,6 +50,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 import static io.airlift.concurrent.MoreFutures.getFutureValue;
@@ -183,6 +184,63 @@ public class RemoteFileOperationsTest {
                     ops.asyncRenameFiles(futures, new AtomicBoolean(false), writePath, targetPath, fileNames);
                     getFutureValue(futures.get(0), StarRocksConnectorException.class);
                 });
+    }
+
+    @Test
+    public void testEnsureDirectoryExistsCreatesWhenMissing() {
+        AtomicInteger createCount = new AtomicInteger(0);
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public boolean pathExists(Path path, Configuration conf) {
+                return false;
+            }
+
+            @Mock
+            public void createDirectory(Path path, Configuration conf) {
+                createCount.incrementAndGet();
+            }
+        };
+
+        HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        hiveRemoteFileIO.setFileSystem(new MockedRemoteFileSystem(HDFS_HIVE_TABLE));
+        FeConstants.runningUnitTest = true;
+        ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
+        ExecutorService executorToLoad = Executors.newSingleThreadExecutor();
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
+                false, true, new Configuration());
+
+        Path p = new Path("hdfs://127.0.0.1:9000/warehouse/missing/part");
+        ops.ensureDirectoryExists(p);
+        Assertions.assertEquals(1, createCount.get());
+    }
+
+    @Test
+    public void testEnsureDirectoryExistsNoOpWhenPresent() {
+        AtomicInteger createCount = new AtomicInteger(0);
+        new MockUp<HiveWriteUtils>() {
+            @Mock
+            public boolean pathExists(Path path, Configuration conf) {
+                return true;
+            }
+
+            @Mock
+            public void createDirectory(Path path, Configuration conf) {
+                createCount.incrementAndGet();
+            }
+        };
+
+        HiveRemoteFileIO hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
+        hiveRemoteFileIO.setFileSystem(new MockedRemoteFileSystem(HDFS_HIVE_TABLE));
+        FeConstants.runningUnitTest = true;
+        ExecutorService executorToRefresh = Executors.newSingleThreadExecutor();
+        ExecutorService executorToLoad = Executors.newSingleThreadExecutor();
+        CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 0.1);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, executorToLoad,
+                false, true, new Configuration());
+
+        ops.ensureDirectoryExists(new Path("hdfs://127.0.0.1:9000/warehouse/exists"));
+        Assertions.assertEquals(0, createCount.get());
     }
 
     @Test
