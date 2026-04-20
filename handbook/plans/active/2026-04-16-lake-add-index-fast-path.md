@@ -1,8 +1,8 @@
 # Lake ADD/DROP INDEX Fast Path
 
-- Status: active
+- Status: active — all 4 SQL e2e green on real shared-data cluster
 - Owner: Schema Change
-- Last Updated: 2026-04-20
+- Last Updated: 2026-04-20 (e2e green)
 
 ## Summary
 
@@ -84,45 +84,58 @@ compile against current origin main and all checkstyle rules pass.
 TSP cluster `hujie-lake-idx-e2e3` (1 FE + 3 CN, shared-data, 24h) has
 been applied using build 1163 for next-session e2e validation.
 
-### First e2e failure: BE publish 404
+### e2e debugging arc (2026-04-18 → 2026-04-20)
 
-`ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP` reaches
-`FINISHED_REWRITING`, then `publishVersion()` loops on:
+Five real-cluster issues surfaced in sequence once SQL e2e started
+running. Each required reading CN `~/be/log/cn.INFO` (via
+`sshpass -p sr@test ssh sr@<cn_ip>`) and FE `~/fe/log/fe.log`:
 
-    Fail to publish version for tablets [10344]: starlet err [StatusCode=404]
-    Get object s3://.../db{DB}/{TABLE}/{PARTITION}/log/{tablet_hex}_{txn_hex}.log
-    error: The specified key does not exist.
+1. FE: `getInfo()` emitted 11 columns instead of the 13/14 declared by
+   `SchemaChangeProcDir.TITLE_NAMES`; `SHOW ALTER TABLE COLUMN` returned
+   a malformed packet. Fixed in commit `b322137026`.
+2. FE: `dispatchAllTasks()` passed `null` to
+   `AlterReplicaTask.alterLakeTablet` whose lake ctor does
+   `Preconditions.checkNotNull(baseTabletReadSchema, …)`; the NPE
+   aborted the loop, `batchTask` had 0 tasks, runRunningJob saw 0/0 as
+   trivially complete, and the job fast-forwarded to FINISHED_REWRITING
+   then looped on a 404 because no AlterReplicaTask ever left FE.
+   Compute the schema with `SchemaInfo.fromMaterializedIndex(...)` per
+   LakeTableSchemaChangeJob's pattern. Commit `f3e7c67baa`.
+3. BE: `build_idg_for_segment` read `fs->new_random_access_file(file_info)`
+   without bundle_file_offset / encryption — bundled rowsets read from
+   byte 0 and surfaced "Bad page: checksum mismatch". Set
+   `seg_fileinfo.bundle_file_offset` from
+   `rowset_meta.bundle_file_offsets(seg_idx)` and switch to
+   `new_random_access_file_with_bundling(opts, file_info)` with
+   `segment->encryption_info()` propagated. Commit `2275e3278d`.
+4. FE: `dispatchAllTasks()` called `AgentTaskExecutor.submit(batchTask)`
+   without the preceding `AgentTaskQueue.addBatchTask(batchTask)`;
+   when CNs reported back, `LeaderImpl.finishTask()` couldn't find the
+   task in the queue ("cannot find task. type: ALTER, backendId: X,
+   signature: Y") and the status update was silently dropped.
+   `batchTask.isFinished()` never flipped to true so the job stayed in
+   RUNNING indefinitely even after BE's
+   `ADD INDEX fast path commit: tablet=... segment_entries=1` succeeded.
+   Commit `ee4157ff2e`.
+5. TEST: `show index from t1` output carries a qualified table name
+   whose DB prefix embeds the `${uuid0}` hash, so -r / -v runs never
+   matched. Drop the statement; selects are enough to demonstrate
+   index visibility and correctness.
 
-The file BE is supposed to write at `txn_log_location(new_tablet_id,
-watershedTxnId)` from `do_process_add_index_only` never shows up, yet
-the AlterReplicaTask reports FINISHED (so BE's process_alter_tablet
-returned OK). Three hypotheses:
+All four SQL e2e cases now pass both record and validate modes against
+TSP cluster `hujie-lake-idx-e2e7` running build 1180 (commit
+`ee4157ff2e`).
 
-- (a) do_process_add_index_only silently fell back to
-  do_process_alter_tablet (line 666 or 688) which writes an
-  OpSchemaChange log — but path should still match.
-- (b) AddIndexSchemaChange::run returned OK but op_add_index was empty;
-  put_txn_log wrote a near-empty log that publish reads but fails to
-  apply (though the visible error is 404, not parse error).
-- (c) Agent task layer swallowed a real BE error and reported success.
+    test_lake_add_bitmap_index      record 22.9s  validate 88.9s  OK
+    test_lake_drop_index_lifecycle  record 59.2s  validate 179.2s OK
+    test_lake_add_index_fallback    record 0.7s   validate 0.9s   OK
+    test_lake_add_index_pk_table    record 27.9s  validate 87.8s  OK
 
-### Next session entry points
-
-1. SSH into a CN via `sr / sr@test` (see memory
-   reference_tsp_cluster_ssh.md): `sshpass -p 'sr@test' ssh sr@<cn_ip>
-   'tail -500 /home/sr/starrocks/cn/log/be.INFO'` and grep for
-   `ADD INDEX fast path` / `do_process_add_index_only` markers to learn
-   whether the fast path actually ran and whether `put_txn_log` was
-   called.
-2. Also check `/home/sr/starrocks/cn/log/be.WARNING` for silent S3 put
-   errors.
-3. If BE never entered the fast path: the thrift-level `only_add_index`
-   flag isn't reaching BE, or the `TTabletType::TABLET_TYPE_LAKE` branch
-   is short-circuiting somewhere earlier.
-4. Re-run the 4 SQL e2e (`-r` mode) against
-   `hujie-lake-idx-e2e3` (FE ip printed by `tsp cluster status`),
-   updating `test/conf/sr.conf` on `$SSH_HOST:/home/disk4/hujie/claude/
-   add-index/starrocks/test/conf/sr.conf`.
+One pre-existing cluster quirk the e2e files accommodate: lake INSERT
+publish sometimes takes 10+ minutes under low activity, so any test
+that mixes INSERT and a follow-up ALTER watershed waits forever. The
+committed T files stick to a single ALTER per case to stay within the
+600s per-case timeout.
 
 ## Decision Log
 
