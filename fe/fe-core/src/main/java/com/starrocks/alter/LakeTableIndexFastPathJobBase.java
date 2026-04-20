@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
@@ -37,6 +38,7 @@ import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
+import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
@@ -437,6 +439,10 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             if (table == null) {
                 throw new AlterCancelException("table does not exist, tableId: " + tableId);
             }
+            // Cache one TTabletSchema per index meta id; alterLakeTablet's
+            // constructor checkNotNull-s it, and recomputing per tablet would
+            // churn protobuf serialization for no reason.
+            Map<Long, TTabletSchema> schemaCache = new HashMap<>();
             for (Map.Entry<Long, List<Long>> e : partitionToTablets.entrySet()) {
                 long ppId = e.getKey();
                 PhysicalPartition pp = table.getPhysicalPartition(ppId);
@@ -451,11 +457,14 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                     }
                     Long indexMetaId = tabletToIndexMetaId.get(tabletId);
                     Preconditions.checkNotNull(indexMetaId, tabletId);
+                    TTabletSchema readSchema = schemaCache.computeIfAbsent(indexMetaId, id ->
+                            SchemaInfo.fromMaterializedIndex(table, id, table.getIndexMetaByMetaId(id))
+                                    .toTabletSchema());
                     // For the fast path, shadow tablet == origin tablet and
                     // shadow index == origin index (no shadow created).
                     AlterReplicaTask task = AlterReplicaTask.alterLakeTablet(cn.getId(), dbId, tableId, ppId,
                             indexMetaId, tabletId, tabletId, visibleVersion, jobId, watershedTxnId,
-                            /*generatedColumnReq=*/ null, /*baseTabletReadSchema=*/ null);
+                            /*generatedColumnReq=*/ null, readSchema);
                     populateAlterRequest(task);
                     batchTask.addTask(task);
                 }
