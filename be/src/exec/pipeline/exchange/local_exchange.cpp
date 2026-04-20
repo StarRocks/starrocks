@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
@@ -399,12 +400,11 @@ Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const in
             _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
             _writer_count++;
         }
-        // set to default value in case of _source vector out of bound in multi thread
-        if (_writer_count > sources_num) {
-            _writer_count = sources_num;
-        }
-        _source->get_sources()[(_next_accept_source++) % _writer_count.load()]->add_chunk(chunk);
-        if (_writer_count < sources_num) {
+        // Snapshot and clamp locally so the index computation is immune to concurrent increments
+        // that may push _writer_count transiently above sources_num between the clamp write and use.
+        size_t writer_count = std::min(_writer_count.load(), sources_num);
+        _source->get_sources()[(_next_accept_source++) % writer_count]->add_chunk(chunk);
+        if (writer_count < sources_num) {
             _data_processed += chunk->bytes_usage();
         }
     }
