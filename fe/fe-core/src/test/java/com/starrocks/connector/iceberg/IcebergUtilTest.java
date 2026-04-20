@@ -17,21 +17,9 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.catalog.Column;
-<<<<<<< HEAD
 import com.starrocks.catalog.Type;
-import com.starrocks.thrift.TExprMinMaxValue;
-=======
-import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.planner.SlotDescriptor;
-import com.starrocks.planner.SlotId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprMinMaxValue;
-import com.starrocks.type.DateType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.StringType;
-import org.apache.iceberg.FileFormat;
-import org.apache.iceberg.FileScanTask;
->>>>>>> e6761a8bf1 ([Enhancement] Support Iceberg datetime min/max optimization and fix timestamp conversion (#71870))
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.types.Types;
@@ -190,32 +178,6 @@ public class IcebergUtilTest {
             assertEquals(10, tExprMinMaxValueMap.get(5).max_int_value);
         }
     }
-<<<<<<< HEAD
-}
-=======
-
-    @Test
-    public void testCheckFileFormatSupportedDelete() {
-        FileScanTask parquetFileScanTask = createMockFileScanTask(FileFormat.PARQUET);
-        FileScanTask orcFileScanTask = createMockFileScanTask(FileFormat.ORC);
-        FileScanTask avroFileScanTask = createMockFileScanTask(FileFormat.AVRO);
-
-        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, true);
-
-        StarRocksConnectorException orcException = assertThrows(StarRocksConnectorException.class,
-                () -> IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, true));
-        assertEquals("Delete operations on Iceberg tables are only supported for Parquet format files. " +
-                "Found ORC format file: /test/orc/file.orc", orcException.getMessage());
-
-        StarRocksConnectorException avroException = assertThrows(StarRocksConnectorException.class,
-                () -> IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, true));
-        assertEquals("Delete operations on Iceberg tables are only supported for Parquet format files. " +
-                "Found AVRO format file: /test/avro/file.avro", avroException.getMessage());
-
-        IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, false);
-        IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, false);
-        IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, false);
-    }
 
     @Test
     public void testParseMinMaxValueBySlotsWithIcebergTimestampTypes() {
@@ -223,11 +185,11 @@ public class IcebergUtilTest {
                 required(3, "ts_ntz", Types.TimestampType.withoutZone()),
                 required(5, "ts_tz", Types.TimestampType.withZone()));
         List<SlotDescriptor> slots = List.of(
-                new SlotDescriptor(new SlotId(3), "ts_ntz", DateType.DATETIME, true),
-                new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true)
+                new SlotDescriptor(new SlotId(3), "ts_ntz", Type.DATETIME, true),
+                new SlotDescriptor(new SlotId(5), "ts_tz", Type.DATETIME, true)
         );
-        slots.get(0).setColumn(new Column("ts_ntz", DateType.DATETIME, true));
-        slots.get(1).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+        slots.get(0).setColumn(new Column("ts_ntz", Type.DATETIME, true));
+        slots.get(1).setColumn(new Column("ts_tz", Type.DATETIME, true));
 
         long minMicros = 0L;
         long maxMicros = 1_000_000L;
@@ -265,16 +227,4 @@ public class IcebergUtilTest {
             ConnectContext.remove();
         }
     }
-
-    private FileScanTask createMockFileScanTask(FileFormat fileFormat) {
-        FileScanTask mockTask = org.mockito.Mockito.mock(FileScanTask.class);
-        org.apache.iceberg.DataFile mockFile = org.mockito.Mockito.mock(org.apache.iceberg.DataFile.class);
-        org.mockito.Mockito.when(mockTask.file()).thenReturn(mockFile);
-        org.mockito.Mockito.when(mockFile.format()).thenReturn(fileFormat);
-        String location = "/test/" + fileFormat.name().toLowerCase() + "/file." +
-                fileFormat.name().toLowerCase();
-        org.mockito.Mockito.when(mockFile.location()).thenReturn(location);
-        return mockTask;
-    }
 }
->>>>>>> e6761a8bf1 ([Enhancement] Support Iceberg datetime min/max optimization and fix timestamp conversion (#71870))
