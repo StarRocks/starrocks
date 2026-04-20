@@ -2,7 +2,7 @@
 
 - Status: active
 - Owner: Schema Change
-- Last Updated: 2026-04-16
+- Last Updated: 2026-04-20
 
 ## Summary
 
@@ -48,6 +48,81 @@ Commits in chronological order:
     LakeTableDropIndexJob (abstract-base + 2 concrete subclasses);
     SchemaChangeHandler dispatch via tryBuildLakeAddIndexJob /
     tryBuildLakeDropIndexJob; FE UT for Job construction + copyForPersist.
+11. TSP integration fixups needed to get the PR to a green build on
+    origin/upstream main (11 consecutive build attempts before SUCCESS):
+    - metrics: METRICS_DEFINE_THREAD_POOL(lake_schema_change) was missing
+    - BitmapIndexIterator needed defaulted move ctor (user-declared dtor
+      suppressed it, std::move fell back to deleted copy)
+    - ASSIGN_OR_RETURN(bool /*first_load*/, ...) doesn't expand to valid
+      Java/C++ (comment stripped, left `bool  = ...`); bind to a named var
+    - add_index_schema_change.h needed segment.pb.h for ColumnIndexMetaPB
+    - upstream main removed Column::raw_data(); replaced 4 call sites with
+      RawDataVisitor
+    - enable_transparent_data_encryption lives in config_rowset_fwd.h
+    - down_cast<const NullableColumn&>(*mutable_ptr_deref) needs non-const
+      target to agree on constness; drop the const qualifier
+    - NonPrimaryKeyTxnLogApplier has no _builder field; construct a local
+      MetaFileBuilder for ADD/DROP INDEX ops
+    - FE API drift: getMaterializedIndices -> getAllMaterializedIndices,
+      getBaseIndex -> getLatestBaseIndex, getColumnByUniqueId(ColumnId) ->
+      getColumn(ColumnId), Column.isBloomFilterColumn/setIsBloomFilterColumn
+      don't exist (drop per-column flips; bloom-filter columns are
+      table-level via bfColumns), new ColumnId(String) private
+    - Utils.publishVersion takes TxnInfoPB not bare long txn-id; wrap it
+      like LakeTableAlterMetaJobBase
+    - getInfo() must emit 13-14 columns aligned to SchemaChangeProcDir
+      TITLE_NAMES (JobId/TableName/CreateTime/FinishTime/IndexName/IndexId/
+      OriginIndexId/SchemaVersion/TransactionId/State/Msg/Progress/Timeout/
+      Warehouse). Previous 11-column output caused "Malformed packet" on
+      SHOW ALTER TABLE COLUMN.
+
+## Current Status (2026-04-20)
+
+Build 1163 (commit 8be915e / b322137) landed green on main: BE + FE both
+compile against current origin main and all checkstyle rules pass.
+
+TSP cluster `hujie-lake-idx-e2e3` (1 FE + 3 CN, shared-data, 24h) has
+been applied using build 1163 for next-session e2e validation.
+
+### First e2e failure: BE publish 404
+
+`ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP` reaches
+`FINISHED_REWRITING`, then `publishVersion()` loops on:
+
+    Fail to publish version for tablets [10344]: starlet err [StatusCode=404]
+    Get object s3://.../db{DB}/{TABLE}/{PARTITION}/log/{tablet_hex}_{txn_hex}.log
+    error: The specified key does not exist.
+
+The file BE is supposed to write at `txn_log_location(new_tablet_id,
+watershedTxnId)` from `do_process_add_index_only` never shows up, yet
+the AlterReplicaTask reports FINISHED (so BE's process_alter_tablet
+returned OK). Three hypotheses:
+
+- (a) do_process_add_index_only silently fell back to
+  do_process_alter_tablet (line 666 or 688) which writes an
+  OpSchemaChange log — but path should still match.
+- (b) AddIndexSchemaChange::run returned OK but op_add_index was empty;
+  put_txn_log wrote a near-empty log that publish reads but fails to
+  apply (though the visible error is 404, not parse error).
+- (c) Agent task layer swallowed a real BE error and reported success.
+
+### Next session entry points
+
+1. SSH into a CN via `sr / sr@test` (see memory
+   reference_tsp_cluster_ssh.md): `sshpass -p 'sr@test' ssh sr@<cn_ip>
+   'tail -500 /home/sr/starrocks/cn/log/be.INFO'` and grep for
+   `ADD INDEX fast path` / `do_process_add_index_only` markers to learn
+   whether the fast path actually ran and whether `put_txn_log` was
+   called.
+2. Also check `/home/sr/starrocks/cn/log/be.WARNING` for silent S3 put
+   errors.
+3. If BE never entered the fast path: the thrift-level `only_add_index`
+   flag isn't reaching BE, or the `TTabletType::TABLET_TYPE_LAKE` branch
+   is short-circuiting somewhere earlier.
+4. Re-run the 4 SQL e2e (`-r` mode) against
+   `hujie-lake-idx-e2e3` (FE ip printed by `tsp cluster status`),
+   updating `test/conf/sr.conf` on `$SSH_HOST:/home/disk4/hujie/claude/
+   add-index/starrocks/test/conf/sr.conf`.
 
 ## Decision Log
 
