@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
+
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -20,7 +22,6 @@
 
 #include "base/concurrency/countdown_latch.h"
 #include "common/thread/thread.h"
-#include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 
