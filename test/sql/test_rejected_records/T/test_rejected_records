@@ -27,14 +27,14 @@ create table t (id int not null, val int not null, name varchar(64))
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_csv_type_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d $'1,100,alice\n2,bad_val,bob\n3,200,carol' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
 -- Only good rows committed
 select * from t order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 -- One rejected record, load_type=STREAM_LOAD, error_code non-null
 select load_type,
@@ -56,14 +56,14 @@ create table t (id int not null, val int not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- Row 2: val is empty → NULL → violates NOT NULL
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_null_${uuid0}" -H "column_separator:," -d $'1,10\n2,\n3,30' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
 select * from t order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 select load_type,
        error_message like '%NULL%' as msg_mentions_null,
@@ -84,14 +84,14 @@ create table t (id int not null, name varchar(5) not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- Row 2: "toolongname" (11 chars) > varchar(5)
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_strlen_${uuid0}" -H "column_separator:," -d $'1,alice\n2,toolongname\n3,bob' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
 select * from t order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 select error_message like '%too long%' as msg_mentions_length,
        raw_record is not null as has_raw_record
@@ -117,14 +117,14 @@ partition by range(dt) (
 distributed by hash(dt) buckets 1
 properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- Row 2: date 2027-01-01 falls outside partition range
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_part_${uuid0}" -H "column_separator:," -d $'2025-06-01,10\n2027-01-01,99\n2025-12-01,20' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
 select * from t order by dt;
 
-shell: sleep 30
+shell: sleep 5
 
 select error_message like '%partition%' as msg_mentions_partition,
        raw_record is not null as has_raw_record
@@ -144,14 +144,14 @@ create table t (id int not null, val int not null, name varchar(64) not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- Row 2: only 2 columns instead of 3
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_colcnt_${uuid0}" -H "column_separator:," -d $'1,100,alice\n2,200\n3,300,carol' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
 select * from t order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 select count(*) as rejected_count
 from _statistics_.rejected_records
@@ -173,14 +173,14 @@ create table t (id int not null, val int not null, name varchar(64))
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- val="not_a_number" is a string where INT is expected, strict_mode=true rejects it
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_json_${uuid0}" -H "format:json" -H "strip_outer_array:true" -H "strict_mode:true" -d '[{"id":1,"val":100,"name":"alice"},{"id":2,"val":"not_a_number","name":"bob"},{"id":3,"val":200,"name":"carol"}]' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
 select * from t order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 select load_type,
        error_code is not null as has_error_code,
@@ -207,7 +207,7 @@ create table t (id int not null, val int not null, name varchar(64))
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- Generate parquet where val is string; cast to INT will fail on "bad_val" and yield NULL → violates NOT NULL
 shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array(["100","bad_val","200"],pa.string()), "name": pa.array(["alice","bob","carol"],pa.string())}); pq.write_table(tbl, "/tmp/rej_parquet_${uuid0}.parquet"); print(0)'
@@ -221,7 +221,7 @@ insert into t select cast(id as int), cast(val as int), name from files('path'='
 
 select * from t order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 select load_type,
        error_code is not null as has_error_code,
@@ -235,20 +235,11 @@ shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; for h in $({ ${mysql_cmd} -Ne "s
 drop database db_${uuid0};
 
 -- =============================================================
--- ORC via INSERT FROM FILES: regression guard for the "feature limit"
--- -------------------------------------------------------------
--- OrcChunkReader does not yet have a per-row error-capture path the way the
--- Parquet arrow converter does (arrow_to_starrocks_converter.report_error_message
--- feeds RejectedRecordWriter::append_from_slices). BE therefore rejects the
--- whole query with error 5609 when ORC is combined with log_rejected_record_num.
--- This case captures that status. If ORC grows a per-row capture path in the
--- future, the insert will succeed and the assertion block below will show
--- actual rejected rows — the R diff is the signal to update the expectation.
+-- ORC rejection via INSERT FROM FILES (stream load does not accept orc).
 -- =============================================================
 
 -- name: test_rejected_records_orc_type_mismatch @sequential
--- INSERT INTO ... FROM FILES('format'='orc') with log_rejected_record_num is
--- rejected by the BE today (error 5609). See comment block above.
+-- INSERT INTO ... SELECT * FROM FILES('format'='orc'): bad row rejected in tablet_sink.
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -256,20 +247,19 @@ create table t (id int not null, val int not null, name varchar(64))
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 shell: python3 -c 'import pyorc, io; schema = "struct<id:int,val:string,name:string>"; buf = io.BytesIO(); w = pyorc.Writer(buf, schema); w.write((1, "100", "alice")); w.write((2, "bad_val", "bob")); w.write((3, "200", "carol")); w.close(); open("/tmp/rej_orc_${uuid0}.orc","wb").write(buf.getvalue()); print(0)'
 
 shell: for h in $({ ${mysql_cmd} -Ne "show frontends" | awk '{print $3}'; ${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'; } | sort -u); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_orc_${uuid0}.orc sr@$h:/tmp/; done; echo 0
 
--- Wrap the ORC insert in a shell so we can mask the BE node id that appears in the
--- error message ("BE:<id>"), which otherwise changes between runs depending on which
--- CN the planner schedules. The mask keeps this case deterministic across reruns.
-shell: ${mysql_cmd} -D db_${uuid0} -e "set log_rejected_record_num=-1; set insert_max_filter_ratio=1.0; insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_orc_${uuid0}.orc','format'='orc');" 2>&1 | sed -E 's/BE:[0-9]+/BE:<masked>/'
+set log_rejected_record_num = -1;
+set insert_max_filter_ratio = 1.0;
+insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_orc_${uuid0}.orc','format'='orc');
 
 select * from t order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 select load_type,
        error_code is not null as has_error_code,
@@ -295,11 +285,11 @@ create table t (id int not null, val int not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_fields_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d $'1,10\n2,not_int\n3,30' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
-shell: sleep 30
+shell: sleep 5
 
 -- id should be UUID (len=36), created_at should be recent, raw_record not null, backend_id not null
 select
@@ -334,11 +324,11 @@ create table t (id int not null, val int not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_idem_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad_val' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
-shell: sleep 30
+shell: sleep 5
 
 -- Count after first sync
 select count(*) as cnt_after_first_sync
@@ -347,7 +337,7 @@ where target_database='db_${uuid0}' and target_table='t';
 
 -- Trigger a second sync cycle by toggling; daemon will re-attempt the same records file
 -- (files are removed after successful post, so a second sync won't re-post already-cleared files)
-shell: sleep 10
+shell: sleep 3
 
 -- Count should still be 1 — PK dedup prevents duplication
 select count(*) as cnt_after_second_sync
@@ -378,12 +368,12 @@ create table db_b_${uuid0}.tb (id int not null, val int not null)
 CREATE USER testuser_${uuid0} IDENTIFIED BY 'Test1234!';
 GRANT SELECT ON db_a_${uuid0}.ta TO testuser_${uuid0};
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_pol_a_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad' ${url}/api/db_a_${uuid0}/ta/_stream_load | jq -r '.Status'
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_pol_b_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad' ${url}/api/db_b_${uuid0}/tb/_stream_load | jq -r '.Status'
 
-shell: sleep 30
+shell: sleep 5
 
 -- root sees records from both databases
 select count(*) >= 2 as root_sees_both
@@ -423,7 +413,7 @@ create table dst (id int not null, val int not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 set log_rejected_record_num = -1;
 set insert_max_filter_ratio = 1.0;
@@ -432,7 +422,7 @@ insert into dst select id, cast(val as int) from src;
 -- Good rows committed
 select * from dst order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 -- Exactly one rejected row, load_type=INSERT, raw_record present, load_label is the insert txn label (non-null)
 select load_type,
@@ -459,7 +449,7 @@ create table t (id int not null, val int not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- 2 bad rows out of 3 → ratio 0.67 > 0.0 → load fails
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_mfr_fail_${uuid0}" -H "strict_mode:true" -H "max_filter_ratio:0.0" -H "column_separator:," -d $'1,10\n2,bad\n3,worse' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
@@ -467,7 +457,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 -- Load failed → nothing committed
 select count(*) as committed_rows from t;
 
-shell: sleep 30
+shell: sleep 5
 
 -- But rejected records still present
 select count(*) >= 2 as has_at_least_2_rejected
@@ -486,7 +476,7 @@ create table t (id int not null, val int not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- 2 bad rows out of 3, ratio 1.0 allows any filter rate → load succeeds, good rows committed
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_mfr_pass_${uuid0}" -H "strict_mode:true" -H "max_filter_ratio:1.0" -H "column_separator:," -d $'1,10\n2,bad\n3,worse' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
@@ -494,7 +484,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 -- Only good row committed
 select * from t order by id;
 
-shell: sleep 30
+shell: sleep 5
 
 -- Rejected rows still recorded (at least 2)
 select count(*) >= 2 as has_at_least_2_rejected
@@ -518,12 +508,12 @@ create table t (id int not null, val int not null)
     duplicate key(id) distributed by hash(id) buckets 1
     properties("replication_num" = "1");
 
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
 -- 5 bad rows, cap=2 → writer stops after 2
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:2" -H "label:rej_cap_${uuid0}" -H "strict_mode:true" -H "max_filter_ratio:1.0" -H "column_separator:," -d $'1,bad1\n2,bad2\n3,bad3\n4,bad4\n5,bad5' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
-shell: sleep 30
+shell: sleep 5
 
 -- Exactly 2 rows make it into the system table (3rd+ silently discarded by writer)
 select count(*) as capped_count

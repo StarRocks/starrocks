@@ -240,11 +240,9 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
     if (runtime_state()->enable_log_rejected_record() &&
         scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
         scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON &&
-        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_PARQUET) {
-        // ORC row rejection is not yet wired into OrcChunkReader's per-row error path.
-        // Parquet goes through arrow_to_starrocks_converter which already emits rejected
-        // records via report_error_message.
-        return Status::InternalError("only support csv/json/parquet format to log rejected record");
+        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_PARQUET &&
+        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_ORC) {
+        return Status::InternalError("only support csv/json/parquet/orc format to log rejected record");
     }
     //create scanner object and open
     std::unique_ptr<FileScanner> scanner = _create_scanner(scan_range, counter);
