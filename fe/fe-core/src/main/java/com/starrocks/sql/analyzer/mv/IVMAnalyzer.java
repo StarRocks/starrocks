@@ -66,11 +66,11 @@ public class IVMAnalyzer {
     }
 
     public record IVMAnalyzeResult(QueryStatement queryStatement,
-                                   boolean needRetractableSink,
+                                   RowIdStrategy rowIdStrategy,
                                    MaterializedView.RefreshMode currentRefreshMode) {
-        public static IVMAnalyzeResult of(QueryStatement queryStatement, boolean needRetractableSink,
+        public static IVMAnalyzeResult of(QueryStatement queryStatement, RowIdStrategy rowIdStrategy,
                                           MaterializedView.RefreshMode currentRefreshMode) {
-            return new IVMAnalyzeResult(queryStatement, needRetractableSink, currentRefreshMode);
+            return new IVMAnalyzeResult(queryStatement, rowIdStrategy, currentRefreshMode);
         }
     }
 
@@ -88,8 +88,6 @@ public class IVMAnalyzer {
     private final ConnectContext connectContext;
     private final CreateMaterializedViewStatement statement;
     private final QueryStatement queryStatement;
-
-    private boolean isNeedRetractableSink = false;
 
     public IVMAnalyzer(ConnectContext connectContext,
                        CreateMaterializedViewStatement statement,
@@ -118,15 +116,24 @@ public class IVMAnalyzer {
 
         try {
             QueryRelation queryRelation = queryStatement.getQueryRelation();
-            rewriteImpl(queryRelation);
-            IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement,
-                    isNeedRetractableSink, refreshMode);
+            // rewriteImpl returns whether the query is "retractable" (currently equivalent
+            // to "has aggregate" after dead-code cleanup). A retractable query produces its
+            // own __ROW_ID__ expression (e.g. encode(group_by_keys)); a non-retractable
+            // query — today an append-only Iceberg scan — relies on storage AUTO_INCREMENT.
+            boolean isRetractable = rewriteImpl(queryRelation);
+            RowIdStrategy strategy = isRetractable
+                    ? RowIdStrategy.QUERY_COMPUTED
+                    : RowIdStrategy.AUTO_INCREMENT;
+            IVMAnalyzeResult result = IVMAnalyzeResult.of(queryStatement, strategy, refreshMode);
             return Optional.of(result);
         } catch (Exception e) {
             if (refreshMode.isIncremental()) {
                 throw new SemanticException("Failed to rewrite the query for IVM: %s", e.getMessage());
             } else {
                 // If the refresh mode is not strictly incremental, we can fallback to full refresh.
+                // NOTE: pre-existing AST-mutation leak — if rewriteImpl partially mutates the
+                // queryStatement then throws, the caller will see a partially-rewritten AST
+                // when falling back to PCT mode. Tracked as a separate follow-up issue.
                 return Optional.empty();
             }
         }
@@ -209,22 +216,6 @@ public class IVMAnalyzer {
         return isRetractable;
     }
 
-    private void markRetractableSink() {
-        if (hasMarkedRetractableSink()) {
-            throw new SemanticException("IVMAnalyzer has already marked retractable sink, " +
-                    "but got another mark request.");
-        }
-        this.isNeedRetractableSink = true;
-    }
-
-    private boolean hasMarkedRetractableSink() {
-        return this.isNeedRetractableSink;
-    }
-
-    private boolean isRetractableJoin(JoinOperator joinType) {
-        return !(joinType.isInnerJoin() || joinType.isCrossJoin() || joinType.isLeftSemiJoin());
-    }
-
     private boolean checkRelation(Relation relation) throws AnalysisException {
         if (relation == null) {
             return false;
@@ -244,15 +235,9 @@ public class IVMAnalyzer {
                 throw new SemanticException("IVMAnalyzer does not support with retractable right input, " +
                         "but got: %s", joinRelation.getRight());
             }
-            if (isRetractableJoin(joinType)) {
-                // only can support two tables with outer join, cannot support multi tables with outer join,
-                if (hasMarkedRetractableSink()) {
-                    throw new SemanticException("IVMAnalyzer does not support outer join with multiple tables, " +
-                            "but got: %s", joinType);
-                }
-                markRetractableSink();
-                return true;
-            }
+            // Iceberg tables are currently append-only (no delete files supported) and
+            // only inner/cross joins are allowed — so this branch never produces
+            // retractable output. Revisit when outer-join / delete-file support lands.
             return false;
         } else if (relation instanceof QueryRelation) {
             // If the inner relation is a QueryRelation, we need to rewrite it recursively.
@@ -277,10 +262,6 @@ public class IVMAnalyzer {
         List<FunctionCallExpr> aggregateExprs = selectRelation.getAggregate();
         if (CollectionUtils.isEmpty(aggregateExprs)) {
             return false;
-        }
-        if (hasMarkedRetractableSink()) {
-            throw new RuntimeException("IVMAnalyzer does not support aggregate functions with " +
-                    "retractable input yet");
         }
 
         List<Expr> groupByExprs = selectRelation.getGroupBy();
@@ -345,7 +326,6 @@ public class IVMAnalyzer {
         newAggFuncInfos.stream()
                 .forEach(aggFunctionInfo -> newOutputExpressions.add(aggFunctionInfo.newAggFunc));
         selectRelation.setOutputExpr(newOutputExpressions);
-        this.markRetractableSink();
         return true;
     }
 
