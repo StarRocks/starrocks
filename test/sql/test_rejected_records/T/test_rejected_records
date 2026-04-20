@@ -262,9 +262,10 @@ shell: python3 -c 'import pyorc, io; schema = "struct<id:int,val:string,name:str
 
 shell: for h in $({ ${mysql_cmd} -Ne "show frontends" | awk '{print $3}'; ${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'; } | sort -u); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_orc_${uuid0}.orc sr@$h:/tmp/; done; echo 0
 
-set log_rejected_record_num = -1;
-set insert_max_filter_ratio = 1.0;
-insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_orc_${uuid0}.orc','format'='orc');
+-- Wrap the ORC insert in a shell so we can mask the BE node id that appears in the
+-- error message ("BE:<id>"), which otherwise changes between runs depending on which
+-- CN the planner schedules. The mask keeps this case deterministic across reruns.
+shell: ${mysql_cmd} -D db_${uuid0} -e "set log_rejected_record_num=-1; set insert_max_filter_ratio=1.0; insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_orc_${uuid0}.orc','format'='orc');" 2>&1 | sed -E 's/BE:[0-9]+/BE:<masked>/'
 
 select * from t order by id;
 
