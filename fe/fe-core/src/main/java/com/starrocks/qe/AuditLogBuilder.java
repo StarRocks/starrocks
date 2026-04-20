@@ -35,7 +35,7 @@ import java.util.Map;
 
 
 // A builtin Audit plugin, registered when FE start.
-// it will receive "AFTER_QUERY" AuditEventy and print it as a log in fe.audit.log
+// it will receive query audit events and print them in fe.audit.log
 public class AuditLogBuilder extends Plugin implements AuditPlugin {
     private static final Logger LOG = LogManager.getLogger(AuditLogBuilder.class);
 
@@ -53,7 +53,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
 
     @Override
     public boolean eventFilter(EventType type) {
-        return type == EventType.AFTER_QUERY || type == EventType.CONNECTION;
+        return type == EventType.BEFORE_QUERY || type == EventType.AFTER_QUERY || type == EventType.CONNECTION;
     }
 
     @Override
@@ -62,6 +62,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
             Map<String, Object> logMap = new HashMap<>();
             StringBuilder sb = new StringBuilder();
             long queryTime = 0;
+            boolean isAfterQuery = event.type == EventType.AFTER_QUERY;
 
             // get each field with annotation "AuditField" in AuditEvent
             Field[] fields = event.getClass().getFields();
@@ -123,6 +124,14 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 }
             }
 
+            if (Config.audit_stmt_before_execute) {
+                if (Config.audit_log_json_format) {
+                    logMap.put("EventType", event.type.name());
+                } else {
+                    sb.append("|EventType=").append(event.type.name());
+                }
+            }
+
             ObjectMapper objectMapper = new ObjectMapper();
 
             if (event.type == EventType.CONNECTION) {
@@ -133,7 +142,7 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                 }
 
             } else {
-                if (isBigQuery(event)) {
+                if (isAfterQuery && isBigQuery(event)) {
                     if (Config.audit_log_json_format) {
                         logMap.put("bigQueryLogCPUSecondThreshold", event.bigQueryLogCPUSecondThreshold);
                         logMap.put("bigQueryLogScanBytesThreshold", event.bigQueryLogScanBytesThreshold);
@@ -146,14 +155,14 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         AuditLog.getBigQueryAudit().log(sb.toString());
                     }
                 }
-                if (Config.enable_qe_slow_log && queryTime > Config.qe_slow_log_ms) {
+                if (isAfterQuery && Config.enable_qe_slow_log && queryTime > Config.qe_slow_log_ms) {
                     if (Config.audit_log_json_format) {
                         AuditLog.getSlowAudit().log(objectMapper.writeValueAsString(logMap));
                     } else {
                         AuditLog.getSlowAudit().log(sb.toString());
                     }
                 }
-                if (Config.enable_plan_feature_collection && event.features != null) {
+                if (isAfterQuery && Config.enable_plan_feature_collection && event.features != null) {
                     StringBuilder execution = new StringBuilder();
                     execution.append("digest=").append(event.digest);
                     execution.append("|cpuCostNs=").append(event.cpuCostNs);
@@ -169,7 +178,6 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                     execution.append("|").append(event.features);
                     AuditLog.getFeaturesAudit().info(execution.toString());
                 }
-                event.features = null;
                 if (Config.audit_log_json_format) {
                     AuditLog.getQueryAudit().log(objectMapper.writeValueAsString(logMap));
                 } else {

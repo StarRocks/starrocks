@@ -119,6 +119,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of audit log files that can be retained within each retention period specified by the `audit_log_roll_interval` parameter.
 - Introduced in: -
 
+### `audit_stmt_before_execute`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether FE emits a `BEFORE_QUERY` audit event before each statement executes. When enabled, ConnectProcessor writes one audit record before statement execution and still writes the normal `AFTER_QUERY` audit record after the statement finishes. For multi-statement requests, this happens per executed statement: statements executed before a failure each emit a before/after pair, the failed statement also emits both records, and statements after the failure emit nothing because they are not executed. Parse failures are unchanged and still only produce the existing failed after-audit for the original SQL text. This is an FE-wide switch, so changing it affects all sessions on the FE.
+- Introduced in: v4.1
+
 ### `bdbje_log_level`
 
 - Default: INFO

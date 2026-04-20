@@ -350,6 +350,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
+        ctx.setMultiStmt(false);
         // Add running query detail for MV refresh
         ctx.setQuerySource(QueryDetail.QuerySource.MV);
 
