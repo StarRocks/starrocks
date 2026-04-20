@@ -167,7 +167,7 @@ USING (
 ON t.id = s.id
 WHEN MATCHED THEN UPDATE SET name = s.name;
 -- result:
-[REGEX]E: \(1064.*matched by at most one source row.*
+[REGEX]E: \(5609.*matched by more than one source row.*
 -- !result
 set pipeline_dop = 0;
 -- result:
