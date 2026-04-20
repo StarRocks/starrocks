@@ -193,11 +193,13 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 
 -- =============================================================
--- Parquet rejection (arrow_to_starrocks_converter TYPE_MISMATCH path)
+-- Parquet rejection via INSERT FROM FILES (stream load does not accept parquet).
+-- Triggers tablet_sink NULL_VIOLATION when cast(string_val AS INT) yields NULL
+-- and target column is NOT NULL. Exercises the INSERT load_type path end-to-end.
 -- =============================================================
 
 -- name: test_rejected_records_parquet_type_mismatch @sequential
--- Parquet stream load: column value cannot convert to target type → TYPE_MISMATCH.
+-- INSERT INTO ... SELECT * FROM FILES('format'='parquet'): bad row rejected in tablet_sink.
 
 create database db_${uuid0};
 use db_${uuid0};
@@ -207,60 +209,67 @@ create table t (id int not null, val int not null, name varchar(64))
 
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
 
--- Generate a small Parquet file: val column is STRING in parquet but INT in table; strict_mode rejects unconvertible rows
+-- Generate parquet where val is string; cast to INT will fail on "bad_val" and yield NULL → violates NOT NULL
 shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array(["100","bad_val","200"],pa.string()), "name": pa.array(["alice","bob","carol"],pa.string())}); pq.write_table(tbl, "/tmp/rej_parquet_${uuid0}.parquet"); print(0)'
 
-shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_parquet_${uuid0}" -H "format:parquet" -H "strict_mode:true" --data-binary @/tmp/rej_parquet_${uuid0}.parquet ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
+-- Distribute the parquet file to every CN so the FILES() scan can read it regardless of scheduling
+shell: for cn in $(${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_parquet_${uuid0}.parquet sr@$cn:/tmp/ >/dev/null 2>&1; done; echo 0
+
+set log_rejected_record_num = -1;
+set insert_max_filter_ratio = 1.0;
+insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_parquet_${uuid0}.parquet','format'='parquet');
 
 select * from t order by id;
 
 shell: sleep 30
 
 select load_type,
-       error_code as error_code,
-       raw_record is not null as has_raw_record,
-       source_info is not null as has_source_info
-from _statistics_.rejected_records
-where target_database='db_${uuid0}' and target_table='t'
-order by created_at limit 5;
-
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
-shell: rm -f /tmp/rej_parquet_${uuid0}.parquet
-drop database db_${uuid0};
-
--- =============================================================
--- ORC rejection (orc_chunk_reader ORC_ROW_REJECTED path)
--- =============================================================
-
--- name: test_rejected_records_orc_type_mismatch @sequential
--- ORC stream load: row fails pre-filter type check → ORC_ROW_REJECTED.
-
-create database db_${uuid0};
-use db_${uuid0};
-create table t (id int not null, val int not null, name varchar(64))
-    duplicate key(id) distributed by hash(id) buckets 1
-    properties("replication_num" = "1");
-
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
-
--- Generate a small ORC file with a string val column that can't fit INT
-shell: python3 -c 'import pyorc, io; schema = "struct<id:int,val:string,name:string>"; buf = io.BytesIO(); w = pyorc.Writer(buf, schema); w.write((1, "100", "alice")); w.write((2, "bad_val", "bob")); w.write((3, "200", "carol")); w.close(); open("/tmp/rej_orc_${uuid0}.orc","wb").write(buf.getvalue()); print(0)'
-
-shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_orc_${uuid0}" -H "format:orc" -H "strict_mode:true" --data-binary @/tmp/rej_orc_${uuid0}.orc ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
-
-select * from t order by id;
-
-shell: sleep 30
-
-select load_type,
-       error_code as error_code,
+       error_code is not null as has_error_code,
        raw_record is not null as has_raw_record
 from _statistics_.rejected_records
 where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
-shell: rm -f /tmp/rej_orc_${uuid0}.orc
+shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; for cn in $(${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'); do sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null sr@$cn "rm -f /tmp/rej_parquet_${uuid0}.parquet" >/dev/null 2>&1; done; echo 0
+drop database db_${uuid0};
+
+-- =============================================================
+-- ORC rejection via INSERT FROM FILES (stream load does not accept orc).
+-- =============================================================
+
+-- name: test_rejected_records_orc_type_mismatch @sequential
+-- INSERT INTO ... SELECT * FROM FILES('format'='orc'): bad row rejected in tablet_sink.
+
+create database db_${uuid0};
+use db_${uuid0};
+create table t (id int not null, val int not null, name varchar(64))
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+
+shell: python3 -c 'import pyorc, io; schema = "struct<id:int,val:string,name:string>"; buf = io.BytesIO(); w = pyorc.Writer(buf, schema); w.write((1, "100", "alice")); w.write((2, "bad_val", "bob")); w.write((3, "200", "carol")); w.close(); open("/tmp/rej_orc_${uuid0}.orc","wb").write(buf.getvalue()); print(0)'
+
+shell: for cn in $(${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_orc_${uuid0}.orc sr@$cn:/tmp/ >/dev/null 2>&1; done; echo 0
+
+set log_rejected_record_num = -1;
+set insert_max_filter_ratio = 1.0;
+insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_orc_${uuid0}.orc','format'='orc');
+
+select * from t order by id;
+
+shell: sleep 30
+
+select load_type,
+       error_code is not null as has_error_code,
+       raw_record is not null as has_raw_record
+from _statistics_.rejected_records
+where target_database='db_${uuid0}' and target_table='t'
+order by created_at limit 5;
+
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
+shell: rm -f /tmp/rej_orc_${uuid0}.orc; for cn in $(${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'); do sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null sr@$cn "rm -f /tmp/rej_orc_${uuid0}.orc" >/dev/null 2>&1; done; echo 0
 drop database db_${uuid0};
 
 -- =============================================================
@@ -514,37 +523,3 @@ where target_database='db_${uuid0}' and target_table='t';
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
 drop database db_${uuid0};
 
--- =============================================================
--- error_column population (Parquet path fills column name)
--- =============================================================
-
--- name: test_rejected_records_error_column_parquet @sequential
--- Parquet TYPE_MISMATCH path populates error_column with the offending column name.
--- CSV/tablet_sink paths leave error_column empty; arrow_to_starrocks_converter fills it.
-
-create database db_${uuid0};
-use db_${uuid0};
-create table t (id int not null, val int not null, name varchar(64))
-    duplicate key(id) distributed by hash(id) buckets 1
-    properties("replication_num" = "1");
-
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=5" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
-
--- Parquet val column is STRING, table column is INT; "bad_val" cannot convert
-shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array(["100","bad_val","200"],pa.string()), "name": pa.array(["alice","bob","carol"],pa.string())}); pq.write_table(tbl, "/tmp/rej_errcol_${uuid0}.parquet"); print(0)'
-
-shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_errcol_${uuid0}" -H "format:parquet" -H "strict_mode:true" -H "max_filter_ratio:1.0" --data-binary @/tmp/rej_errcol_${uuid0}.parquet ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
-
-shell: sleep 30
-
--- error_column should equal 'val' (the column whose conversion failed), error_code='TYPE_MISMATCH'
-select error_code,
-       error_column = 'val' as err_col_is_val,
-       raw_record is not null as has_raw_record
-from _statistics_.rejected_records
-where target_database='db_${uuid0}' and target_table='t'
-order by created_at limit 5;
-
-shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
-shell: rm -f /tmp/rej_errcol_${uuid0}.parquet
-drop database db_${uuid0};

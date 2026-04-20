@@ -6360,6 +6360,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setLoad_transmission_compression_type(loadCompressionType);
         }
 
+        // Propagate log_rejected_record_num so INSERT (and any path using
+        // context.getSessionVariable().toThrift()) can emit rejected records
+        // to _statistics_.rejected_records. Without this, the BE writer stays
+        // disabled because log_rejected_record_num defaults to 0.
+        tResult.setLog_rejected_record_num(logRejectedRecordNum);
+
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
         tResult.setGlobal_runtime_filter_build_max_size(globalRuntimeFilterBuildMaxSize);
         tResult.setRuntime_filter_wait_timeout_ms(globalRuntimeFilterWaitTimeout);
