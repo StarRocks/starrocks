@@ -119,6 +119,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Preconditions.checkState(partitionColumnOpt.isPresent());
         Column partitionColumn = partitionColumnOpt.get();
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
+        differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
         PartitionDiffResult result = differ.computePartitionDiff(rangeToInclude);
         if (result == null) {
             logger.warn("compute range partition diff failed: mv: {}", mv.getName());

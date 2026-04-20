@@ -33,6 +33,7 @@ import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.Assertions;
@@ -906,5 +907,304 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     PlanTestBase.assertContains(planStr, "state_union");
                 }
         );
+    }
+
+    /**
+     * Verify that after IVM→PCT fallback's first batch, the pinning owner is installed on
+     * AsyncRefreshContext and the runtime pinnedTvrMap is hydrated. This is the precondition
+     * for subsequent batches to recognise themselves as pinned and consume pinned state at
+     * scan / partition enumeration / partition-info persistence.
+     */
+    @Test
+    public void testPinnedTvrMapHydratedOnFallbackFirstBatch() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+
+        // First batch completed — inspect the runtime pinnedTvrMap hydrated by
+        // setupPinnedContextIfNeeded after the afterSyncHook installed the owner.
+        MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
+        Map<String, TvrVersionRange> pinnedMap = mvTaskRunContext.getRefreshRuntimeState().getPinnedTvrMap();
+        Assertions.assertFalse(pinnedMap.isEmpty(),
+                "pinnedTvrMap should be populated after fallback first batch hydrates pinned state");
+        // Value should be a TvrTableSnapshot pointing at the PCT-synced snapshot (version 2).
+        TvrVersionRange pinned = pinnedMap.values().iterator().next();
+        Assertions.assertTrue(pinned instanceof TvrTableSnapshot, "pinned range should be a TvrTableSnapshot");
+        Assertions.assertEquals(2L, pinned.to().getVersion(),
+                "pinned snapshot should match the PCT-synced version (2)");
+    }
+
+    /**
+     * Verify that when a pinned fallback job generates the next batch task run, the next task
+     * run's properties carry PINNED_REFRESH_JOB_ID set to the pinning job's START_TASK_RUN_ID.
+     * This is what makes TaskRunManager treat different pinned jobs as non-mergeable and what
+     * triggers pinned-mode behaviour on batch 2+ entry.
+     */
+    @Test
+    public void testPinnedRefreshJobIdPropagatedToSubsequentBatch() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
+        MVHybridBasedRefreshProcessor hybrid =
+                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        MVPCTBasedRefreshProcessor pctProcessor =
+                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+
+        // First batch should have generated a next batch (partition_refresh_number=1 on 4 partitions).
+        TaskRun nextTaskRun = pctProcessor.getNextTaskRun();
+        Assertions.assertNotNull(nextTaskRun, "Fallback first batch should generate a next batch task run");
+
+        // The next batch must carry PINNED_REFRESH_JOB_ID so:
+        //  (a) TaskRunManager treats it as non-mergeable with other jobs' batches (MV_COMPARABLE);
+        //  (b) on its own getProcessExecPlan, the early-SKIP / isPinnedMode paths resolve correctly.
+        String pinnedJobId = nextTaskRun.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID);
+        Assertions.assertNotNull(pinnedJobId,
+                "Subsequent pinned batch must carry PINNED_REFRESH_JOB_ID");
+
+        // The value must equal the current job's START_TASK_RUN_ID so the owner-match guard in
+        // updateVersionMeta (and the early-SKIP in getProcessExecPlan) will accept the batch.
+        MvTaskRunContext mvTaskRunContext = mvTaskRunProcessor.getMvTaskRunContext();
+        String expectedJobId = mvTaskRunContext.getStatus().getStartTaskRunId();
+        Assertions.assertEquals(expectedJobId, pinnedJobId,
+                "PINNED_REFRESH_JOB_ID should equal the pinning job's START_TASK_RUN_ID");
+
+        // Also verify the persisted pinning owner matches — this is what isPinnedMode() compares.
+        MaterializedView refreshedMv = getMv("test_mv1");
+        String persistedOwner = refreshedMv.getRefreshScheme()
+                .getAsyncRefreshContext()
+                .getTempTvrOwnerStartTaskRunId();
+        Assertions.assertEquals(expectedJobId, persistedOwner,
+                "Persisted pinning owner should match the job id carried on the next batch");
+    }
+
+    /**
+     * Verify that a stale subsequent batch whose pinning owner has been overwritten by a newer
+     * refresh job returns SKIPPED early, does not run syncAndCheckPCTPartitions, and does not
+     * clobber the newer job's pending state. This exercises the early-SKIP path in
+     * MVPCTBasedRefreshProcessor.getProcessExecPlan (Commit 1) together with the owner-match
+     * guard on clearTempBaseTableInfoTvrDeltaState (Commit 3).
+     */
+    @Test
+    public void testStalePinnedBatchDoesNotCorruptNewerJobState() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+
+        // Job A: first batch installs owner=A_jobId and creates nextTaskRun for batch 2.
+        TaskRun jobARun1 = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor jobARun1Processor = getMVTaskRunProcessor(jobARun1);
+        MVHybridBasedRefreshProcessor jobAHybrid =
+                (MVHybridBasedRefreshProcessor) jobARun1Processor.getMVRefreshProcessor();
+        MVPCTBasedRefreshProcessor jobAPct =
+                (MVPCTBasedRefreshProcessor) jobAHybrid.getCurrentProcessor();
+        TaskRun jobABatch2 = jobAPct.getNextTaskRun();
+        Assertions.assertNotNull(jobABatch2, "Job A should generate a batch 2");
+        String jobAId = jobARun1Processor.getMvTaskRunContext().getStatus().getStartTaskRunId();
+
+        // Simulate job B arriving: overwrite owner to a different value (a different random UUID)
+        // directly on AsyncRefreshContext. This mimics what a newer job's fallback first batch would do.
+        MaterializedView currentMv = getMv("test_mv1");
+        MaterializedView.AsyncRefreshContext asyncCtx = currentMv.getRefreshScheme().getAsyncRefreshContext();
+        Map<BaseTableInfo, TvrVersionRange> jobBFrozen = Map.copyOf(asyncCtx.getTempBaseTableInfoTvrDeltaMap());
+        String jobBId = com.starrocks.common.util.UUIDUtil.genUUID().toString();
+        asyncCtx.replaceTempBaseTableInfoTvrDeltaMap(jobBId, jobBFrozen);
+        Assertions.assertEquals(jobBId, asyncCtx.getTempTvrOwnerStartTaskRunId(),
+                "Setup: newer job B should have overwritten the pinning owner");
+
+        // Job A's stale batch 2 now runs. It must detect owner mismatch and return SKIPPED,
+        // NOT refresh external tables, NOT build a plan, and NOT clear the pending state.
+        initAndExecuteTaskRun(jobABatch2);
+
+        // After the stale batch: owner must still be job B (not cleared by stale batch),
+        // and the pending map must be intact. Job B's pending state is protected.
+        MaterializedView afterStaleMv = getMv("test_mv1");
+        MaterializedView.AsyncRefreshContext ctxAfter =
+                afterStaleMv.getRefreshScheme().getAsyncRefreshContext();
+        Assertions.assertEquals(jobBId, ctxAfter.getTempTvrOwnerStartTaskRunId(),
+                "Stale batch must not overwrite or clear the newer job's pinning owner");
+        Assertions.assertFalse(ctxAfter.getTempBaseTableInfoTvrDeltaMap().isEmpty(),
+                "Stale batch must not clear the newer job's pending TVR delta map");
+        // Sanity: the owner is not the stale batch's job id.
+        Assertions.assertNotEquals(jobAId, ctxAfter.getTempTvrOwnerStartTaskRunId(),
+                "Pinning owner should no longer be job A after job B overwrote it");
+    }
+
+    /**
+     * Verify Bug B core invariant: a subsequent pinned batch's scan plan pins to the frozen
+     * snapshot (S2) and NOT to a live snapshot (S3) that the catalog has advanced to between
+     * batches. This exercises the full pipeline from {@code afterSyncHook} (freeze) through
+     * {@code setupPinnedContextIfNeeded} (hydrate) through
+     * {@code MVPCTRefreshPlanBuilder.injectPinnedTvrForIcebergRelations} (scan-plan injection)
+     * down to {@code IcebergScanNode}'s {@code useSnapshot(snapshotId)} call.
+     * <p>
+     * Without scan-plan injection, batch 2 would pick up the live S3 via
+     * {@code TableRelation.getTable().getNativeTable().currentSnapshot()} and scan S3 data while
+     * the MV's partition-info / TVR record S2 — the exact divergence Bug B describes. The final
+     * TVR checkpoint would still be correct (S2), so existing multi-batch tests do not catch
+     * this regression.
+     */
+    @Test
+    public void testSubsequentBatchScanPlanUsesFrozenSnapshotNotLive() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+
+        // Batch 1: IVM fails -> Hybrid fallback to PCT -> afterSyncHook freezes at S2.
+        TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
+        MVHybridBasedRefreshProcessor hybrid =
+                (MVHybridBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTBasedRefreshProcessor pctProc =
+                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+        TaskRun batch2 = pctProc.getNextTaskRun();
+        Assertions.assertNotNull(batch2, "Multi-batch fallback should generate batch 2");
+
+        // Simulate a background catalog refresh advancing the live Iceberg snapshot to S3 BEFORE
+        // batch 2 builds its plan. Batch 2 must still pin scan to S2 via pinnedTvrMap, not read
+        // the advanced current snapshot from TableRelation.getTable().
+        advanceTableVersionTo(3);
+
+        // Execute batch 2 and capture its exec plan.
+        initAndExecuteTaskRun(batch2);
+        MVTaskRunProcessor batch2Proc = getMVTaskRunProcessor(batch2);
+        MvTaskRunContext batch2Ctx = batch2Proc.getMvTaskRunContext();
+        ExecPlan batch2Plan = batch2Ctx.getExecPlan();
+        Assertions.assertNotNull(batch2Plan,
+                "Batch 2 should have built an exec plan in pinned PCT mode");
+
+        String planStr = batch2Plan.getExplainString(TExplainLevel.NORMAL);
+
+        // The scan operator must pin to version 2 via TvrTableSnapshot (set by
+        // injectPinnedTvrForIcebergRelations). TvrTableSnapshot's toString renders as
+        // "Snapshot@(<version>)"; MIN -> "MIN", concrete version -> "<n>".
+        PlanTestBase.assertContains(planStr, "TABLE VERSION:");
+        Assertions.assertTrue(planStr.contains("Snapshot@(2)"),
+                "Batch 2's scan must pin to S2 via TvrTableSnapshot(2); plan was:\n" + planStr);
+        Assertions.assertFalse(planStr.contains("Snapshot@(3)"),
+                "Batch 2 must not scan live S3 after background catalog advance; plan was:\n" + planStr);
+    }
+
+    /**
+     * Verify the dual of merge isolation: pure PCT multi-batch runs (refresh_mode="pct", not
+     * going through Hybrid) must NOT carry PINNED_REFRESH_JOB_ID on the next-batch task run.
+     * Only pinned batches should be marked non-mergeable across jobs; pure PCT batches must
+     * preserve their original merge semantics so high-frequency PCT MVs do not suffer queue
+     * dedup regressions.
+     */
+    @Test
+    public void testPurePCTBatchDoesNotCarryPinnedRefreshJobId() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "pct",
+                "`date`", Map.of("partition_refresh_number", "1"));
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
+
+        advanceTableVersionTo(2);
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
+
+        // refresh_mode=pct routes through MVPCTBasedRefreshProcessor directly, not Hybrid.
+        // Therefore no afterSyncHook is installed, no owner is written, and isPinnedMode()
+        // returns false on every batch of this job.
+        Assertions.assertTrue(batch1Proc.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor,
+                "refresh_mode=pct must use MVPCTBasedRefreshProcessor directly (not Hybrid)");
+        MVPCTBasedRefreshProcessor pctProc =
+                (MVPCTBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+
+        TaskRun batch2 = pctProc.getNextTaskRun();
+        Assertions.assertNotNull(batch2,
+                "Pure PCT multi-batch must still generate a next batch task run");
+
+        // The property must be absent; its presence would signal pinned-mode semantics to
+        // TaskRunManager (non-mergeable with batches of other jobs on the same range) and to
+        // the next batch's getProcessExecPlan (pinned consumer paths). Both would mis-behave
+        // for a pure PCT MV.
+        Assertions.assertNull(batch2.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID),
+                "Pure PCT batches must not carry PINNED_REFRESH_JOB_ID; " +
+                        "setting it would break merge behaviour for all pure-PCT MVs");
+
+        // Also verify nothing installed itself as the pinning owner during pure PCT.
+        MaterializedView refreshedMv = getMv("test_mv1");
+        MaterializedView.AsyncRefreshContext ctx = refreshedMv.getRefreshScheme().getAsyncRefreshContext();
+        Assertions.assertNull(ctx.getTempTvrOwnerStartTaskRunId(),
+                "Pure PCT must not install a pinning owner on AsyncRefreshContext");
+        Assertions.assertTrue(ctx.getTempBaseTableInfoTvrDeltaMap().isEmpty(),
+                "Pure PCT must not populate tempBaseTableInfoTvrDeltaMap");
+    }
+
+    /**
+     * Regression for isStalePinnedBatch correctness: an unrelated batch whose task run does NOT
+     * carry PINNED_REFRESH_JOB_ID must not be early-SKIPped just because some prior pinning
+     * owner was left behind (e.g. by a failed/aborted pinning job). Without the
+     * PINNED_REFRESH_JOB_ID gate, any partial-range refresh whose START_TASK_RUN_ID differed
+     * from the orphaned owner would be falsely SKIPPED and its requested partitions would
+     * never refresh.
+     */
+    @Test
+    public void testUnrelatedPCTBatchNotBlockedByOrphanedPinningOwner() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "pct",
+                "`date`", Map.of("partition_refresh_number", "1"));
+        Assertions.assertEquals(MaterializedView.RefreshMode.PCT, mv.getCurrentRefreshMode());
+
+        advanceTableVersionTo(2);
+
+        // Simulate leftover state from a hypothetical previous pinning job that aborted before
+        // clearing AsyncRefreshContext — owner is set to a UUID that no current or subsequent
+        // task run will match.
+        MaterializedView.AsyncRefreshContext asyncCtx = mv.getRefreshScheme().getAsyncRefreshContext();
+        String orphanedOwner = "orphaned-" + com.starrocks.common.util.UUIDUtil.genUUID();
+        asyncCtx.replaceTempBaseTableInfoTvrDeltaMap(orphanedOwner,
+                Map.of(mv.getBaseTableInfos().get(0), TvrTableSnapshot.of(99L)));
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
+        MVPCTBasedRefreshProcessor pctProc =
+                (MVPCTBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        TaskRun batch2 = pctProc.getNextTaskRun();
+        Assertions.assertNotNull(batch2, "Pure PCT multi-batch must generate a next batch");
+        // Pure PCT never carries PINNED_REFRESH_JOB_ID, which is exactly what signals the
+        // isStalePinnedBatch check to skip this batch.
+        Assertions.assertNull(batch2.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID),
+                "Pure PCT batch must not carry PINNED_REFRESH_JOB_ID");
+
+        // Batch 2 has isCompleteRefresh=false (PARTITION_START/END set) and an orphaned owner
+        // exists on AsyncRefreshContext. Before the fix, isStalePinnedBatch would detect
+        // owner != startTaskRunId and return SKIPPED. After the fix, the PINNED_REFRESH_JOB_ID
+        // gate makes this a no-op for non-pinned runs.
+        initAndExecuteTaskRun(batch2);
+        MVTaskRunProcessor batch2Proc = getMVTaskRunProcessor(batch2);
+        ExecPlan batch2Plan = batch2Proc.getMvTaskRunContext().getExecPlan();
+        Assertions.assertNotNull(batch2Plan,
+                "Unrelated pure PCT batch must not be early-SKIPped by orphaned pinning owner " +
+                        "state — an exec plan should have been built");
     }
 }
