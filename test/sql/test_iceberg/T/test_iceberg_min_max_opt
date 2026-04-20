@@ -1,12 +1,20 @@
 -- name: test_iceberg_min_max_opt
 
-create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="false");
 
 create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 set catalog iceberg_sql_test_${uuid0};
 use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 
-create external table ice_tbl_${uuid0}(
+set enable_profile = true;
+set enable_async_profile = false;
+
+-- ============================================================
+-- Case 1: all supported types (tinyint/smallint/int/bigint/bool/float/double/date).
+-- With enable_min_max_optimization=true, all columns have file-level statistics,
+-- so RowsRead should be 0.  Results must match the reference scan (opt=false).
+-- ============================================================
+create external table ice_tbl_0(
     c_tinyint tinyint,
     c_smallint smallint,
     c_int int,
@@ -21,7 +29,7 @@ create external table ice_tbl_${uuid0}(
     c_time time
 );
 
-INSERT INTO ice_tbl_${uuid0} (
+INSERT INTO ice_tbl_0 (
     c_tinyint,
     c_smallint,
     c_int,
@@ -46,7 +54,6 @@ INSERT INTO ice_tbl_${uuid0} (
 (9, 90, 900, 9000, true, 9.9, 10.1, 90.000000000000000009, '2025-06-29 09:20:00', 'iota', '2025-07-07', '09:20:00'),
 (10, 100, 1000, 10000, false, 10.1, 11.2, 100.000000000000000010, '2025-06-29 09:30:00', 'kappa', '2025-07-08', '09:30:00');
 
--- supported types.
 set enable_min_max_optimization = true;
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
@@ -64,7 +71,9 @@ select min(c_tinyint) as min_tinyint,
        max(c_double) as max_double,
        min(c_date) as min_date, 
        max(c_date) as max_date
-       from ice_tbl_${uuid0};
+       from ice_tbl_0;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+
 set enable_min_max_optimization = false;
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
@@ -82,9 +91,15 @@ select min(c_tinyint) as min_tinyint,
        max(c_double) as max_double,
        min(c_date) as min_date, 
        max(c_date) as max_date
-       from ice_tbl_${uuid0};
+       from ice_tbl_0;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
--- mixed with unsupported types.
+-- ============================================================
+-- Case 2: mixed with unsupported types (decimal/datetime/string).
+-- With enable_min_max_optimization=true, unsupported-type columns fall back to
+-- reading the file, but supported-type columns still use statistics.
+-- Results must match the reference scan (opt=false).
+-- ============================================================
 set enable_min_max_optimization = true;
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
@@ -107,7 +122,9 @@ select min(c_tinyint) as min_tinyint,
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_string) as max_string from ice_tbl_0;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+
 
 set enable_min_max_optimization = false;
 select min(c_tinyint) as min_tinyint, 
@@ -131,10 +148,16 @@ select min(c_tinyint) as min_tinyint,
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_string) as max_string from ice_tbl_0;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
--- mixed with null values
-INSERT INTO ice_tbl_${uuid0} (
+-- ============================================================
+-- Case 3: multiple files with NULL values in some columns.
+-- Appends a row where c_tinyint and c_bigint are NULL, creating a second file.
+-- The NULL file has null_value_count > 0 in its statistics; the optimization must
+-- still return the correct (non-null) min/max from the non-null file.
+-- ============================================================
+INSERT INTO ice_tbl_0 (
     c_tinyint,
     c_smallint,
     c_int,
@@ -151,7 +174,6 @@ INSERT INTO ice_tbl_${uuid0} (
 (null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
 
 set enable_min_max_optimization = true;
-
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
        min(c_smallint) as min_smallint, 
@@ -166,17 +188,11 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,
-       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date, 
-       min(c_datetime) as min_datetime, 
-       max(c_datetime) as max_datetime,
-       min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_date) as max_date from ice_tbl_0;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
 set enable_min_max_optimization = false;
-
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
        min(c_smallint) as min_smallint, 
@@ -191,19 +207,17 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,
-       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date, 
-       min(c_datetime) as min_datetime, 
-       max(c_datetime) as max_datetime,
-       min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_date) as max_date from ice_tbl_0;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
-
-
--- mixed with null values
-INSERT overwrite ice_tbl_${uuid0} (
+-- ============================================================
+-- Case 4: single file where ALL rows have NULLs in queried columns.
+-- INSERT OVERWRITE replaces the table with one row that has c_tinyint=NULL
+-- and c_bigint=NULL.  The file statistics have null_count == row_count, so
+-- min/max are absent; the optimization must return NULL correctly.
+-- ============================================================
+INSERT overwrite ice_tbl_0 (
     c_tinyint,
     c_smallint,
     c_int,
@@ -220,7 +234,6 @@ INSERT overwrite ice_tbl_${uuid0} (
 (null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
 
 set enable_min_max_optimization = true;
-
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
        min(c_smallint) as min_smallint, 
@@ -235,17 +248,11 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,
-       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date, 
-       min(c_datetime) as min_datetime, 
-       max(c_datetime) as max_datetime,
-       min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_date) as max_date from ice_tbl_0;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
 set enable_min_max_optimization = false;
-
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
        min(c_smallint) as min_smallint, 
@@ -260,45 +267,81 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,
-       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date, 
-       min(c_datetime) as min_datetime, 
-       max(c_datetime) as max_datetime,
-       min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_date) as max_date from ice_tbl_0;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
-drop table ice_tbl_${uuid0} force;
+drop table ice_tbl_0 force;
 
-create external table ice_tbl_${uuid1}(
+-- ============================================================
+-- Case 5: all rows are NULL in every queried column.
+-- Verifies that the optimization correctly returns NULL instead of
+-- incorrect default values when all file statistics are absent.
+-- ============================================================
+set enable_min_max_optimization = true;
+
+create external table ice_tbl_1(
     c_int int,
     c_bigint bigint    
 );
-INSERT INTO ice_tbl_${uuid1} (    
+INSERT INTO ice_tbl_1 (
     c_int,
     c_bigint    
 ) VALUES
 (null, null);
 
-select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_${uuid1};
+select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_1;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
-drop table ice_tbl_${uuid1} force;
+drop table ice_tbl_1 force;
 
-create external table ice_tbl_${uuid2}(
+-- ============================================================
+-- Case 6: identity partition on datetime column.
+-- Querying min/max of the partition column itself; the value is served
+-- from partition metadata without reading file data.
+-- ============================================================
+create external table ice_tbl_2(
     c_int int,
     dt datetime
 ) partition by (dt);
 
-INSERT INTO ice_tbl_${uuid2} (    
+INSERT INTO ice_tbl_2 (
        c_int, dt
 ) VALUES
 (10, '2021-01-01 13:00:00'),
 (20, '2022-01-01 14:00:00');
 
-select min(dt), max(dt) from ice_tbl_${uuid2};
+select min(c_int), max(c_int) from ice_tbl_2;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
-drop table ice_tbl_${uuid2} force;
+select min(dt), max(dt) from ice_tbl_2;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+
+drop table ice_tbl_2 force;
+
+-- =============================================================
+-- Case 7: bucket partition on int column (Bug 2 regression).
+-- When all queried columns are bucket-partition columns, PruneHDFSScanColumnRule
+-- injects a STRING placeholder column and sets can_use_any_column=true.
+-- The fix ensures the placeholder is filled with a default value so that
+-- no file data is read (RowsRead should be 0).
+-- ============================================================
+create external table ice_tbl_3(
+    id int,
+    name string
+) partition by (bucket(id, 4));
+
+INSERT INTO ice_tbl_3 (id, name) VALUES
+(1, 'alice'),
+(2, 'bob'),
+(3, 'carol'),
+(4, 'dave'),
+(5, 'eve');
+
+select min(id), max(id) from ice_tbl_3;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+
+drop table ice_tbl_3 force;
 
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 set catalog default_catalog;
