@@ -366,6 +366,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
     }
+    // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
+    // a partition column and a placeholder materialized column was injected to satisfy
+    // the "at least one materialized column" requirement.  We propagate this flag so that
+    // the scanner can avoid reading that placeholder column from the data file when
+    // min/max optimization is active.
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
@@ -734,6 +742,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_file_metacache = _use_file_metacache;
 
     scanner_params.use_min_max_opt = _use_min_max_opt;
+    scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.use_count_opt = _use_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
 
