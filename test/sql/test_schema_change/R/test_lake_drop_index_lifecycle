@@ -1,25 +1,49 @@
 -- name: test_lake_drop_index_lifecycle @cloud
 create database lake_idx_drop_${uuid0};
+-- result:
+-- !result
 use lake_idx_drop_${uuid0};
-
+-- result:
+-- !result
 CREATE TABLE t1 (
     k1 int,
     v1 int,
     v2 string
 ) DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 3;
-
+-- result:
+-- !result
 insert into t1 values (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c');
-
--- ADD INDEX via fast path
+-- result:
+-- !result
 ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+-- result:
+-- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 select count(*) from t1 where v1 = 20;
-
--- DROP INDEX is a metadata-only tombstone; query must still be correct
+-- result:
+1
+-- !result
 drop index idx_v1 on t1;
+-- result:
+-- !result
 function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 select count(*) from t1 where v1 = 20;
+-- result:
+1
+-- !result
 select * from t1 order by k1;
-
+-- result:
+1	10	a
+2	20	b
+3	30	c
+-- !result
 drop database lake_idx_drop_${uuid0};
+-- result:
+-- !result

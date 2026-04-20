@@ -1,8 +1,10 @@
 -- name: test_lake_add_index_pk_table @cloud
 create database lake_idx_pk_${uuid0};
+-- result:
+-- !result
 use lake_idx_pk_${uuid0};
-
--- PK table: fast-path ADD INDEX is allowed for non-PK columns.
+-- result:
+-- !result
 CREATE TABLE t1 (
     k1 int,
     k2 int,
@@ -11,14 +13,28 @@ CREATE TABLE t1 (
 ) PRIMARY KEY(k1, k2)
 DISTRIBUTED BY HASH(k1) BUCKETS 3
 PROPERTIES ("replication_num" = "1");
-
+-- result:
+-- !result
 insert into t1 values (1, 1, 10, 'aa'), (2, 2, 20, 'bb'), (3, 3, 30, 'cc');
-
--- ADD BITMAP INDEX on a non-PK value column via fast path
+-- result:
+-- !result
 ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+-- result:
+-- !result
 function: wait_alter_table_finish()
-
+-- result:
+None
+-- !result
 select count(*) from t1 where v1 = 20;
+-- result:
+1
+-- !result
 select * from t1 order by k1;
-
+-- result:
+1	1	10	aa
+2	2	20	bb
+3	3	30	cc
+-- !result
 drop database lake_idx_pk_${uuid0};
+-- result:
+-- !result

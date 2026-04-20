@@ -1,19 +1,32 @@
 -- name: test_lake_add_index_fallback @cloud
 create database lake_idx_fb_${uuid0};
+-- result:
+-- !result
 use lake_idx_fb_${uuid0};
-
--- GIN is intentionally out of scope for the fast path; it must fall back to
--- the regular schema-change path (which also succeeds, just without IDG).
+-- result:
+-- !result
 CREATE TABLE t1 (
     k1 int,
     v1 string
 ) DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 3;
-
+-- result:
+-- !result
 insert into t1 values (1, 'hello world'), (2, 'starrocks lake'), (3, 'fast path index');
-
+-- result:
+-- !result
 ALTER TABLE t1 ADD INDEX idx_gin(v1) USING GIN ("parser" = "english");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
+-- !result
 function: wait_alter_table_finish()
-select count(*) from t1;
+-- result:
 
+-- !result
+select count(*) from t1;
+-- result:
+3
+-- !result
 drop database lake_idx_fb_${uuid0};
+-- result:
+-- !result

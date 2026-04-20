@@ -1,25 +1,46 @@
 -- name: test_lake_add_bitmap_index @cloud
 create database lake_idx_${uuid0};
+-- result:
+-- !result
 use lake_idx_${uuid0};
-
+-- result:
+-- !result
 CREATE TABLE t1 (
     k1 int,
     v1 int,
     v2 string
 ) DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 3;
-
+-- result:
+-- !result
 insert into t1 values (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry'),
                      (4, 40, 'apple'), (5, 50, 'banana'), (6, 60, 'cherry');
-
-
--- Fast-path ADD BITMAP INDEX on a non-key column
+-- result:
+-- !result
 ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+-- result:
+-- !result
 function: wait_alter_table_finish()
-
--- Query should be correct with IDG-backed bitmap index
+-- result:
+None
+-- !result
 select * from t1 where v1 = 20;
+-- result:
+2	20	banana
+-- !result
 select count(*) from t1 where v1 in (10, 30, 50);
+-- result:
+3
+-- !result
 select * from t1 order by k1;
-
+-- result:
+1	10	apple
+2	20	banana
+3	30	cherry
+4	40	apple
+5	50	banana
+6	60	cherry
+-- !result
 drop database lake_idx_${uuid0};
+-- result:
+-- !result
