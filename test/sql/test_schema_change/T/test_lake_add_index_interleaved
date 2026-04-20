@@ -1,0 +1,51 @@
+-- name: test_lake_add_index_interleaved @cloud
+create database lake_idx_iv_${uuid0};
+use lake_idx_iv_${uuid0};
+
+CREATE TABLE t1 (
+    k1 int,
+    v1 int,
+    v2 string
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3;
+
+-- Pre-alter insert becomes one rowset; ADD INDEX writes IDG entry for its segments.
+insert into t1 values (1, 10, 'apple'), (2, 20, 'banana'), (3, 30, 'cherry');
+
+-- ADD INDEX fast path: BITMAP on v1
+ALTER TABLE t1 ADD INDEX idx_v1(v1) USING BITMAP;
+function: wait_alter_table_finish()
+
+-- Query through IDG-backed bitmap on the pre-alter rowset
+select count(*) from t1 where v1 = 20;
+select * from t1 where v1 = 30 order by k1;
+
+-- Post-alter insert hits the inline path (bitmap written to segment footer at
+-- write time rather than via IDG), exercising tablet_index[BITMAP] presence.
+insert into t1 values (4, 40, 'date'), (5, 10, 'elderberry');
+
+-- Mixed-source query: IDG bitmap for pre-alter rowset + inline bitmap for new rowset.
+select count(*) from t1 where v1 = 10;
+select * from t1 where v1 = 10 order by k1;
+
+-- Second ADD INDEX stacks a new IDG entry on the latest rowset (which already
+-- has an inline bitmap for v1 but no bitmap for v2). IDG visibility filtering
+-- by version is exercised in be/test/storage/lake/index_delta_group_loader_test.cpp.
+ALTER TABLE t1 ADD INDEX idx_v2(v2) USING BITMAP;
+function: wait_alter_table_finish()
+
+-- Query through the second index
+select count(*) from t1 where v2 = 'apple';
+select count(*) from t1 where v2 = 'date';
+
+-- DROP fast path: metadata-only tombstone. Queries that used to filter via
+-- the dropped index fall back to full scan and must still return correct
+-- results.
+drop index idx_v1 on t1;
+function: wait_alter_table_finish()
+
+select count(*) from t1 where v1 = 10;
+select count(*) from t1 where v2 = 'apple';
+select * from t1 order by k1;
+
+drop database lake_idx_iv_${uuid0};

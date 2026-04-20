@@ -111,6 +111,10 @@ void AgentMetrics::install(MetricRegistry* registry) {
 
     REGISTER_ENGINE_REQUEST_METRIC(schema_change, total, schema_change_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(schema_change, failed, schema_change_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(lake_add_index, total, lake_add_index_requests_total);
+    REGISTER_ENGINE_REQUEST_METRIC(lake_add_index, failed, lake_add_index_requests_failed);
+    REGISTER_ENGINE_REQUEST_METRIC(lake_drop_index, total, lake_drop_index_requests_total);
+    registry->register_metric("lake_idg_files_written_total", &lake_idg_files_written_total);
     REGISTER_ENGINE_REQUEST_METRIC(clone, total, clone_requests_total);
     REGISTER_ENGINE_REQUEST_METRIC(clone, failed, clone_requests_failed);
 
