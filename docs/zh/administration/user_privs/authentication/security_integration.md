@@ -109,7 +109,7 @@ PROPERTIES (
 ##### authentication_ldap_simple_bind_dn_pattern
 
 - 必需：否
-- 描述：直接绑定认证的 DN 模式。使用 `${USER}` 作为用户名的占位符。例如 `uid=${USER},ou=People,dc=example,dc=com`。多个模式之间用冒号分隔，系统将按顺序尝试每个模式直到成功。设置此参数后，系统将跳过搜索步骤直接使用构造的 DN 进行绑定，因此不需要配置 `authentication_ldap_simple_bind_base_dn`、`authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_bind_root_dn` 和 `authentication_ldap_simple_bind_root_pwd`。
+- 描述：直接绑定认证的 DN 模式。使用 `${USER}` 作为用户名的占位符。模式必须生成合法的 LDAP Distinguished Name（DN），不支持 UPN 格式（如 `${USER}@domain`）。例如 `uid=${USER},ou=People,dc=example,dc=com`。多个模式之间用冒号分隔，系统将按顺序尝试每个模式直到成功。设置此参数后，系统将跳过搜索步骤直接使用构造的 DN 进行绑定，因此不需要配置 `authentication_ldap_simple_bind_base_dn`、`authentication_ldap_simple_user_search_attr`、`authentication_ldap_simple_bind_root_dn` 和 `authentication_ldap_simple_bind_root_pwd`。
 
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 

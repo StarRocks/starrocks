@@ -52,13 +52,17 @@ authentication_ldap_simple_bind_dn_pattern =
 
 For example: `uid=${USER},ou=People,dc=example,dc=com`
 
-For Active Directory environments, you can use the UPN (User Principal Name) format: `${USER}@corp.example.com`
-
 If you have users across multiple OUs, you can specify multiple patterns separated by colons:
 
 `uid=${USER},ou=Engineering,dc=example,dc=com:uid=${USER},ou=Marketing,dc=example,dc=com`
 
 The system will try each pattern in order and return the first successful bind.
+
+:::note
+
+The pattern must produce a valid LDAP Distinguished Name (DN). UPN-style patterns like `${USER}@corp.example.com` are not supported, because the result is not a DN and would break downstream group lookups. If your DN contains `@` in an attribute value (e.g., `uid=${USER}@corp.example.com,ou=People,dc=example,dc=com`), that is valid.
+
+:::
 
 ## DN Matching Mechanism
 

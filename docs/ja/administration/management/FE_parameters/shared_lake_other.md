@@ -726,7 +726,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：直接バインド認証用の DN パターン。ユーザー名のプレースホルダーとして `${USER}` を使用します。例：`uid=${USER},ou=People,dc=example,dc=com`。Active Directory 環境では、`${USER}@corp.example.com` のような UPN 形式も使用できます。複数のパターンをコロンで区切ることができ、システムは成功するまで順番に試行します。設定すると検索ステップがスキップされ、構築された DN で直接バインド認証が行われます。
+- 説明：直接バインド認証用の DN パターン。ユーザー名のプレースホルダーとして `${USER}` を使用します。パターンは有効な LDAP Distinguished Name（DN）を生成する必要があります。`${USER}@domain` のような UPN 形式はサポートされていません。例：`uid=${USER},ou=People,dc=example,dc=com`。複数のパターンをコロンで区切ることができ、システムは成功するまで順番に試行します。設定すると検索ステップがスキップされ、構築された DN で直接バインド認証が行われます。
 
 ### `authentication_ldap_simple_bind_root_dn`
 

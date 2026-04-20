@@ -52,13 +52,17 @@ authentication_ldap_simple_bind_dn_pattern =
 
 例如：`uid=${USER},ou=People,dc=example,dc=com`
 
-对于 Active Directory 环境，可以使用 UPN（User Principal Name）格式：`${USER}@corp.example.com`
-
 如果用户分布在多个 OU 中，可以指定多个模式，用冒号分隔：
 
 `uid=${USER},ou=Engineering,dc=example,dc=com:uid=${USER},ou=Marketing,dc=example,dc=com`
 
 系统将按顺序尝试每个模式，并返回第一个成功绑定的结果。
+
+:::note
+
+模式必须生成合法的 LDAP Distinguished Name（DN），不支持 UPN 格式的模式（如 `${USER}@corp.example.com`），因为其结果不是 DN，会导致下游组查找失败。如果 DN 中的属性值包含 `@`（如 `uid=${USER}@corp.example.com,ou=People,dc=example,dc=com`），这是合法的。
+
+:::
 
 ## DN 匹配机制
 

@@ -723,7 +723,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. For example, `uid=${USER},ou=People,dc=example,dc=com`. For Active Directory, you can use UPN format such as `${USER}@corp.example.com`. Multiple patterns can be separated by colons, and the system will try each pattern in order until one succeeds. When set, the search step is skipped and the system binds directly with the constructed DN.
+- Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. The pattern must produce a valid LDAP Distinguished Name (DN); UPN-style patterns like `${USER}@domain` are not supported. For example, `uid=${USER},ou=People,dc=example,dc=com`. Multiple patterns can be separated by colons, and the system will try each pattern in order until one succeeds. When set, the search step is skipped and the system binds directly with the constructed DN.
 
 ### `authentication_ldap_simple_bind_root_dn`
 

@@ -52,13 +52,17 @@ authentication_ldap_simple_bind_dn_pattern =
 
 例: `uid=${USER},ou=People,dc=example,dc=com`
 
-Active Directory 環境では、UPN（User Principal Name）形式を使用できます: `${USER}@corp.example.com`
-
 ユーザーが複数の OU に分散している場合は、コロンで区切って複数のパターンを指定できます:
 
 `uid=${USER},ou=Engineering,dc=example,dc=com:uid=${USER},ou=Marketing,dc=example,dc=com`
 
 システムは各パターンを順番に試行し、最初にバインドに成功した結果を返します。
+
+:::note
+
+パターンは有効な LDAP Distinguished Name（DN）を生成する必要があります。`${USER}@corp.example.com` のような UPN 形式のパターンはサポートされていません。結果が DN ではないため、ダウンストリームのグループ検索が失敗します。DN の属性値に `@` が含まれる場合（例: `uid=${USER}@corp.example.com,ou=People,dc=example,dc=com`）は有効です。
+
+:::
 
 ## DN マッチングメカニズム
 
