@@ -102,6 +102,11 @@ StatusOr<ScanTask> LockFreeWorkGroupScanTaskQueue::take(int worker_id) {
                     _refresh_min_wg_entity();
                 }
                 _num_tasks.fetch_sub(1, std::memory_order_relaxed);
+                // Enqueue signals _sema on every task arrival. Drain one permit on
+                // the fast dequeue path as well, otherwise sustained traffic can
+                // accumulate stale permits and keep workers spinning after the queue
+                // goes idle.
+                _sema.tryWait();
                 return std::move(task);
             }
         }

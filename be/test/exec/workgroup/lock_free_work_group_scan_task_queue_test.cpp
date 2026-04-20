@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
-
 #include <gtest/gtest.h>
 
 #include <atomic>
@@ -22,6 +20,7 @@
 
 #include "base/concurrency/countdown_latch.h"
 #include "common/thread/thread.h"
+#include "exec/workgroup/lock_free_work_group_scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 
@@ -127,6 +126,19 @@ TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_try_offer) {
     auto result = queue.take(1);
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(queue.size(), 0);
+}
+
+TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_successful_dequeue_drains_wakeup_permit) {
+    constexpr int kNumWorkers = 4;
+    LockFreeWorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, kNumWorkers);
+
+    queue.force_put(make_wg_task(_wg1, 5));
+    ASSERT_EQ(queue.available_wakeup_permits_for_test(), 1u);
+
+    auto result = queue.take(0);
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(queue.size(), 0);
+    ASSERT_EQ(queue.available_wakeup_permits_for_test(), 0u);
 }
 
 TEST_F(LockFreeWorkGroupScanTaskQueueTest, test_workgroup_vruntime_selection) {

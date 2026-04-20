@@ -51,6 +51,10 @@ public:
     void update_statistics(ScanTask& task, int64_t runtime_ns) override;
     bool should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const override;
 
+#ifdef BE_TEST
+    size_t available_wakeup_permits_for_test() const { return _sema.availableApprox(); }
+#endif
+
 private:
     static constexpr int64_t SCHEDULE_PERIOD_PER_WG_NS = 100'000'000;
 
