@@ -477,6 +477,92 @@ Status LakePrimaryIndex::parallel_get(ThreadPoolToken* token, SegmentPKIterator*
     return segment_pk_iterator->status();
 }
 
+// Parallel query of PK index to retrieve rss_rowids for all segments at once.
+// Submits chunks from all segments to a single shared thread pool token, enabling
+// cross-segment parallelism.
+Status LakePrimaryIndex::batch_parallel_get_rss_rowids(ThreadPoolToken* token,
+                                                       std::vector<SegmentPKIteratorPtr>& pk_iters,
+                                                       std::vector<std::vector<uint64_t>>* rss_rowids_per_segment) {
+    const uint32_t num_segments = pk_iters.size();
+    rss_rowids_per_segment->resize(num_segments);
+
+    struct RssRowidSlot {
+        size_t begin_rowid = 0;
+        size_t count = 0;
+        std::vector<uint64_t> values;
+    };
+
+    std::mutex mutex;
+    Status status = Status::OK();
+    std::vector<std::vector<std::unique_ptr<RssRowidSlot>>> per_segment_slots(num_segments);
+
+    // Iterate all segments' chunks on the main thread and submit them all to the shared pool.
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        auto* pk_iter = pk_iters[seg_idx].get();
+        for (; !pk_iter->done(); pk_iter->next()) {
+            auto current = pk_iter->current();
+            size_t num_rows = current.first->num_rows();
+            size_t begin_rowid = current.second;
+
+            auto slot = std::make_unique<RssRowidSlot>();
+            slot->begin_rowid = begin_rowid;
+            slot->count = num_rows;
+            per_segment_slots[seg_idx].push_back(std::move(slot));
+            auto* slot_ptr = per_segment_slots[seg_idx].back().get();
+
+            auto func = [this, slot_ptr, current = std::move(current), pk_iter, &mutex, &status]() {
+                auto pk_column_st = pk_iter->encoded_pk_column(current.first.get());
+                Status st;
+                if (pk_column_st.ok()) {
+                    slot_ptr->values.resize(slot_ptr->count, NullIndexValue);
+                    st = get(*pk_column_st.value(), &slot_ptr->values);
+                } else {
+                    st = pk_column_st.status();
+                }
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+            };
+
+            if (token) {
+                auto st = token->submit_func(func);
+                TRACE_COUNTER_INCREMENT("batch_parallel_get_rss_rowids_cnt", 1);
+                std::lock_guard<std::mutex> l(mutex);
+                status.update(st);
+            } else {
+                func();
+                RETURN_IF_ERROR(status);
+            }
+        }
+    }
+
+    if (token) {
+        TRACE_COUNTER_SCOPE_LATENCY_US("batch_parallel_get_rss_rowids_wait_us");
+        token->wait();
+    }
+    RETURN_IF_ERROR(status);
+
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        RETURN_IF_ERROR(pk_iters[seg_idx]->status());
+    }
+
+    // Merge per-chunk results into per-segment output vectors
+    for (uint32_t seg_idx = 0; seg_idx < num_segments; seg_idx++) {
+        auto& slots = per_segment_slots[seg_idx];
+        size_t total = 0;
+        if (!slots.empty()) {
+            auto& last = slots.back();
+            total = last->begin_rowid + last->count;
+        }
+        auto& output = (*rss_rowids_per_segment)[seg_idx];
+        output.resize(total);
+        for (auto& slot : slots) {
+            memcpy(output.data() + slot->begin_rowid, slot->values.data(), slot->count * sizeof(uint64_t));
+        }
+    }
+
+    return Status::OK();
+}
+
 // Update index with new primary keys from all segments.
 // This is used during write operations (non-read-only publish) to insert/update index entries.
 //
