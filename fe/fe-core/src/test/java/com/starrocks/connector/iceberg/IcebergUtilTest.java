@@ -18,7 +18,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TExprMinMaxValue;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import org.apache.iceberg.FileFormat;
@@ -32,6 +34,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TimeZone;
 
 import static org.apache.iceberg.types.Types.NestedField.required;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -203,6 +206,55 @@ public class IcebergUtilTest {
         IcebergUtil.checkFileFormatSupportedDelete(orcFileScanTask, false);
         IcebergUtil.checkFileFormatSupportedDelete(avroFileScanTask, false);
         IcebergUtil.checkFileFormatSupportedDelete(parquetFileScanTask, false);
+    }
+
+    @Test
+    public void testParseMinMaxValueBySlotsWithIcebergTimestampTypes() {
+        Schema schema = new Schema(
+                required(3, "ts_ntz", Types.TimestampType.withoutZone()),
+                required(5, "ts_tz", Types.TimestampType.withZone()));
+        List<SlotDescriptor> slots = List.of(
+                new SlotDescriptor(new SlotId(3), "ts_ntz", DateType.DATETIME, true),
+                new SlotDescriptor(new SlotId(5), "ts_tz", DateType.DATETIME, true)
+        );
+        slots.get(0).setColumn(new Column("ts_ntz", DateType.DATETIME, true));
+        slots.get(1).setColumn(new Column("ts_tz", DateType.DATETIME, true));
+
+        long minMicros = 0L;
+        long maxMicros = 1_000_000L;
+        Map<Integer, ByteBuffer> lowerBounds = Map.of(
+                3, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withoutZone(), minMicros),
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), minMicros));
+        Map<Integer, ByteBuffer> upperBounds = Map.of(
+                3, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withoutZone(), maxMicros),
+                5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), maxMicros));
+        Map<Integer, Long> nullValueCounts = Map.of(3, 0L, 5, 0L);
+        Map<Integer, Long> valueCounts = Map.of(3, 2L, 5, 2L);
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone("Asia/Shanghai");
+        ctx.setThreadLocalInfo();
+        try {
+            Map<Integer, IcebergUtil.MinMaxValue> result = IcebergUtil.parseMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(2, result.size());
+            assertEquals(minMicros, result.get(3).minValue);
+            assertEquals(maxMicros, result.get(3).maxValue);
+            assertEquals(minMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(0) * 1000L, result.get(5).minValue);
+            assertEquals(maxMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(1000L) * 1000L,
+                    result.get(5).maxValue);
+
+            Map<Integer, TExprMinMaxValue> thriftValues = IcebergUtil.toThriftMinMaxValueBySlots(
+                    schema, lowerBounds, upperBounds, nullValueCounts, valueCounts, slots);
+            assertEquals(minMicros, thriftValues.get(3).min_int_value);
+            assertEquals(maxMicros, thriftValues.get(3).max_int_value);
+            assertEquals(minMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(0) * 1000L,
+                    thriftValues.get(5).min_int_value);
+            assertEquals(maxMicros + TimeZone.getTimeZone("Asia/Shanghai").getOffset(1000L) * 1000L,
+                    thriftValues.get(5).max_int_value);
+        } finally {
+            ConnectContext.remove();
+        }
     }
 
     private FileScanTask createMockFileScanTask(FileFormat fileFormat) {

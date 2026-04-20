@@ -323,6 +323,25 @@ TEST_F(HdfsScannerTest, TestFillNotExistedColumnWithEmptyDefaultNonString) {
     EXPECT_FALSE(status.ok());
 }
 
+TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMicros) {
+    SlotDesc descs[] = {{"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_DATETIME)}, {""}};
+    auto* tuple_desc = _create_tuple_desc(descs);
+    HdfsScannerContext ctx;
+    ctx.is_first_split = true;
+
+    TExprMinMaxValue min_max_value;
+    min_max_value.__set_type(TExprNodeType::INT_LITERAL);
+    min_max_value.__set_has_null(false);
+    min_max_value.__set_all_null(false);
+    min_max_value.__set_min_int_value(-1);
+    min_max_value.__set_max_int_value(0);
+
+    auto col = ctx.create_min_max_value_column(tuple_desc->slots()[0], min_max_value, 2);
+    ASSERT_EQ(2, col->size());
+    EXPECT_EQ("1969-12-31 23:59:59.999999", col->debug_item(0));
+    EXPECT_EQ("1970-01-01 00:00:00", col->debug_item(1));
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {

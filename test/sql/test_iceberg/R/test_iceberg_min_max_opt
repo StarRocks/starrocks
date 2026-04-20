@@ -316,6 +316,65 @@ select * from (select line from table(unnest(split(get_query_profile(last_query_
 drop table ice_tbl_0 force;
 -- result:
 -- !result
+create external table ice_tbl_dt(
+    c_int int,
+    c_datetime datetime
+) partition by (hour(c_datetime));
+-- result:
+-- !result
+INSERT INTO ice_tbl_dt (c_int, c_datetime) VALUES
+(1, '2025-06-29 08:00:00'),
+(2, '2025-06-29 09:10:00'),
+(3, '2025-06-29 10:20:00');
+-- result:
+-- !result
+set enable_min_max_optimization = true;
+-- result:
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+select min(c_datetime), max(c_datetime) from ice_tbl_dt;
+-- result:
+2025-06-29 08:00:00	2025-06-29 10:20:00
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+select min(c_datetime), max(c_datetime) from ice_tbl_dt;
+-- result:
+2025-06-29 08:00:00	2025-06-29 10:20:00
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
+-- !result
+set enable_min_max_optimization = false;
+-- result:
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+select min(c_datetime), max(c_datetime) from ice_tbl_dt;
+-- result:
+2025-06-29 08:00:00	2025-06-29 10:20:00
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+select min(c_datetime), max(c_datetime) from ice_tbl_dt;
+-- result:
+2025-06-29 08:00:00	2025-06-29 10:20:00
+-- !result
+drop table ice_tbl_dt force;
+-- result:
+-- !result
 set enable_min_max_optimization = true;
 -- result:
 -- !result
@@ -332,7 +391,7 @@ INSERT INTO ice_tbl_1 (
 (null, null);
 -- result:
 -- !result
-select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_1;
+select min(c_int), max(c_int), min(c_bigint), max(c_bigint) from ice_tbl_1;
 -- result:
 None	None	None	None
 -- !result
