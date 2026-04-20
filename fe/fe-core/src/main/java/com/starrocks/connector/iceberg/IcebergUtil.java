@@ -16,7 +16,19 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
 import com.starrocks.analysis.SlotDescriptor;
+=======
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> e6761a8bf1 ([Enhancement] Support Iceberg datetime min/max optimization and fix timestamp conversion (#71870))
 import com.starrocks.thrift.TExprMinMaxValue;
 import com.starrocks.thrift.TExprNodeType;
 import org.apache.iceberg.Schema;
@@ -28,6 +40,9 @@ import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.LocationUtil;
 
 import java.nio.ByteBuffer;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +85,7 @@ public final class IcebergUtil {
                     break;
                 case BIGINT:
                 case TIME:
+                case DATETIME:
                     texpr.setType(TExprNodeType.INT_LITERAL);
                     if (minValue instanceof Integer) {
                         texpr.setMin_int_value(((Integer) minValue).longValue());
@@ -118,7 +134,8 @@ public final class IcebergUtil {
             Type.TypeID.FLOAT,
             Type.TypeID.DOUBLE,
             Type.TypeID.DATE,
-            Type.TypeID.TIME
+            Type.TypeID.TIME,
+            Type.TypeID.TIMESTAMP
     );
 
     @VisibleForTesting
@@ -161,8 +178,32 @@ public final class IcebergUtil {
             Object high = Conversions.fromByteBuffer(field.type(), upperBounds.get(field.fieldId()));
             minMaxValue.minValue = low;
             minMaxValue.maxValue = high;
+            if (type.typeId() == Type.TypeID.TIMESTAMP) {
+                Types.TimestampType timestampType = (Types.TimestampType) type;
+                if (timestampType.shouldAdjustToUTC() && low instanceof Long && high instanceof Long) {
+                    // Iceberg TIMESTAMP WITH TIME ZONE stores instants in UTC, while StarRocks compares DATETIME
+                    // values in the session timezone, so we convert file-level bounds into session-local micros
+                    // before sending them to BE.
+                    //
+                    // Note that this is an endpoint conversion on file-level min/max only. For timezones whose
+                    // UTC offset changes over time (for example DST or historical rule changes), UTC->local is
+                    // not strictly monotonic over an arbitrary interval, so the converted low/high remain a
+                    // best-effort approximation rather than an exact local min/max for the full file.
+                    minMaxValue.minValue = adjustTimestampMicrosToSessionTz((Long) low);
+                    minMaxValue.maxValue = adjustTimestampMicrosToSessionTz((Long) high);
+                }
+            }
         }
         return minMaxValues;
+    }
+
+    private static long adjustTimestampMicrosToSessionTz(long micros) {
+        long seconds = Math.floorDiv(micros, 1_000_000L);
+        long microsRemainder = Math.floorMod(micros, 1_000_000L);
+        int nanos = (int) (microsRemainder * 1000L);
+        ZoneId zoneId = TimeUtils.getTimeZone().toZoneId();
+        ZoneOffset offset = zoneId.getRules().getOffset(Instant.ofEpochSecond(seconds, nanos));
+        return micros + offset.getTotalSeconds() * 1_000_000L;
     }
 
     public static Map<Integer, TExprMinMaxValue> toThriftMinMaxValueBySlots(Schema schema,
@@ -195,4 +236,49 @@ public final class IcebergUtil {
         return table.properties().getOrDefault(TableProperties.WRITE_DATA_LOCATION,
                 String.format("%s/data", LocationUtil.stripTrailingSlash(tableLocation)));
     }
+<<<<<<< HEAD
 }
+=======
+
+    public static CloudConfiguration getVendedCloudConfiguration(String catalogName, IcebergTable icebergTable) {
+        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        Preconditions.checkState(connector != null,
+                String.format("connector of catalog %s should not be null", catalogName));
+
+        // Try to get vended credentials from loadTable response
+        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties(),
+                        icebergTable.getNativeTable().location());
+        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return vendedCredentialsCloudConfiguration;
+        }
+
+        // Try to get credentials from catalog config (/v1/config response).
+        // This is used as fallback when STS is unavailable (e.g., Apache Polaris without STS).
+        CloudConfiguration catalogConfigCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(connector.getMetadata().getCatalogProperties(),
+                        icebergTable.getNativeTable().location());
+        if (catalogConfigCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return catalogConfigCloudConfiguration;
+        }
+
+        // Fall back to user-provided catalog credentials
+        CloudConfiguration cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        Preconditions.checkState(cloudConfiguration != null,
+                String.format("cloudConfiguration of catalog %s should not be null", catalogName));
+        return cloudConfiguration;
+    }
+
+    public static void checkFileFormatSupportedDelete(FileScanTask fileScanTask, boolean uedForDelete) {
+        // Check file format for DELETE operations
+        // Only Parquet format is supported for Iceberg DELETE operations now
+        if (uedForDelete && fileScanTask.file().format() != FileFormat.PARQUET) {
+            throw new StarRocksConnectorException(
+                    String.format("Delete operations on Iceberg tables are only supported for " +
+                                    "Parquet format files. Found %s format file: %s",
+                            fileScanTask.file().format(), fileScanTask.file().location()));
+
+        }
+    }
+}
+>>>>>>> e6761a8bf1 ([Enhancement] Support Iceberg datetime min/max optimization and fix timestamp conversion (#71870))
