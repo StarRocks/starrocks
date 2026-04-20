@@ -38,10 +38,10 @@
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/update_manager.h"
 #include "storage/projection_iterator.h"
-#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset_options.h"
 #include "storage/rowset/segment.h"
+#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/short_key_range_option.h"
 #include "storage/seek_range.h"
@@ -96,13 +96,13 @@ Status prepare_segment_boundary_cache(const SegmentPtr& segment, const SegmentRe
         return Status::OK();
     }
 
-    ASSIGN_OR_RETURN(auto seek_ranges, get_segment_rowid_ranges_by_seek_ranges(segment, options.ranges, options.lake_io_opts));
+    ASSIGN_OR_RETURN(auto seek_ranges,
+                     get_segment_rowid_ranges_by_seek_ranges(segment, options.ranges, options.lake_io_opts));
     prepared_state->seek_range_rowid_bounds = std::move(seek_ranges);
 
     if (options.tablet_range.has_value()) {
-        ASSIGN_OR_RETURN(auto tablet_range,
-                         get_segment_rowid_range_by_seek_range(segment, options.tablet_range.value(),
-                                                               options.lake_io_opts));
+        ASSIGN_OR_RETURN(auto tablet_range, get_segment_rowid_range_by_seek_range(segment, options.tablet_range.value(),
+                                                                                  options.lake_io_opts));
         prepared_state->tablet_range_rowid_range = std::move(tablet_range);
     } else {
         prepared_state->tablet_range_rowid_range.reset();
@@ -110,7 +110,8 @@ Status prepare_segment_boundary_cache(const SegmentPtr& segment, const SegmentRe
     return Status::OK();
 }
 
-Status prepare_segment_key_pruned_scan_range(const SegmentPtr& segment, const PreparedSegmentReadStatePtr& pruning_state,
+Status prepare_segment_key_pruned_scan_range(const SegmentPtr& segment,
+                                             const PreparedSegmentReadStatePtr& pruning_state,
                                              SparseRangePtr* shared_scan_range) {
     if (pruning_state == nullptr) {
         return Status::OK();
@@ -393,17 +394,17 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     return do_read(schema, options, &prepared_segments, reusable_segment_iterators, nullptr);
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const RowsetReadOptions& options,
-                                                     const std::vector<SegmentPtr>& prepared_segments,
-                                                     std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
-                                                     std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(
+        const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
+        std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
+        std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states) {
     return do_read(schema, options, &prepared_segments, reusable_segment_iterators, prepared_segment_read_states);
 }
 
-StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, const RowsetReadOptions& options,
-                                                        const std::vector<SegmentPtr>* prepared_segments,
-                                                        std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
-                                                        std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states) {
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(
+        const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>* prepared_segments,
+        std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
+        std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states) {
     SegmentReadOptions seg_options;
     if (options.lake_io_opts.fs) {
         seg_options.fs = options.lake_io_opts.fs;
@@ -590,7 +591,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
             } else {
                 RETURN_IF_ERROR(reset_raw_segment_iterator(reusable_iter, seg_options));
             }
-            segment_iterators.emplace_back(new_projection_iterator(schema, make_non_closing_chunk_iterator(reusable_iter)));
+            segment_iterators.emplace_back(
+                    new_projection_iterator(schema, make_non_closing_chunk_iterator(reusable_iter)));
         } else {
             auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
             if (res.status().is_end_of_file()) {

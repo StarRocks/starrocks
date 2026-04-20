@@ -168,7 +168,8 @@ protected:
     virtual NewMorselPickupSlotRank _rank_new_morsel_pickup_slot(int chunk_source_index) const {
         return NewMorselPickupSlotRank::kNormal;
     }
-    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) {
+    virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                              ChunkSourcePtr chunk_source) {
         if (chunk_source != nullptr) {
             chunk_source->close(state);
         }

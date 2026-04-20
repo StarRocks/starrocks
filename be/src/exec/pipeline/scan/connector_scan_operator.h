@@ -140,7 +140,8 @@ private:
     NewMorselPickupSlotRank _rank_new_morsel_pickup_slot(int chunk_source_index) const override;
     ReusableChunkSourceLookupResult _take_reusable_chunk_source_for_morsel(RuntimeState* state, int chunk_source_index,
                                                                            const Morsel& morsel) override;
-    void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) override;
+    void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
+                                      ChunkSourcePtr chunk_source) override;
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
     std::vector<ChunkSourcePtr> _reusable_chunk_sources;
