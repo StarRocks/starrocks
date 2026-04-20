@@ -95,7 +95,7 @@ select min(c_tinyint) as min_tinyint,
 select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
 -- ============================================================
--- Case 2: mixed with unsupported types (decimal/datetime/string).
+-- Case 2: mixed with unsupported types (decimal/string).
 -- With enable_min_max_optimization=true, unsupported-type columns fall back to
 -- reading the file, but supported-type columns still use statistics.
 -- Results must match the reference scan (opt=false).
@@ -274,7 +274,43 @@ select * from (select line from table(unnest(split(get_query_profile(last_query_
 drop table ice_tbl_0 force;
 
 -- ============================================================
--- Case 5: all rows are NULL in every queried column.
+-- Case 5: datetime min/max on an hour-transform partition column.
+-- Using hour(c_datetime) makes the case more robust because it exercises
+-- transformed partition metadata instead of only identity partitions. The
+-- inserted values span different hours. For Iceberg timestamp-without-timezone
+-- semantics, changing session time_zone must not change the returned datetime
+-- values.
+-- ============================================================
+create external table ice_tbl_dt(
+    c_int int,
+    c_datetime datetime
+) partition by (hour(c_datetime));
+
+INSERT INTO ice_tbl_dt (c_int, c_datetime) VALUES
+(1, '2025-06-29 08:00:00'),
+(2, '2025-06-29 09:10:00'),
+(3, '2025-06-29 10:20:00');
+
+set enable_min_max_optimization = true;
+set time_zone = 'UTC';
+select min(c_datetime), max(c_datetime) from ice_tbl_dt;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+
+set time_zone = 'Asia/Shanghai';
+select min(c_datetime), max(c_datetime) from ice_tbl_dt;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+
+set enable_min_max_optimization = false;
+set time_zone = 'UTC';
+select min(c_datetime), max(c_datetime) from ice_tbl_dt;
+
+set time_zone = 'Asia/Shanghai';
+select min(c_datetime), max(c_datetime) from ice_tbl_dt;
+
+drop table ice_tbl_dt force;
+
+-- ============================================================
+-- Case 6: all rows are NULL in every queried column.
 -- Verifies that the optimization correctly returns NULL instead of
 -- incorrect default values when all file statistics are absent.
 -- ============================================================
@@ -290,13 +326,13 @@ INSERT INTO ice_tbl_1 (
 ) VALUES
 (null, null);
 
-select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_1;
+select min(c_int), max(c_int), min(c_bigint), max(c_bigint) from ice_tbl_1;
 select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
 drop table ice_tbl_1 force;
 
 -- ============================================================
--- Case 6: identity partition on datetime column.
+-- Case 7: identity partition on datetime column.
 -- Querying min/max of the partition column itself; the value is served
 -- from partition metadata without reading file data.
 -- ============================================================
@@ -320,7 +356,7 @@ select * from (select line from table(unnest(split(get_query_profile(last_query_
 drop table ice_tbl_2 force;
 
 -- =============================================================
--- Case 7: bucket partition on int column (Bug 2 regression).
+-- Case 8: bucket partition on int column (Bug 2 regression).
 -- When all queried columns are bucket-partition columns, PruneHDFSScanColumnRule
 -- injects a STRING placeholder column and sets can_use_any_column=true.
 -- The fix ensures the placeholder is filled with a default value so that
