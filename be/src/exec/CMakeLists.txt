@@ -129,7 +129,6 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/sink/olap_table_sink_operator.cpp
     pipeline/sink/result_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
-    pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
