@@ -533,7 +533,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 -- Parquet val column is STRING, table column is INT; "bad_val" cannot convert
 shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array(["100","bad_val","200"],pa.string()), "name": pa.array(["alice","bob","carol"],pa.string())}); pq.write_table(tbl, "/tmp/rej_errcol_${uuid0}.parquet"); print(0)'
 
-shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_errcol_${uuid0}" -H "format:parquet" -H "strict_mode:true" --data-binary @/tmp/rej_errcol_${uuid0}.parquet ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
+shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_errcol_${uuid0}" -H "format:parquet" -H "strict_mode:true" -H "max_filter_ratio:1.0" --data-binary @/tmp/rej_errcol_${uuid0}.parquet ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
 shell: sleep 30
 
