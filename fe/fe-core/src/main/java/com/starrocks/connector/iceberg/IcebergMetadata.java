@@ -1711,6 +1711,14 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos, String branch, Object extra,
                            ConnectContext context) {
+        // Skip the commit entirely when there is nothing to write — a zero-row INSERT/UPDATE/DELETE
+        // would otherwise produce an empty `append` snapshot that pollutes snapshot history and
+        // confuses downstream CDC consumers. Aligns with Trino's fix in trinodb/trino#12412.
+        if (commitInfos.isEmpty()) {
+            LOG.info("Skipping empty Iceberg commit for {}.{} (no data or delete files produced)", dbName, tableName);
+            return;
+        }
+
         // Normalize db name and table name to lower case for commit queue key
         // because some catalogs are case-insensitive (e.g., Hive, Glue)
         //
