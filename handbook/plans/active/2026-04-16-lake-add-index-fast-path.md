@@ -1,8 +1,8 @@
 # Lake ADD/DROP INDEX Fast Path
 
-- Status: active — all 4 SQL e2e green on real shared-data cluster
+- Status: active — all 5 SQL e2e green (interleaved + metrics included) on real shared-data cluster
 - Owner: Schema Change
-- Last Updated: 2026-04-20 (e2e green)
+- Last Updated: 2026-04-21 (interleaved e2e + IDG metrics)
 
 ## Summary
 
@@ -212,28 +212,46 @@ committed T files stick to a single ALTER per case to stay within the
   - Run via `mvn test -pl fe-core -am -Dtest="SchemaChangeIndexFastPathClassifierTest,
     LakeTableIndexFastPathJobTest" -Dsurefire.failIfNoSpecifiedTests=false`
     inside the dev-env-ubuntu docker.
-- **SQL e2e** (4 cases, `test/sql/test_schema_change/`):
+- **SQL e2e** (5 cases, `test/sql/test_schema_change/`):
   - `test_lake_add_bitmap_index`: BITMAP ADD + index-backed queries.
   - `test_lake_drop_index_lifecycle`: ADD then DROP (tombstone-only), verify
     queries still correct.
   - `test_lake_add_index_fallback`: GIN ADD captures
     `enable_experimental_gin=false` FE error (flag off by default).
   - `test_lake_add_index_pk_table`: PK table + non-PK column BITMAP index.
+  - `test_lake_add_index_interleaved`: two sequential ADD INDEX alters stack
+    IDG entries on the same base rowset, then DROP idx_v1 validates tombstone
+    semantics + remaining idx_v2 visibility. Exercises the Slice-based feed
+    path for string columns (BinaryColumn / LargeBinaryColumn).
   - Both record (`-r`) and validate (`-v`) pass against a real shared-data
     cluster. Run from `$SSH_HOST:/home/disk4/hujie/claude/add-index/starrocks/test`
     with `sr.conf` pointing at a TSP-built cluster; see
     `handbook/domains/sql-integration.md` (if present) for invocation details.
 
+### BE metrics
+- `engine_requests_total{type="lake_add_index", status="total"/"failed"}`
+  counters track fast-path ADD INDEX invocations (including soft fallbacks
+  to regular schema change).
+- `engine_requests_total{type="lake_drop_index", status="total"}` counts
+  DROP INDEX fast-path invocations.
+- `lake_idg_files_written_total` counter increments once per `.idx` file
+  successfully written by `AddIndexSchemaChange::build_idg_for_segment`.
+- All four are registered in `global_metrics_registry.cpp` and scraped via
+  `/metrics` on every CN. Observed values after the 5 e2e runs on
+  hujie-lake-idx-e2e8: `lake_add_index{total}=28, failed=0`,
+  `lake_drop_index{total}=12`, `lake_idg_files_written_total=28` per CN.
+
 ### Out of scope for this PR (follow-ups)
 - GIN real-fallback e2e: requires `enable_experimental_gin=true` cluster config
   and a GIN reader-side bridge (per plan, reader bridge itself is deferred).
   Current `test_lake_add_index_fallback` covers only the "GIN flag off" path.
-- Multi-ALTER interleaved with INSERT e2e: blocked on lake publish-daemon
-  cadence. Single-ALTER e2e + `IndexDeltaGroupLoaderTest.VersionVisibilityFilter`
-  already cover multi-version IDG selection.
-- IDG-specific user metrics (`lake_add_index_duration`,
-  `lake_index_delta_group_files`): not implemented; commit them when adding
-  grafana dashboards.
+- INSERT-between-alters e2e: the interleaved e2e tests multi-ADD IDG stacking
+  on a single base rowset. INSERT interleaved with ALTER remains flaky on
+  fresh TSP clusters (lake publish daemon occasionally takes 10+ minutes to
+  transition a COMMITTED insert to VISIBLE, which stalls the next ALTER's
+  watershed wait). Not a fast-path code issue.
+- IDG-specific latency histograms (`lake_add_index_duration`): counters only
+  for now; add histograms when grafana dashboards land.
 
 ### Docs (landed)
 - `docs/en/administration/management/BE_parameters/stats_storage.md:135` and
