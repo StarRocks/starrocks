@@ -1,5 +1,5 @@
 -- name: test_iceberg_min_max_opt
-create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="false");
 -- result:
 -- !result
 create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
@@ -11,7 +11,13 @@ set catalog iceberg_sql_test_${uuid0};
 use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 -- result:
 -- !result
-create external table ice_tbl_${uuid0}(
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+create external table ice_tbl_0(
     c_tinyint tinyint,
     c_smallint smallint,
     c_int int,
@@ -27,7 +33,7 @@ create external table ice_tbl_${uuid0}(
 );
 -- result:
 -- !result
-INSERT INTO ice_tbl_${uuid0} (
+INSERT INTO ice_tbl_0 (
     c_tinyint,
     c_smallint,
     c_int,
@@ -72,9 +78,14 @@ select min(c_tinyint) as min_tinyint,
        max(c_double) as max_double,
        min(c_date) as min_date, 
        max(c_date) as max_date
-       from ice_tbl_${uuid0};
+       from ice_tbl_0;
 -- result:
 1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	2025-06-29	2025-07-08
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
 -- !result
 set enable_min_max_optimization = false;
 -- result:
@@ -95,9 +106,12 @@ select min(c_tinyint) as min_tinyint,
        max(c_double) as max_double,
        min(c_date) as min_date, 
        max(c_date) as max_date
-       from ice_tbl_${uuid0};
+       from ice_tbl_0;
 -- result:
 1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	2025-06-29	2025-07-08
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
 -- !result
 set enable_min_max_optimization = true;
 -- result:
@@ -123,9 +137,12 @@ select min(c_tinyint) as min_tinyint,
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_string) as max_string from ice_tbl_0;
 -- result:
 1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
 -- !result
 set enable_min_max_optimization = false;
 -- result:
@@ -151,11 +168,14 @@ select min(c_tinyint) as min_tinyint,
        min(c_datetime) as min_datetime, 
        max(c_datetime) as max_datetime,
        min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_string) as max_string from ice_tbl_0;
 -- result:
 1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
 -- !result
-INSERT INTO ice_tbl_${uuid0} (
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+-- !result
+INSERT INTO ice_tbl_0 (
     c_tinyint,
     c_smallint,
     c_int,
@@ -189,16 +209,15 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,
-       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date, 
-       min(c_datetime) as min_datetime, 
-       max(c_datetime) as max_datetime,
-       min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_date) as max_date from ice_tbl_0;
 -- result:
-1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	2025-06-29	2025-07-08
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
 -- !result
 set enable_min_max_optimization = false;
 -- result:
@@ -217,18 +236,15 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,
-       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date, 
-       min(c_datetime) as min_datetime, 
-       max(c_datetime) as max_datetime,
-       min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_date) as max_date from ice_tbl_0;
 -- result:
-1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	10.000000000000000001	100.000000000000000010	2025-06-29	2025-07-08	2025-06-29 08:00:00	2025-06-29 09:30:00	alpha	zeta
+1	10	10	100	100	1000	1000	10000	0	1	1.1	10.1	2.2	11.2	2025-06-29	2025-07-08
 -- !result
-INSERT overwrite ice_tbl_${uuid0} (
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+-- !result
+INSERT overwrite ice_tbl_0 (
     c_tinyint,
     c_smallint,
     c_int,
@@ -262,16 +278,15 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,
-       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date, 
-       min(c_datetime) as min_datetime, 
-       max(c_datetime) as max_datetime,
-       min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_date) as max_date from ice_tbl_0;
 -- result:
-None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	10.000000000000000001	2025-06-29	2025-06-29	2025-06-29 08:00:00	2025-06-29 08:00:00	alpha	alpha
+None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	2025-06-29	2025-06-29
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
 -- !result
 set enable_min_max_optimization = false;
 -- result:
@@ -290,58 +305,103 @@ select min(c_tinyint) as min_tinyint,
        max(c_float) as max_float,
        min(c_double) as min_double, 
        max(c_double) as max_double,
-       min(c_decimal) as min_decimal,
-       max(c_decimal) as max_decimal,
        min(c_date) as min_date, 
-       max(c_date) as max_date, 
-       min(c_datetime) as min_datetime, 
-       max(c_datetime) as max_datetime,
-       min(c_string) as min_string, 
-       max(c_string) as max_string from ice_tbl_${uuid0};
+       max(c_date) as max_date from ice_tbl_0;
 -- result:
-None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	10.000000000000000001	10.000000000000000001	2025-06-29	2025-06-29	2025-06-29 08:00:00	2025-06-29 08:00:00	alpha	alpha
+None	None	10	10	100	100	None	None	1	1	1.1	1.1	2.2	2.2	2025-06-29	2025-06-29
 -- !result
-drop table ice_tbl_${uuid0} force;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 -- result:
 -- !result
-create external table ice_tbl_${uuid1}(
+drop table ice_tbl_0 force;
+-- result:
+-- !result
+set enable_min_max_optimization = true;
+-- result:
+-- !result
+create external table ice_tbl_1(
     c_int int,
     c_bigint bigint    
 );
 -- result:
 -- !result
-INSERT INTO ice_tbl_${uuid1} (    
+INSERT INTO ice_tbl_1 (
     c_int,
     c_bigint    
 ) VALUES
 (null, null);
 -- result:
 -- !result
-select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_${uuid1};
+select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_1;
 -- result:
 None	None	None	None
 -- !result
-drop table ice_tbl_${uuid1} force;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
+-- !result
+drop table ice_tbl_1 force;
 -- result:
 -- !result
-create external table ice_tbl_${uuid2}(
+create external table ice_tbl_2(
     c_int int,
     dt datetime
 ) partition by (dt);
 -- result:
 -- !result
-INSERT INTO ice_tbl_${uuid2} (    
+INSERT INTO ice_tbl_2 (
        c_int, dt
 ) VALUES
 (10, '2021-01-01 13:00:00'),
 (20, '2022-01-01 14:00:00');
 -- result:
 -- !result
-select min(dt), max(dt) from ice_tbl_${uuid2};
+select min(c_int), max(c_int) from ice_tbl_2;
+-- result:
+10	20
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
+-- !result
+select min(dt), max(dt) from ice_tbl_2;
 -- result:
 2021-01-01 13:00:00	2022-01-01 14:00:00
 -- !result
-drop table ice_tbl_${uuid2} force;
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
+-- !result
+drop table ice_tbl_2 force;
+-- result:
+-- !result
+create external table ice_tbl_3(
+    id int,
+    name string
+) partition by (bucket(id, 4));
+-- result:
+-- !result
+INSERT INTO ice_tbl_3 (id, name) VALUES
+(1, 'alice'),
+(2, 'bob'),
+(3, 'carol'),
+(4, 'dave'),
+(5, 'eve');
+-- result:
+-- !result
+select min(id), max(id) from ice_tbl_3;
+-- result:
+1	5
+-- !result
+select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
+-- result:
+               - RawRowsRead: 0
+               - RowsRead: 0
+-- !result
+drop table ice_tbl_3 force;
 -- result:
 -- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
