@@ -57,6 +57,16 @@ public class LakeTableTestHelper {
         return table;
     }
 
+    LakeTable buildLakeTableWithIndex(MaterializedIndex index) {
+        Partition partition = new Partition(partitionId, physicalPartitionId, "p0", index, null);
+        LakeTable table = new LakeTable(
+                tableId, "t0",
+                Lists.newArrayList(new Column("c0", IntegerType.BIGINT)),
+                KeysType.DUP_KEYS, null, null);
+        table.addPartition(partition);
+        return table;
+    }
+
     DatabaseTransactionMgr addDatabaseTransactionMgr() {
         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         try {

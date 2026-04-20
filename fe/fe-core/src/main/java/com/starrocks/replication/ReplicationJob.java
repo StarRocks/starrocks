@@ -915,6 +915,19 @@ public class ReplicationJob implements GsonPostProcessable {
         transactionId = GlobalStateMgr.getServingState().getGlobalTransactionMgr().beginTransaction(databaseId,
                 Lists.newArrayList(tableId), label, coordinator, loadJobSourceType,
                 Config.replication_transaction_timeout_sec);
+
+        // Register loaded indexes so preCommit() validates the same indexes that were collected,
+        // not the latest (which may change due to tablet split).
+        TransactionState txnState = GlobalStateMgr.getServingState().getGlobalTransactionMgr()
+                .getTransactionState(databaseId, transactionId);
+        if (txnState != null) {
+            for (PartitionInfo partitionInfo : partitionInfos.values()) {
+                List<Long> indexIds = partitionInfo.getIndexInfos().values().stream()
+                        .map(IndexInfo::getIndexId)
+                        .collect(Collectors.toList());
+                txnState.addPartitionLoadedIndexes(tableId, partitionInfo.getPartitionId(), indexIds);
+            }
+        }
     }
 
     protected void commitTransaction() throws StarRocksException {
