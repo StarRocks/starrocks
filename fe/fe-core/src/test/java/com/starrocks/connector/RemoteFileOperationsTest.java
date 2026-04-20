@@ -189,7 +189,7 @@ public class RemoteFileOperationsTest {
     @Test
     public void testEnsureDirectoryExistsCreatesWhenMissing() {
         AtomicInteger createCount = new AtomicInteger(0);
-        new MockUp<HiveUtils>() {
+        new MockUp<HiveWriteUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return false;
@@ -218,7 +218,7 @@ public class RemoteFileOperationsTest {
     @Test
     public void testEnsureDirectoryExistsNoOpWhenPresent() {
         AtomicInteger createCount = new AtomicInteger(0);
-        new MockUp<HiveUtils>() {
+        new MockUp<HiveWriteUtils>() {
             @Mock
             public boolean pathExists(Path path, Configuration conf) {
                 return true;
