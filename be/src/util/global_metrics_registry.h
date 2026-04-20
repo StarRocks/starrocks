@@ -28,6 +28,7 @@
 #include "common/util/table_metrics.h"
 #include "util/metrics/catalog_scan_metrics.h"
 #include "util/metrics/file_scan_metrics.h"
+#include "util/metrics/spill_metrics.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -50,6 +51,7 @@ public:
     TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
     FileScanMetrics* file_scan_metrics() { return _file_scan_metrics.get(); }
     CatalogScanMetrics* catalog_scan_metrics() { return _catalog_scan_metrics.get(); }
+    SpillMetrics* spill_metrics() { return _spill_metrics.get(); }
     pipeline::PipelineExecutorMetrics* pipeline_executor_metrics() { return &_pipeline_executor_metrics; }
 
 private:
@@ -72,6 +74,7 @@ private:
     TableMetricsManager _table_metrics_mgr;
     std::unique_ptr<FileScanMetrics> _file_scan_metrics;
     std::unique_ptr<CatalogScanMetrics> _catalog_scan_metrics;
+    std::unique_ptr<SpillMetrics> _spill_metrics;
     pipeline::PipelineExecutorMetrics _pipeline_executor_metrics;
 };
 

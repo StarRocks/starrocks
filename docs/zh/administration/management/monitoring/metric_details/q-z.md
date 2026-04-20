@@ -66,6 +66,48 @@ description: "Alphabetical q - z"
 - 单位：计数
 - 描述：扫描的总行数。
 
+## `query_spill_trigger_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端（`local`、`remote`）细分的、触发过至少一次落盘的 spillable 算子实例数量。每个算子实例首次执行 flush 回调时累加一次。
+
+## `query_spill_bytes_write_total`
+
+- 单位：字节
+- 标签：`storage_type`
+- 描述：按存储后端细分的、spillable 算子累计写入溢出存储的有效负载字节数。
+
+## `query_spill_bytes_read_total`
+
+- 单位：字节
+- 标签：`storage_type`
+- 描述：按存储后端细分的、恢复阶段从溢出存储累计读回的有效负载字节数。
+
+## `query_spill_blocks_write_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端细分的、为写入分配的溢出 block 数量。用于估算写路径的 IO 次数规模。
+
+## `query_spill_blocks_read_total`
+
+- 单位：计数
+- 标签：`storage_type`
+- 描述：按存储后端细分的、打开用于读取的溢出 block 数量。用于估算读路径的 IO 次数规模。
+
+## `query_spill_write_io_duration_ns_total`
+
+- 单位：纳秒
+- 标签：`storage_type`
+- 描述：按存储后端细分的、写侧溢出 IO（block append 与 flush）累计耗时。用于跟踪写盘性能。
+
+## `query_spill_read_io_duration_ns_total`
+
+- 单位：纳秒
+- 标签：`storage_type`
+- 描述：按存储后端细分的、恢复阶段读侧溢出 IO（block 读取）累计耗时。用于跟踪读盘性能。
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `resource_group_bigquery_count`
@@ -202,6 +244,12 @@ description: "Alphabetical q - z"
 
 - 单位: 计数
 - 描述: 小文件缓存的数量。
+
+## `spill_disk_bytes_used`
+
+- 单位: 字节
+- 标签: `storage_type`
+- 描述: 所有溢出存储目录当前已占用的磁盘字节数。`storage_type=local` 汇总 BE 溢出 `DirManager` 管理的每个目录中正在使用的字节数。`storage_type=remote` 为对称保留，当前始终为 0，因为远端溢出存储由单独的查询实例各自管理，没有全局的聚合数据。
 
 ## `snmp`
 

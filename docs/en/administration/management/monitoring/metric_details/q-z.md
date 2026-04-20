@@ -66,6 +66,48 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Total number of scanned rows.
 
+## `query_spill_trigger_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spillable operator instances that triggered at least one spill, broken down by storage backend (`local`, `remote`). Incremented once per operator instance at the first flush callback.
+
+## `query_spill_bytes_write_total`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Cumulative payload bytes written by spillable operators to spill storage, broken down by storage backend (`local`, `remote`).
+
+## `query_spill_bytes_read_total`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Cumulative payload bytes read back from spill storage during restore, broken down by storage backend.
+
+## `query_spill_blocks_write_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spill blocks allocated for writing, broken down by storage backend. Useful for estimating IO count scale on the write path.
+
+## `query_spill_blocks_read_total`
+
+- Unit: Count
+- Labels: `storage_type`
+- Description: Number of spill blocks opened for reading, broken down by storage backend. Useful for estimating IO count scale on the read path.
+
+## `query_spill_write_io_duration_ns_total`
+
+- Unit: Nanoseconds
+- Labels: `storage_type`
+- Description: Cumulative wall-clock time spent in write-side spill IO (block append and flush), broken down by storage backend. Useful for tracking write-side spill performance.
+
+## `query_spill_read_io_duration_ns_total`
+
+- Unit: Nanoseconds
+- Labels: `storage_type`
+- Description: Cumulative wall-clock time spent in read-side spill IO (block reads during restore), broken down by storage backend. Useful for tracking read-side spill performance.
+
 ## `readable_blocks_total (Deprecated)`
 
 ## `resource_group_bigquery_count`
@@ -202,6 +244,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Count
 - Description: Number of small file caches.
+
+## `spill_disk_bytes_used`
+
+- Unit: Bytes
+- Labels: `storage_type`
+- Description: Current disk bytes reserved across all spill storage directories. The `storage_type=local` variant aggregates the live reserved bytes across every directory managed by the BE's spill `DirManager`. The `storage_type=remote` variant is reported for completeness and is currently always 0 because remote spill storage is tracked per-query rather than globally.
 
 ## `snmp`
 
