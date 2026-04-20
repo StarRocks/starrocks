@@ -93,29 +93,7 @@ be/tags
 build/
 cmake-build-debug/
 CMakeLists.txt
-<<<<<<< HEAD
 fe/fe-core/pseudo_cluster_*
 contrib/java-udf/target/
 java-extensions/*/bin/
-=======
-.claude
-.clangd
-.cursor/
 .codex/
-.worktrees/
-handbook/plans/local/
-
-
-!build-mac/CMakeLists.txt
-# build-mac generated files
-build-mac/.ninja_deps
-build-mac/.ninja_lock
-build-mac/.ninja_log
-build-mac/CMakeCache.txt
-build-mac/CMakeFiles/
-build-mac/build.ninja
-build-mac/build_version.cc
-build-mac/cmake_install.cmake
-_codeql_detected_source_root
-test/.venv
->>>>>>> e9c501d33a ([BugFix] Fix aggregate-join-pushdown MV rewrite on Iceberg base tables (#71856))

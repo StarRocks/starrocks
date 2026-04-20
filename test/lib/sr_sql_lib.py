@@ -644,9 +644,6 @@ class StarrocksSQLApiLib(object):
     def use_database(self, db_name):
         return self.execute_sql("use %s" % db_name)
 
-<<<<<<< HEAD
-    def create_database_and_table(self, database_name, table_name, table_sql_path=None, tolerate_exist=False):
-=======
     def create_iceberg_catalog(self, catalog_name, catalog_type):
         """
         Create an iceberg external catalog for SQL tests, dispatching to a
@@ -706,9 +703,7 @@ class StarrocksSQLApiLib(object):
         res = self.execute_sql(sql)
         tools.assert_true(res["status"], "create hadoop iceberg catalog failed: %s" % res.get("msg"))
 
-    def create_database_and_table(self, catalog_name, database_name, table_name, table_sql_path=None,
-                                  tolerate_exist=False):
->>>>>>> e9c501d33a ([BugFix] Fix aggregate-join-pushdown MV rewrite on Iceberg base tables (#71856))
+    def create_database_and_table(self, database_name, table_name, table_sql_path=None, tolerate_exist=False):
         """
         create database, use database and create table
         Args:
