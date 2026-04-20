@@ -213,7 +213,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array(["100","bad_val","200"],pa.string()), "name": pa.array(["alice","bob","carol"],pa.string())}); pq.write_table(tbl, "/tmp/rej_parquet_${uuid0}.parquet"); print(0)'
 
 -- Distribute the parquet file to every CN so the FILES() scan can read it regardless of scheduling
-shell: for cn in $(${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_parquet_${uuid0}.parquet sr@$cn:/tmp/ >/dev/null 2>&1; done; echo 0
+shell: for h in $({ ${mysql_cmd} -Ne "show frontends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2}' | sort -u); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_parquet_${uuid0}.parquet sr@$h:/tmp/ >/dev/null 2>&1; done; echo 0
 
 set log_rejected_record_num = -1;
 set insert_max_filter_ratio = 1.0;
@@ -231,7 +231,7 @@ where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
-shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; for cn in $(${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'); do sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null sr@$cn "rm -f /tmp/rej_parquet_${uuid0}.parquet" >/dev/null 2>&1; done; echo 0
+shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; for h in $({ ${mysql_cmd} -Ne "show frontends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2}' | sort -u); do sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null sr@$h "rm -f /tmp/rej_parquet_${uuid0}.parquet" >/dev/null 2>&1; done; echo 0
 drop database db_${uuid0};
 
 -- =============================================================
@@ -251,7 +251,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 
 shell: python3 -c 'import pyorc, io; schema = "struct<id:int,val:string,name:string>"; buf = io.BytesIO(); w = pyorc.Writer(buf, schema); w.write((1, "100", "alice")); w.write((2, "bad_val", "bob")); w.write((3, "200", "carol")); w.close(); open("/tmp/rej_orc_${uuid0}.orc","wb").write(buf.getvalue()); print(0)'
 
-shell: for cn in $(${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_orc_${uuid0}.orc sr@$cn:/tmp/ >/dev/null 2>&1; done; echo 0
+shell: for h in $({ ${mysql_cmd} -Ne "show frontends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2}' | sort -u); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_orc_${uuid0}.orc sr@$h:/tmp/ >/dev/null 2>&1; done; echo 0
 
 set log_rejected_record_num = -1;
 set insert_max_filter_ratio = 1.0;
@@ -269,7 +269,7 @@ where target_database='db_${uuid0}' and target_table='t'
 order by created_at limit 5;
 
 shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
-shell: rm -f /tmp/rej_orc_${uuid0}.orc; for cn in $(${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'); do sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null sr@$cn "rm -f /tmp/rej_orc_${uuid0}.orc" >/dev/null 2>&1; done; echo 0
+shell: rm -f /tmp/rej_orc_${uuid0}.orc; for h in $({ ${mysql_cmd} -Ne "show frontends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2}' | sort -u); do sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null sr@$h "rm -f /tmp/rej_orc_${uuid0}.orc" >/dev/null 2>&1; done; echo 0
 drop database db_${uuid0};
 
 -- =============================================================
