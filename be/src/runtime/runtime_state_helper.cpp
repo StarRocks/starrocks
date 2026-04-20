@@ -173,7 +173,7 @@ RejectedRecordWriter* RuntimeStateHelper::rejected_record_writer(RuntimeState* s
     }
     std::lock_guard<std::mutex> l(state->_rejected_record_lock);
     if (state->_rejected_record_writer == nullptr) {
-        state->_rejected_record_writer = std::make_unique<RejectedRecordWriter>(state);
+        state->_rejected_record_writer = std::make_shared<RejectedRecordWriter>(state);
     }
     return state->_rejected_record_writer.get();
 }

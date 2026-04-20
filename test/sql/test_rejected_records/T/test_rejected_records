@@ -34,7 +34,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 -- Only good rows committed
 select * from t order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- One rejected record, load_type=STREAM_LOAD, error_code non-null
 select load_type,
@@ -63,7 +63,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 select load_type,
        error_message like '%NULL%' as msg_mentions_null,
@@ -91,7 +91,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 select error_message like '%too long%' as msg_mentions_length,
        raw_record is not null as has_raw_record
@@ -124,7 +124,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by dt;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 select error_message like '%partition%' as msg_mentions_partition,
        raw_record is not null as has_raw_record
@@ -151,7 +151,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 select count(*) as rejected_count
 from _statistics_.rejected_records
@@ -180,7 +180,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 
 select * from t order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 select load_type,
        error_code is not null as has_error_code,
@@ -221,7 +221,7 @@ insert into t select cast(id as int), cast(val as int), name from files('path'='
 
 select * from t order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 select load_type,
        error_code is not null as has_error_code,
@@ -259,7 +259,7 @@ insert into t select cast(id as int), cast(val as int), name from files('path'='
 
 select * from t order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 select load_type,
        error_code is not null as has_error_code,
@@ -289,7 +289,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_fields_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d $'1,10\n2,not_int\n3,30' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- id should be UUID (len=36), created_at should be recent, raw_record not null, backend_id not null
 select
@@ -328,7 +328,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_idem_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad_val' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- Count after first sync
 select count(*) as cnt_after_first_sync
@@ -373,7 +373,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_pol_a_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad' ${url}/api/db_a_${uuid0}/ta/_stream_load | jq -r '.Status'
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_pol_b_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad' ${url}/api/db_b_${uuid0}/tb/_stream_load | jq -r '.Status'
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- root sees records from both databases
 select count(*) >= 2 as root_sees_both
@@ -422,7 +422,7 @@ insert into dst select id, cast(val as int) from src;
 -- Good rows committed
 select * from dst order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- Exactly one rejected row, load_type=INSERT, raw_record present, load_label is the insert txn label (non-null)
 select load_type,
@@ -457,7 +457,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 -- Load failed → nothing committed
 select count(*) as committed_rows from t;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- But rejected records still present
 select count(*) >= 2 as has_at_least_2_rejected
@@ -484,7 +484,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 -- Only good row committed
 select * from t order by id;
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- Rejected rows still recorded (at least 2)
 select count(*) >= 2 as has_at_least_2_rejected
@@ -513,7 +513,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 -- 5 bad rows, cap=2 → writer stops after 2
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:2" -H "label:rej_cap_${uuid0}" -H "strict_mode:true" -H "max_filter_ratio:1.0" -H "column_separator:," -d $'1,bad1\n2,bad2\n3,bad3\n4,bad4\n5,bad5' ${url}/api/db_${uuid0}/t/_stream_load | jq -r '.Status'
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- Exactly 2 rows make it into the system table (3rd+ silently discarded by writer)
 select count(*) as capped_count

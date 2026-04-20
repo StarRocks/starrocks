@@ -654,7 +654,12 @@ private:
     std::mutex _rejected_record_lock;
     // Writer. Lazily constructed by RuntimeStateHelper on first
     // append so enabled-but-never-triggered loads pay no allocation cost.
-    std::unique_ptr<RejectedRecordWriter> _rejected_record_writer;
+    // Held via shared_ptr so this header does not need RejectedRecordWriter's
+    // complete type for destruction. Letting unique_ptr destruct here would
+    // force runtime_state.cpp (RuntimeCore layer) to include the writer
+    // header, which lives in the higher Runtime layer and breaks the module
+    // boundary check.
+    std::shared_ptr<RejectedRecordWriter> _rejected_record_writer;
 
     // Username of user that is executing the query to which this RuntimeState belongs.
     std::string _user;

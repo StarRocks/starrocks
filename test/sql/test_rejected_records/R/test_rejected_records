@@ -50,7 +50,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -97,7 +97,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -144,7 +144,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -196,7 +196,7 @@ Fail
 select * from t order by dt;
 -- result:
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -242,7 +242,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -286,7 +286,7 @@ Fail
 select * from t order by id;
 -- result:
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -349,7 +349,7 @@ select * from t order by id;
 1	100	alice
 3	200	carol
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -417,7 +417,7 @@ select * from t order by id;
 1	100	alice
 3	200	carol
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -466,7 +466,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -518,7 +518,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -586,7 +586,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -660,7 +660,7 @@ select * from dst order by id;
 1	100
 3	200
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -709,7 +709,7 @@ select count(*) as committed_rows from t;
 -- result:
 0
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -754,7 +754,7 @@ select * from t order by id;
 -- result:
 1	10
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
@@ -795,7 +795,7 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 Fail
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ "${n:-0}" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0

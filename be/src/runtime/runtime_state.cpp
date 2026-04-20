@@ -52,7 +52,6 @@
 #include "common/status.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
-#include "runtime/rejected_record_writer.h"
 #include "types/datetime_value.h"
 
 namespace starrocks {
