@@ -249,7 +249,10 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 LOG.warn("normalized rewritePlan: \n{}", actual);
                 LOG.warn("normalized expect: \n{}", normalizedExpect);
             }
-            Assertions.assertTrue(contained);
+            Assertions.assertTrue(contained,
+                    () -> "Plan does not contain expected substring.\n--- normalized expect ---\n"
+                            + normalizedExpect + "\n--- normalized actual plan ---\n" + actual
+                            + "\n--- raw rewritePlan ---\n" + rewritePlan);
             return this;
         }
 

@@ -2139,7 +2139,7 @@ public class JoinTest extends PlanTestBase {
     public void testEquivalenceLoopDependency() throws Exception {
         String sql = "select * from t0 join t1 on t0.v1 = t1.v4 and cast(t0.v1 as STRING) = t0.v1";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "equal join conjunct: 4: v4 = 1: v1");
+        assertContains(plan, "equal join conjunct: 1: v1 = 4: v4");
         assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
@@ -2159,8 +2159,9 @@ public class JoinTest extends PlanTestBase {
                 "SELECT t0.v1 from t0 join test_all_type on t0.v2 = test_all_type.t1d where t0.v1 = test_all_type.t1d";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "join op: INNER JOIN");
-        assertContains(plan, "  |  equal join conjunct: 2: v2 = 7: t1d\n"
-                + "  |  equal join conjunct: 1: v1 = 7: t1d");
+        // Order of multiple equal join conjuncts in EXPLAIN is not stable (e.g. HashSet / rewrite order).
+        assertContains(plan, "equal join conjunct: 7: t1d = 2: v2");
+        assertContains(plan, "equal join conjunct: 7: t1d = 1: v1");
     }
 
     @Test

@@ -110,11 +110,15 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
             String ignoreExpect = normalizeLogicalPlan(text);
             for (String actual : pattern) {
                 String ignoreActual = normalizeLogicalPlan(actual);
-                Assertions.assertTrue(ignoreExpect.contains(ignoreActual), text);
+                Assertions.assertTrue(ignoreExpect.contains(ignoreActual),
+                        () -> "Plan missing expected substring (column refs normalized):\n\""
+                                + ignoreActual + "\"\n\nNormalized plan:\n" + ignoreExpect
+                                + "\n\nRaw plan:\n" + text);
             }
-        }  else {
+        } else {
             for (String s : pattern) {
-                Assertions.assertTrue(text.contains(s), text);
+                Assertions.assertTrue(text.contains(s),
+                        () -> "Plan missing expected substring:\n\"" + s + "\"\n\nFull plan:\n" + text);
             }
         }
     }
@@ -630,8 +634,17 @@ public class PlanTestNoneDBBase extends StarRocksTestBase {
                         actualSchedulerPlan);
             }
             if (isEnumerate) {
-                Assertions.assertEquals(planCount, execPlan.getPlanCount(), "plan count mismatch");
-                checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
+                Assertions.assertEquals(planCount, execPlan.getPlanCount(),
+                        "plan count mismatch: expected " + planCount + ", actual " + execPlan.getPlanCount());
+                String expect = planEnumerate.toString().trim();
+                String actual = pair.first.trim();
+                try {
+                    checkWithIgnoreTabletList(expect, actual);
+                } catch (AssertionError e) {
+                    System.err.println("--- expected [plan-" + nth + "] ---\n" + expect);
+                    System.err.println("--- actual [plan-" + nth + "] ---\n" + actual);
+                    throw e;
+                }
                 connectContext.getSessionVariable().setUseNthExecPlan(0);
             }
         } catch (Error error) {

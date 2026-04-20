@@ -387,8 +387,8 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/merge_group_delete_best_expression"), null,
                         TExplainLevel.NORMAL);
-        // check without exception
-        Assertions.assertTrue(replayPair.second.contains("14:HASH JOIN\n" +
+        // check without exception (operator id updated when plan shape shifts, e.g. 14 -> 13)
+        Assertions.assertTrue(replayPair.second.contains("13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)"), replayPair.second);
     }
 
