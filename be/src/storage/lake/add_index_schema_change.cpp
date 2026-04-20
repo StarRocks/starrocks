@@ -181,6 +181,13 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     if (seg_idx_in_rowset < rowset_meta.segment_size_size()) {
         seg_fileinfo.size = rowset_meta.segment_size(seg_idx_in_rowset);
     }
+    // Bundled rowsets pack multiple logical segments into one physical file;
+    // without this offset the RandomAccessFile starts at byte 0 of the bundle
+    // and column reads return the wrong bytes (observed as page checksum
+    // mismatch on the first column read in the fast path).
+    if (seg_idx_in_rowset < rowset_meta.bundle_file_offsets_size()) {
+        seg_fileinfo.bundle_file_offset = rowset_meta.bundle_file_offsets(seg_idx_in_rowset);
+    }
     size_t footer_size_hint = 16 * 1024;
     LakeIOOptions read_opts{.fill_data_cache = false};
     auto tablet_schema = _new_tablet.get_schema();
@@ -283,8 +290,16 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(column, /*path=*/nullptr));
 
     // Open a RandomAccessFile over the segment data for the column iterator.
+    // _with_bundling() honors FileInfo.bundle_file_offset so reads land at the
+    // right offset when the rowset packs multiple segments into one physical
+    // object. Also propagate encryption_info from the already-opened Segment
+    // so transparent decryption works end-to-end.
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(segment->file_name()));
-    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(segment->file_info()));
+    RandomAccessFileOptions raf_opts;
+    if (auto enc = segment->encryption_info(); enc) {
+        raf_opts.encryption_info = *enc;
+    }
+    ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file_with_bundling(raf_opts, segment->file_info()));
 
     OlapReaderStatistics stats;
     ColumnIteratorOptions col_iter_opts;
