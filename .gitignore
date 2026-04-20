@@ -103,12 +103,7 @@ CLAUDE.md
 AGENTS.md
 .clangd
 .cursor/
-<<<<<<< HEAD
-=======
 .codex/
-.worktrees/
-handbook/plans/local/
->>>>>>> e9c501d33a ([BugFix] Fix aggregate-join-pushdown MV rewrite on Iceberg base tables (#71856))
 
 
 !build-mac/CMakeLists.txt
@@ -122,4 +117,3 @@ build-mac/build.ninja
 build-mac/build_version.cc
 build-mac/cmake_install.cmake
 _codeql_detected_source_root
-
