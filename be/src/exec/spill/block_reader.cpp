@@ -84,28 +84,61 @@ Status BlockReader::read_fully(void* data, int64_t count) {
             int64_t length_need_read = count - length_in_buffer;
             if (length_need_read >= _options.max_buffer_bytes) {
                 // if res length is larger than max_buffer_bytes, read from file directly
-                SCOPED_TIMER(_options.read_io_timer);
+                int64_t io_ns = 0;
+                int64_t read_len = 0;
+                {
+                    SCOPED_RAW_TIMER(&io_ns);
+                    ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), offset, length_need_read));
+                }
+                COUNTER_UPDATE(_options.read_io_timer, io_ns);
                 COUNTER_UPDATE(_options.read_io_count, 1);
-                ASSIGN_OR_RETURN(auto read_len, try_to_read_from_file(_readable.get(), offset, length_need_read));
-                _slice.clear();
                 COUNTER_UPDATE(_options.read_io_bytes, read_len);
+                if (_options.global_read_io_duration_ns != nullptr) {
+                    _options.global_read_io_duration_ns->increment(io_ns);
+                }
+                if (_options.global_read_bytes != nullptr) {
+                    _options.global_read_bytes->increment(read_len);
+                }
+                _slice.clear();
             } else {
                 // refill buffer, then read res data from buffer
-                SCOPED_TIMER(_options.read_io_timer);
+                int64_t io_ns = 0;
+                int64_t read_len = 0;
+                {
+                    SCOPED_RAW_TIMER(&io_ns);
+                    ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), _buffer.get(),
+                                                                     _options.max_buffer_bytes, length_need_read));
+                }
+                COUNTER_UPDATE(_options.read_io_timer, io_ns);
                 COUNTER_UPDATE(_options.read_io_count, 1);
-                ASSIGN_OR_RETURN(auto read_len, try_to_read_from_file(_readable.get(), _buffer.get(),
-                                                                      _options.max_buffer_bytes, length_need_read));
+                COUNTER_UPDATE(_options.read_io_bytes, read_len);
+                if (_options.global_read_io_duration_ns != nullptr) {
+                    _options.global_read_io_duration_ns->increment(io_ns);
+                }
+                if (_options.global_read_bytes != nullptr) {
+                    _options.global_read_bytes->increment(read_len);
+                }
                 _slice = Slice(_buffer.get(), read_len);
                 std::memcpy(offset, _slice.data, length_need_read);
                 _slice.remove_prefix(length_need_read);
-                COUNTER_UPDATE(_options.read_io_bytes, read_len);
             }
         }
     } else {
-        SCOPED_TIMER(_options.read_io_timer);
+        int64_t io_ns = 0;
+        int64_t read_len = 0;
+        {
+            SCOPED_RAW_TIMER(&io_ns);
+            ASSIGN_OR_RETURN(read_len, try_to_read_from_file(_readable.get(), data, count));
+        }
+        COUNTER_UPDATE(_options.read_io_timer, io_ns);
         COUNTER_UPDATE(_options.read_io_count, 1);
-        ASSIGN_OR_RETURN(auto read_len, try_to_read_from_file(_readable.get(), data, count));
         COUNTER_UPDATE(_options.read_io_bytes, read_len);
+        if (_options.global_read_io_duration_ns != nullptr) {
+            _options.global_read_io_duration_ns->increment(io_ns);
+        }
+        if (_options.global_read_bytes != nullptr) {
+            _options.global_read_bytes->increment(read_len);
+        }
     }
     _offset += count;
     return Status::OK();
