@@ -25,6 +25,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveRemoteFileIO;
+import com.starrocks.connector.hive.HiveUtils;
 import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.connector.hive.MockedRemoteFileSystem;
 import com.starrocks.connector.hive.Partition;
