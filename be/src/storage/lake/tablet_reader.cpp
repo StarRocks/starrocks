@@ -666,6 +666,20 @@ Status TabletReader::_prepare_segment_split_task(const TabletReaderParams& read_
             }
         }
 
+        if (config::enable_lake_scan_child_morsel_reuse && config::enable_lake_scan_child_morsel_fast_reopen &&
+            segment_state->estimated_fanout > 1) {
+            seg_options.shared_static_pruned_scan_range = segment_state->static_pruned_range;
+            SparseRangePtr execution_pruned_range;
+            st = prepare_segment_execution_pruned_scan_range(segment_schema, segment, seg_options, segment_state,
+                                                             &execution_pruned_range);
+            if (!st.ok()) {
+                segment_state->prepare_status = st;
+                segment_state->lifecycle.store(static_cast<uint32_t>(PreparedSegmentReadState::Lifecycle::FAILED),
+                                               std::memory_order_release);
+                return st;
+            }
+        }
+
         segment_state->prepare_status = Status::OK();
         segment_state->lifecycle.store(static_cast<uint32_t>(PreparedSegmentReadState::Lifecycle::PREPARED),
                                        std::memory_order_release);
@@ -911,6 +925,8 @@ Status TabletReader::init_rowset_read_options(const TabletReaderParams& params, 
                                      &rs_opts->ranges, &_mempool));
     rs_opts->rowid_range_option = params.rowid_range_option;
     rs_opts->short_key_ranges_option = params.short_key_ranges_option;
+    rs_opts->prepared_target_rowset_index = params.prepared_target_rowset_index;
+    rs_opts->prepared_target_segment_index = params.prepared_target_segment_index;
     return Status::OK();
 }
 
@@ -929,7 +945,27 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RowsetReadOptions rs_opts;
     RETURN_IF_ERROR(init_rowset_read_options(params, &rs_opts));
 
+    const bool enable_targeted_child_read =
+            enable_reusable_segment_iters && config::enable_lake_scan_child_morsel_fast_reopen &&
+            params.prepared_target_rowset_index >= 0 && params.prepared_target_segment_index >= 0;
+
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
+
+    if (enable_targeted_child_read) {
+        const size_t rowset_idx = static_cast<size_t>(params.prepared_target_rowset_index);
+        if (rowset_idx < prepared_state->rowsets.size()) {
+            auto& rowset = prepared_state->rowsets[rowset_idx];
+            if (params.rowid_range_option == nullptr || params.rowid_range_option->contains_rowset(rowset.get())) {
+                ASSIGN_OR_RETURN(auto seg_iters,
+                                 enhance_error_prompt(rowset->read(schema(), rs_opts,
+                                                                    prepared_state->rowset_segments[rowset_idx],
+                                                                    &_reusable_rowset_iterators[rowset_idx],
+                                                                    &prepared_state->rowset_prepared_states[rowset_idx])));
+                iters->insert(iters->end(), seg_iters.begin(), seg_iters.end());
+            }
+            return Status::OK();
+        }
+    }
 
     std::vector<std::future<StatusOr<std::vector<ChunkIteratorPtr>>>> futures;
     // The parallel tasks capture local variables and |this| by reference.

@@ -58,6 +58,8 @@ struct PreparedSegmentReadState {
 
     SparseRangePtr static_pruned_range;
 
+    SparseRangePtr execution_pruned_range;
+
     std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_bounds;
     std::optional<Range<rowid_t>> tablet_range_rowid_range;
 
@@ -84,6 +86,10 @@ Status prepare_segment_static_pruned_scan_range(const Schema& schema, const Segm
                                                 const SegmentReadOptions& options,
                                                 const PreparedSegmentReadStatePtr& pruning_state,
                                                 SparseRangePtr* shared_scan_range);
+Status prepare_segment_execution_pruned_scan_range(const Schema& schema, const SegmentPtr& segment,
+                                                   const SegmentReadOptions& options,
+                                                   const PreparedSegmentReadStatePtr& pruning_state,
+                                                   SparseRangePtr* shared_scan_range);
 
 class Rowset : public BaseRowset {
 public:

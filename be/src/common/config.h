@@ -1075,6 +1075,10 @@ CONF_mBool(enable_lake_index_pruned_physical_split, "true");
 // not participate in the planner's prepared-vs-baseline path selection.
 CONF_mBool(enable_lake_scan_child_morsel_reuse, "false");
 
+// Whether reused Lake physical child morsels on the same slot bypass the full reader reopen shell and only refresh
+// child-specific scan parameters before reopening the existing TabletReader.
+CONF_mBool(enable_lake_scan_child_morsel_fast_reopen, "false");
+
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 

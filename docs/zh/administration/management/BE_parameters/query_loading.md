@@ -301,6 +301,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：控制 Lake shared-data physical split 的兄弟 child morsel，在顶层 prepared split 路径已经选中的前提下，是否在同一个 slot 内继续复用 chunk source 和 reader 壳层。这只是 slot-local 的次级实现细节开关，不参与 prepared path 与 baseline path 的架构选路。对于 query cache 的 delta-rowsets 读取、logical split morsel、GLM、CACHE SELECT/SST warmup 等暂未支持的场景，会自动回退到原有的按 morsel 重建 reader 路径。
 - 引入版本：v4.1
 
+### enable_lake_scan_child_morsel_fast_reopen
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制复用中的 Lake physical split child morsel，是否绕过完整的 `LakeDataSource::open_reader_for_current_morsel()` 壳层，只刷新 child 自己的 rowid range 后直接重开已有 `TabletReader`。该开关只有在同时开启 `enable_lake_scan_child_morsel_reuse` 时才生效，并且只作用于同一 slot 内的 physical child morsel 复用场景。
+- 引入版本：v4.1
+
 ### max_hdfs_file_handle
 
 - 默认值：1000

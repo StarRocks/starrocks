@@ -385,6 +385,53 @@ ChunkSourcePtr ConnectorScanOperator::_take_reusable_chunk_source(RuntimeState* 
     return reusable_chunk_source;
 }
 
+ScanOperator::NewMorselPickupSlotRank ConnectorScanOperator::_rank_new_morsel_pickup_slot(int chunk_source_index) const {
+    if (!config::enable_lake_scan_child_morsel_reuse || connector_type() != connector::ConnectorType::LAKE) {
+        return NewMorselPickupSlotRank::kNormal;
+    }
+    std::shared_lock guard(_task_mutex);
+    if (_chunk_sources[chunk_source_index] == nullptr && _reusable_chunk_sources[chunk_source_index] == nullptr) {
+        return NewMorselPickupSlotRank::kPreferred;
+    }
+    return NewMorselPickupSlotRank::kNormal;
+}
+
+ScanOperator::ReusableChunkSourceLookupResult ConnectorScanOperator::_take_reusable_chunk_source_for_morsel(
+        RuntimeState* /*state*/, int chunk_source_index, const Morsel& morsel) {
+    ReusableChunkSourceLookupResult result;
+    if (!config::enable_lake_scan_child_morsel_reuse || connector_type() != connector::ConnectorType::LAKE) {
+        return result;
+    }
+
+    const size_t slot_count = _reusable_chunk_sources.size();
+    if (slot_count == 0) {
+        return result;
+    }
+
+    for (size_t offset = 0; offset < slot_count; ++offset) {
+        const size_t probe_idx = (static_cast<size_t>(chunk_source_index) + offset) % slot_count;
+        auto& candidate = _reusable_chunk_sources[probe_idx];
+        if (candidate == nullptr) {
+            continue;
+        }
+        result.found_candidate = true;
+        if (candidate->can_reuse_with(morsel)) {
+            if (probe_idx != static_cast<size_t>(chunk_source_index)) {
+                auto& stale = _reusable_chunk_sources[chunk_source_index];
+                if (stale != nullptr) {
+                    result.stale_chunk_source = std::move(stale);
+                }
+            }
+            result.reusable_chunk_source = std::move(candidate);
+            return result;
+        }
+        if (probe_idx == static_cast<size_t>(chunk_source_index)) {
+            result.stale_chunk_source = std::move(candidate);
+        }
+    }
+    return result;
+}
+
 void ConnectorScanOperator::_stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index,
                                                          ChunkSourcePtr chunk_source) {
     if (!config::enable_lake_scan_child_morsel_reuse || connector_type() != connector::ConnectorType::LAKE) {
@@ -393,7 +440,11 @@ void ConnectorScanOperator::_stash_reusable_chunk_source(RuntimeState* state, in
         }
         return;
     }
-    _reusable_chunk_sources[chunk_source_index] = std::move(chunk_source);
+    auto& slot = _reusable_chunk_sources[chunk_source_index];
+    if (slot != nullptr) {
+        slot->close(state);
+    }
+    slot = std::move(chunk_source);
 }
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {

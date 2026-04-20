@@ -147,7 +147,27 @@ protected:
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);
+    struct ReusableChunkSourceLookupResult {
+        ChunkSourcePtr reusable_chunk_source = nullptr;
+        ChunkSourcePtr stale_chunk_source = nullptr;
+        bool found_candidate = false;
+    };
     virtual ChunkSourcePtr _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index) { return nullptr; }
+    virtual ReusableChunkSourceLookupResult _take_reusable_chunk_source_for_morsel(RuntimeState* state,
+                                                                                   int chunk_source_index,
+                                                                                   const Morsel& morsel) {
+        ReusableChunkSourceLookupResult result;
+        result.reusable_chunk_source = _take_reusable_chunk_source(state, chunk_source_index);
+        result.found_candidate = result.reusable_chunk_source != nullptr;
+        return result;
+    }
+    enum class NewMorselPickupSlotRank : uint8_t {
+        kPreferred = 0,
+        kNormal = 1,
+    };
+    virtual NewMorselPickupSlotRank _rank_new_morsel_pickup_slot(int chunk_source_index) const {
+        return NewMorselPickupSlotRank::kNormal;
+    }
     virtual void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) {
         if (chunk_source != nullptr) {
             chunk_source->close(state);

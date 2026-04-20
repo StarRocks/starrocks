@@ -101,7 +101,9 @@ private:
     bool can_reuse_current_morsel(const pipeline::ScanMorsel& morsel) const;
     bool can_reuse_with_signature(const pipeline::ScanMorsel& morsel) const;
     bool has_reuse_blocker() const;
+    bool can_fast_reopen_current_morsel() const;
     Status open_reader_for_current_morsel();
+    Status fast_reopen_reader_for_current_morsel();
     void release_reader(RuntimeState* state);
     void refresh_reuse_signature();
 

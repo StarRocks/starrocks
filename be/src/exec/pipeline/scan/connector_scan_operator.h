@@ -137,6 +137,9 @@ private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     bool _is_lake_child_reuse_candidate(const Morsel& morsel) const override;
     ChunkSourcePtr _take_reusable_chunk_source(RuntimeState* state, int chunk_source_index) override;
+    NewMorselPickupSlotRank _rank_new_morsel_pickup_slot(int chunk_source_index) const override;
+    ReusableChunkSourceLookupResult _take_reusable_chunk_source_for_morsel(RuntimeState* state, int chunk_source_index,
+                                                                           const Morsel& morsel) override;
     void _stash_reusable_chunk_source(RuntimeState* state, int chunk_source_index, ChunkSourcePtr chunk_source) override;
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;

@@ -95,6 +95,7 @@ public:
     SparseRangePtr rowid_range_option = nullptr;
     SparseRangePtr shared_key_pruned_scan_range = nullptr;
     SparseRangePtr shared_static_pruned_scan_range = nullptr;
+    SparseRangePtr shared_execution_pruned_scan_range = nullptr;
     const std::vector<std::optional<Range<rowid_t>>>* cached_seek_range_rowid_bounds = nullptr;
     const std::optional<Range<rowid_t>>* cached_tablet_range_rowid = nullptr;
     std::vector<ShortKeyRangeOptionPtr> short_key_ranges;

@@ -148,6 +148,20 @@ Status prepare_segment_static_pruned_scan_range(const Schema& schema, const Segm
     return Status::OK();
 }
 
+Status prepare_segment_execution_pruned_scan_range(const Schema& schema, const SegmentPtr& segment,
+                                                   const SegmentReadOptions& options,
+                                                   const PreparedSegmentReadStatePtr& pruning_state,
+                                                   SparseRangePtr* shared_scan_range) {
+    if (pruning_state == nullptr || !options.short_key_ranges.empty()) {
+        return Status::OK();
+    }
+
+    ASSIGN_OR_RETURN(auto range, get_segment_scan_range_after_execution_pruning(segment, schema, options));
+    pruning_state->execution_pruned_range = std::make_shared<SparseRange<>>(std::move(range));
+    *shared_scan_range = pruning_state->execution_pruned_range;
+    return Status::OK();
+}
+
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
         : _tablet_mgr(tablet_mgr),
@@ -465,6 +479,11 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 
     ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
 
+    const bool use_target_segment = prepared_segments != nullptr && options.rowid_range_option != nullptr &&
+                                    options.prepared_target_segment_index >= 0 &&
+                                    options.prepared_target_segment_index < static_cast<int64_t>(num_segments());
+    const int target_segment_index = use_target_segment ? static_cast<int>(options.prepared_target_segment_index) : -1;
+
     // Check if segment metadata filter can be used.
     // Apply metadata filter BEFORE loading segments to avoid loading unnecessary segment footers.
     bool use_metadata_filter = config::enable_lake_segment_metadata_filter && metadata().segment_metas_size() > 0 &&
@@ -472,7 +491,10 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 
     std::unordered_set<int> skip_segment_idxs;
     if (use_metadata_filter) {
-        for (int i = 0; i < metadata().segment_metas_size() && i < num_segments(); i++) {
+        const int metadata_begin = use_target_segment ? target_segment_index : 0;
+        const int metadata_end = use_target_segment ? target_segment_index + 1
+                                                    : std::min<int>(metadata().segment_metas_size(), num_segments());
+        for (int i = metadata_begin; i < metadata_end; i++) {
             const auto& segment_meta = metadata().segment_metas(i);
             if (!SegmentMetadataFilter::may_contain(segment_meta, options.pred_tree_for_zone_map,
                                                     *options.tablet_schema)) {
@@ -503,7 +525,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
 
     // Update segments_read_count after filtering
     if (options.stats) {
-        options.stats->segments_read_count += num_segments() - skip_segment_idxs.size();
+        const size_t candidate_segment_count = use_target_segment ? 1 : num_segments();
+        options.stats->segments_read_count += candidate_segment_count - skip_segment_idxs.size();
     }
 
     if (reusable_segment_iterators != nullptr && reusable_segment_iterators->size() < segments.size()) {
@@ -513,7 +536,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
         prepared_segment_read_states->resize(segments.size());
     }
 
-    for (int i = 0; i < segments.size(); i++) {
+    const int segment_begin = use_target_segment ? target_segment_index : 0;
+    const int segment_end = use_target_segment ? target_segment_index + 1 : segments.size();
+    for (int i = segment_begin; i < segment_end; i++) {
         auto& seg_ptr = segments[i];
         // Skip segments that were filtered by metadata filter (nullptr placeholders)
         if (seg_ptr == nullptr) {
@@ -544,6 +569,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
         }
         seg_options.shared_key_pruned_scan_range = nullptr;
         seg_options.shared_static_pruned_scan_range = nullptr;
+        seg_options.shared_execution_pruned_scan_range = nullptr;
         if (prepared_segment_read_states != nullptr) {
             auto& pruning_state = (*prepared_segment_read_states)[i];
             if (pruning_state != nullptr) {
@@ -551,6 +577,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
                 seg_options.cached_tablet_range_rowid = &pruning_state->tablet_range_rowid_range;
                 if (options.rowid_range_option != nullptr) {
                     seg_options.shared_key_pruned_scan_range = pruning_state->key_pruned_range;
+                    seg_options.shared_execution_pruned_scan_range = pruning_state->execution_pruned_range;
                 }
                 seg_options.shared_static_pruned_scan_range = pruning_state->static_pruned_range;
             }

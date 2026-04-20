@@ -48,5 +48,8 @@ StatusOr<std::optional<Range<>>> get_segment_rowid_range_by_seek_range(const std
 StatusOr<SparseRange<>> get_segment_scan_range_after_static_pruning(const std::shared_ptr<Segment>& segment,
                                                                     const Schema& schema,
                                                                     const SegmentReadOptions& options);
+StatusOr<SparseRange<>> get_segment_scan_range_after_execution_pruning(const std::shared_ptr<Segment>& segment,
+                                                                       const Schema& schema,
+                                                                       const SegmentReadOptions& options);
 
 } // namespace starrocks

@@ -313,6 +313,15 @@ This topic introduces the following types of FE configurations:
 - Description: Controls whether Lake shared-data physical split sibling morsels reuse the same chunk source and reader shell within one slot after the top-level prepared split path has already been chosen. This is a secondary implementation-detail switch for slot-local reuse only; it does not participate in the prepared-vs-baseline path selection. Unsupported cases such as query cache delta-rowset reads, logical split morsels, GLM, or CACHE SELECT warmup paths automatically fall back to the original per-morsel reader construction path.
 - Introduced in: v4.1
 
+### enable_lake_scan_child_morsel_fast_reopen
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether a reused Lake physical split child morsel bypasses the full `LakeDataSource::open_reader_for_current_morsel()` shell and directly reopens the existing `TabletReader` with only the child-specific rowid range refreshed. This switch only takes effect when `enable_lake_scan_child_morsel_reuse` is also enabled and only for same-slot physical child morsel reuse.
+- Introduced in: v4.1
+
 ### late_materialization_ratio
 
 - Default: 10
