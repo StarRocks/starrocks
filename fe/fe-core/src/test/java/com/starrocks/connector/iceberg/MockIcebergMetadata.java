@@ -78,6 +78,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TRANSFORMS_DB_NAME = "partitioned_transforms_db";
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
+    public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
     public static final String MOCKED_UNKNOWN_TYPE_TABLE_NAME = "t_unknown_types";
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "t1";
     // date partition table
@@ -193,6 +194,31 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 col -> ColumnStatistic.unknown()));
 
         icebergTableInfoMap.put(MOCKED_UNPARTITIONED_TABLE_NAME0,
+                new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
+
+        schemas = ImmutableList.of(new Column("id", IntegerType.INT, true),
+                new Column("c1", IntegerType.INT, true),
+                new Column("c2", IntegerType.INT, true));
+        schemas = addMetaColumns(schemas);
+
+        schema = new Schema(required(6, "id", Types.IntegerType.get()),
+                required(7, "c1", Types.IntegerType.get()),
+                required(8, "c2", Types.IntegerType.get()));
+        spec = PartitionSpec.builderFor(schema).build();
+        baseTable = TestTables.create(
+                new File(getStarRocksHome() + "/" + MOCKED_UNPARTITIONED_DB_NAME + "/" +
+                        MOCKED_UNPARTITIONED_TABLE_NUMERIC), MOCKED_UNPARTITIONED_TABLE_NUMERIC,
+                schema, spec, 3);
+
+        mockIcebergTable = new MockIcebergTable(3, MOCKED_UNPARTITIONED_TABLE_NUMERIC,
+                MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
+                MOCKED_UNPARTITIONED_TABLE_NUMERIC, schemas, baseTable, null, "");
+
+        colNames = schemas.stream().map(Column::getName).collect(Collectors.toList());
+        columnStatisticMap = colNames.stream().collect(Collectors.toMap(Function.identity(),
+                col -> ColumnStatistic.unknown()));
+
+        icebergTableInfoMap.put(MOCKED_UNPARTITIONED_TABLE_NUMERIC,
                 new IcebergTableInfo(mockIcebergTable, Lists.newArrayList(), 100, columnStatisticMap));
     }
 
