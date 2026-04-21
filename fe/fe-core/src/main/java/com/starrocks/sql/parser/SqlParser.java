@@ -15,6 +15,8 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
@@ -31,6 +33,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
+import com.starrocks.type.Type;
 import io.trino.sql.parser.StatementSplitter;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -44,13 +47,17 @@ import org.antlr.v4.runtime.misc.ParseCancellationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
+import static com.starrocks.sql.parser.AstBuilderUtils.createPos;
+import static com.starrocks.sql.parser.AstBuilderUtils.getIdentifier;
 
 public class SqlParser {
     private static final Logger LOG = LogManager.getLogger(SqlParser.class);
@@ -254,6 +261,31 @@ public class SqlParser {
         return (ImportColumnsStmt) GlobalStateMgr.getCurrentState().getSqlParser().astBuilderFactory
                 .create(sqlMode, GlobalVariable.enableTableNameCaseInsensitive, new IdentityHashMap<>())
                 .visit(importColumnsContext);
+    }
+
+    public static List<Column> parseFilesSchema(String schemaStr) {
+        SessionVariable sv = ConnectContext.get() != null
+                ? ConnectContext.get().getSessionVariable()
+                : new SessionVariable();
+        com.starrocks.sql.parser.StarRocksParser.FilesSchemaContext ctx =
+                (com.starrocks.sql.parser.StarRocksParser.FilesSchemaContext)
+                        invokeParser(schemaStr, sv,
+                                com.starrocks.sql.parser.StarRocksParser::filesSchema).first;
+
+        List<Column> cols = new ArrayList<>(ctx.filesSchemaColumn().size());
+        Set<String> seenNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        for (com.starrocks.sql.parser.StarRocksParser.FilesSchemaColumnContext colCtx
+                : ctx.filesSchemaColumn()) {
+            String name = getIdentifier(colCtx.identifier()).getValue();
+            if (!seenNames.add(name)) {
+                throw new ParsingException(
+                        "duplicate column in 'schema': " + name,
+                        createPos(colCtx.identifier()));
+            }
+            Type type = TypeParser.getType(colCtx.type());
+            cols.add(new Column(name, type, /*isNullable=*/ true));
+        }
+        return cols;
     }
 
     private static Pair<ParserRuleContext, com.starrocks.sql.parser.StarRocksParser> invokeParser(
