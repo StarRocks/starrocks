@@ -378,10 +378,14 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_pol_a_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad' ${url}/api/db_a_${uuid0}/ta/_stream_load >/dev/null; echo done
 shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "log_rejected_record_num:-1" -H "label:rej_pol_b_${uuid0}" -H "strict_mode:true" -H "column_separator:," -d '1,bad' ${url}/api/db_b_${uuid0}/tb/_stream_load >/dev/null; echo done
 
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+-- Wait until records from BOTH databases have synced so the root-sees-both
+-- assertion below has something to compare against. Using `count(distinct
+-- target_database)` avoids double-counting a database that synced two rows
+-- before the other database synced any.
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(distinct target_database) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 2 ] && break; sleep 1; done; sleep 3; echo 0
 
 -- root sees records from both databases
-select count(*) >= 2 as root_sees_both
+select count(distinct target_database) >= 2 as root_sees_both
 from _statistics_.rejected_records
 where target_database in ('db_a_${uuid0}', 'db_b_${uuid0}');
 

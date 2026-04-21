@@ -586,12 +586,12 @@ shell: curl -s --location-trusted -u root: -X PUT -H "Expect:100-continue" -H "l
 0
 done
 -- !result
-shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+shell: for i in $(seq 1 60); do n=$(${mysql_cmd} -Ne "select count(distinct target_database) from _statistics_.rejected_records where target_database like 'db_%${uuid0}%'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 2 ] && break; sleep 1; done; sleep 3; echo 0
 -- result:
 0
 0
 -- !result
-select count(*) >= 2 as root_sees_both
+select count(distinct target_database) >= 2 as root_sees_both
 from _statistics_.rejected_records
 where target_database in ('db_a_${uuid0}', 'db_b_${uuid0}');
 -- result:
