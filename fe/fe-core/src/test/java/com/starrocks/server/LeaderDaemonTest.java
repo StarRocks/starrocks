@@ -54,8 +54,7 @@ public class LeaderDaemonTest {
     private static class CountingDaemon extends LeaderDaemon {
         final GlobalStateMgr gsm;
         final AtomicInteger cycles = new AtomicInteger();
-        final AtomicBoolean beforeStopCalled = new AtomicBoolean();
-        final AtomicBoolean afterStopCalled = new AtomicBoolean();
+        final AtomicBoolean stoppedCalled = new AtomicBoolean();
         final CountDownLatch firstCycle = new CountDownLatch(1);
 
         CountingDaemon(String name, long intervalMs, GlobalStateMgr gsm) {
@@ -75,13 +74,8 @@ public class LeaderDaemonTest {
         }
 
         @Override
-        protected void onBeforeStop() {
-            beforeStopCalled.set(true);
-        }
-
-        @Override
-        protected void onAfterStop() {
-            afterStopCalled.set(true);
+        protected void onStopped() {
+            stoppedCalled.set(true);
         }
     }
 
@@ -95,15 +89,13 @@ public class LeaderDaemonTest {
         Assertions.assertTrue(d.isRunning());
 
         d.stopGracefully(2000L);
-        Assertions.assertTrue(d.beforeStopCalled.get());
-        Assertions.assertTrue(d.afterStopCalled.get());
+        Assertions.assertTrue(d.stoppedCalled.get());
         Assertions.assertFalse(d.isRunning());
         Assertions.assertTrue(d.isStopped());
 
         // Reset observables and restart the same instance - mimics a re-elected leader reusing
         // the singleton Mgr across leader sessions.
-        d.beforeStopCalled.set(false);
-        d.afterStopCalled.set(false);
+        d.stoppedCalled.set(false);
         int cyclesAfterFirstStop = d.cycles.get();
 
         d.start();
@@ -139,9 +131,10 @@ public class LeaderDaemonTest {
     }
 
     @Test
-    public void testStopGracefullyInvokesHooksInOrder() throws Exception {
+    public void testStopGracefullyRunsOnStoppedAfterWorkerExits() throws Exception {
         TestGlobalStateMgr gsm = activeLeader();
-        StringBuilder order = new StringBuilder();
+        AtomicBoolean workerExited = new AtomicBoolean();
+        AtomicBoolean onStoppedObservedWorkerExit = new AtomicBoolean();
         LeaderDaemon d = new LeaderDaemon("hook-order-test", 5L) {
             @Override
             protected GlobalStateMgr getGlobalStateMgr() {
@@ -150,36 +143,34 @@ public class LeaderDaemonTest {
 
             @Override
             protected void runAfterLeaseValid() throws InterruptedException {
-                Thread.sleep(5);
-            }
-
-            @Override
-            protected void onBeforeStop() {
-                synchronized (order) {
-                    order.append("before;");
+                try {
+                    Thread.sleep(5);
+                } finally {
+                    workerExited.set(true);
                 }
             }
 
             @Override
-            protected void onAfterStop() {
-                synchronized (order) {
-                    order.append("after;");
-                }
+            protected void onStopped() {
+                onStoppedObservedWorkerExit.set(workerExited.get());
             }
         };
 
         d.start();
         Thread.sleep(100);
         d.stopGracefully(2000L);
-        Assertions.assertEquals("before;after;", order.toString());
+        Assertions.assertTrue(onStoppedObservedWorkerExit.get(),
+                "onStopped must run after the worker has exited runAfterLeaseValid");
+        Assertions.assertFalse(d.isRunning());
     }
 
     @Test
-    public void testStopGracefullyReInterruptsOnTimeout() throws Exception {
+    public void testJoinTimeoutInvokesFailureHookAndKeepsStateFenced() throws Exception {
         TestGlobalStateMgr gsm = activeLeader();
         CountDownLatch inWork = new CountDownLatch(1);
-        AtomicBoolean reachedAfterStop = new AtomicBoolean();
-        // Worker that swallows interrupts and busy-loops, forcing the timeout path.
+        AtomicBoolean joinTimeoutHook = new AtomicBoolean();
+        AtomicBoolean onStoppedCalled = new AtomicBoolean();
+        // Worker that swallows interrupts and busy-loops, forcing the join-timeout path.
         LeaderDaemon d = new LeaderDaemon("timeout-test", 0L) {
             @Override
             protected GlobalStateMgr getGlobalStateMgr() {
@@ -197,8 +188,14 @@ public class LeaderDaemonTest {
             }
 
             @Override
-            protected void onAfterStop() {
-                reachedAfterStop.set(true);
+            protected void onStopped() {
+                onStoppedCalled.set(true);
+            }
+
+            @Override
+            protected void onJoinTimeout() {
+                // Test override: record the call instead of terminating the JVM.
+                joinTimeoutHook.set(true);
             }
         };
 
@@ -209,9 +206,10 @@ public class LeaderDaemonTest {
         d.stopGracefully(100L);
         long elapsed = System.currentTimeMillis() - start;
 
-        // stopGracefully must return after the join timeout rather than blocking for the full busy span.
+        // Must honor the join timeout rather than blocking for the full busy span.
         Assertions.assertTrue(elapsed < 2000L, "stopGracefully should honor the join timeout; elapsed=" + elapsed);
-        Assertions.assertTrue(reachedAfterStop.get(), "onAfterStop must run even after timeout");
+        Assertions.assertTrue(joinTimeoutHook.get(), "onJoinTimeout must fire when the worker doesn't exit in time");
+        Assertions.assertFalse(onStoppedCalled.get(), "onStopped must NOT run on the timeout path");
         Assertions.assertTrue(d.isStopped());
     }
 }

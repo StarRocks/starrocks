@@ -32,9 +32,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 2. Built-in lease check: each iteration captures and revalidates a {@link LeaderLease}
  *    obtained from {@link GlobalStateMgr}. Once the lease is invalidated by a demotion the
  *    daemon stops itself - subclasses do not need to add their own check.
- * 3. Cleanup hooks: {@link #onBeforeStop()} runs before the worker is interrupted so subclasses
- *    can release leader-session-only state immediately. Follower state should not retain that
- *    data, both to free memory and to avoid leaking stale leader state into replay paths.
+ * 3. Cleanup hook: {@link #onStopped()} runs after the worker has actually exited, so
+ *    subclasses can release leader-session-only state without racing the loop. Follower state
+ *    should not retain that data, both to free memory and to avoid leaking stale leader state
+ *    into replay paths. If the worker does not exit within the stop timeout the JVM is
+ *    terminated via {@link #onJoinTimeout()} because a concurrent second worker (after a
+ *    subsequent re-election) would be strictly more dangerous than a process restart.
  */
 public abstract class LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LeaderDaemon.class);
@@ -108,18 +111,15 @@ public abstract class LeaderDaemon {
 
     /**
      * Coordinated stop for leader demotion:
-     *   1. {@link #onBeforeStop()} - subclass releases leader-session state immediately;
-     *   2. mark stopped + interrupt worker;
-     *   3. join up to {@code timeoutMs}, re-interrupt if still alive;
-     *   4. {@link #onAfterStop()} - late cleanup that needs the worker actually exited.
+     *   1. mark stopped + interrupt worker;
+     *   2. join up to {@code timeoutMs};
+     *   3. on timeout, invoke {@link #onJoinTimeout()} (default: terminate the JVM) and return
+     *      without clearing {@code worker}/{@code isRunning} - a subsequent {@link #start()}
+     *      must not spin up a second worker while the first is still alive;
+     *   4. on clean exit, run {@link #onStopped()} so subclasses release leader-session state.
      * Idempotent.
      */
     public final void stopGracefully(long timeoutMs) {
-        try {
-            onBeforeStop();
-        } catch (Throwable t) {
-            LOG.warn("{} onBeforeStop failed", name, t);
-        }
         setStop();
         Thread t = worker;
         if (t != null) {
@@ -129,14 +129,16 @@ public abstract class LeaderDaemon {
                 Thread.currentThread().interrupt();
             }
             if (t.isAlive()) {
-                LOG.warn("{} did not exit within {}ms, re-interrupt", name, timeoutMs);
-                t.interrupt();
+                onJoinTimeout();
+                // onJoinTimeout normally terminates the JVM. If it returns (tests only) we must
+                // not reset worker/isRunning: another start() would then race the stuck worker.
+                return;
             }
         }
         try {
-            onAfterStop();
+            onStopped();
         } catch (Throwable th) {
-            LOG.warn("{} onAfterStop failed", name, th);
+            LOG.warn("{} onStopped failed", name, th);
         }
         capturedLease = LeaderLease.INVALID;
         worker = null;
@@ -171,7 +173,7 @@ public abstract class LeaderDaemon {
         isRunning.set(false);
     }
 
-    private void runOneCycle() throws InterruptedException {
+    protected void runOneCycle() throws InterruptedException {
         GlobalStateMgr gsm = getGlobalStateMgr();
         while (!gsm.isReady()) {
             Thread.sleep(100);
@@ -208,17 +210,22 @@ public abstract class LeaderDaemon {
     }
 
     /**
-     * Hook called at the start of {@link #stopGracefully(long)}, before the worker is interrupted.
+     * Hook called from {@link #stopGracefully(long)} after the worker thread has actually exited.
      * Subclasses MUST clear all leader-session-only state here (queues, pending maps, executors)
-     * so memory is reclaimed promptly and follower state does not retain it.
+     * so memory is reclaimed promptly and follower state does not retain it. Not called when the
+     * join times out - {@link #onJoinTimeout()} fires instead.
      */
-    protected void onBeforeStop() {
+    protected void onStopped() {
     }
 
     /**
-     * Hook called after the worker has exited (or the stop timeout elapsed). For late cleanup
-     * that requires the loop to have actually stopped. Usually empty.
+     * Invoked when the worker thread fails to exit within the stop timeout. Default:
+     * {@link System#exit(int)} - a stuck worker combined with a later {@link #start()} would run
+     * two workers against the same singleton state, which is strictly worse than a process
+     * restart. Overridable for tests only.
      */
-    protected void onAfterStop() {
+    protected void onJoinTimeout() {
+        LOG.error("{} did not exit within stop timeout; terminating JVM to avoid concurrent workers", name);
+        System.exit(-1);
     }
 }

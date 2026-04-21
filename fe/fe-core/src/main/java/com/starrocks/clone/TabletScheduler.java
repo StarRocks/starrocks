@@ -491,7 +491,7 @@ public class TabletScheduler extends LeaderDaemon {
      * with version >= requested.
      */
     @Override
-    protected synchronized void onBeforeStop() {
+    protected synchronized void onStopped() {
         pendingTablets.clear();
         // shrink the backing array - PriorityQueue does not release capacity on clear()
         pendingTablets = new PriorityQueue<>();

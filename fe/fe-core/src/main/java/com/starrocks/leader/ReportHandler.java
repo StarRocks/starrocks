@@ -2231,7 +2231,7 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
     }
 
     @Override
-    protected void onBeforeStop() {
+    protected void onStopped() {
         try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
             reportQueue.clear();
             resourceReportQueue.clear();

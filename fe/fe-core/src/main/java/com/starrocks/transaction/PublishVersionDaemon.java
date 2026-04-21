@@ -1107,7 +1107,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
      * will resubmit publish from {@code GlobalTransactionMgr.getReadyToPublishTransactions}.
      */
     @Override
-    protected void onBeforeStop() {
+    protected void onStopped() {
         ThreadPoolExecutor t = taskExecutor;
         if (t != null) {
             t.shutdownNow();

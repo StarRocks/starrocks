@@ -106,7 +106,7 @@ public class HeartbeatMgr extends LeaderDaemon {
     }
 
     @Override
-    protected synchronized void onBeforeStop() {
+    protected synchronized void onStopped() {
         ExecutorService e = executor;
         if (e != null) {
             e.shutdownNow();
