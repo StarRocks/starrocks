@@ -864,7 +864,18 @@ public class LeaderImpl {
             result.setStatus(status);
             return result;
         }
-        return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
+        try {
+            return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
+        } catch (IllegalStateException e) {
+            // Leader-lease fence fired inside ReportHandler: demotion raced the isLeader() check
+            // above. Translate to the same non-master status so the BE re-resolves the current
+            // leader rather than retrying on this FE.
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("current fe is not master: " +
+                    (Strings.isNullOrEmpty(e.getMessage()) ? "leader lease invalidated" : e.getMessage())));
+            result.setStatus(status);
+            return result;
+        }
     }
 
     private void finishAlterTask(AgentTask task) {

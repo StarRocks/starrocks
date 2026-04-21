@@ -1631,6 +1631,42 @@ public class GlobalStateMgr {
         }
     }
 
+    /**
+     * Symmetric counterpart to {@link #startLeaderOnlyDaemonThreads()}. Stops the leader-only
+     * daemons that have been migrated to {@link com.starrocks.common.util.LeaderDaemon}, in reverse
+     * start order, so leader-session state is released promptly during demotion and the FE
+     * singletons become reusable when this node is re-elected.
+     *
+     * TODO: migrate the remaining {@code Daemon}-based leader tasks and add them here.
+     */
+    void stopLeaderOnlyDaemonThreads() {
+        long timeoutMs = Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L);
+        // Reverse of startLeaderOnlyDaemonThreads(): stop downstream consumers first so that
+        // upstream producers (heartbeat) can wind down without piling work on a draining sink.
+        try {
+            reportHandler.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop reportHandler failed", t);
+        }
+        try {
+            publishVersionDaemon.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop publishVersionDaemon failed", t);
+        }
+        if (!RunMode.isSharedDataMode()) {
+            try {
+                tabletScheduler.stopGracefully(timeoutMs);
+            } catch (Throwable t) {
+                LOG.warn("stop tabletScheduler failed", t);
+            }
+        }
+        try {
+            heartbeatMgr.stopGracefully(timeoutMs);
+        } catch (Throwable t) {
+            LOG.warn("stop heartbeatMgr failed", t);
+        }
+    }
+
     // start threads that should run on all FE
     private void startAllNodeTypeDaemonThreads() {
         if (!checkpointWorkerStarted) {
@@ -1701,6 +1737,13 @@ public class GlobalStateMgr {
         if (!isDefaultWarehouseCreated) {
             // A brand-new cluster was up for the first time, the follower/observer node initializes its default warehouse here.
             initDefaultWarehouse();
+        }
+
+        // If this node was serving as LEADER, cleanly stop leader-only daemons before taking on
+        // the new role. Runs after the admission fence is closed by the demotion orchestrator so
+        // no new leader-side work can enter while cleanup is in flight.
+        if (feType == FrontendNodeType.LEADER) {
+            stopLeaderOnlyDaemonThreads();
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER

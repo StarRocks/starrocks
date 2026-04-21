@@ -784,6 +784,14 @@ public class Config extends ConfigBase {
     public static boolean start_with_incomplete_meta = false;
 
     /**
+     * Per-daemon timeout, in seconds, used by leader demotion when stopping leader-only daemons.
+     * Each daemon has up to this much time to drain in-flight work and run its onBeforeStop hook
+     * before the worker thread is re-interrupted.
+     */
+    @ConfField(mutable = true)
+    public static int leader_demotion_drain_timeout_sec = 30;
+
+    /**
      * If true, non-leader FE will ignore the metadata delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
      * Non-leader FE will still offer read service.

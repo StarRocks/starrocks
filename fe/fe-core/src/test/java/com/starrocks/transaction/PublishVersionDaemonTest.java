@@ -285,7 +285,7 @@ public class PublishVersionDaemonTest {
         };
 
         PublishVersionDaemon daemon = new PublishVersionDaemon();
-        daemon.runAfterCatalogReady();
+        daemon.runAfterLeaseValid();
 
         Assertions.assertEquals(2, finishedTxnIds.size());
         Assertions.assertTrue(finishedTxnIds.contains(txnId1));
@@ -335,7 +335,7 @@ public class PublishVersionDaemonTest {
 
         daemon.publishingTransactionIds = Sets.newConcurrentHashSet();
         daemon.publishingTransactionIds.add(txnId1);
-        daemon.runAfterCatalogReady();
+        daemon.runAfterLeaseValid();
 
         Assertions.assertEquals(0, finishedTxnIds.size());
 
@@ -383,7 +383,7 @@ public class PublishVersionDaemonTest {
         };
 
         PublishVersionDaemon daemon2 = new PublishVersionDaemon();
-        daemon2.runAfterCatalogReady();
+        daemon2.runAfterLeaseValid();
 
         Assertions.assertTrue(canTxnFinishedCallCount.get() > 0);
         Assertions.assertEquals(0, finishedTxnIds.size());
@@ -427,7 +427,7 @@ public class PublishVersionDaemonTest {
         };
 
         PublishVersionDaemon daemon3 = new PublishVersionDaemon();
-        daemon3.runAfterCatalogReady();
+        daemon3.runAfterLeaseValid();
 
         // Even if submission fails, publishingTransactionIds should be cleaned up
         Assertions.assertFalse(daemon3.publishingTransactionIds.contains(txnId1));
@@ -478,7 +478,7 @@ public class PublishVersionDaemonTest {
 
         PublishVersionDaemon daemon4 = new PublishVersionDaemon();
         // ERR_LOCK_ERROR is swallowed with an info log and retried next cycle — must not throw
-        Assertions.assertDoesNotThrow(daemon4::runAfterCatalogReady);
+        Assertions.assertDoesNotThrow(daemon4::runAfterLeaseValid);
         // finishTransaction must NOT have been invoked because tryFinishTransaction returned early
         Assertions.assertEquals(0, finishedTxnIds.size());
 
@@ -512,9 +512,9 @@ public class PublishVersionDaemonTest {
         };
 
         // The non-lock exception propagates from tryFinishTransaction, is caught as Throwable
-        // by the executor's catch block (LOG.error), so runAfterCatalogReady itself does not throw
+        // by the executor's catch block (LOG.error), so runAfterLeaseValid itself does not throw
         PublishVersionDaemon daemon5 = new PublishVersionDaemon();
-        Assertions.assertDoesNotThrow(daemon5::runAfterCatalogReady);
+        Assertions.assertDoesNotThrow(daemon5::runAfterLeaseValid);
         // finishTransaction was never reached because exception was thrown before it
         Assertions.assertEquals(0, finishedTxnIds.size());
     }
