@@ -101,6 +101,11 @@ public class JDBCScanNode extends ScanNode {
         public String getStringValue() {
             return sqlLiteral;
         }
+
+        @Override
+        public String toSqlImpl() {
+            return sqlLiteral;
+        }
     }
 
     public JDBCScanNode(PlanNodeId id, TupleDescriptor desc, JDBCTable tbl) {
