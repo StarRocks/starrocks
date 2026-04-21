@@ -1389,15 +1389,6 @@ class StarrocksSQLApiLib(object):
     def check(sql_id, sql, exp, act, order=False, ori_sql=None):
         """check sql result"""
         # judge if it needs to check
-        if exp is None:
-            # No -- result: block provided: only verify the statement did not error
-            if sql.startswith(SHELL_FLAG):
-                log.info("[%s.check] only check with no Error" % sql_id)
-                tools.assert_equal(0, act[0], "shell %s error: %s" % (sql, act))
-            elif not sql.startswith(FUNCTION_FLAG):
-                log.info("[%s.check] only check with no Error" % sql_id)
-                tools.assert_false(str(act).startswith("E: "), "sql result not match: actual with E(%s)" % str(act))
-            return
         if exp == "":
             if sql.startswith(SHELL_FLAG):
                 # SHELL check

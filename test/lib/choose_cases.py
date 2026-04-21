@@ -366,7 +366,7 @@ class ChooseCase(object):
                 _loop_stat_list.append("\n".join(this_line_command))
             else:
                 _stat_list.append("\n".join(this_line_command))
-                _res_list.append("\n".join(this_line_res[1:-1]) if len(this_line_res) > 0 else None)
+                _res_list.append("\n".join(this_line_res[1:-1] if len(this_line_res) > 0 else []))
 
             return _line_id
 
