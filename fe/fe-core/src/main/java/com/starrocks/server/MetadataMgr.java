@@ -49,8 +49,12 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
+<<<<<<< HEAD
 import com.starrocks.connector.ConnectorMetadatRequestContext;
+=======
+>>>>>>> a9520cee2d ([Refactor] Rename ConnectorMetadataRequestContext (#71984))
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
@@ -658,7 +662,7 @@ public class MetadataMgr {
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
-                                           ConnectorMetadatRequestContext requestContext) {
+                                           ConnectorMetadataRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
@@ -875,7 +879,7 @@ public class MetadataMgr {
      * Get partition info at a specific snapshot identified by the request context.
      */
     public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames,
-                                             ConnectorMetadatRequestContext requestContext) {
+                                             ConnectorMetadataRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
             try {

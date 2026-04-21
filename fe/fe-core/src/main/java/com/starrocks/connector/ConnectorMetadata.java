@@ -103,7 +103,7 @@ public interface ConnectorMetadata {
      * @return a list of partition names
      */
     default List<String> listPartitionNames(String databaseName, String tableName,
-                                            ConnectorMetadatRequestContext requestContext) {
+                                            ConnectorMetadataRequestContext requestContext) {
         return Lists.newArrayList();
     }
 
@@ -215,7 +215,7 @@ public interface ConnectorMetadata {
      * Default implementation ignores the context and falls back to the live-snapshot variant.
      */
     default List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
-                                              ConnectorMetadatRequestContext requestContext) {
+                                              ConnectorMetadataRequestContext requestContext) {
         return getPartitions(table, partitionNames);
     }
 

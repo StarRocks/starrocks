@@ -42,8 +42,8 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorType;
@@ -850,7 +850,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String dbName, String tblName, ConnectorMetadataRequestContext requestContext) {
         try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
             Table table = getTable(scope.getContext(), dbName, tblName);
             return icebergCatalog.listPartitionNames((IcebergTable) table, requestContext, jobPlanningExecutor);
@@ -883,7 +883,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames,
-                                             ConnectorMetadatRequestContext requestContext) {
+                                             ConnectorMetadataRequestContext requestContext) {
         long snapshotId = requestContext.getSnapshotId();
         List<Partition> ans =
                 icebergCatalog.getPartitionsByNames((IcebergTable) table, snapshotId, null, partitionNames);
