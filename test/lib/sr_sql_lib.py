@@ -1398,15 +1398,14 @@ class StarrocksSQLApiLib(object):
                 # Explicit empty result block: verify no error and result is empty
                 log.info("[%s.check] check no Error and empty result" % sql_id)
                 tools.assert_false(str(act).startswith("E: "), "sql result not match: actual with E(%s)" % str(act))
-                tools.assert_equal("", act, "sql result not match: expected empty but got (%s)" % str(act))
+                if not any(re.search(c, sql) for c in skip.skip_res_cmd):
+                    tools.assert_equal("", act, "sql result not match: expected empty but got (%s)" % str(act))
             else:
                 # function call with empty result
                 exp = []
             return
 
-        if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(
-            condition in sql for condition in skip.skip_res_cmd
-        ):
+        if any(re.search(condition, sql) for condition in skip.skip_res_cmd):
             log.info("[%s.check] skip check" % sql_id)
             return
 
