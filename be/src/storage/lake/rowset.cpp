@@ -90,78 +90,6 @@ ChunkIteratorPtr make_non_closing_chunk_iterator(const ChunkIteratorPtr& child) 
 
 } // namespace
 
-Status prepare_segment_boundary_cache(const SegmentPtr& segment, const SegmentReadOptions& options,
-                                      const PreparedSegmentReadStatePtr& prepared_state) {
-    if (prepared_state == nullptr || !options.short_key_ranges.empty()) {
-        return Status::OK();
-    }
-
-    ASSIGN_OR_RETURN(auto seek_ranges, get_segment_rowid_ranges_by_seek_ranges(segment, options.ranges, options.lake_io_opts));
-    prepared_state->seek_range_rowid_bounds = std::move(seek_ranges);
-
-    if (options.tablet_range.has_value()) {
-        ASSIGN_OR_RETURN(auto tablet_range,
-                         get_segment_rowid_range_by_seek_range(segment, options.tablet_range.value(),
-                                                               options.lake_io_opts));
-        prepared_state->tablet_range_rowid_range = std::move(tablet_range);
-    } else {
-        prepared_state->tablet_range_rowid_range.reset();
-    }
-    return Status::OK();
-}
-
-Status prepare_segment_key_pruned_scan_range(const SegmentPtr& segment, const PreparedSegmentReadStatePtr& pruning_state,
-                                             SparseRangePtr* shared_scan_range) {
-    if (pruning_state == nullptr) {
-        return Status::OK();
-    }
-
-    SparseRange<> pruned_range;
-    if (pruning_state->seek_range_rowid_bounds.empty()) {
-        pruned_range.add(Range<>(0, segment->num_rows()));
-    } else {
-        for (const auto& rowid_range_opt : pruning_state->seek_range_rowid_bounds) {
-            if (rowid_range_opt.has_value()) {
-                pruned_range.add(rowid_range_opt.value());
-            }
-        }
-    }
-    pruning_state->key_pruned_range = std::make_shared<SparseRange<>>(std::move(pruned_range));
-    pruning_state->key_pruned_rows = pruning_state->key_pruned_range->span_size();
-    *shared_scan_range = pruning_state->key_pruned_range;
-    return Status::OK();
-}
-
-Status prepare_segment_static_pruned_scan_range(const Schema& schema, const SegmentPtr& segment,
-                                                const SegmentReadOptions& options,
-                                                const PreparedSegmentReadStatePtr& pruning_state,
-                                                SparseRangePtr* shared_scan_range) {
-    if (pruning_state == nullptr || !options.short_key_ranges.empty()) {
-        return Status::OK();
-    }
-
-    ASSIGN_OR_RETURN(auto range, get_segment_scan_range_after_static_pruning(segment, schema, options));
-    pruning_state->static_pruned_range = std::make_shared<SparseRange<>>(std::move(range));
-    pruning_state->final_pruned_rows = pruning_state->static_pruned_range->span_size();
-    pruning_state->used_static_pruning = true;
-    *shared_scan_range = pruning_state->static_pruned_range;
-    return Status::OK();
-}
-
-Status prepare_segment_execution_pruned_scan_range(const Schema& schema, const SegmentPtr& segment,
-                                                   const SegmentReadOptions& options,
-                                                   const PreparedSegmentReadStatePtr& pruning_state,
-                                                   SparseRangePtr* shared_scan_range) {
-    if (pruning_state == nullptr || !options.short_key_ranges.empty()) {
-        return Status::OK();
-    }
-
-    ASSIGN_OR_RETURN(auto range, get_segment_scan_range_after_execution_pruning(segment, schema, options));
-    pruning_state->execution_pruned_range = std::make_shared<SparseRange<>>(std::move(range));
-    *shared_scan_range = pruning_state->execution_pruned_range;
-    return Status::OK();
-}
-
 Rowset::Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
                TabletSchemaPtr tablet_schema)
         : _tablet_mgr(tablet_mgr),
@@ -567,8 +495,6 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
         } else {
             seg_options.is_first_split_of_segment = true;
         }
-        seg_options.shared_key_pruned_scan_range = nullptr;
-        seg_options.shared_static_pruned_scan_range = nullptr;
         seg_options.shared_execution_pruned_scan_range = nullptr;
         if (prepared_segment_read_states != nullptr) {
             auto& pruning_state = (*prepared_segment_read_states)[i];
@@ -576,10 +502,8 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::do_read(const Schema& schema, co
                 seg_options.cached_seek_range_rowid_bounds = &pruning_state->seek_range_rowid_bounds;
                 seg_options.cached_tablet_range_rowid = &pruning_state->tablet_range_rowid_range;
                 if (options.rowid_range_option != nullptr) {
-                    seg_options.shared_key_pruned_scan_range = pruning_state->key_pruned_range;
                     seg_options.shared_execution_pruned_scan_range = pruning_state->execution_pruned_range;
                 }
-                seg_options.shared_static_pruned_scan_range = pruning_state->static_pruned_range;
             }
         }
 

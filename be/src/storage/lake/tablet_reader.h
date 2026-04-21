@@ -134,7 +134,6 @@ private:
     Status _prepare_segment_split_task(const TabletReaderParams& read_params,
                                        const pipeline::LakeSplitContext* split_context,
                                        RowidRangeOptionPtr* local_rowid_range);
-
     Status init_predicates(const TabletReaderParams& read_params);
     Status init_delete_predicates(const TabletReaderParams& read_params, DeletePredicates* dels);
 

@@ -136,12 +136,9 @@ protected:
     friend StatusOr<std::optional<Range<>>> get_segment_rowid_range_by_seek_range(const std::shared_ptr<Segment>& segment,
                                                                                   const SeekRange& range,
                                                                                   const LakeIOOptions& lake_io_opts);
-    friend StatusOr<SparseRange<>> get_segment_scan_range_after_static_pruning(const std::shared_ptr<Segment>& segment,
-                                                                               const Schema& schema,
-                                                                               const SegmentReadOptions& options);
-    friend StatusOr<SparseRange<>> get_segment_scan_range_after_execution_pruning(const std::shared_ptr<Segment>& segment,
-                                                                                  const Schema& schema,
-                                                                                  const SegmentReadOptions& options);
+    friend StatusOr<SparseRange<>> new_segment_iterator_for_execution_pruning(const std::shared_ptr<Segment>& segment,
+                                                                              const Schema& schema,
+                                                                              const SegmentReadOptions& options);
 
 private:
     struct ScanContext {
@@ -343,11 +340,9 @@ private:
     Status _get_row_ranges_by_bloom_filter();
     Status _get_row_ranges_by_rowid_range();
     Status _get_row_ranges_by_row_ids(std::vector<int64_t>* result_ids, SparseRange<>* r);
-    StatusOr<SparseRange<>> _get_static_pruned_row_ranges();
     StatusOr<SparseRange<>> _get_execution_pruned_row_ranges();
 
     Status _apply_tablet_range();
-    Status _apply_shared_static_pruned_range();
     Status _apply_shared_execution_pruned_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
@@ -889,15 +884,16 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 
 Status SegmentIterator::reset(const SegmentReadOptions& options) {
     _opts.rowid_range_option = options.rowid_range_option;
-    _opts.shared_key_pruned_scan_range = options.shared_key_pruned_scan_range;
-    _opts.shared_static_pruned_scan_range = options.shared_static_pruned_scan_range;
     _opts.shared_execution_pruned_scan_range = options.shared_execution_pruned_scan_range;
     _opts.is_first_split_of_segment = options.is_first_split_of_segment;
     _opts.ranges = options.ranges;
     _opts.runtime_range_pruner = options.runtime_range_pruner;
+    _opts.runtime_filter_preds = options.runtime_filter_preds;
     _opts.short_key_ranges = options.short_key_ranges;
+    _opts.enable_join_runtime_filter_pushdown = options.enable_join_runtime_filter_pushdown;
     _opts.chunk_size = options.chunk_size;
     _chunk_size = options.chunk_size;
+    _reserve_chunk_size = static_cast<int32_t>(std::min(static_cast<uint32_t>(options.chunk_size), _segment->num_rows()));
     _inited = false;
     return Status::OK();
 }
@@ -962,22 +958,14 @@ Status SegmentIterator::_init_internal() {
         RETURN_IF_ERROR(_apply_shared_execution_pruned_range());
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_keys());
-        const bool use_shared_static_pruned_range = !_opts.short_key_ranges.empty() ? false
-                                                                                    : _opts.shared_static_pruned_scan_range != nullptr;
-        if (use_shared_static_pruned_range) {
-            RETURN_IF_ERROR(_apply_shared_static_pruned_range());
-        } else {
-            RETURN_IF_ERROR(_apply_tablet_range());
-        }
+        RETURN_IF_ERROR(_apply_tablet_range());
         bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
         if (!apply_del_vec_after_all_index_filter) {
             RETURN_IF_ERROR(_apply_del_vector());
         }
         // Support prefilter for now
         RETURN_IF_ERROR(_apply_bitmap_index());
-        if (!use_shared_static_pruned_range) {
-            RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
-        }
+        RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
         RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
         RETURN_IF_ERROR(_apply_inverted_index());
         if (apply_del_vec_after_all_index_filter) {
@@ -1034,21 +1022,13 @@ Status SegmentIterator::_reset_for_reuse() {
         RETURN_IF_ERROR(_apply_shared_execution_pruned_range());
     } else {
         RETURN_IF_ERROR(_get_row_ranges_by_keys());
-        const bool use_shared_static_pruned_range = !_opts.short_key_ranges.empty() ? false
-                                                                                    : _opts.shared_static_pruned_scan_range != nullptr;
-        if (use_shared_static_pruned_range) {
-            RETURN_IF_ERROR(_apply_shared_static_pruned_range());
-        } else {
-            RETURN_IF_ERROR(_apply_tablet_range());
-        }
+        RETURN_IF_ERROR(_apply_tablet_range());
         bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
         if (!apply_del_vec_after_all_index_filter) {
             RETURN_IF_ERROR(_apply_del_vector());
         }
         RETURN_IF_ERROR(_apply_bitmap_index());
-        if (!use_shared_static_pruned_range) {
-            RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
-        }
+        RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
         RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
         RETURN_IF_ERROR(_apply_inverted_index());
         if (apply_del_vec_after_all_index_filter) {
@@ -1072,18 +1052,6 @@ Status SegmentIterator::_reset_for_reuse() {
     return Status::OK();
 }
 
-StatusOr<SparseRange<>> SegmentIterator::_get_static_pruned_row_ranges() {
-    _init_column_access_paths();
-    RETURN_IF_ERROR(_check_low_cardinality_optimization());
-    RETURN_IF_ERROR(_init_column_iterators<true>(_schema));
-
-    _scan_range.add(Range<>(0, num_rows()));
-    RETURN_IF_ERROR(_get_row_ranges_by_keys());
-    RETURN_IF_ERROR(_apply_tablet_range());
-    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
-    return _scan_range;
-}
-
 StatusOr<SparseRange<>> SegmentIterator::_get_execution_pruned_row_ranges() {
     if (!_get_del_vec_st.ok()) {
         return _get_del_vec_st;
@@ -1104,23 +1072,15 @@ StatusOr<SparseRange<>> SegmentIterator::_get_execution_pruned_row_ranges() {
     RETURN_IF_ERROR(_init_ann_reader());
 
     _scan_range.add(Range<>(0, num_rows()));
-    const bool use_shared_static_pruned_range = !_opts.short_key_ranges.empty() ? false
-                                                                                : _opts.shared_static_pruned_scan_range != nullptr;
-    if (use_shared_static_pruned_range) {
-        RETURN_IF_ERROR(_apply_shared_static_pruned_range());
-    } else {
-        RETURN_IF_ERROR(_get_row_ranges_by_keys());
-        RETURN_IF_ERROR(_apply_tablet_range());
-    }
+    RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    RETURN_IF_ERROR(_apply_tablet_range());
 
     bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
     if (!apply_del_vec_after_all_index_filter) {
         RETURN_IF_ERROR(_apply_del_vector());
     }
     RETURN_IF_ERROR(_apply_bitmap_index());
-    if (!use_shared_static_pruned_range) {
-        RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
-    }
+    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
     RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
     RETURN_IF_ERROR(_apply_inverted_index());
     if (apply_del_vec_after_all_index_filter) {
@@ -1129,17 +1089,6 @@ StatusOr<SparseRange<>> SegmentIterator::_get_execution_pruned_row_ranges() {
     RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
     RETURN_IF_ERROR(_apply_data_sampling());
     return _scan_range;
-}
-
-Status SegmentIterator::_apply_shared_static_pruned_range() {
-    if (_opts.shared_static_pruned_scan_range == nullptr) {
-        return Status::OK();
-    }
-
-    const size_t prev_size = _scan_range.span_size();
-    _scan_range &= *_opts.shared_static_pruned_scan_range;
-    _opts.stats->rows_stats_filtered += prev_size - _scan_range.span_size();
-    return Status::OK();
 }
 
 Status SegmentIterator::_apply_shared_execution_pruned_range() {
@@ -1774,9 +1723,7 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
     const bool is_logical_split = !_opts.short_key_ranges.empty();
 
     SparseRange<> scan_range_by_keys;
-    if (!is_logical_split && _opts.shared_key_pruned_scan_range != nullptr) {
-        scan_range_by_keys = *_opts.shared_key_pruned_scan_range;
-    } else if (is_logical_split) {
+    if (is_logical_split) {
         ASSIGN_OR_RETURN(scan_range_by_keys, _get_row_ranges_by_short_key_ranges());
         _opts.stats->rows_key_range_num += _opts.short_key_ranges.size();
     } else {
@@ -3938,6 +3885,15 @@ ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, c
     return new_projection_iterator(schema, seg_iter);
 }
 
+StatusOr<SparseRange<>> new_segment_iterator_for_execution_pruning(const std::shared_ptr<Segment>& segment,
+                                                                   const Schema& schema,
+                                                                   const SegmentReadOptions& options) {
+    auto seg_iter = new_raw_segment_iterator(segment, schema, options);
+    auto* iter = dynamic_cast<SegmentIterator*>(seg_iter.get());
+    DCHECK(iter != nullptr);
+    return iter->_get_execution_pruned_row_ranges();
+}
+
 Status reset_raw_segment_iterator(const ChunkIteratorPtr& iter, const SegmentReadOptions& options) {
     auto* seg_iter = dynamic_cast<SegmentIterator*>(iter.get());
     if (seg_iter == nullptr) {
@@ -4006,20 +3962,6 @@ StatusOr<std::optional<Range<>>> get_segment_rowid_range_by_seek_range(const std
     RETURN_IF_ERROR(segment->load_index(lake_io_opts));
     SegmentIterator iter(segment, Schema(), options);
     return iter._seek_range_to_rowid_range(range);
-}
-
-StatusOr<SparseRange<>> get_segment_scan_range_after_static_pruning(const std::shared_ptr<Segment>& segment,
-                                                                    const Schema& schema,
-                                                                    const SegmentReadOptions& options) {
-    SegmentIterator iter(segment, schema, options);
-    return iter._get_static_pruned_row_ranges();
-}
-
-StatusOr<SparseRange<>> get_segment_scan_range_after_execution_pruning(const std::shared_ptr<Segment>& segment,
-                                                                       const Schema& schema,
-                                                                       const SegmentReadOptions& options) {
-    SegmentIterator iter(segment, schema, options);
-    return iter._get_execution_pruned_row_ranges();
 }
 
 } // namespace starrocks

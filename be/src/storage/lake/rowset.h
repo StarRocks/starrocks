@@ -54,19 +54,13 @@ struct PreparedSegmentReadState {
     std::atomic<uint32_t> lifecycle{static_cast<uint32_t>(Lifecycle::UNPREPARED)};
     Status prepare_status;
 
-    SparseRangePtr key_pruned_range;
-
-    SparseRangePtr static_pruned_range;
-
     SparseRangePtr execution_pruned_range;
 
     std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_bounds;
     std::optional<Range<rowid_t>> tablet_range_rowid_range;
 
-    size_t key_pruned_rows = 0;
     size_t final_pruned_rows = 0;
     size_t estimated_fanout = 0;
-    bool used_static_pruning = false;
 };
 using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
 
@@ -76,20 +70,6 @@ struct PreparedTabletReadState {
     std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
 };
 using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
-
-Status prepare_segment_boundary_cache(const SegmentPtr& segment, const SegmentReadOptions& options,
-                                      const PreparedSegmentReadStatePtr& prepared_state);
-Status prepare_segment_key_pruned_scan_range(const SegmentPtr& segment,
-                                             const PreparedSegmentReadStatePtr& pruning_state,
-                                             SparseRangePtr* shared_scan_range);
-Status prepare_segment_static_pruned_scan_range(const Schema& schema, const SegmentPtr& segment,
-                                                const SegmentReadOptions& options,
-                                                const PreparedSegmentReadStatePtr& pruning_state,
-                                                SparseRangePtr* shared_scan_range);
-Status prepare_segment_execution_pruned_scan_range(const Schema& schema, const SegmentPtr& segment,
-                                                   const SegmentReadOptions& options,
-                                                   const PreparedSegmentReadStatePtr& pruning_state,
-                                                   SparseRangePtr* shared_scan_range);
 
 class Rowset : public BaseRowset {
 public:

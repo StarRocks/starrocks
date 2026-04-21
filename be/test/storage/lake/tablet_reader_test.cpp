@@ -38,6 +38,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/versioned_tablet.h"
+#include "storage/olap_tuple.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/common.h"
 #include "storage/rowset/rowid_range_option.h"
@@ -580,6 +581,93 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
 
     read_chunk_ptr->reset();
     ASSERT_TRUE(reader->get_next(read_chunk_ptr.get()).is_end_of_file());
+
+    reader->close();
+}
+
+TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_reopen_does_not_accumulate_delete_predicates) {
+    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
+
+    auto c0 = Int32Column::create();
+    auto c1 = Int32Column::create();
+    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
+    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
+
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
+    {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
+        ASSERT_OK(writer->open());
+        ASSERT_OK(writer->write(chunk0));
+        ASSERT_OK(writer->finish());
+
+        const auto& files = writer->segments();
+        ASSERT_EQ(1, files.size());
+
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(true);
+        rowset->set_id(1);
+        auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
+        for (const auto& file : writer->segments()) {
+            segs->Add()->assign(file.path);
+            segs_size->Add(file.size.value());
+        }
+
+        writer->close();
+    }
+
+    {
+        auto* rowset = _tablet_metadata->add_rowsets();
+        rowset->set_overlapped(false);
+        rowset->set_num_rows(0);
+        rowset->set_data_size(0);
+
+        auto* delete_predicate = rowset->mutable_delete_predicate();
+        delete_predicate->set_version(-1);
+        auto* in_predicate = delete_predicate->add_in_predicates();
+        in_predicate->set_column_name("c0");
+        in_predicate->set_is_not_in(true);
+        in_predicate->add_values("10");
+    }
+
+    _tablet_metadata->set_version(3);
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(*_tablet_metadata));
+
+    ConfigResetGuard<bool> reuse_guard(&config::enable_lake_scan_child_morsel_reuse, true);
+
+    auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), _tablet_metadata, *_schema);
+    reader->set_prepared_read_state(std::make_shared<TabletReader::PreparedReadState>());
+    ASSERT_OK(reader->prepare());
+
+    TabletReaderParams params;
+    params.range = TabletReaderParams::RangeStartOperation::GE;
+    params.end_range = TabletReaderParams::RangeEndOperation::LE;
+    params.start_key = {OlapTuple({"1"})};
+    params.end_key = {OlapTuple({"12"})};
+
+    auto drain_reader = [&]() {
+        auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
+        while (true) {
+            read_chunk_ptr->reset();
+            auto st = reader->get_next(read_chunk_ptr.get());
+            if (st.is_end_of_file()) {
+                return;
+            }
+            ASSERT_OK(st);
+        }
+    };
+
+    ASSERT_OK(reader->open(params));
+    ASSERT_EQ(1, reader->TEST_predicate_free_list_size());
+    drain_reader();
+
+    ASSERT_OK(reader->open(params));
+    EXPECT_EQ(1, reader->TEST_predicate_free_list_size());
+    drain_reader();
 
     reader->close();
 }
