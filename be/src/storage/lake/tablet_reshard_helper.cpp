@@ -254,8 +254,8 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
             const int32_t new_segment_offset = op_compaction.new_segment_offset();
             const int32_t new_segment_count = op_compaction.new_segment_count();
             if (new_segment_offset >= 0 && new_segment_count > 0) {
-                for (int32_t idx = new_segment_offset, taken = 0;
-                     idx < segments.size() && taken < new_segment_count; ++idx, ++taken) {
+                for (int32_t idx = new_segment_offset, taken = 0; idx < segments.size() && taken < new_segment_count;
+                     ++idx, ++taken) {
                     output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segments[idx]));
                 }
             }
@@ -285,8 +285,7 @@ void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, 
 
 } // namespace
 
-std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log,
-                                                              TabletManager* tablet_manager) {
+std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log, TabletManager* tablet_manager) {
     DCHECK(tablet_manager != nullptr);
 
     const int64_t tablet_id = txn_log.tablet_id();

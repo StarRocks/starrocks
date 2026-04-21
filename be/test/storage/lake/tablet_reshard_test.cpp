@@ -3853,8 +3853,8 @@ namespace {
 // source and |merged_tablet_id| as the target.
 lake::PublishTabletInfo make_merging_publish_info(int64_t source_tablet_id, int64_t merged_tablet_id) {
     int64_t ids[] = {source_tablet_id};
-    return lake::PublishTabletInfo(lake::PublishTabletInfo::MERGING_TABLET,
-                                   std::span<const int64_t>(ids, 1), merged_tablet_id);
+    return lake::PublishTabletInfo(lake::PublishTabletInfo::MERGING_TABLET, std::span<const int64_t>(ids, 1),
+                                   merged_tablet_id);
 }
 
 TxnLogPtr make_op_write_only_log(int64_t source_tablet_id, const std::string& segment_name) {
@@ -3955,9 +3955,9 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_parallel
     // reproduce the shape produced by the parallel-compaction manager.
 
     auto paths = lake::tablet_reshard_helper::collect_compaction_output_file_paths(log, _tablet_manager.get());
-    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(
-                               _tablet_manager->segment_location(tablet_id, "parallel_new_0.dat"),
-                               _tablet_manager->segment_location(tablet_id, "parallel_new_1.dat")));
+    EXPECT_THAT(paths,
+                ::testing::UnorderedElementsAre(_tablet_manager->segment_location(tablet_id, "parallel_new_0.dat"),
+                                                _tablet_manager->segment_location(tablet_id, "parallel_new_1.dat")));
 }
 
 // Regression: partial compaction's output_rowset.segments() concatenates
@@ -3980,13 +3980,12 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_partial_
     op_compaction->set_new_segment_count(2);
 
     auto paths = lake::tablet_reshard_helper::collect_compaction_output_file_paths(log, _tablet_manager.get());
-    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(
-                               _tablet_manager->segment_location(tablet_id, "new_0.dat"),
-                               _tablet_manager->segment_location(tablet_id, "new_1.dat")));
-    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(
-                               _tablet_manager->segment_location(tablet_id, "reused_0.dat"))));
-    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(
-                               _tablet_manager->segment_location(tablet_id, "reused_1.dat"))));
+    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(_tablet_manager->segment_location(tablet_id, "new_0.dat"),
+                                                       _tablet_manager->segment_location(tablet_id, "new_1.dat")));
+    EXPECT_THAT(paths,
+                ::testing::Not(::testing::Contains(_tablet_manager->segment_location(tablet_id, "reused_0.dat"))));
+    EXPECT_THAT(paths,
+                ::testing::Not(::testing::Contains(_tablet_manager->segment_location(tablet_id, "reused_1.dat"))));
 }
 
 } // namespace starrocks
