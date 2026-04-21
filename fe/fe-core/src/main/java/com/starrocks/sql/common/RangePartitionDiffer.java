@@ -239,7 +239,7 @@ public final class RangePartitionDiffer extends PartitionDiffer {
                 // Collect the ref base table's partition range map.
                 PCellSortedSet refTablePartitionKeyMap =
                         PartitionUtil.getPartitionKeyRange(refBT, refBTPartitionColumns.get(0),
-                                mvPartitionExprOpt.get());
+                                mvPartitionExprOpt.get(), pinnedRangeFor(refBT));
                 if (refTablePartitionKeyMap == null) {
                     return null;
                 }
