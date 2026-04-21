@@ -312,6 +312,33 @@ StatusOr<ColumnPtr> LikePredicate::constant_equals_fn(FunctionContext* context, 
     return VectorizedStrictBinaryFunction<ConstantEqualsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
 }
 
+template <typename OffsetValue, typename ResultValue>
+static void constant_substring_impl(const OffsetValue* __restrict offsets, size_t num_rows, const char* begin,
+                                    const char* end, Slice needle, ResultValue* __restrict result_data) {
+    const char* pos = begin;
+    size_t i = 0;
+    auto searcher = VolnitskyUTF8(needle.data, needle.size, end - pos);
+
+    /// We will search for the next occurrence in all strings at once.
+    while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
+        /// Determine which index it refers to.
+        while (begin + offsets[i + 1] <= pos) {
+            result_data[i] = false;
+            ++i;
+        }
+        const char* row_end = begin + offsets[i + 1];
+
+        /// We check that the entry does not pass through the boundaries of strings.
+        result_data[i] = pos + needle.size <= row_end;
+        pos = row_end;
+        ++i;
+    }
+
+    if (i < num_rows) {
+        memset(result_data + i, 0, (num_rows - i) * sizeof(result_data[0]));
+    }
+}
+
 StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
@@ -355,37 +382,13 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         res->resize(haystack->size());
 
         const char* begin = haystack->get_string_begin();
-        const char* pos = begin;
         const char* end = haystack->get_string_end();
+        auto* __restrict result_data = res->get_data().data();
+        const size_t num_rows = haystack->size();
 
-        /// Current index in the array of strings.
-        size_t i = 0;
-
-        auto searcher = VolnitskyUTF8(needle.data, needle.size, end - pos);
-        /// We will search for the next occurrence in all strings at once.
         offsets.visit_storage([&](const auto& offsets_buf) {
-            const auto* __restrict offset_data = offsets_buf.data();
-            while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
-                /// Determine which index it refers to.
-                while (begin + offset_data[i + 1] <= pos) {
-                    res->get_data()[i] = false;
-                    ++i;
-                }
-                /// We check that the entry does not pass through the boundaries of strings.
-                if (pos + needle.size > begin + offset_data[i + 1]) {
-                    res->get_data()[i] = false;
-                } else {
-                    res->get_data()[i] = true;
-                }
-                pos = begin + offset_data[i + 1];
-                ++i;
-            }
+            constant_substring_impl(offsets_buf.data(), num_rows, begin, end, needle, result_data);
         });
-
-        if (i < res->size()) {
-            size_t type_size = res->type_size();
-            memset(res->mutable_raw_data() + i * type_size, 0, (res->size() - i) * type_size);
-        }
     }
 
     if (columns[0]->has_null()) {

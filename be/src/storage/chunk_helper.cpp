@@ -14,6 +14,7 @@
 
 #include "storage/chunk_helper.h"
 
+#include <memory>
 #include <numeric>
 #include <type_traits>
 #include <utility>
@@ -272,7 +273,8 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     // |schema| maybe partial columns in vertical compaction, so get char column length by name.
     uint32_t len = tschema->column(tschema->field_index(field.name())).length();
 
-    new_offset.resize(num_rows + 1);
+    const uint64_t final_offset = static_cast<uint64_t>(len) * num_rows;
+    new_offset.resize_uninitialized(num_rows + 1, final_offset);
     new_bytes.assign(num_rows * len, 0); // padding 0
 
     size_t from = 0;
@@ -285,10 +287,13 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
         }
     });
 
-    new_offset.set(0, 0);
-    for (size_t j = 1; j <= num_rows; ++j) {
-        new_offset.set(j, static_cast<uint64_t>(len) * j);
-    }
+    new_offset.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        auto* __restrict offset_data = offsets_buf.data();
+        for (size_t j = 0; j <= num_rows; ++j) {
+            offset_data[j] = static_cast<OffsetValue>(static_cast<uint64_t>(len) * j);
+        }
+    });
 
     if (field.is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -739,6 +744,7 @@ public:
         // assign offsets
         size_t num_bytes = 0;
         size_t from = _from;
+        auto str_sizes = std::make_unique_for_overwrite<size_t[]>(_size);
         for (size_t i = 0; i < _size; i++) {
             size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
@@ -746,8 +752,9 @@ public:
             DCHECK_LT(segment_offset, columns[segment_id]->size());
 
             const Offsets& src_offsets = *input_offsets[segment_id];
-            Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+            const size_t str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
 
+            str_sizes[i] = str_size;
             num_bytes += str_size;
         }
         output_offsets.resize_uninitialized(_size + 1, num_bytes);
@@ -756,10 +763,7 @@ public:
             offsets_buf[0] = 0;
             uint64_t offset = 0;
             for (size_t i = 0; i < _size; i++) {
-                size_t idx = _indexes[from + i];
-                auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
-                const Offsets& src_offsets = *input_offsets[segment_id];
-                offset += src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+                offset += str_sizes[i];
                 offsets_buf[i + 1] = static_cast<OffsetValue>(offset);
             }
         });
@@ -767,15 +771,17 @@ public:
 
         // copy bytes
         Byte* dest_bytes = output_bytes.data();
+        size_t dest_offset = 0;
         for (size_t i = 0; i < _size; i++) {
             size_t idx = _indexes[from + i];
             auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
             const Byte* src_bytes = input_bytes[segment_id];
             const Offsets& src_offsets = *input_offsets[segment_id];
-            Offset str_size = src_offsets[segment_offset + 1] - src_offsets[segment_offset];
+            const size_t str_size = str_sizes[i];
             const Byte* str_data = src_bytes + src_offsets[segment_offset];
 
-            strings::memcpy_inlined(dest_bytes + output_offsets[i], str_data, str_size);
+            strings::memcpy_inlined(dest_bytes + dest_offset, str_data, str_size);
+            dest_offset += str_size;
         }
 
 #ifndef NDEBUG
