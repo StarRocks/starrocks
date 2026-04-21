@@ -108,6 +108,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
     // result and modify transaction state on FE
     private ThreadPoolExecutor taskExecutor;
     private ThreadPoolExecutor deleteTxnLogExecutor;
+    // Guards ConfigRefreshDaemon listener registration. Executors are recreated on every
+    // leader activation (after onStopped() nulls them), but listeners must be registered
+    // only once per daemon instance — otherwise each demote/re-elect cycle leaks a listener.
+    private boolean taskExecutorListenerRegistered;
+    private boolean deleteTxnLogExecutorListenerRegistered;
 
     @VisibleForTesting
     protected Set<Long> publishingTransactionIds;
@@ -235,9 +240,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // allow core thread timeout as well
             taskExecutor.allowCoreThreadTimeOut(true);
 
-            // register ThreadPool config change listener
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
-                    .registerListener(() -> this.adjustTaskExecutor());
+            // register ThreadPool config change listener only once per daemon instance.
+            if (!taskExecutorListenerRegistered) {
+                GlobalStateMgr.getCurrentState().getConfigRefreshDaemon()
+                        .registerListener(() -> this.adjustTaskExecutor());
+                taskExecutorListenerRegistered = true;
+            }
         }
         return taskExecutor;
     }
@@ -250,14 +258,17 @@ public class PublishVersionDaemon extends LeaderDaemon {
             deleteTxnLogExecutor = ThreadPoolManager.newDaemonCacheThreadPool(numThreads,
                     "lake-publish-delete-txnLog", true);
 
-            // register ThreadPool config change listener
-            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
-                int newMaxThreads = Config.lake_publish_delete_txnlog_max_threads;
-                if (deleteTxnLogExecutor != null && newMaxThreads > 0
-                        && deleteTxnLogExecutor.getMaximumPoolSize() != newMaxThreads) {
-                    deleteTxnLogExecutor.setMaximumPoolSize(Config.lake_publish_delete_txnlog_max_threads);
-                }
-            });
+            // register ThreadPool config change listener only once per daemon instance.
+            if (!deleteTxnLogExecutorListenerRegistered) {
+                GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+                    int newMaxThreads = Config.lake_publish_delete_txnlog_max_threads;
+                    if (deleteTxnLogExecutor != null && newMaxThreads > 0
+                            && deleteTxnLogExecutor.getMaximumPoolSize() != newMaxThreads) {
+                        deleteTxnLogExecutor.setMaximumPoolSize(Config.lake_publish_delete_txnlog_max_threads);
+                    }
+                });
+                deleteTxnLogExecutorListenerRegistered = true;
+            }
         }
         return deleteTxnLogExecutor;
     }

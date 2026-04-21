@@ -619,4 +619,35 @@ public class PublishVersionDaemonTest {
         FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", null, true);
         Assertions.assertDoesNotThrow(daemon::onStopped);
     }
+
+    @Test
+    public void testConfigRefreshListenersDoNotAccumulateAcrossStopCycles() throws Exception {
+        ConfigRefreshDaemon configDaemon = GlobalStateMgr.getCurrentState().getConfigRefreshDaemon();
+        @SuppressWarnings("unchecked")
+        List<?> listeners = (List<?>) FieldUtils.readField(configDaemon, "listeners", true);
+
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        int before = listeners.size();
+        // First activation: both listeners get registered.
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "first getTaskExecutor + getDeleteTxnLogExecutor should register exactly two listeners");
+
+        // Simulate demote: executors are nulled so the next activation will recreate them.
+        daemon.onStopped();
+
+        // Re-activation: executors recreated, but listeners must not be registered again.
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "re-creating executors after onStopped must not leak additional listeners");
+
+        // And a third cycle stays stable.
+        daemon.onStopped();
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "listener count must stay stable across repeated demote/re-elect cycles");
+    }
 }
