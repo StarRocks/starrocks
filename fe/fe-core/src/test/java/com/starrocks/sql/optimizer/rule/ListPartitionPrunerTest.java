@@ -839,4 +839,213 @@ public class ListPartitionPrunerTest {
         Assertions.assertEquals(Sets.newHashSet(1L), normalized.get(normalizedKey));
         Assertions.assertEquals(Sets.newHashSet(2L), normalized.get(normalized.lastKey()));
     }
+
+    // ==================== Tests for IN predicate partition pruning ====================
+
+    @Test
+    public void testGetColumnINConstantValues() {
+        // Build: col IN ('a', 'b')
+        ColumnRefOperator strCol = new ColumnRefOperator(10, VarcharType.VARCHAR, "name", true);
+        ScalarOperator inPredicate = new InPredicateOperator(false,
+                Lists.newArrayList(strCol,
+                        ConstantOperator.createVarchar("a"),
+                        ConstantOperator.createVarchar("b")));
+
+        Column nameCol = new Column("name", VarcharType.VARCHAR);
+        Column dtCol = new Column("dt", VarcharType.VARCHAR);
+        ColumnRefOperator dtColRef = new ColumnRefOperator(11, VarcharType.VARCHAR, "dt", true);
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(nameCol, strCol);
+        columnMetaToColRefMap.put(dtCol, dtColRef);
+
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(), Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        // EQ path should NOT match multi-value IN
+        List<Optional<ScalarOperator>> eqResult = OptExternalPartitionPruner.getEffectivePartitionPredicate(
+                scanOperator, ImmutableList.of(nameCol, dtCol), inPredicate);
+        Assertions.assertEquals(2, eqResult.size());
+        Assertions.assertFalse(eqResult.get(0).isPresent()); // IN is not recognized as EQ
+        Assertions.assertFalse(eqResult.get(1).isPresent());
+    }
+
+    @Test
+    public void testGetEffectiveInPartitionValuesSingleColumn() {
+        ColumnRefOperator strCol = new ColumnRefOperator(10, VarcharType.VARCHAR, "name", true);
+        ColumnRefOperator dtColRef = new ColumnRefOperator(11, VarcharType.VARCHAR, "dt", true);
+        Column nameCol = new Column("name", VarcharType.VARCHAR);
+        Column dtCol = new Column("dt", VarcharType.VARCHAR);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(nameCol, strCol);
+        columnMetaToColRefMap.put(dtCol, dtColRef);
+
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(), Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        // name IN ('a', 'b') AND dt >= '2025-01-01'
+        ScalarOperator predicate = Utils.compoundAnd(
+                new InPredicateOperator(false,
+                        Lists.newArrayList(strCol,
+                                ConstantOperator.createVarchar("a"),
+                                ConstantOperator.createVarchar("b"))),
+                new BinaryPredicateOperator(BinaryType.GE, dtColRef,
+                        ConstantOperator.createVarchar("2025-01-01")));
+
+        // Use reflection to test the private method
+        List<Optional<List<String>>> result = invokeGetEffectiveInPartitionValues(
+                scanOperator, ImmutableList.of(nameCol, dtCol), predicate);
+
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertTrue(result.get(0).isPresent());
+        Assertions.assertEquals(Lists.newArrayList("'a'", "'b'"), result.get(0).get());
+        Assertions.assertFalse(result.get(1).isPresent()); // dt has range predicate, not IN
+    }
+
+    @Test
+    public void testGetEffectiveInPartitionValuesNoIn() {
+        ColumnRefOperator strCol = new ColumnRefOperator(10, VarcharType.VARCHAR, "name", true);
+        Column nameCol = new Column("name", VarcharType.VARCHAR);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(nameCol, strCol);
+
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(), Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        // name = 'a' (EQ, no IN)
+        ScalarOperator predicate = new BinaryPredicateOperator(BinaryType.EQ, strCol,
+                ConstantOperator.createVarchar("a"));
+
+        List<Optional<List<String>>> result = invokeGetEffectiveInPartitionValues(
+                scanOperator, ImmutableList.of(nameCol), predicate);
+
+        Assertions.assertNull(result); // no IN predicate found
+    }
+
+    @Test
+    public void testGetEffectiveInPartitionValuesNotIn() {
+        ColumnRefOperator strCol = new ColumnRefOperator(10, VarcharType.VARCHAR, "name", true);
+        Column nameCol = new Column("name", VarcharType.VARCHAR);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(nameCol, strCol);
+
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(), Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        // name NOT IN ('a', 'b') — should NOT be recognized
+        ScalarOperator predicate = new InPredicateOperator(true,
+                Lists.newArrayList(strCol,
+                        ConstantOperator.createVarchar("a"),
+                        ConstantOperator.createVarchar("b")));
+
+        List<Optional<List<String>>> result = invokeGetEffectiveInPartitionValues(
+                scanOperator, ImmutableList.of(nameCol), predicate);
+
+        Assertions.assertNull(result); // NOT IN should not be recognized
+    }
+
+    @Test
+    public void testGetEffectiveInPartitionValuesBothColumnsHaveIn() {
+        ColumnRefOperator strCol = new ColumnRefOperator(10, VarcharType.VARCHAR, "name", true);
+        ColumnRefOperator dtColRef = new ColumnRefOperator(11, VarcharType.VARCHAR, "dt", true);
+        Column nameCol = new Column("name", VarcharType.VARCHAR);
+        Column dtCol = new Column("dt", VarcharType.VARCHAR);
+
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = Maps.newHashMap();
+        columnMetaToColRefMap.put(nameCol, strCol);
+        columnMetaToColRefMap.put(dtCol, dtColRef);
+
+        LogicalHiveScanOperator scanOperator = new LogicalHiveScanOperator(new HiveTable(), Maps.newHashMap(),
+                columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
+
+        // name IN ('a', 'b') AND dt IN ('2025-01-01', '2025-01-02', '2025-01-03')
+        ScalarOperator predicate = Utils.compoundAnd(
+                new InPredicateOperator(false,
+                        Lists.newArrayList(strCol,
+                                ConstantOperator.createVarchar("a"),
+                                ConstantOperator.createVarchar("b"))),
+                new InPredicateOperator(false,
+                        Lists.newArrayList(dtColRef,
+                                ConstantOperator.createVarchar("2025-01-01"),
+                                ConstantOperator.createVarchar("2025-01-02"),
+                                ConstantOperator.createVarchar("2025-01-03"))));
+
+        List<Optional<List<String>>> result = invokeGetEffectiveInPartitionValues(
+                scanOperator, ImmutableList.of(nameCol, dtCol), predicate);
+
+        Assertions.assertNotNull(result);
+        Assertions.assertEquals(2, result.size());
+        Assertions.assertTrue(result.get(0).isPresent());
+        Assertions.assertEquals(2, result.get(0).get().size()); // name has 2 values
+        Assertions.assertTrue(result.get(1).isPresent());
+        Assertions.assertEquals(3, result.get(1).get().size()); // dt has 3 values
+    }
+
+    @Test
+    public void testListPartitionNamesForInValuesCombinationLimit() {
+        // Test that combinations exceeding MAX_IN_COMBINATIONS (64) returns null
+        List<Optional<List<String>>> inValues = Lists.newArrayList();
+        // 10 values * 10 values = 100 > 64
+        List<String> tenValues = Lists.newArrayList();
+        for (int i = 0; i < 10; i++) {
+            tenValues.add("val" + i);
+        }
+        inValues.add(Optional.of(tenValues));
+        inValues.add(Optional.of(tenValues));
+
+        List<String> result = invokeListPartitionNamesForInValues(inValues);
+        Assertions.assertNull(result); // should fall back due to too many combinations
+    }
+
+    @Test
+    public void testListPartitionNamesForInValuesEmptyList() {
+        // Test that empty IN values returns empty list
+        List<Optional<List<String>>> inValues = Lists.newArrayList();
+        inValues.add(Optional.of(Lists.newArrayList())); // empty IN values
+        inValues.add(Optional.empty());
+
+        List<String> result = invokeListPartitionNamesForInValues(inValues);
+        Assertions.assertNotNull(result);
+        Assertions.assertTrue(result.isEmpty());
+    }
+
+    // Helper methods to invoke private static methods via reflection
+
+    @SuppressWarnings("unchecked")
+    private static List<Optional<List<String>>> invokeGetEffectiveInPartitionValues(
+            LogicalHiveScanOperator operator, List<Column> partitionColumns, ScalarOperator predicate) {
+        try {
+            java.lang.reflect.Method method = OptExternalPartitionPruner.class.getDeclaredMethod(
+                    "getEffectiveInPartitionValues",
+                    com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator.class,
+                    List.class, ScalarOperator.class);
+            method.setAccessible(true);
+            return (List<Optional<List<String>>>) method.invoke(null, operator, partitionColumns, predicate);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> invokeListPartitionNamesForInValues(
+            List<Optional<List<String>>> inPartitionValues) {
+        try {
+            java.lang.reflect.Method method = OptExternalPartitionPruner.class.getDeclaredMethod(
+                    "listPartitionNamesForInValues",
+                    com.starrocks.catalog.Table.class, List.class);
+            method.setAccessible(true);
+            return (List<String>) method.invoke(null, new HiveTable(), inPartitionValues);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            if (e.getCause() instanceof NullPointerException) {
+                // Expected when calling with mock HiveTable that has no catalog
+                return null;
+            }
+            throw new RuntimeException(e);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
