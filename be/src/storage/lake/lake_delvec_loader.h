@@ -13,6 +13,9 @@
 // limitations under the License.
 #pragma once
 
+#include <string>
+#include <unordered_map>
+
 #include "common/statusor.h"
 #include "storage/del_vector.h"
 #include "storage/lake/meta_file.h"
@@ -36,10 +39,20 @@ public:
     Status load_from_file(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
 
 private:
+    // Read a delvec page from a cached file buffer. If the file is not yet
+    // cached, reads the entire file into _delvec_file_cache so that subsequent
+    // pages from the same file avoid remote IO.
+    StatusOr<std::string> _read_delvec_page(const TabletMetadataPtr& metadata, const DelvecPagePB& delvec_page);
+
     TabletManager* _tablet_manager;
     const MetaFileBuilder* _pk_builder = nullptr;
     bool _fill_cache = false;
     LakeIOOptions _lake_io_opts;
+
+    // File-level cache: delvec_file_name -> entire file content.
+    // Populated on first access per file, avoids repeated remote IO for
+    // multiple delvec pages within the same file.
+    std::unordered_map<std::string, std::string> _delvec_file_cache;
 };
 
 } // namespace starrocks::lake
