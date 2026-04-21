@@ -146,11 +146,11 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
                                                 OptimizerContext context,
                                                 List<MaterializationContext> mvCandidateContexts) {
         List<LogicalScanOperator> scanOperators = getScanOperator(queryExpression);
-        Map<Long, Set<String>> queryGroupByColumnsByTable = new HashMap<>();
+        Map<Table, Set<String>> queryGroupByColumnsByTable = new HashMap<>();
         collectGroupByColumnsByTable(queryExpression, queryGroupByColumnsByTable);
-        Map<Long, Set<String>> queryPredicateColumnsByTable = new HashMap<>();
+        Map<Table, Set<String>> queryPredicateColumnsByTable = new HashMap<>();
         collectPredicateColumnsByTable(queryExpression, queryPredicateColumnsByTable);
-        Map<Long, Set<String>> queryGroupByAndPredicateColumnsByTable = new HashMap<>(queryGroupByColumnsByTable);
+        Map<Table, Set<String>> queryGroupByAndPredicateColumnsByTable = new HashMap<>(queryGroupByColumnsByTable);
         queryPredicateColumnsByTable.forEach(
                 (tableId, columns) -> queryGroupByAndPredicateColumnsByTable.computeIfAbsent(tableId,
                         k -> new HashSet<>()).addAll(columns));
@@ -166,8 +166,8 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
     }
 
     private boolean validMv(MaterializationContext mvContext, List<LogicalScanOperator> scanOperators,
-                            Map<Long, Set<String>> queryGroupByAndPredicateColumnsByTable,
-                            Map<Long, Set<String>> queryPredicateColumnsByTable) {
+                            Map<Table, Set<String>> queryGroupByAndPredicateColumnsByTable,
+                            Map<Table, Set<String>> queryPredicateColumnsByTable) {
         // mv is SPG, so there is only one baseTable
         // Use Table.equals rather than getId() so external tables (e.g. IcebergTable) that
         // override equals() by catalog/db/tableIdentifier match correctly across plan rebuilds,
@@ -197,11 +197,11 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
             return false;
         }
         // no group by or predicate columns in query
-        if (!queryGroupByAndPredicateColumnsByTable.containsKey(baseTableId)) {
+        if (!queryGroupByAndPredicateColumnsByTable.containsKey(mvBaseTable)) {
             return true;
         }
-        if (validMvGroupByAndPredicateColumns(mvContext, queryGroupByAndPredicateColumnsByTable.get(baseTableId),
-                queryPredicateColumnsByTable.get(baseTableId))) {
+        if (validMvGroupByAndPredicateColumns(mvContext, queryGroupByAndPredicateColumnsByTable.get(mvBaseTable),
+                queryPredicateColumnsByTable.get(mvBaseTable))) {
             return true;
         }
         logMVRewrite(mvContext, "mv pruned: mv group by does not cover query group by + predicate columns");
@@ -237,7 +237,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
                                                       Set<String> queryPredicateColumns) {
         Set<String> mvPredicateColumns = mvContext.getPredicateColumns();
         if (mvPredicateColumns == null) {
-            Map<Long, Set<String>> mvPredicateColumnsByTable = new HashMap<>();
+            Map<Table, Set<String>> mvPredicateColumnsByTable = new HashMap<>();
             collectPredicateColumnsByTable(mvContext.getMvExpression(), mvPredicateColumnsByTable);
             // MV is SPG, so there is only one baseTable
             mvPredicateColumns = mvPredicateColumnsByTable.values().stream().findFirst().orElse(new HashSet<>());
@@ -258,7 +258,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
         }
         Set<String> mvGroupingColumns = mvContext.getGroupingColumns();
         if (mvGroupingColumns == null) {
-            Map<Long, Set<String>> mvGroupByColumnsByTable = new HashMap<>();
+            Map<Table, Set<String>> mvGroupByColumnsByTable = new HashMap<>();
             collectGroupByColumnsByTable(mvContext.getMvExpression(), mvGroupByColumnsByTable);
             // MV is SPG, so there is only one baseTable
             mvGroupingColumns = mvGroupByColumnsByTable.values().stream().findFirst().orElse(new HashSet<>());
@@ -274,14 +274,14 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
      * Starting from queryExpression (TopAgg -> Join -> ...), collects the physical columns
      * referenced by the top-level Agg's group-by keys, grouped by table id.
      */
-    static void collectGroupByColumnsByTable(OptExpression queryExpression, Map<Long, Set<String>> columnsByTable) {
+    static void collectGroupByColumnsByTable(OptExpression queryExpression, Map<Table, Set<String>> columnsByTable) {
         if (queryExpression.getOp() instanceof LogicalAggregationOperator agg) {
             // colRef -> [<tableId, physicalColName>]
-            Map<Integer, List<Pair<Long, String>>> colRefToTableColumns = new HashMap<>();
+            Map<Integer, List<Pair<Table, String>>> colRefToTableColumns = new HashMap<>();
             buildSPJFullColumnsToTableColumns(queryExpression.inputAt(0), colRefToTableColumns);
             for (ColumnRefOperator key : agg.getGroupingKeys()) {
-                List<Pair<Long, String>> resolved = colRefToTableColumns.getOrDefault(key.getId(), Collections.emptyList());
-                for (Pair<Long, String> tableColumn : resolved) {
+                List<Pair<Table, String>> resolved = colRefToTableColumns.getOrDefault(key.getId(), Collections.emptyList());
+                for (Pair<Table, String> tableColumn : resolved) {
                     columnsByTable.computeIfAbsent(tableColumn.first, t -> new HashSet<>()).add(tableColumn.second);
                 }
             }
@@ -297,12 +297,12 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
      * - Nested Agg children are skipped to exclude Agg->Agg->...->Scan paths.
      */
     private static void buildSPJFullColumnsToTableColumns(OptExpression node,
-                                                          Map<Integer, List<Pair<Long, String>>> colToTableColumns) {
+                                                          Map<Integer, List<Pair<Table, String>>> colToTableColumns) {
         if (node.getOp() instanceof LogicalScanOperator scan) {
             Table table = scan.getTable();
             for (Map.Entry<ColumnRefOperator, Column> e : scan.getColRefToColumnMetaMap().entrySet()) {
                 colToTableColumns.put(e.getKey().getId(),
-                        Collections.singletonList(Pair.create(table.getId(), e.getValue().getName())));
+                        Collections.singletonList(Pair.create(table, e.getValue().getName())));
             }
         }
 
@@ -328,10 +328,10 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
      * Expands each output colRef in {@code columnRefMap} to the union of physical (tableId, colName) pairs
      */
     private static void resolveProjectionIntoMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap,
-                                                 Map<Integer, List<Pair<Long, String>>> columnToTableColumns) {
+                                                 Map<Integer, List<Pair<Table, String>>> columnToTableColumns) {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> e : columnRefMap.entrySet()) {
             columnToTableColumns.computeIfAbsent(e.getKey().getId(), input -> {
-                List<Pair<Long, String>> resolved = new ArrayList<>();
+                List<Pair<Table, String>> resolved = new ArrayList<>();
                 e.getValue().getUsedColumns().getStream()
                         .forEach(id -> resolved.addAll(columnToTableColumns.getOrDefault(id, Collections.emptyList())));
                 return resolved.isEmpty() ? null : resolved;
@@ -344,7 +344,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
      * grouped by table id into {@code predicateColumnsByTable}.
      * Nested Agg subtrees are skipped to exclude Agg->Agg->...->Scan paths.
      */
-    private static void collectPredicateColumnsByTable(OptExpression node, Map<Long, Set<String>> predicateColumnsByTable) {
+    private static void collectPredicateColumnsByTable(OptExpression node, Map<Table, Set<String>> predicateColumnsByTable) {
         if (node.getOp() instanceof LogicalScanOperator) {
             LogicalScanOperator scan = (LogicalScanOperator) node.getOp();
             if (scan.getPredicate() != null) {
@@ -353,7 +353,7 @@ public class AggregateJoinPushDownRule extends BaseMaterializedViewRewriteRule {
                 scan.getPredicate().getUsedColumns().getStream().forEach(colId ->
                         refToCol.forEach((ref, col) -> {
                             if (ref.getId() == colId) {
-                                predicateColumnsByTable.computeIfAbsent(table.getId(), t -> new HashSet<>()).add(col.getName());
+                                predicateColumnsByTable.computeIfAbsent(table, t -> new HashSet<>()).add(col.getName());
                             }
                         }));
             }
