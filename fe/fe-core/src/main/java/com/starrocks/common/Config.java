@@ -1151,6 +1151,15 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_enable_batch_publish_version = true;
 
+    /**
+     * Route lake ADD INDEX / DROP INDEX alters through the LakeTableAddIndexJob /
+     * LakeTableDropIndexJob fast path (metadata-only, no shadow index). Set to
+     * false to fall back to the regular LakeTableSchemaChangeJob path. Intended
+     * as a safety valve; the fast path is the supported default.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_lake_add_index_fast_path = true;
+
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
 

@@ -16,6 +16,7 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
@@ -56,6 +57,9 @@ public final class SchemaChangeIndexFastPathClassifier {
      *         later in the Job class.
      */
     public static boolean shouldUseAddIndexFastPath(OlapTable table, List<AlterClause> alterClauses) {
+        if (!Config.enable_lake_add_index_fast_path) {
+            return false;
+        }
         if (table == null || !table.isCloudNativeTableOrMaterializedView()) {
             return false;
         }
@@ -84,6 +88,9 @@ public final class SchemaChangeIndexFastPathClassifier {
      *         type, AND the table is a cloud-native (lake) table.
      */
     public static boolean shouldUseDropIndexFastPath(OlapTable table, List<AlterClause> alterClauses) {
+        if (!Config.enable_lake_add_index_fast_path) {
+            return false;
+        }
         if (table == null || !table.isCloudNativeTableOrMaterializedView()) {
             return false;
         }

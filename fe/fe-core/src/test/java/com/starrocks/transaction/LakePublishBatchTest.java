@@ -208,13 +208,9 @@ public class LakePublishBatchTest {
                 "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"true\")";
         starRocksAssert.withTable(sql2);
 
-        // Disable fast schema evolution v2 so a plain "add column" alter goes
-        // through the LakeTableSchemaChangeJob path that the shadow-index
-        // batch-publish scenario in testBatchPublishShadowIndex needs.
         String sql3 = "create table " + TABLE_SCHEMA_CHANGE +
                 " (pk int NOT NULL, v0 int not null) primary KEY (pk) " +
-                "DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
-                "PROPERTIES('cloud_native_fast_schema_evolution_v2'='false');";
+                "DISTRIBUTED BY HASH(pk) BUCKETS 1;";
         starRocksAssert.withTable(sql3);
     }
 
@@ -696,14 +692,20 @@ public class LakePublishBatchTest {
         txnState1.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(), Lists.newArrayList(normalIndex.getId()));
         List<TabletCommitInfo> commitInfo1 = commitAllTablets(List.of(normalTablet));
 
-        // Do a schema change that creates a shadow index. ADD INDEX on lake
-        // tables now routes through the LakeTableAddIndexJob fast path which
-        // does not create a shadow index (metadata-only IDG write), so drive
-        // this batch-publish-with-shadow test via an ADD COLUMN alter instead.
-        String alterSql = String.format(
-                "alter table %s add column col_new varchar(30) not null default 'xyz'", TABLE_SCHEMA_CHANGE);
+        // Disable the LakeTableAddIndexJob fast path just for the alterTable
+        // call so ADD INDEX routes through the legacy LakeTableSchemaChangeJob
+        // shadow-index flow that this batch-publish scenario exercises. Once
+        // the job is registered with the scheduler it runs on its own; we
+        // restore the flag immediately after.
+        String alterSql = String.format("alter table %s add index idx (v0) using bitmap", TABLE_SCHEMA_CHANGE);
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        boolean origFastPath = Config.enable_lake_add_index_fast_path;
+        Config.enable_lake_add_index_fast_path = false;
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
+        } finally {
+            Config.enable_lake_add_index_fast_path = origFastPath;
+        }
         List<AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
                 .getSchemaChangeHandler().getUnfinishedAlterJobV2ByTableId(table.getId());
         assertEquals(1, alterJobs.size());
