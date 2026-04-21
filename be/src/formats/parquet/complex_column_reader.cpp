@@ -1536,54 +1536,14 @@ static void build_has_typed_value_bitmap(const std::vector<ShreddedFieldNode>& s
     }
 }
 
-static Status build_full_row_from_shredded_fields(size_t row, std::string_view metadata_raw, std::string_view value_raw,
-                                                  const std::vector<ShreddedFieldNode>& shredded_fields,
-                                                  std::string* out_metadata, std::string* out_value) {
-    if (out_metadata == nullptr || out_value == nullptr) {
-        return Status::OK();
-    }
-
-    std::vector<VariantBuilder::Overlay> overlays;
-    overlays.reserve(16);
-    for (const auto& node : shredded_fields) {
-        auto node_value = VariantColumnReader::build_variant_binding_from_node(row, node, metadata_raw);
-        if (!node_value.ok()) {
-            return node_value.status();
-        }
-        if (node_value->has_value()) {
-            overlays.emplace_back(
-                    VariantBuilder::Overlay{.path = node.parsed_full_path, .value = std::move(**node_value)});
-        }
-    }
-    if (overlays.empty()) {
-        out_metadata->assign(metadata_raw.data(), metadata_raw.size());
-        out_value->assign(value_raw.data(), value_raw.size());
-        return Status::OK();
-    }
-
-    const bool has_base_payload = !value_raw.empty();
-    std::optional<VariantRowRef> base =
-            has_base_payload ? std::optional<VariantRowRef>(VariantRowRef(metadata_raw, value_raw)) : std::nullopt;
-    ASSIGN_OR_RETURN(auto built, VariantBuilder::build_row_from_overlays(base, std::move(overlays)));
-
-    auto metadata_built = built.get_metadata().raw();
-    auto value_built = built.get_value().raw();
-    out_metadata->assign(metadata_built.data(), metadata_built.size());
-    out_value->assign(value_built.data(), value_built.size());
-    return Status::OK();
-}
-
 class VariantReadRangeBatchContext {
 public:
     VariantReadRangeBatchContext(const std::vector<ShreddedFieldNode>& shredded_fields,
                                  const std::vector<TopBinding>& materialized_bindings,
-                                 const std::vector<std::string>& shredded_paths, const Column* root_typed_value_column,
-                                 const TypeDescriptor* root_typed_value_type, const BinaryColumn* metadata_column,
-                                 const BinaryColumn* value_column, ImmutableNullData metadata_nulls,
-                                 ImmutableNullData value_nulls)
-            : shredded_fields(shredded_fields),
-              materialized_bindings(materialized_bindings),
-              shredded_paths(shredded_paths),
+                                 const Column* root_typed_value_column, const TypeDescriptor* root_typed_value_type,
+                                 const BinaryColumn* metadata_column, const BinaryColumn* value_column,
+                                 ImmutableNullData metadata_nulls, ImmutableNullData value_nulls)
+            : materialized_bindings(materialized_bindings),
               root_typed_value_column(root_typed_value_column),
               root_typed_value_type(root_typed_value_type),
               metadata_column(metadata_column),
@@ -1610,16 +1570,9 @@ public:
         }
     }
 
-    bool request_all_paths() const { return shredded_paths.empty(); }
-
-    // Full shredded tree discovered from the file schema. Used for whole-row rebuild and
-    // typed-value presence checks; this is broader than the requested output bindings.
-    const std::vector<ShreddedFieldNode>& shredded_fields;
     // Final output bindings after applying requested paths and per-batch materialization
     // decisions. These drive typed_paths/typed_columns layout in the result VariantColumn.
     const std::vector<TopBinding>& materialized_bindings;
-    // Original requested top-level shredded paths. Empty means "request all available paths".
-    const std::vector<std::string>& shredded_paths;
     // Optional row-indexed top-level typed_value column for non-STRUCT root typed_value.
     const Column* root_typed_value_column;
     // Type descriptor paired with root_typed_value_column. Needed when encoding the root typed
@@ -1667,9 +1620,6 @@ public:
             return true;
         }
 
-        if (_batch_ctx.request_all_paths()) {
-            RETURN_IF_ERROR(_try_build_full_row());
-        }
         return true;
     }
 
@@ -1728,21 +1678,6 @@ private:
         return true;
     }
 
-    Status _try_build_full_row() {
-        _built_metadata_buf.clear();
-        _built_value_buf.clear();
-        RETURN_IF_ERROR(build_full_row_from_shredded_fields(_row, _raw_metadata, _raw_value, _batch_ctx.shredded_fields,
-                                                            &_built_metadata_buf, &_built_value_buf));
-        _row_metadata = std::string_view(_built_metadata_buf.data(), _built_metadata_buf.size());
-        _row_value = std::string_view(_built_value_buf.data(), _built_value_buf.size());
-        if (_row_metadata.empty() || _row_value.empty()) {
-            return Status::InternalError(strings::Substitute(
-                    "build full variant row produced empty payload, row=$0, metadata_size=$1, value_size=$2", _row,
-                    _row_metadata.size(), _row_value.size()));
-        }
-        return Status::OK();
-    }
-
     const VariantReadRangeBatchContext& _batch_ctx;
     size_t _row;
     VariantColumn* _variant_column;
@@ -1751,8 +1686,6 @@ private:
     std::string_view _raw_value;
     std::string_view _row_metadata;
     std::string_view _row_value;
-    std::string _built_metadata_buf;
-    std::string _built_value_buf;
     std::string _root_typed_metadata_buf;
     std::string _root_typed_value_buf;
 };
@@ -2060,18 +1993,16 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     bool has_reconstructed_null = false;
 
     // batch_ctx is built first so has_typed_value_bitmap is available for both code paths.
-    VariantReadRangeBatchContext batch_ctx(_shredded_fields, materialized_bindings, _requested_shredded_path_names,
-                                           _top_level.root_typed_value_column.get(),
-                                           _top_level.root_typed_value_type.get(), metadata_column, value_column,
-                                           metadata_nulls, value_nulls);
+    VariantReadRangeBatchContext batch_ctx(
+            _shredded_fields, materialized_bindings, _top_level.root_typed_value_column.get(),
+            _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls);
 
     variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
                                          BinaryColumn::create(), BinaryColumn::create());
 
-    // Per-row materialization path.
-    // - request-all-paths: emit rebuilt top-level metadata/value.
-    // - requested-subset: keep the current row payload as-is; individual bindings are
-    //   materialized from their shredded subtree or via direct raw-row seek when unshredded.
+    // Per-row materialization path keeps the top-level metadata/value as the base remain
+    // payload. Shredded bindings are stored separately in typed_columns so full-row
+    // reconstruction is deferred until a caller asks VariantColumn to materialize a row.
     VariantReadRangeRowMaterializer materializer(batch_ctx, 0, variant_column);
     for (size_t i = 0; i < num_rows; ++i) {
         materializer.set_row(i);
