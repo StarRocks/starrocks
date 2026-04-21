@@ -50,8 +50,17 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     // init delvec loader
     SegmentReadOptions seg_options;
 
+<<<<<<< HEAD
     auto delvec_loader =
             std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, seg_options.lake_io_opts);
+=======
+    // Cache the base-version metadata once so per-rssid delvec loads skip get_tablet_metadata
+    // and its TabletMetadataPB deep copy (hot when one compaction merges hundreds of rowsets).
+    ASSIGN_OR_RETURN(auto base_metadata,
+                     _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
+    auto delvec_loader = std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, true /* fill cache */, lake_io_opts,
+                                                            std::move(base_metadata));
+>>>>>>> d74b39657c ([Enhancement] Cache base-version metadata in lake PK compaction delvec loader (#71905))
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();
@@ -66,4 +75,36 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     });
 }
 
+<<<<<<< HEAD
+=======
+Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
+        const std::function<Status(const CompactConflictResolveParams&, const std::vector<SegmentPtr>&,
+                                   const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler) {
+    // load all segments
+    std::vector<SegmentPtr> segments;
+    RETURN_IF_ERROR(_rowset->load_segments(&segments, true /* file cache*/));
+    RETURN_ERROR_IF_FALSE(segments.size() == _rowset->num_segments());
+    // init delvec loader
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
+
+    // See the overload above: cache base-version metadata once to skip per-rssid deep copy.
+    ASSIGN_OR_RETURN(auto base_metadata,
+                     _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
+    auto delvec_loader = std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, true /* fill cache */, lake_io_opts,
+                                                            std::move(base_metadata));
+    // init params
+    CompactConflictResolveParams params;
+    params.tablet_id = _rowset->tablet_id();
+    params.rowset_id = _metadata->next_rowset_id();
+    params.base_version = _base_version;
+    params.new_version = _metadata->version();
+    params.delvec_loader = delvec_loader.get();
+    params.index = _index;
+    return handler(params, segments, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
+        (*_segment_id_to_add_dels)[rssid] += num_dels;
+        _delvecs->emplace_back(rssid, dv);
+    });
+}
+
+>>>>>>> d74b39657c ([Enhancement] Cache base-version metadata in lake PK compaction delvec loader (#71905))
 } // namespace starrocks::lake
