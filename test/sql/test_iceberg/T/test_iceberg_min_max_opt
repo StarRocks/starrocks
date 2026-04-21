@@ -284,49 +284,7 @@ select * from (select line from table(unnest(split(get_query_profile(last_query_
 drop table ice_tbl_0 force;
 
 -- ============================================================
-<<<<<<< HEAD
 -- Case 5: all rows are NULL in every queried column.
-=======
--- Case 5: datetime min/max on an hour-transform partition column.
--- Using hour(c_datetime) makes the case more robust because it exercises
--- transformed partition metadata instead of only identity partitions. The
--- inserted values span different hours. For Iceberg timestamp-without-timezone
--- semantics, changing session time_zone must not change the returned datetime
--- values.
--- ============================================================
-create external table ice_tbl_dt(
-    c_int int,
-    c_datetime datetime
-) partition by (hour(c_datetime));
-
-INSERT INTO ice_tbl_dt (c_int, c_datetime) VALUES
-(1, '2025-06-29 08:00:00'),
-(2, '2025-06-29 09:10:00'),
-(3, '2025-06-29 10:20:00');
-
-select c_int from ice_tbl_dt order by c_int;
-
-set enable_min_max_optimization = true;
-set time_zone = 'UTC';
-select min(c_datetime), max(c_datetime) from ice_tbl_dt;
-select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
-
-set time_zone = 'Asia/Shanghai';
-select min(c_datetime), max(c_datetime) from ice_tbl_dt;
-select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
-
-set enable_min_max_optimization = false;
-set time_zone = 'UTC';
-select min(c_datetime), max(c_datetime) from ice_tbl_dt;
-
-set time_zone = 'Asia/Shanghai';
-select min(c_datetime), max(c_datetime) from ice_tbl_dt;
-
-drop table ice_tbl_dt force;
-
--- ============================================================
--- Case 6: all rows are NULL in every queried column.
->>>>>>> 54ece6b975 ([BugFix] Preserve Iceberg column stats in manifest data file cache (#71913))
 -- Verifies that the optimization correctly returns NULL instead of
 -- incorrect default values when all file statistics are absent.
 -- ============================================================
@@ -342,13 +300,9 @@ INSERT INTO ice_tbl_1 (
 ) VALUES
 (null, null);
 
-<<<<<<< HEAD
-select min(c_int), max(c_int), max(c_bigint), max(c_bigint) from ice_tbl_1;
-=======
 select c_int from ice_tbl_1 order by c_int;
 
 select min(c_int), max(c_int), min(c_bigint), max(c_bigint) from ice_tbl_1;
->>>>>>> 54ece6b975 ([BugFix] Preserve Iceberg column stats in manifest data file cache (#71913))
 select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
 drop table ice_tbl_1 force;
