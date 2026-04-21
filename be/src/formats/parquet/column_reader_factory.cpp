@@ -326,6 +326,18 @@ bool any_reader_not_null(const std::map<std::string, std::unique_ptr<ColumnReade
 
 } // anonymous namespace
 
+Status VariantShreddedReadHints::add_path(std::string path) {
+    ASSIGN_OR_RETURN(auto parsed_path, VariantPathParser::parse_shredded_path(std::string_view(path)));
+    shredded_paths.emplace_back(std::move(path));
+    parsed_shredded_paths.emplace_back(std::move(parsed_path));
+    return Status::OK();
+}
+
+void VariantShreddedReadHints::clear() {
+    shredded_paths.clear();
+    parsed_shredded_paths.clear();
+}
+
 StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions& opts, const ParquetField* field,
                                                       const TypeDescriptor& col_type) {
     // We will only set a complex type in ParquetField
@@ -510,7 +522,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create_variant_column_reader(cons
         }
     }
     return std::make_unique<VariantColumnReader>(variant_field, std::move(_metadata_reader), std::move(_value_reader),
-                                                 std::move(shredded_fields), hints.shredded_paths,
+                                                 std::move(shredded_fields), std::move(hints.parsed_shredded_paths),
                                                  std::move(root_typed_value_reader), std::move(root_typed_value_type));
 }
 

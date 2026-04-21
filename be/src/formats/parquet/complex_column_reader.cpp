@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <string_view>
 
 #include "base/string/slice.h"
 #include "column/array_column.h"
@@ -778,23 +779,84 @@ static Status _prepare_shredded_field_node(ShreddedFieldNode* node) {
     return Status::OK();
 }
 
-static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filter* filter, ShreddedFieldNode* node) {
+// Returns true when the subtree rooted at `node` overlaps with at least one requested path,
+// meaning we must recurse into it. Two overlap conditions:
+//   1. node is an ancestor-or-equal of a requested path  → must descend to reach the leaf.
+//   2. a requested path is an ancestor-or-equal of node  → the request covers this entire subtree.
+// When no requested_paths are given (nullptr), all nodes are visited.
+static bool _should_read_shredded_field_node(const ShreddedFieldNode& node,
+                                             const std::vector<VariantPath>* requested_paths) {
+    if (requested_paths == nullptr) {
+        return true;
+    }
+    for (const auto& path : *requested_paths) {
+        if (node.parsed_full_path.is_ancestor_or_same(path) || path.is_ancestor_or_same(node.parsed_full_path)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Returns true when the node's own columns (value / typed_value / array_element_value) should
+// be read from disk. "Visiting" a node is not the same as reading its columns:
+//   - Ancestor nodes must be visited so recursion can reach the requested leaves, but their
+//     own columns are skipped unless a requested path points at or above the node itself.
+//   - ARRAY nodes are the exception: their offset columns are required by child readers even
+//     when the request targets a deeper descendant, so they are always read when visited.
+static bool _should_read_shredded_field_node_columns(const ShreddedFieldNode& node,
+                                                     const std::vector<VariantPath>* requested_paths) {
+    if (requested_paths == nullptr) {
+        return true;
+    }
+    for (const auto& path : *requested_paths) {
+        // The requested path covers this node (path is ancestor-or-equal): read columns.
+        if (path.is_ancestor_or_same(node.parsed_full_path)) {
+            return true;
+        }
+        // ARRAY node: its offsets are needed by child readers even when the request targets
+        // a deeper descendant, so read whenever the node is an ancestor of a requested path.
+        if (node.kind == ShreddedFieldNode::Kind::ARRAY && node.parsed_full_path.is_ancestor_or_same(path)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void _clear_shredded_field_node_columns(ShreddedFieldNode* node) {
+    if (node == nullptr) {
+        return;
+    }
+    node->value_column = nullptr;
+    node->typed_value_column = nullptr;
+    node->array_element_value_column = nullptr;
+    for (auto& child : node->children) {
+        _clear_shredded_field_node_columns(&child);
+    }
+}
+
+static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filter* filter, ShreddedFieldNode* node,
+                                        const std::vector<VariantPath>* requested_paths) {
     if (node == nullptr) {
         return Status::InvalidArgument("node should not be null");
     }
-    if (node->value_reader != nullptr) {
+    if (!_should_read_shredded_field_node(*node, requested_paths)) {
+        _clear_shredded_field_node_columns(node);
+        return Status::OK();
+    }
+    const bool read_node_columns = _should_read_shredded_field_node_columns(*node, requested_paths);
+    if (read_node_columns && node->value_reader != nullptr) {
         node->value_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         RETURN_IF_ERROR(node->value_reader->read_range(range, filter, node->value_column));
     } else {
         node->value_column = nullptr;
     }
-    if (node->typed_value_reader != nullptr) {
+    if (read_node_columns && node->typed_value_reader != nullptr) {
         node->typed_value_column = ColumnHelper::create_column(*node->typed_value_read_type, true);
         RETURN_IF_ERROR(node->typed_value_reader->read_range(range, filter, node->typed_value_column));
     } else {
         node->typed_value_column = nullptr;
     }
-    if (node->array_element_value_reader != nullptr) {
+    if (read_node_columns && node->array_element_value_reader != nullptr) {
         node->array_element_value_column = ColumnHelper::create_column(array_varbinary_type_desc(), true);
         RETURN_IF_ERROR(node->array_element_value_reader->read_range(range, filter, node->array_element_value_column));
     } else {
@@ -815,41 +877,51 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
                 node->typed_value_column->size(), node->array_element_value_column->size()));
     }
     for (auto& child : node->children) {
-        RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &child));
+        RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &child, requested_paths));
     }
     return Status::OK();
 }
 
 static void _collect_shredded_field_io_range(const ShreddedFieldNode& node,
                                              std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                             int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
-    if (node.value_reader != nullptr) {
+                                             int64_t* end_offset, ColumnIOTypeFlags types, bool active,
+                                             const std::vector<VariantPath>* requested_paths) {
+    if (!_should_read_shredded_field_node(node, requested_paths)) {
+        return;
+    }
+    const bool read_node_columns = _should_read_shredded_field_node_columns(node, requested_paths);
+    if (read_node_columns && node.value_reader != nullptr) {
         node.value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
-    if (node.typed_value_reader != nullptr) {
+    if (read_node_columns && node.typed_value_reader != nullptr) {
         node.typed_value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
-    if (node.array_element_value_reader != nullptr) {
+    if (read_node_columns && node.array_element_value_reader != nullptr) {
         node.array_element_value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
     for (const auto& child : node.children) {
-        _collect_shredded_field_io_range(child, ranges, end_offset, types, active);
+        _collect_shredded_field_io_range(child, ranges, end_offset, types, active, requested_paths);
     }
 }
 
 static void _select_shredded_field_offset_index(const ShreddedFieldNode& node, const SparseRange<uint64_t>& range,
-                                                const uint64_t rg_first_row) {
-    if (node.value_reader != nullptr) {
+                                                const uint64_t rg_first_row,
+                                                const std::vector<VariantPath>* requested_paths) {
+    if (!_should_read_shredded_field_node(node, requested_paths)) {
+        return;
+    }
+    const bool read_node_columns = _should_read_shredded_field_node_columns(node, requested_paths);
+    if (read_node_columns && node.value_reader != nullptr) {
         node.value_reader->select_offset_index(range, rg_first_row);
     }
-    if (node.typed_value_reader != nullptr) {
+    if (read_node_columns && node.typed_value_reader != nullptr) {
         node.typed_value_reader->select_offset_index(range, rg_first_row);
     }
-    if (node.array_element_value_reader != nullptr) {
+    if (read_node_columns && node.array_element_value_reader != nullptr) {
         node.array_element_value_reader->select_offset_index(range, rg_first_row);
     }
     for (const auto& child : node.children) {
-        _select_shredded_field_offset_index(child, range, rg_first_row);
+        _select_shredded_field_offset_index(child, range, rg_first_row, requested_paths);
     }
 }
 
@@ -1222,6 +1294,19 @@ static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& 
         }
         // NONE node with no children: pure remain-binary; no typed binding needed.
     }
+}
+
+static StatusOr<std::vector<std::string>> make_shredded_path_names(const std::vector<VariantPath>& parsed_paths) {
+    std::vector<std::string> paths;
+    paths.reserve(parsed_paths.size());
+    for (const auto& path : parsed_paths) {
+        auto shredded_path = path.to_shredded_path();
+        if (!shredded_path.has_value()) {
+            return Status::InvalidArgument("variant shredded hint path must not contain array segments");
+        }
+        paths.emplace_back(std::move(*shredded_path));
+    }
+    return paths;
 }
 
 // Guided by shredded_paths: each path maps to SCALAR or VARIANT typed_column entry.
@@ -1748,8 +1833,10 @@ void VariantColumnReader::collect_column_io_range(std::vector<io::SharedBuffered
     if (_top_level.root_typed_value_reader != nullptr) {
         _top_level.root_typed_value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
+    const std::vector<VariantPath>* requested_paths =
+            _requested_shredded_paths.empty() ? nullptr : &_requested_shredded_paths;
     for (const auto& node : _shredded_fields) {
-        _collect_shredded_field_io_range(node, ranges, end_offset, types, active);
+        _collect_shredded_field_io_range(node, ranges, end_offset, types, active, requested_paths);
     }
 }
 
@@ -1763,8 +1850,10 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
     if (_top_level.root_typed_value_reader != nullptr) {
         _top_level.root_typed_value_reader->select_offset_index(range, rg_first_row);
     }
+    const std::vector<VariantPath>* requested_paths =
+            _requested_shredded_paths.empty() ? nullptr : &_requested_shredded_paths;
     for (const auto& node : _shredded_fields) {
-        _select_shredded_field_offset_index(node, range, rg_first_row);
+        _select_shredded_field_offset_index(node, range, rg_first_row, requested_paths);
     }
 }
 
@@ -1794,8 +1883,11 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     } else {
         _top_level.root_typed_value_column = nullptr;
     }
+
+    const std::vector<VariantPath>* requested_paths =
+            _requested_shredded_paths.empty() ? nullptr : &_requested_shredded_paths;
     for (auto& node : _shredded_fields) {
-        RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &node));
+        RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &node, requested_paths));
     }
 
     auto* metadata_nullable = down_cast<NullableColumn*>(metadata_col->as_mutable_raw_ptr());
@@ -1813,11 +1905,17 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
 
     // When no explicit paths are requested, auto-discover paths from the shredded field tree.
     // The tree is fixed after construction, so cache the result to avoid repeated traversal.
-    if (_shredded_paths.empty() && !_auto_paths_cached) {
+    std::vector<std::string> requested_path_names;
+    if (!_requested_shredded_paths.empty()) {
+        ASSIGN_OR_RETURN(requested_path_names, make_shredded_path_names(_requested_shredded_paths));
+    }
+
+    if (_requested_shredded_paths.empty() && !_auto_paths_cached) {
         collect_all_top_binding_paths(_shredded_fields, &_cached_auto_paths);
         _auto_paths_cached = true;
     }
-    const std::vector<std::string>& effective_paths = _shredded_paths.empty() ? _cached_auto_paths : _shredded_paths;
+    const std::vector<std::string>& effective_paths =
+            _requested_shredded_paths.empty() ? _cached_auto_paths : requested_path_names;
 
     std::vector<TopBinding> collected_bindings;
     collect_top_bindings(_shredded_fields, effective_paths, &collected_bindings);
@@ -1840,7 +1938,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
 
     // batch_ctx is built first so has_typed_value_bitmap is available for both code paths.
     VariantReadRangeBatchContext batch_ctx(
-            _shredded_fields, materialized_bindings, _shredded_paths, _top_level.root_typed_value_column.get(),
+            _shredded_fields, materialized_bindings, requested_path_names, _top_level.root_typed_value_column.get(),
             _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls);
 
     // Partition bindings into two groups:
@@ -1848,7 +1946,7 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     //   native_indices – VARIANT bindings that require per-row decode.
     // Bulk copy is only applicable when there is no root typed value to re-encode and paths are
     // explicitly requested (not the "all paths" auto-discovery mode).
-    const bool bulk_eligible = _top_level.root_typed_value_column == nullptr && !_shredded_paths.empty();
+    const bool bulk_eligible = _top_level.root_typed_value_column == nullptr && !_requested_shredded_paths.empty();
     std::vector<size_t> bulk_indices;
     std::vector<size_t> native_indices;
     for (size_t bi = 0; bi < materialized_bindings.size(); ++bi) {
