@@ -692,8 +692,12 @@ public class LakePublishBatchTest {
         txnState1.addPartitionLoadedIndexes(table.getId(), physicalPartition.getId(), Lists.newArrayList(normalIndex.getId()));
         List<TabletCommitInfo> commitInfo1 = commitAllTablets(List.of(normalTablet));
 
-        // do a schema change, which will create a shadow index
-        String alterSql = String.format("alter table %s add index idx (v0) using bitmap", TABLE_SCHEMA_CHANGE);
+        // Do a schema change that creates a shadow index. ADD INDEX on lake
+        // tables now routes through the LakeTableAddIndexJob fast path which
+        // does not create a shadow index (metadata-only IDG write), so drive
+        // this batch-publish-with-shadow test via an ADD COLUMN alter instead.
+        String alterSql = String.format(
+                "alter table %s add column col_new varchar(30) not null default 'xyz'", TABLE_SCHEMA_CHANGE);
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterSql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
         List<AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getAlterJobMgr()
