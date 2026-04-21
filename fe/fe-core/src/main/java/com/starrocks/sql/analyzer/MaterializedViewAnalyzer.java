@@ -62,6 +62,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
 import com.starrocks.sql.analyzer.mv.MVBaseTablePartitionHandlers;
 import com.starrocks.sql.analyzer.mv.MVPartitionCheckContext;
+import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -369,8 +370,9 @@ public class MaterializedViewAnalyzer {
                     Analyzer.analyze(queryStatement, context);
                     statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
                     statement.setQueryStatement(queryStatement);
-                    // use primary key as default keys type for ivm
-                    if (result.needRetractableSink()) {
+                    // Use primary key as default keys type for IVM when the query itself
+                    // produces __ROW_ID__ (aggregate MVs encode group-by keys into __ROW_ID__).
+                    if (result.rowIdStrategy() == RowIdStrategy.QUERY_COMPUTED) {
                         statement.setKeysType(KeysType.PRIMARY_KEYS);
                     }
                     statement.setCurrentRefreshMode(result.currentRefreshMode());
