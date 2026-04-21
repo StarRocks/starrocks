@@ -4,7 +4,7 @@ displayed_sidebar: docs
 
 # Marimo
 
-This guide describes how to integrate your StarRocks cluster with [Marimo](https://marimo.io/), a reactive Python notebook built for reproducibility and interactivity.
+Integrate your StarRocks cluster with [Marimo](https://marimo.io/), a reactive Python notebook built for reproducibility and interactivity.
 
 ## Prerequisites
 
@@ -66,6 +66,9 @@ mo.ui.table(df)
 
 ![Marimo notebook connected to StarRocks](../../_assets/marimo_starrocks.png)
 
-> **NOTE**
->
-> Multi-catalog support requires Marimo version 0.22.5 or later.
+:::note
+
+Multi-catalog support requires Marimo version 0.22.5 or later.
+
+:::
+
