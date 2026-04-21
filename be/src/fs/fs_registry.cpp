@@ -15,9 +15,11 @@
 #include "fs/fs_registry.h"
 
 #include <algorithm>
+#include <atomic>
 #include <utility>
 
 #include "fmt/format.h"
+#include "fs/fs_posix.h"
 
 namespace starrocks::fs {
 
@@ -109,13 +111,33 @@ const FrozenFileSystemProviderRegistry& FileSystemProviderRegistry::freeze() {
     return *_frozen;
 }
 
-FileSystemProviderRegistry& global_fs_provider_registry() {
+namespace {
+
+const FrozenFileSystemProviderRegistry& posix_file_system_provider_registry() {
     static FileSystemProviderRegistry registry;
+    static const FrozenFileSystemProviderRegistry* frozen = [] {
+        auto st = registry.register_provider(new_posix_file_system_provider());
+        CHECK(st.ok()) << st;
+        return &registry.freeze();
+    }();
+    return *frozen;
+}
+
+std::atomic<const FrozenFileSystemProviderRegistry*>& installed_file_system_provider_registry() {
+    // The default registry is installed during process bootstrap before worker
+    // threads start, so relaxed ordering is enough for this pointer handoff.
+    static std::atomic<const FrozenFileSystemProviderRegistry*> registry{&posix_file_system_provider_registry()};
     return registry;
 }
 
-Status register_fs_provider(const FileSystemProvider& provider) {
-    return global_fs_provider_registry().register_provider(provider);
+} // namespace
+
+const FrozenFileSystemProviderRegistry& default_file_system_provider_registry() {
+    return *installed_file_system_provider_registry().load(std::memory_order_relaxed);
+}
+
+void install_default_file_system_provider_registry(const FrozenFileSystemProviderRegistry& registry) {
+    installed_file_system_provider_registry().store(&registry, std::memory_order_relaxed);
 }
 
 } // namespace starrocks::fs
