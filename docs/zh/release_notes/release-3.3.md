@@ -96,7 +96,7 @@ displayed_sidebar: docs
 - Lake 主键表返回的行数不正确。[#64007](https://github.com/StarRocks/starrocks/pull/64007)
 - 带 IGNORE NULLS 标志的窗口函数无法与未带该标志的对应函数合并。[#63958](https://github.com/StarRocks/starrocks/pull/63958)
 - `PartitionedSpillerWriter::_remove_partition` 中的 ASAN 错误。[#63903](https://github.com/StarRocks/starrocks/pull/63903)
-- 共享数据集群中排序聚合（sorted aggregation）结果错误。[#63849](https://github.com/StarRocks/starrocks/pull/63849)
+- 存算分离集群中排序聚合（sorted aggregation）结果错误。[#63849](https://github.com/StarRocks/starrocks/pull/63849)
 - 创建分区物化视图时发生 NPE。[#63830](https://github.com/StarRocks/starrocks/pull/63830)
 - 删除分区时 Partitioned Spill 崩溃。[#63825](https://github.com/StarRocks/starrocks/pull/63825)
 - FE 在清理过期导入作业时发生 NPE。[#63820](https://github.com/StarRocks/starrocks/pull/63820)
@@ -110,7 +110,7 @@ displayed_sidebar: docs
 - ARRAY 低基数优化导致 `Left Join` 结果不完整。[#63419](https://github.com/StarRocks/starrocks/pull/63419)
 - 聚合中间类型使用 `ARRAY<NULL_TYPE>` 导致问题。[#63371](https://github.com/StarRocks/starrocks/pull/63371)
 - 基于自增列的部分更新出现元数据不一致。[#63370](https://github.com/StarRocks/starrocks/pull/63370)
-- 共享数据集群中 Fast Schema Evolution 使用的 Bitmap 索引复用不兼容。[#63315](https://github.com/StarRocks/starrocks/pull/63315)
+- 存算分离集群中 Fast Schema Evolution 使用的 Bitmap 索引复用不兼容。[#63315](https://github.com/StarRocks/starrocks/pull/63315)
 - Pod 重启或升级时 CN 被不必要地注销。[#63085](https://github.com/StarRocks/starrocks/pull/63085)
 - 执行 PREPARE/EXECUTE 语句时，Profile 中显示 SQL 为 `omit`。[#62988](https://github.com/StarRocks/starrocks/pull/62988)
 
