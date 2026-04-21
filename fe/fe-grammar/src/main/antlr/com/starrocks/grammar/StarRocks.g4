@@ -1900,6 +1900,7 @@ revokePrivilegeStatement
 showGrantsStatement
     : SHOW GRANTS showPredicateClauses
     | SHOW GRANTS FOR USER? user showPredicateClauses
+    | SHOW GRANTS FOR CURRENT_USER ('(' ')')? showPredicateClauses
     | SHOW GRANTS FOR EXTERNAL GROUP identifierOrString showPredicateClauses
     | SHOW GRANTS FOR ROLE identifierOrString showPredicateClauses
     ;
