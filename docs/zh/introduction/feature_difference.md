@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_label: "Feature Differences"
+sidebar_label: "功能差异"
 ---
 
 import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
