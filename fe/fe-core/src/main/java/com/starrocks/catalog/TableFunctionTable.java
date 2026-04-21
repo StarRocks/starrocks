@@ -42,6 +42,8 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.expression.Delimiter;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
+import com.starrocks.sql.parser.ParsingException;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -474,6 +476,26 @@ public class TableFunctionTable extends Table {
 
         if (!SUPPORTED_FORMATS.contains(format.toLowerCase())) {
             throw new DdlException("not supported format: " + format);
+        }
+
+        if (properties.containsKey(PROPERTY_SCHEMA)) {
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_SAMPLE_FILES, PROPERTY_SCHEMA);
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_SAMPLE_ROWS, PROPERTY_SCHEMA);
+            rejectIfPresent(properties, PROPERTY_AUTO_DETECT_TYPES, PROPERTY_SCHEMA);
+
+            String schemaStr = properties.get(PROPERTY_SCHEMA);
+            if (Strings.isNullOrEmpty(schemaStr) || schemaStr.trim().isEmpty()) {
+                throw new DdlException("'schema' property is empty");
+            }
+            try {
+                List<Column> cols = SqlParser.parseFilesSchema(schemaStr);
+                if (cols.isEmpty()) {
+                    throw new DdlException("'schema' declares no columns");
+                }
+                explicitSchemaColumns = Optional.of(cols);
+            } catch (ParsingException e) {
+                throw new DdlException("invalid 'schema': " + e.getMessage(), e);
+            }
         }
 
         String colsFromPathProp = properties.get(PROPERTY_COLUMNS_FROM_PATH);
