@@ -1296,19 +1296,6 @@ static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& 
     }
 }
 
-static StatusOr<std::vector<std::string>> make_shredded_path_names(const std::vector<VariantPath>& parsed_paths) {
-    std::vector<std::string> paths;
-    paths.reserve(parsed_paths.size());
-    for (const auto& path : parsed_paths) {
-        auto shredded_path = path.to_shredded_path();
-        if (!shredded_path.has_value()) {
-            return Status::InvalidArgument("variant shredded hint path must not contain array segments");
-        }
-        paths.emplace_back(std::move(*shredded_path));
-    }
-    return paths;
-}
-
 // Guided by shredded_paths: each path maps to SCALAR or VARIANT typed_column entry.
 // If a requested path is not found in current file/row-group shredded fields, keep it as VARIANT
 // with null node so output typed_columns keep request-shape stability.
@@ -1905,17 +1892,13 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
 
     // When no explicit paths are requested, auto-discover paths from the shredded field tree.
     // The tree is fixed after construction, so cache the result to avoid repeated traversal.
-    std::vector<std::string> requested_path_names;
-    if (!_requested_shredded_paths.empty()) {
-        ASSIGN_OR_RETURN(requested_path_names, make_shredded_path_names(_requested_shredded_paths));
-    }
-
+    // _requested_shredded_path_names is pre-computed at construction time for the explicit case.
     if (_requested_shredded_paths.empty() && !_auto_paths_cached) {
         collect_all_top_binding_paths(_shredded_fields, &_cached_auto_paths);
         _auto_paths_cached = true;
     }
     const std::vector<std::string>& effective_paths =
-            _requested_shredded_paths.empty() ? _cached_auto_paths : requested_path_names;
+            _requested_shredded_paths.empty() ? _cached_auto_paths : _requested_shredded_path_names;
 
     std::vector<TopBinding> collected_bindings;
     collect_top_bindings(_shredded_fields, effective_paths, &collected_bindings);
@@ -1937,9 +1920,10 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     bool has_reconstructed_null = false;
 
     // batch_ctx is built first so has_typed_value_bitmap is available for both code paths.
-    VariantReadRangeBatchContext batch_ctx(
-            _shredded_fields, materialized_bindings, requested_path_names, _top_level.root_typed_value_column.get(),
-            _top_level.root_typed_value_type.get(), metadata_column, value_column, metadata_nulls, value_nulls);
+    VariantReadRangeBatchContext batch_ctx(_shredded_fields, materialized_bindings, _requested_shredded_path_names,
+                                           _top_level.root_typed_value_column.get(),
+                                           _top_level.root_typed_value_type.get(), metadata_column, value_column,
+                                           metadata_nulls, value_nulls);
 
     // Partition bindings into two groups:
     //   bulk_indices   – SCALAR bindings whose typed_value_column can be bulk-copied after the loop.
@@ -1988,7 +1972,14 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
             const TopBinding& binding = materialized_bindings[bi];
             const Column* src = binding.node != nullptr ? binding.node->typed_value_column.get() : nullptr;
             Column* dst = variant_column->mutable_typed_columns()[bi].get();
-            if (src == nullptr || src->size() != num_rows) {
+            if (src == nullptr) {
+                // Node was not found in this row group's shredded schema; all rows are null.
+                dst->append_nulls(num_rows);
+                continue;
+            }
+            DCHECK_EQ(src->size(), num_rows) << "typed_value_column size mismatch for binding '" << binding.path
+                                             << "': expected " << num_rows << ", got " << src->size();
+            if (src->size() != num_rows) {
                 dst->append_nulls(num_rows);
                 continue;
             }
