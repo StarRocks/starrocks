@@ -185,6 +185,11 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         opts.need_bitmap_index = column.has_bitmap_index();
         opts.need_inverted_index = _tablet_schema->has_index(column.unique_id(), GIN);
         opts.need_vector_index = _tablet_schema->has_index(column.unique_id(), IndexType::VECTOR);
+        if (opts.need_vector_index && _opts.defer_vector_index_build) {
+            // async mode: skip VectorIndexWriter creation, but vector_index_file_paths
+            // are still populated so vector_index_ids metadata is correct
+            opts.need_vector_index = false;
+        }
 
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
         if (opts.need_inverted_index) {
@@ -235,6 +240,8 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
         opts.need_flat = config::enable_json_flat;
         opts.is_compaction = _opts.is_compaction;
+        opts.vector_index_build_threshold = _opts.vector_index_build_threshold;
+
         if (column.type() == LogicalType::TYPE_JSON && _opts.flat_json_config != nullptr) {
             opts.need_flat = _opts.flat_json_config->is_flat_json_enabled();
             opts.flat_json_config = _opts.flat_json_config.get();
@@ -345,7 +352,10 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         if (standalone_index_size > 0) {
             _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_STANDALONE);
             _has_vector_index_written = true;
-        } else {
+        } else if (_tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR) &&
+                   !_opts.defer_vector_index_build) {
+            // Only mark NONE when not deferring. For async mode, leave unset so the read path
+            // will attempt to find .vi files (built later) and fall back gracefully if missing.
             _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_NONE);
         }
 

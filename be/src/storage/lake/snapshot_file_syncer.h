@@ -17,7 +17,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "runtime/exec_env.h"
+#include "runtime/exec_env_fwd.h"
 #include "storage/lake/location_provider.h"
 
 namespace starrocks::lake {

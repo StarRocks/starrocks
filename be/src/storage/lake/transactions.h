@@ -54,7 +54,7 @@ class PublishTabletInfo;
 // - StatusOr containing the new published TabletMetadataPtr on success.
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata);
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version = 0);
 
 // Publish a batch new versions of transaction logs.
 //

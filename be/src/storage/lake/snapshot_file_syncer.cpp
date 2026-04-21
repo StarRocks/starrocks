@@ -19,6 +19,7 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "glog/logging.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/remote_starlet_location_provider.h"

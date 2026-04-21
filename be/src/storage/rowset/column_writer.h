@@ -98,6 +98,7 @@ struct ColumnWriterOptions {
 
     bool is_compaction = false;
     bool need_flat = false;
+    uint32_t vector_index_build_threshold = 0;
 
     std::string field_name;
     const FlatJsonConfig* flat_json_config = nullptr;

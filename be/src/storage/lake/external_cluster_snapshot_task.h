@@ -15,7 +15,7 @@
 #pragma once
 
 #include "gen_cpp/AgentService_types.h"
-#include "runtime/exec_env.h"
+#include "runtime/exec_env_fwd.h"
 
 namespace starrocks::lake {
 
