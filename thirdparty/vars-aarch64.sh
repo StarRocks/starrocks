@@ -57,7 +57,7 @@ STARCACHE_SOURCE="starcache"
 STARCACHE_MD5SUM="8360f05571a77a3745094689a63f5e83"
 
 # pprof
-PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260326/pprof-linux-arm64"
+PPROF_DOWNLOAD="https://github.com/StarRocks/pprof/releases/download/release%2F20260421/pprof-linux-arm64"
 PPROF_NAME="pprof"
 PPROF_SOURCE="pprof"
-PPROF_MD5SUM="dd5184cecf942cf7e027d1f410261cce"
+PPROF_MD5SUM="68014e8daec9cabc8a605a7e2ffe7752"
