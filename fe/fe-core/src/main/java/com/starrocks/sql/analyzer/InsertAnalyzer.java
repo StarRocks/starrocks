@@ -455,6 +455,15 @@ public class InsertAnalyzer {
         }
 
         Consumer<TableFunctionTable> pushDownSchemaFunc = (fileTable) -> {
+            if (fileTable.hasExplicitSchema()) {
+                if (insertStmt.isEnablePushDownSchema()) {
+                    throw new SemanticException(
+                            "'enable_push_down_schema' on INSERT cannot be combined with " +
+                            "'schema' property on FILES(); the explicit schema already fixes " +
+                            "read columns — remove one");
+                }
+                return;  // Mode 1 (config-level): silent skip; explicit schema is authoritative
+            }
             Locker locker = new Locker(session.getQueryId());
             locker.lockTableWithIntensiveDbLock(database.getId(), targetTable.getId(), LockType.READ);
             try {
