@@ -160,7 +160,10 @@ class ArrowSqlLib(BaseConnectionLib):
             cursor.execute(sql)
             arrow_table = cursor.fetch_arrow_table()
             res = convert_arrow_table_to_mysql_rows(arrow_table)
-            return SQLRawResult(status=True, result=res, msg="OK", desc=cursor.description)
+            result = SQLRawResult(status=True, result=res, msg="OK", desc=cursor.description)
+            if not self._is_query_result(result):
+                return SQLRawResult(status=True, result=(), msg="OK", desc=cursor.description)
+            return result
 
     def _is_query_result(self, result: SQLRawResult) -> bool:
         """

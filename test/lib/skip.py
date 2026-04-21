@@ -57,6 +57,7 @@ skip_res_cmd = [
     "select current_time\\(\\)",
     "select curdate\\(\\)",
     "select current_date\\(\\)",
+    "^result=.*",
     "refresh materialized view.*",
     "REFRESH MATERIALIZED VIEW.*",
     "analyze full table.*",

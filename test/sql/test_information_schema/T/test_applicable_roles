@@ -8,51 +8,41 @@ USE db_${uuid0};
 
 SELECT * FROM information_schema.applicable_roles ORDER BY ROLE_NAME ASC;
 -- result:
+root	%	root	%	root	%	NO	NO	NO
 -- !result
--- USER | HOST | GRANTEE | GRANTEE_HOST | ROLE_NAME | ROLE_HOST | IS_GRANTABLE | IS_DEFAULT | IS_MANDATORY
--- -----|------|---------|--------------|-----------|-----------|--------------|------------|--------------
--- root | %    | root    | %            | root      | %         | NO           | NO        | NO
 
 SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME = 'root';
 -- result:
+root	%	root	%	root	%	NO	NO	NO
 -- !result
--- USER | HOST | GRANTEE | GRANTEE_HOST | ROLE_NAME | ROLE_HOST | IS_GRANTABLE | IS_DEFAULT | IS_MANDATORY
--- -----|------|---------|--------------|-----------|-----------|--------------|------------|--------------
--- root | %    | root    | %            | root      | %         | NO           | NO        | NO
 
 SELECT * FROM information_schema.applicable_roles WHERE IS_GRANTABLE = 'NO';
 -- result:
+root	%	root	%	root	%	NO	NO	NO
 -- !result
--- USER | HOST | GRANTEE | GRANTEE_HOST | ROLE_NAME | ROLE_HOST | IS_GRANTABLE | IS_DEFAULT | IS_MANDATORY
--- -----|------|---------|--------------|-----------|-----------|--------------|------------|--------------
--- root | %    | root    | %            | root      | %         | NO           | NO        | NO
 
 SELECT * FROM information_schema.applicable_roles WHERE IS_DEFAULT = 'NO';
 -- result:
+root	%	root	%	root	%	NO	NO	NO
 -- !result
--- USER | HOST | GRANTEE | GRANTEE_HOST | ROLE_NAME | ROLE_HOST | IS_GRANTABLE | IS_DEFAULT | IS_MANDATORY
--- -----|------|---------|--------------|-----------|-----------|--------------|------------|--------------
--- root | %    | root    | %            | root      | %         | NO           | NO        | NO
 
 SELECT * FROM information_schema.applicable_roles WHERE IS_MANDATORY = 'NO';
 -- result:
+root	%	root	%	root	%	NO	NO	NO
 -- !result
--- USER | HOST | GRANTEE | GRANTEE_HOST | ROLE_NAME | ROLE_HOST | IS_GRANTABLE | IS_DEFAULT | IS_MANDATORY
--- -----|------|---------|--------------|-----------|-----------|--------------|------------|--------------
--- root | %    | root    | %            | root      | %         | NO           | NO        | NO
 
 SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME LIKE 'r%' ORDER BY ROLE_NAME ASC;
 -- result:
+root	%	root	%	root	%	NO	NO	NO
 -- !result
--- USER | HOST | GRANTEE | GRANTEE_HOST | ROLE_NAME | ROLE_HOST | IS_GRANTABLE | IS_DEFAULT | IS_MANDATORY
--- -----|------|---------|--------------|-----------|-----------|--------------|------------|--------------
--- root | %    | root    | %            | root      | %         | NO           | NO        | NO
 
 SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME = 'NON_EXISTENT_ROLE';
 -- result:
 -- !result
 
 DROP USER IF EXISTS test_user;
+-- result:
+-- !result
 CREATE USER test_user;
 -- result:
 -- !result
@@ -63,6 +53,7 @@ GRANT SELECT ON information_schema.applicable_roles TO test_user;
 
 SELECT * FROM information_schema.applicable_roles;
 -- result:
+root	%	root	%	root	%	NO	NO	NO
 -- !result
 
 DROP USER test_user;
