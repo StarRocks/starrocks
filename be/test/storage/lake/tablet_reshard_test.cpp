@@ -473,6 +473,155 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_keeps_raw_rowset_stats) {
     EXPECT_EQ(800, total_child_data_size);
 }
 
+// Verify PK split scales num_dels across children proportional to per-child rows. Without
+// this, each child inherits the parent's full delvec cardinality and live_rows drops to 0
+// in get_tablet_stats (see lake_service.cpp:1166-1184).
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_primary_key_schema(&metadata, 1);
+    add_historical_schema(&metadata, 1);
+
+    auto* rowset = metadata.add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(true);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(1000);
+    rowset->set_num_dels(6);
+
+    rowset->add_segments("segment_0.dat");
+    rowset->add_segment_size(500);
+    auto* segment_meta0 = rowset->add_segment_metas();
+    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+    segment_meta0->set_num_rows(5);
+
+    rowset->add_segments("segment_1.dat");
+    rowset->add_segment_size(500);
+    auto* segment_meta1 = rowset->add_segment_metas();
+    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    segment_meta1->set_num_rows(5);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& splitting_tablet = *resharding_tablet.mutable_splitting_tablet_info();
+    splitting_tablet.set_old_tablet_id(tablet_id);
+    const int64_t new_tablet_id_1 = next_id();
+    const int64_t new_tablet_id_2 = next_id();
+    splitting_tablet.add_new_tablet_ids(new_tablet_id_1);
+    splitting_tablet.add_new_tablet_ids(new_tablet_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    int64_t total_child_num_rows = 0;
+    int64_t total_child_num_dels = 0;
+    for (auto new_tablet_id : {new_tablet_id_1, new_tablet_id_2}) {
+        auto it = tablet_metadatas.find(new_tablet_id);
+        ASSERT_TRUE(it != tablet_metadatas.end());
+        ASSERT_EQ(1, it->second->rowsets_size());
+        const auto& child_rowset = it->second->rowsets(0);
+        EXPECT_TRUE(child_rowset.has_num_dels()) << "split must always write num_dels on PK children";
+        EXPECT_LE(child_rowset.num_dels(), child_rowset.num_rows()) << "num_dels must not exceed child num_rows";
+        total_child_num_rows += child_rowset.num_rows();
+        total_child_num_dels += child_rowset.num_dels();
+    }
+
+    EXPECT_EQ(10, total_child_num_rows);
+    // Largest-remainder allocation is exact for in-range rows: Σ child.num_dels must equal D.
+    EXPECT_EQ(6, total_child_num_dels);
+}
+
+// Verify the fallback path: when the parent rowset predates num_dels (has_num_dels() ==
+// false), split derives D from the persisted delvec. A child rowset that cannot retrieve
+// D through either path must still carry an explicit num_dels (0) so that the Step 2
+// router in lake_service sees has_range() but has_num_dels() -> defaults to zero dels.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for_num_dels) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_primary_key_schema(&metadata, 1);
+    add_historical_schema(&metadata, 1);
+
+    auto* rowset = metadata.add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(true);
+    rowset->set_num_rows(8);
+    rowset->set_data_size(800);
+    // num_dels intentionally not set -> exercises get_rowset_num_deletes fallback.
+
+    rowset->add_segments("segment_0.dat");
+    rowset->add_segment_size(400);
+    auto* segment_meta0 = rowset->add_segment_metas();
+    segment_meta0->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment_meta0->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
+    segment_meta0->set_num_rows(4);
+
+    rowset->add_segments("segment_1.dat");
+    rowset->add_segment_size(400);
+    auto* segment_meta1 = rowset->add_segment_metas();
+    segment_meta1->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
+    segment_meta1->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    segment_meta1->set_num_rows(4);
+
+    DelVector delvec;
+    const uint32_t deleted_rows[] = {0, 1, 2, 3};
+    delvec.init(base_version, deleted_rows, 4);
+    add_delvec(&metadata, tablet_id, base_version, rowset->id(), "test.delvec", delvec.save());
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& splitting_tablet = *resharding_tablet.mutable_splitting_tablet_info();
+    splitting_tablet.set_old_tablet_id(tablet_id);
+    const int64_t new_tablet_id_1 = next_id();
+    const int64_t new_tablet_id_2 = next_id();
+    splitting_tablet.add_new_tablet_ids(new_tablet_id_1);
+    splitting_tablet.add_new_tablet_ids(new_tablet_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    int64_t total_child_num_dels = 0;
+    for (auto new_tablet_id : {new_tablet_id_1, new_tablet_id_2}) {
+        auto it = tablet_metadatas.find(new_tablet_id);
+        ASSERT_TRUE(it != tablet_metadatas.end());
+        ASSERT_EQ(1, it->second->rowsets_size());
+        const auto& child_rowset = it->second->rowsets(0);
+        EXPECT_TRUE(child_rowset.has_num_dels());
+        total_child_num_dels += child_rowset.num_dels();
+    }
+    // Σ child.num_dels should equal the delvec cardinality recovered via fallback (4).
+    EXPECT_EQ(4, total_child_num_dels);
+}
+
 TEST_F(LakeTabletReshardTest, test_merge_rowsets_reorder_by_predicate_version) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
@@ -1635,6 +1784,69 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_then_merge) {
     EXPECT_EQ(0, out_sst.rssid_offset());
     // max_rss_rowid high part should match projected shared_rssid
     EXPECT_EQ((static_cast<uint64_t>(out_sst.shared_rssid()) << 32) | 99, out_sst.max_rss_rowid());
+}
+
+// Verify merge-back accumulates num_dels alongside num_rows / data_size. Without this,
+// update_canonical would keep only the first child's per-range num_dels slice so the
+// merged rowset loses (N-1)/N of the parent's deletes and get_tablet_stats over-reports
+// live rows after a merge-back.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_num_dels) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    auto make_child = [&](int64_t tablet_id, int64_t num_rows, int64_t data_size, int64_t num_dels) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(3);
+        set_primary_key_schema(meta.get(), 1001);
+        auto* rowset = meta->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(num_rows);
+        rowset->set_data_size(data_size);
+        rowset->set_num_dels(num_dels);
+        rowset->add_segments("shared_seg.dat");
+        rowset->add_segment_size(data_size);
+        rowset->add_shared_segments(true);
+        return meta;
+    };
+
+    // Parent rowset was 10 rows / 6 dels / 100 bytes. Split gave A 4/3 and B 6/3.
+    auto meta_a = make_child(child_a, /*num_rows=*/4, /*data_size=*/40, /*num_dels=*/3);
+    auto meta_b = make_child(child_b, /*num_rows=*/6, /*data_size=*/60, /*num_dels=*/3);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(child_a);
+    merging_tablet.add_old_tablet_ids(child_b);
+    merging_tablet.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(10, merged->rowsets(0).num_rows());
+    EXPECT_EQ(100, merged->rowsets(0).data_size());
+    EXPECT_EQ(6, merged->rowsets(0).num_dels());
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {

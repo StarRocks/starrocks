@@ -186,8 +186,16 @@ Status update_canonical(RowsetMetadataPB* canonical_rowset, const RowsetMetadata
                          tablet_reshard_helper::union_range(canonical_rowset->range(), duplicate_rowset.range()));
         canonical_rowset->mutable_range()->CopyFrom(merged_range);
     }
+    // Each merge input carries a proportional num_dels slice written by
+    // tablet_splitter.cpp / tablet_reshard_helper.cpp with num_dels <= num_rows.
+    // Summation therefore preserves that invariant on the canonical rowset, so no
+    // clamp is needed. Tablet merge is greenfield; there is no legacy state with
+    // the parent's full num_dels inherited by every child to guard against.
+    DCHECK_LE(canonical_rowset->num_dels(), canonical_rowset->num_rows());
+    DCHECK_LE(duplicate_rowset.num_dels(), duplicate_rowset.num_rows());
     canonical_rowset->set_num_rows(canonical_rowset->num_rows() + duplicate_rowset.num_rows());
     canonical_rowset->set_data_size(canonical_rowset->data_size() + duplicate_rowset.data_size());
+    canonical_rowset->set_num_dels(canonical_rowset->num_dels() + duplicate_rowset.num_dels());
     return Status::OK();
 }
 
