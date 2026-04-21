@@ -146,6 +146,8 @@ public class TableFunctionTable extends Table {
     private static final String PROPERTY_LIST_FILES_ONLY = "list_files_only";
     private static final String PROPERTY_LIST_RECURSIVELY = "list_recursively";
 
+    public static final String PROPERTY_SCHEMA = "schema";
+
     public enum MisMatchFillValue {
         NONE,       // error
         NULL;
@@ -188,6 +190,8 @@ public class TableFunctionTable extends Table {
     private List<TBrokerFileStatus> fileStatuses = Lists.newArrayList();
 
     private MisMatchFillValue misMatchFillValue = MisMatchFillValue.NONE;
+
+    private Optional<List<Column>> explicitSchemaColumns = Optional.empty();
 
     // for unload data
     private String compressionType;
@@ -760,6 +764,10 @@ public class TableFunctionTable extends Table {
         return misMatchFillValue != MisMatchFillValue.NONE;
     }
 
+    public boolean hasExplicitSchema() {
+        return explicitSchemaColumns.isPresent();
+    }
+
     @Override
     public String toString() {
         return String.format("TABLE('path'='%s', 'format'='%s')", path, format);
@@ -991,6 +999,14 @@ public class TableFunctionTable extends Table {
 
         public List<Column> build() {
             return columns;
+        }
+    }
+
+    private static void rejectIfPresent(Map<String, String> props, String key, String against)
+            throws DdlException {
+        if (props.containsKey(key)) {
+            throw new DdlException(
+                    String.format("'%s' cannot be used together with '%s'", key, against));
         }
     }
 }
