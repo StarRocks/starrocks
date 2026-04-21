@@ -67,6 +67,12 @@ import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.mv.IVMAnalyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.mv.MVBaseTablePartitionHandlers;
+import com.starrocks.sql.analyzer.mv.MVPartitionCheckContext;
+import com.starrocks.sql.analyzer.mv.RowIdStrategy;
+>>>>>>> 9cbf6d3b06 ([Refactor] Replace markRetractableSink with RowIdStrategy (#71911))
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -388,8 +394,9 @@ public class MaterializedViewAnalyzer {
                     Analyzer.analyze(queryStatement, context);
                     statement.setIvmViewDef(AstToSQLBuilder.buildSimple(queryStatement));
                     statement.setQueryStatement(queryStatement);
-                    // use primary key as default keys type for ivm
-                    if (result.needRetractableSink()) {
+                    // Use primary key as default keys type for IVM when the query itself
+                    // produces __ROW_ID__ (aggregate MVs encode group-by keys into __ROW_ID__).
+                    if (result.rowIdStrategy() == RowIdStrategy.QUERY_COMPUTED) {
                         statement.setKeysType(KeysType.PRIMARY_KEYS);
                     }
                     statement.setCurrentRefreshMode(result.currentRefreshMode());
