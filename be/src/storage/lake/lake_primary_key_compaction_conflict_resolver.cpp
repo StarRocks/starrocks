@@ -50,8 +50,12 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     // init delvec loader
     SegmentReadOptions seg_options;
 
-    auto delvec_loader =
-            std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, false /* fill cache */, seg_options.lake_io_opts);
+    // Cache the base-version metadata once so per-rssid delvec loads skip get_tablet_metadata
+    // and its TabletMetadataPB deep copy (hot when one compaction merges hundreds of rowsets).
+    ASSIGN_OR_RETURN(auto base_metadata,
+                     _tablet_mgr->get_tablet_metadata(_rowset->tablet_id(), _base_version, true /* fill_cache */));
+    auto delvec_loader = std::make_unique<LakeDelvecLoader>(_tablet_mgr, _builder, true /* fill cache */,
+                                                            seg_options.lake_io_opts, std::move(base_metadata));
     // init params
     CompactConflictResolveParams params;
     params.tablet_id = _rowset->tablet_id();
