@@ -276,10 +276,10 @@ Status AgentServer::Impl::init() {
         // lake_schema_change_per_tablet_parallelism inner tasks at once. The
         // pool is DYNAMIC, so it does not hold idle threads when no schema
         // change is running.
-        int lake_sc_pool_max = std::max(1, config::alter_tablet_worker_count *
-                                                   config::lake_schema_change_per_tablet_parallelism);
-        BUILD_DYNAMIC_TASK_THREAD_POOL(lake_schema_change, 0, lake_sc_pool_max,
-                                       std::numeric_limits<int>::max(), _thread_pool_lake_schema_change);
+        int lake_sc_pool_max =
+                std::max(1, config::alter_tablet_worker_count * config::lake_schema_change_per_tablet_parallelism);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(lake_schema_change, 0, lake_sc_pool_max, std::numeric_limits<int>::max(),
+                                       _thread_pool_lake_schema_change);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL(clear_transaction, 0, config::clear_transaction_task_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_clear_transaction);
@@ -762,11 +762,9 @@ void AgentServer::Impl::update_lake_schema_change_thread_pool_max() {
     if (_thread_pool_lake_schema_change == nullptr) {
         return;
     }
-    int new_max = std::max(1, config::alter_tablet_worker_count *
-                                      config::lake_schema_change_per_tablet_parallelism);
+    int new_max = std::max(1, config::alter_tablet_worker_count * config::lake_schema_change_per_tablet_parallelism);
     Status st = _thread_pool_lake_schema_change->update_max_threads(new_max);
-    LOG_IF(ERROR, !st.ok()) << "Failed to update lake_schema_change pool max_threads to "
-                            << new_max << ": " << st;
+    LOG_IF(ERROR, !st.ok()) << "Failed to update lake_schema_change pool max_threads to " << new_max << ": " << st;
 }
 
 #define STOP_IF_NOT_NULL(worker_pool) \

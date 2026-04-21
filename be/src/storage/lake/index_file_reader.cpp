@@ -50,8 +50,8 @@ Status IndexFileReader::init(RandomAccessFile* file) {
     }
     std::string footer_buf;
     footer_buf.resize(footer_len);
-    RETURN_IF_ERROR(file->read_at_fully(file_size - kTrailerSize - static_cast<int64_t>(footer_len),
-                                        footer_buf.data(), footer_len));
+    RETURN_IF_ERROR(file->read_at_fully(file_size - kTrailerSize - static_cast<int64_t>(footer_len), footer_buf.data(),
+                                        footer_len));
     if (!_footer.ParseFromString(footer_buf)) {
         return Status::Corruption("IndexFileReader: failed to parse IndexFileFooterPB");
     }
@@ -66,8 +66,7 @@ const ColumnIndexMetaPB* IndexFileReader::find(int32_t col_unique_id, IndexType 
     // Linear scan is fine: a single .idx file carries at most a handful of
     // (col, type) pairs (bounded by what one ALTER can introduce).
     for (const auto& entry : _footer.column_indexes()) {
-        if (entry.col_unique_id() == col_unique_id && entry.index_type() == index_type &&
-            entry.has_index_meta()) {
+        if (entry.col_unique_id() == col_unique_id && entry.index_type() == index_type && entry.has_index_meta()) {
             return &entry.index_meta();
         }
     }

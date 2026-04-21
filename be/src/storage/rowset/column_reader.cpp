@@ -429,9 +429,7 @@ Status ColumnReader::_new_idg_backed_bitmap_index_iterator(const IndexReadOption
     public:
         OwningBitmapIndexIterator(BitmapIndexIterator&& base, std::unique_ptr<BitmapIndexReader> reader,
                                   std::unique_ptr<RandomAccessFile> file)
-                : BitmapIndexIterator(std::move(base)),
-                  _reader(std::move(reader)),
-                  _file(std::move(file)) {}
+                : BitmapIndexIterator(std::move(base)), _reader(std::move(reader)), _file(std::move(file)) {}
         ~OwningBitmapIndexIterator() override = default;
 
     private:
@@ -549,8 +547,8 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                 // Resolve .idx path under the segment directory and parse footer.
                 const std::string& seg_path = _segment->file_name();
                 auto pos = seg_path.find_last_of('/');
-                std::string idx_path = (pos == std::string::npos) ? e.index_file
-                                                                  : seg_path.substr(0, pos + 1) + e.index_file;
+                std::string idx_path =
+                        (pos == std::string::npos) ? e.index_file : seg_path.substr(0, pos + 1) + e.index_file;
                 ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(idx_path));
                 ASSIGN_OR_RETURN(idg_file_holder, fs->new_random_access_file(idx_path));
 
@@ -563,8 +561,7 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
                 IndexReadOptions sub_opts = opts;
                 sub_opts.read_file = idg_file_holder->stream().get();
                 idg_reader_holder = std::make_unique<BloomFilterIndexReader>();
-                ASSIGN_OR_RETURN(auto bf_first_load,
-                                 idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
+                ASSIGN_OR_RETURN(auto bf_first_load, idg_reader_holder->load(sub_opts, meta->bloom_filter_index()));
                 (void)bf_first_load;
                 RETURN_IF_ERROR(idg_reader_holder->new_iterator(sub_opts, &bf_iter));
                 used_idg = true;

@@ -23,8 +23,7 @@ IndexFileWriter::IndexFileWriter(std::unique_ptr<WritableFile> file) : _file(std
 
 IndexFileWriter::~IndexFileWriter() = default;
 
-void IndexFileWriter::append_column_index(int32_t col_unique_id, IndexType index_type,
-                                          const ColumnIndexMetaPB& meta) {
+void IndexFileWriter::append_column_index(int32_t col_unique_id, IndexType index_type, const ColumnIndexMetaPB& meta) {
     auto* entry = _footer.add_column_indexes();
     entry->set_col_unique_id(col_unique_id);
     entry->set_index_type(index_type);

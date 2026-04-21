@@ -717,8 +717,7 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
 Status SchemaChangeHandler::do_process_drop_index_only(const TAlterTabletReqV2& request) {
     AgentMetrics::instance()->lake_drop_index_requests_total.increment(1);
     if (!request.__isset.drop_indexes || request.drop_indexes.empty()) {
-        LOG(WARNING) << "DROP INDEX fast path called with empty drop_indexes list; tablet="
-                     << request.new_tablet_id;
+        LOG(WARNING) << "DROP INDEX fast path called with empty drop_indexes list; tablet=" << request.new_tablet_id;
         return Status::InvalidArgument("drop_indexes is empty for DROP INDEX fast path");
     }
     if (!request.__isset.txn_id) {
@@ -749,8 +748,8 @@ Status SchemaChangeHandler::do_process_drop_index_only(const TAlterTabletReqV2& 
         }
     }
 
-    LOG(INFO) << "DROP INDEX fast path commit: tablet=" << request.new_tablet_id
-              << " txn_id=" << request.txn_id << " drop_count=" << op->dropped_size();
+    LOG(INFO) << "DROP INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id
+              << " drop_count=" << op->dropped_size();
     return _tablet_manager->put_txn_log(std::move(txn_log));
 }
 

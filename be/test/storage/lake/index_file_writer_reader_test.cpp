@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/lake/index_file_reader.h"
-#include "storage/lake/index_file_writer.h"
-
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -25,6 +22,8 @@
 #include "fs/fs_memory.h"
 #include "gen_cpp/segment.pb.h"
 #include "gen_cpp/types.pb.h"
+#include "storage/lake/index_file_reader.h"
+#include "storage/lake/index_file_writer.h"
 
 namespace starrocks::lake {
 

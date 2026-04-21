@@ -31,7 +31,7 @@ class Segment;
 class TabletColumn;
 class WritableFile;
 class TabletIndex;
-}
+} // namespace starrocks
 
 namespace starrocks::lake {
 
@@ -56,7 +56,8 @@ class IndexFileWriter;
 class AddIndexSchemaChange {
 public:
     AddIndexSchemaChange(TabletManager* tablet_mgr, int64_t txn_id, VersionedTablet base_tablet,
-                         VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build, int64_t alter_version);
+                         VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build,
+                         int64_t alter_version);
 
     ~AddIndexSchemaChange();
 

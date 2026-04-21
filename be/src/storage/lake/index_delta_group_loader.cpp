@@ -29,8 +29,7 @@ inline uint64_t pack_key(int32_t col_uid, IndexType type) {
 
 } // namespace
 
-Status LakeIndexDeltaGroupLoader::load(const TabletSegmentId& tsid, int64_t query_version,
-                                       IndexDeltaGroupList* out) {
+Status LakeIndexDeltaGroupLoader::load(const TabletSegmentId& tsid, int64_t query_version, IndexDeltaGroupList* out) {
     out->clear();
     if (_tablet_metadata == nullptr) {
         return Status::OK();

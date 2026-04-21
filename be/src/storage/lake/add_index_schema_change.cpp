@@ -132,8 +132,8 @@ Status feed_index_from_column(Writer* writer, const Column& col, size_t start_ro
 } // namespace
 
 AddIndexSchemaChange::AddIndexSchemaChange(TabletManager* tablet_mgr, int64_t txn_id, VersionedTablet base_tablet,
-                                           VersionedTablet new_tablet,
-                                           std::vector<TabletIndexPB> indexes_to_build, int64_t alter_version)
+                                           VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build,
+                                           int64_t alter_version)
         : _tablet_mgr(tablet_mgr),
           _txn_id(txn_id),
           _base_tablet(std::move(base_tablet)),
@@ -169,16 +169,16 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
             // reference would dangle if we captured by reference and the
             // metadata got mutated during the run (e.g. defensive).
             RowsetMetadataPB rowset_copy = rowset;
-            Status submit_st = runner.submit([this, rowset_copy = std::move(rowset_copy), seg_idx, rssid,
-                                              op_add_index]() -> Status {
-                IndexDeltaGroupEntryPB entry;
-                RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
-                std::lock_guard<std::mutex> lg(_op_mtx);
-                auto* se = op_add_index->add_segment_entries();
-                se->set_segment_id(rssid);
-                se->mutable_entry()->Swap(&entry);
-                return Status::OK();
-            });
+            Status submit_st = runner.submit(
+                    [this, rowset_copy = std::move(rowset_copy), seg_idx, rssid, op_add_index]() -> Status {
+                        IndexDeltaGroupEntryPB entry;
+                        RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
+                        std::lock_guard<std::mutex> lg(_op_mtx);
+                        auto* se = op_add_index->add_segment_entries();
+                        se->set_segment_id(rssid);
+                        se->mutable_entry()->Swap(&entry);
+                        return Status::OK();
+                    });
             if (!submit_st.ok()) {
                 // Submission failure short-circuits: wait for pending tasks
                 // to drain, then report the submit error (which takes
@@ -260,8 +260,7 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
         int col_uid = ix.col_unique_id(0);
         int32_t col_ordinal = tablet_schema->field_index(col_uid);
         if (col_ordinal < 0) {
-            return Status::InternalError(
-                    strings::Substitute("column with unique_id $0 not found in schema", col_uid));
+            return Status::InternalError(strings::Substitute("column with unique_id $0 not found in schema", col_uid));
         }
         const auto& column = tablet_schema->column(static_cast<size_t>(col_ordinal));
 
@@ -281,9 +280,8 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
         case IndexType::GIN:
         case IndexType::VECTOR:
         default:
-            return Status::NotSupported(
-                    strings::Substitute("lake ADD INDEX fast path: index type $0 not yet supported",
-                                        static_cast<int>(ix.index_type())));
+            return Status::NotSupported(strings::Substitute("lake ADD INDEX fast path: index type $0 not yet supported",
+                                                            static_cast<int>(ix.index_type())));
         }
         idx_writer.append_column_index(col_uid, ix.index_type(), meta);
     }
@@ -373,9 +371,9 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     return Status::OK();
 }
 
-Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const TabletColumn& column,
-                                                    IndexType index_type, const TabletIndexPB& ix,
-                                                    WritableFile* target_wfile, ColumnIndexMetaPB* out_meta) {
+Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const TabletColumn& column, IndexType index_type,
+                                                    const TabletIndexPB& ix, WritableFile* target_wfile,
+                                                    ColumnIndexMetaPB* out_meta) {
     if (segment == nullptr || target_wfile == nullptr || out_meta == nullptr) {
         return Status::InvalidArgument("build_bloom_for_column: null argument");
     }
