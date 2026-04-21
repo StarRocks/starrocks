@@ -332,6 +332,7 @@ select array_generate("2025-10-01", "2025-10-05",interval 1 day);
 -- !result
 select array_generate("2025-10-01", "2025-10-05",interval 0 day);
 -- result:
+[]
 -- !result
 select array_generate("2025-10-01", 10000, interval 0 day);
 -- result:

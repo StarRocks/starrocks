@@ -28,7 +28,7 @@ create table t5(k int, v int sum) aggregate key(k) distributed by hash(k);
 -- !result
 alter table t5 distributed by random buckets 20;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 15 to line 1, column 45. Detail message: AGGREGATE KEY cannot use random distribution.')
+E: (1064, 'Getting analyzing error from line 1, column 15 to line 1, column 45. Detail message: AGGREGATE KEY must use hash distribution.')
 -- !result
 
 -- name: test_create_default_random_distribution_table
@@ -87,6 +87,7 @@ insert into t values(1,1),(1,2);
 -- !result
 select * from tva;
 -- result:
+1	3
 -- !result
 -- name: test_add_partition @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
