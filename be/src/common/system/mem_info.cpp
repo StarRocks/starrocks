@@ -108,9 +108,9 @@ void MemInfo::init() {
         auto mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
 
         if (result == StringParser::PARSE_SUCCESS) {
-            // Entries in /proc/meminfo are in KB.
-            if (_s_physical_mem <= 0 || _s_physical_mem > mem_total_kb * 1000L) {
-                _s_physical_mem = mem_total_kb * 1000L;
+            // Entries in /proc/meminfo are in kB(which is same as KiB).
+            if (_s_physical_mem <= 0 || _s_physical_mem > mem_total_kb * 1024L) {
+                _s_physical_mem = mem_total_kb * 1024L;
             }
         }
 
