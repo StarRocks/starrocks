@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "common/config_local_io_fwd.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "io/core/array_input_stream.h"
 
 namespace starrocks {
@@ -83,6 +84,11 @@ TEST(FSCoreTest, file_write_history_tracks_open_and_close) {
     ASSERT_TRUE(it != stats.end());
 
     config::file_write_history_size = old_history_size;
+}
+
+TEST(FSCoreTest, factory_uses_default_posix_registry) {
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString("posix://"));
+    ASSERT_EQ(FileSystem::POSIX, fs->type());
 }
 
 } // namespace starrocks
