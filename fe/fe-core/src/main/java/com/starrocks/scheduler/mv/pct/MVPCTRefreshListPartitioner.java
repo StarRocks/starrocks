@@ -129,6 +129,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         PartitionDiffResult result;
         try {
+            differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
             result = differ.computePartitionDiff(null);
             if (result == null) {
                 logger.warn("compute list partition diff failed, result is null");
