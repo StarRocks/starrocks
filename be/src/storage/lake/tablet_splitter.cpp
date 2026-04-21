@@ -527,8 +527,8 @@ Status get_tablet_split_ranges(TabletManager* tablet_manager, const TabletMetada
                      << " produced=" << split_ranges->size();
         auto produced = split_ranges->size();
         split_ranges->clear();
-        return Status::InvalidArgument(fmt::format(
-                "Insufficient split boundaries: requested {}, produced {}", split_count, produced));
+        return Status::InvalidArgument(
+                fmt::format("Insufficient split boundaries: requested {}, produced {}", split_count, produced));
     }
 
     // Only PK tablets maintain delete vectors; duplicate/aggregate keys never populate

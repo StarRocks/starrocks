@@ -356,8 +356,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
 
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-    auto res = lake::publish_resharding_tablet(_tablet_manager.get(), resharding, metadata.version(),
-                                               metadata.version() + 1, txn_info, false, tablet_metadatas, tablet_ranges);
+    auto res =
+            lake::publish_resharding_tablet(_tablet_manager.get(), resharding, metadata.version(),
+                                            metadata.version() + 1, txn_info, false, tablet_metadatas, tablet_ranges);
     EXPECT_OK(res);
     // Fallback produces: old_tablet_id (committed under new_version) +
     // new_tablet_ids(0) carrying all data. The remaining 7 new tablet ids
