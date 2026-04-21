@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class SqlParserFilesSchemaTest {
@@ -65,5 +66,71 @@ public class SqlParserFilesSchemaTest {
         List<Column> cols = SqlParser.parseFilesSchema("`schema` BIGINT, `order` VARCHAR(16)");
         assertEquals("schema", cols.get(0).getName());
         assertEquals("order", cols.get(1).getName());
+    }
+
+    @Test
+    public void testRejectsNotNull() {
+        ParsingException e = assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a INT NOT NULL"));
+        // ANTLR error message references the unexpected token
+        assertTrue(e.getMessage().toLowerCase().contains("not") ||
+                        e.getMessage().contains("extraneous"),
+                "message should indicate grammar error, got: " + e.getMessage());
+    }
+
+    @Test
+    public void testRejectsNullable() {
+        assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a INT NULL"));
+    }
+
+    @Test
+    public void testRejectsDefault() {
+        assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a INT DEFAULT 0"));
+    }
+
+    @Test
+    public void testRejectsComment() {
+        assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a INT COMMENT 'x'"));
+    }
+
+    @Test
+    public void testRejectsKey() {
+        assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a INT KEY"));
+    }
+
+    @Test
+    public void testRejectsAutoIncrement() {
+        assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a BIGINT AUTO_INCREMENT"));
+    }
+
+    @Test
+    public void testRejectsGeneratedColumn() {
+        assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a INT AS (b + 1)"));
+    }
+
+    @Test
+    public void testRejectsMissingType() {
+        assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a, b INT"));
+    }
+
+    @Test
+    public void testRejectsTrailingComma() {
+        assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a INT,"));
+    }
+
+    @Test
+    public void testRejectsDuplicateColumnName() {
+        ParsingException e = assertThrows(ParsingException.class,
+                () -> SqlParser.parseFilesSchema("a INT, A BIGINT"));
+        assertTrue(e.getMessage().contains("duplicate column in 'schema'"),
+                "message should call out duplicate, got: " + e.getMessage());
     }
 }
