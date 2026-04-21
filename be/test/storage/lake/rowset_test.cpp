@@ -143,6 +143,7 @@ TEST_F(LakeRowsetTest, test_data_size_after_deletion_clamps_negative_live_rows) 
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(next_id());
     auto* schema = metadata->mutable_schema();
+    schema->set_id(next_id()); // TabletSchemaMap::emplace DCHECKs id != invalid_id()
     schema->set_keys_type(DUP_KEYS);
     auto* r = metadata->add_rowsets();
     r->set_id(1);
@@ -159,6 +160,7 @@ TEST_F(LakeRowsetTest, test_data_size_after_deletion_scales_by_live_fraction) {
     auto metadata = std::make_shared<TabletMetadata>();
     metadata->set_id(next_id());
     auto* schema = metadata->mutable_schema();
+    schema->set_id(next_id()); // TabletSchemaMap::emplace DCHECKs id != invalid_id()
     schema->set_keys_type(DUP_KEYS);
     auto* r = metadata->add_rowsets();
     r->set_id(1);
