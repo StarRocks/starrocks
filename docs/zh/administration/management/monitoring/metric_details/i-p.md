@@ -8,10 +8,10 @@ description: "Alphabetical i - p"
 
 :::note
 
-物化视图和共享数据集群的指标在相应章节中详细说明：
+物化视图和存算分离集群的指标在相应章节中详细说明：
 
 - [异步物化视图指标](../metrics-materialized_view.md)
-- [共享数据仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
+- [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
 有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控与告警](../Monitor_and_Alert.md)。
 

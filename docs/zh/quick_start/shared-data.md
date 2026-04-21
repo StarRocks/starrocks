@@ -16,7 +16,7 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 - 在 Docker 容器中运行 StarRocks
 - 使用 MinIO 作为对象存储
-- 配置 StarRocks 以实现共享数据
+- 配置 StarRocks 以实现存算分离
 - 导入两个公共数据集
 - 使用 SELECT 和 JOIN 分析数据
 - 基本数据转换（ETL 中的 **T**）
@@ -27,8 +27,8 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 本文档包含大量信息，内容以步骤为主，技术细节在后面。这是为了按以下顺序实现这些目的：
 
-1. 允许读者在共享数据部署中导入数据并分析这些数据。
-2. 提供共享数据部署的配置细节。
+1. 允许读者在存算分离部署中导入数据并分析这些数据。
+2. 提供存算分离部署的配置细节。
 3. 解释数据导入过程中的基本数据转换。
 
 ---
@@ -67,11 +67,11 @@ import Curl from '../_assets/quick-start/_curl.mdx'
 
 ### CN
 
-计算节点负责在共享数据部署中执行查询计划。
+计算节点负责在存算分离部署中执行查询计划。
 
 ### BE
 
-后端节点负责在无共享部署中进行数据存储和执行查询计划。
+后端节点负责在存算一体部署中进行数据存储和执行查询计划。
 
 :::note
 本指南不使用 BEs，此信息仅供您了解 BEs 和 CNs 之间的区别。
@@ -192,11 +192,11 @@ docker compose run minio_mc
 
 ---
 
-## StarRocks 的共享数据配置
+## StarRocks 的存算分离配置
 
 此时，您已经运行了 StarRocks，并且 MinIO 也在运行。MinIO 访问密钥用于连接 StarRocks 和 MinIO。
 
-这是 `FE` 配置的一部分，指定 StarRocks 部署将使用共享数据。这是在 Docker Compose 创建部署时添加到文件 `fe.conf` 中的。
+这是 `FE` 配置的一部分，指定 StarRocks 部署将使用存算分离。这是在 Docker Compose 创建部署时添加到文件 `fe.conf` 中的。
 
 ```sh
 # enable the shared data run mode
@@ -242,7 +242,7 @@ SHOW STORAGE VOLUMES;
 Empty set (0.04 sec)
 ```
 
-#### 创建一个共享数据存储卷
+#### 创建一个存算分离存储卷
 
 之前您在 MinIO 中创建了一个名为 `my-starrocks-volume` 的 bucket，并验证了 MinIO 有一个名为 `AAAAAAAAAAAAAAAAAAAA` 的访问密钥。以下 SQL 将在 MionIO bucket 中使用访问密钥和密钥创建一个存储卷。
 
@@ -462,13 +462,13 @@ curl --location-trusted -u root             \
 
 ---
 
-## 配置 StarRocks 以实现共享数据
+## 配置 StarRocks 以实现存算分离
 
-现在您已经体验了使用 StarRocks 的共享数据，了解配置很重要。
+现在您已经体验了使用 StarRocks 的存算分离，了解配置很重要。
 
 ### CN 配置
 
-此处使用的 CN 配置是默认配置，因为 CN 设计用于共享数据使用。默认配置如下所示。您无需进行任何更改。
+此处使用的 CN 配置是默认配置，因为 CN 设计用于存算分离使用。默认配置如下所示。您无需进行任何更改。
 
 ```bash
 sys_log_level = INFO
@@ -494,7 +494,7 @@ cloud_native_storage_type = S3
 ```
 
 :::note
-此配置文件不包含 FE 的默认条目，仅显示共享数据配置。
+此配置文件不包含 FE 的默认条目，仅显示存算分离配置。
 :::
 
 非默认 FE 配置设置：
@@ -505,7 +505,7 @@ cloud_native_storage_type = S3
 
 #### `run_mode=shared_data`
 
-这启用了共享数据使用。
+这启用了存算分离使用。
 
 #### `cloud_native_storage_type=S3`
 
