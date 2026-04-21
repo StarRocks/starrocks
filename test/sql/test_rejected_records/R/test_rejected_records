@@ -308,7 +308,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
--- name: test_rejected_records_parquet_type_mismatch @sequential @cloud
+-- name: test_rejected_records_parquet_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
 -- !result
@@ -330,7 +330,7 @@ shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({
 0
 0
 -- !result
-shell: for h in $({ ${mysql_cmd} -Ne "show frontends" | awk '{print $3}'; ${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'; } | sort -u); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_parquet_${uuid0}.parquet sr@$h:/tmp/; done; echo 0
+shell: ossutil64 mkdir oss://${oss_bucket}/test_rejected_records/${uuid0} >/dev/null 2>&1 || true; ossutil64 cp --force /tmp/rej_parquet_${uuid0}.parquet oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.parquet >/dev/null 2>&1; echo 0
 -- result:
 0
 0
@@ -341,7 +341,7 @@ set log_rejected_record_num = -1;
 set insert_max_filter_ratio = 1.0;
 -- result:
 -- !result
-insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_parquet_${uuid0}.parquet','format'='parquet');
+insert into t select cast(id as int), cast(val as int), name from files("path" = "oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.parquet", "fs.oss.endpoint" = "${oss_endpoint}", "fs.oss.accessKeyId" = "${oss_ak}", "fs.oss.accessKeySecret" = "${oss_sk}", "format" = "parquet");
 -- result:
 -- !result
 select * from t order by id;
@@ -368,7 +368,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 0
 0
 -- !result
-shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; for h in $({ ${mysql_cmd} -Ne "show frontends" | awk '{print $3}'; ${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'; } | sort -u); do sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null sr@$h "rm -f /tmp/rej_parquet_${uuid0}.parquet" >/dev/null 2>&1; done; echo 0
+shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; ossutil64 rm -rf oss://${oss_bucket}/test_rejected_records/${uuid0}/ >/dev/null 2>&1 || true; echo 0
 -- result:
 0
 0
@@ -376,7 +376,7 @@ shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; for h in $({ ${mysql_cmd} -Ne "s
 drop database db_${uuid0};
 -- result:
 -- !result
--- name: test_rejected_records_orc_type_mismatch @sequential @cloud
+-- name: test_rejected_records_orc_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
 -- !result
@@ -398,7 +398,7 @@ shell: python3 -c 'import pyorc, io; schema = "struct<id:int,val:string,name:str
 0
 0
 -- !result
-shell: for h in $({ ${mysql_cmd} -Ne "show frontends" | awk '{print $3}'; ${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'; } | sort -u); do sshpass -p 'sr@test' scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null /tmp/rej_orc_${uuid0}.orc sr@$h:/tmp/; done; echo 0
+shell: ossutil64 mkdir oss://${oss_bucket}/test_rejected_records/${uuid0} >/dev/null 2>&1 || true; ossutil64 cp --force /tmp/rej_orc_${uuid0}.orc oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.orc >/dev/null 2>&1; echo 0
 -- result:
 0
 0
@@ -409,7 +409,7 @@ set log_rejected_record_num = -1;
 set insert_max_filter_ratio = 1.0;
 -- result:
 -- !result
-insert into t select cast(id as int), cast(val as int), name from files('path'='file:///tmp/rej_orc_${uuid0}.orc','format'='orc');
+insert into t select cast(id as int), cast(val as int), name from files("path" = "oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.orc", "fs.oss.endpoint" = "${oss_endpoint}", "fs.oss.accessKeyId" = "${oss_ak}", "fs.oss.accessKeySecret" = "${oss_sk}", "format" = "orc");
 -- result:
 -- !result
 select * from t order by id;
@@ -436,7 +436,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 0
 0
 -- !result
-shell: rm -f /tmp/rej_orc_${uuid0}.orc; for h in $({ ${mysql_cmd} -Ne "show frontends" | awk '{print $3}'; ${mysql_cmd} -Ne "show compute nodes" | awk '{print $2}'; } | sort -u); do sshpass -p 'sr@test' ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null sr@$h "rm -f /tmp/rej_orc_${uuid0}.orc" >/dev/null 2>&1; done; echo 0
+shell: rm -f /tmp/rej_orc_${uuid0}.orc; ossutil64 rm -rf oss://${oss_bucket}/test_rejected_records/${uuid0}/ >/dev/null 2>&1 || true; echo 0
 -- result:
 0
 0
