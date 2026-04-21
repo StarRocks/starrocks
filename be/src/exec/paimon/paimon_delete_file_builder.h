@@ -28,19 +28,16 @@ public:
     Status build(const TPaimonDeletionFile* paimon_deletion_file);
 
 private:
-    uint32_t swap_endian32(uint32_t val) {
-        return ((val << 24) & 0xFF000000) | ((val << 8) & 0x00FF0000) | ((val >> 8) & 0x0000FF00) |
-               ((val >> 24) & 0x000000FF);
-    }
-
     FileSystem* _fs;
     SkipRowsContextPtr _skip_rows_ctx;
 
     // Structure of a deletion file is: 1 byte version num + n * {4 bytes deletion vector length + 4 bytes magic num
     // + (length - 4) bytes bitmap + 4 bytes CRC num}, n is equal to num of data files
-    const int32_t MAGIC_NUMBER = 1581511376;
-    const int32_t MAGIC_NUMBER_LENGTH = 4;
-    const int32_t BITMAP_SIZE_LENGTH = 4;
+    static constexpr int32_t MAGIC_NUMBER = 1581511376;
+    static constexpr int32_t MAGIC_NUMBER_64 = 1681511377;
+    static constexpr int32_t MAGIC_NUMBER_LENGTH = 4;
+    static constexpr int32_t BITMAP_SIZE_LENGTH = 4;
+    static constexpr int32_t CRC_LENGTH = 4;
 };
 
 } // namespace starrocks
