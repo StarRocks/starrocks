@@ -1,6 +1,6 @@
 -- name: test_iceberg_min_max_opt
 
-create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="false");
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
 
 create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 set catalog iceberg_sql_test_${uuid0};
@@ -8,6 +8,10 @@ use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 
 set enable_profile = true;
 set enable_async_profile = false;
+
+-- In each test case, after inserting data, we will run a simple query to fill data files cache and metadata cache on purpose
+-- we don't request column stats in this scan, we need to make sure the file stats are loaded in cache for later tests.
+-- if it does not, then following queries can not use column stats and will trigger io read.
 
 -- ============================================================
 -- Case 1: all supported types (tinyint/smallint/int/bigint/bool/float/double/date).
@@ -53,6 +57,8 @@ INSERT INTO ice_tbl_0 (
 (8, 80, 800, 8000, false, 8.8, 9.9, 80.000000000000000008, '2025-06-29 09:10:00', 'theta', '2025-07-06', '09:10:00'),
 (9, 90, 900, 9000, true, 9.9, 10.1, 90.000000000000000009, '2025-06-29 09:20:00', 'iota', '2025-07-07', '09:20:00'),
 (10, 100, 1000, 10000, false, 10.1, 11.2, 100.000000000000000010, '2025-06-29 09:30:00', 'kappa', '2025-07-08', '09:30:00');
+
+select c_tinyint from ice_tbl_0 order by c_tinyint;
 
 set enable_min_max_optimization = true;
 select min(c_tinyint) as min_tinyint, 
@@ -173,6 +179,8 @@ INSERT INTO ice_tbl_0 (
 ) VALUES
 (null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
 
+select c_tinyint from ice_tbl_0 order by c_tinyint;
+
 set enable_min_max_optimization = true;
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
@@ -233,6 +241,8 @@ INSERT overwrite ice_tbl_0 (
 ) VALUES
 (null, 10, 100, null, true, 1.1, 2.2, 10.000000000000000001, '2025-06-29 08:00:00', 'alpha', '2025-06-29', '08:00:00');
 
+select c_tinyint from ice_tbl_0 order by c_tinyint;
+
 set enable_min_max_optimization = true;
 select min(c_tinyint) as min_tinyint, 
        max(c_tinyint) as max_tinyint,
@@ -291,6 +301,8 @@ INSERT INTO ice_tbl_dt (c_int, c_datetime) VALUES
 (2, '2025-06-29 09:10:00'),
 (3, '2025-06-29 10:20:00');
 
+select c_int from ice_tbl_dt order by c_int;
+
 set enable_min_max_optimization = true;
 set time_zone = 'UTC';
 select min(c_datetime), max(c_datetime) from ice_tbl_dt;
@@ -326,6 +338,8 @@ INSERT INTO ice_tbl_1 (
 ) VALUES
 (null, null);
 
+select c_int from ice_tbl_1 order by c_int;
+
 select min(c_int), max(c_int), min(c_bigint), max(c_bigint) from ice_tbl_1;
 select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
 
@@ -346,6 +360,8 @@ INSERT INTO ice_tbl_2 (
 ) VALUES
 (10, '2021-01-01 13:00:00'),
 (20, '2022-01-01 14:00:00');
+
+select c_int from ice_tbl_2 order by c_int;
 
 select min(c_int), max(c_int) from ice_tbl_2;
 select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
@@ -373,6 +389,8 @@ INSERT INTO ice_tbl_3 (id, name) VALUES
 (3, 'carol'),
 (4, 'dave'),
 (5, 'eve');
+
+select id from ice_tbl_3 order by id;
 
 select min(id), max(id) from ice_tbl_3;
 select * from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%RowsRead: 0%';
