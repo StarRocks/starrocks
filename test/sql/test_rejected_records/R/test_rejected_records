@@ -393,7 +393,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 0
 0
 -- !result
-shell: python3 -c 'import pyorc, io; schema = "struct<id:int,val:string,name:string>"; buf = io.BytesIO(); w = pyorc.Writer(buf, schema); w.write((1, "100", "alice")); w.write((2, "bad_val", "bob")); w.write((3, "200", "carol")); w.close(); open("/tmp/rej_orc_${uuid0}.orc","wb").write(buf.getvalue()); print(0)'
+shell: python3 -c 'import pyarrow as pa, pyarrow.orc as po; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array(["100","bad_val","200"],pa.string()), "name": pa.array(["alice","bob","carol"],pa.string())}); po.write_table(tbl, "/tmp/rej_orc_${uuid0}.orc"); print(0)'
 -- result:
 0
 0
