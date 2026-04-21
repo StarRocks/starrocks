@@ -1454,7 +1454,16 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public boolean isEnableLoadProfile() {
-        return connectContext != null && connectContext.getSessionVariable().isEnableLoadProfile();
+        // Check both session variable and the query option set during planning.
+        // When stream load is sent directly to CN, the ConnectContext is created
+        // with empty session variables, but StreamLoadPlanner may have set
+        // enable_profile=true in TQueryOptions based on the table's
+        // enable_load_profile property.  Without checking the query option,
+        // the profile collected by BE would be silently discarded by FE.
+        if (connectContext != null && connectContext.getSessionVariable().isEnableLoadProfile()) {
+            return true;
+        }
+        return jobSpec.getQueryOptions().isSetEnable_profile() && jobSpec.getQueryOptions().isEnable_profile();
     }
 
     /**
