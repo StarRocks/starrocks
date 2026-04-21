@@ -60,6 +60,7 @@ import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
@@ -83,6 +84,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionMetricRegistry;
@@ -908,6 +910,36 @@ public final class MetricRepo {
             STARROCKS_METRIC_REGISTER.addMetric(tabletMaxCompactionScore);
 
         } // end for backends
+
+        if (!RunMode.isSharedDataMode()) {
+            return;
+        }
+        StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+
+        for (Long cnId : infoService.getComputeNodeIds(false)) {
+            ComputeNode cn = infoService.getComputeNode(cnId);
+            if (cn == null) {
+                continue;
+            }
+
+            // tablet number of each compute node
+            Metric<Long> tabletNum = new LeaderAwareGaugeMetricLong(TABLET_NUM,
+                    MetricUnit.NOUNIT, "tablet number") {
+                @Override
+                public Long getValueLeader() {
+                    ComputeNode cn = infoService.getComputeNode(cnId);
+                    if (cn == null) {
+                        return 0L;
+                    }
+                    String workerAddr = cn.getHost() + ":" + cn.getStarletPort();
+                    return starOsAgent.getWorkerTabletNum(workerAddr);
+                }
+            };
+            tabletNum.addLabel(new MetricLabel("backend",
+                    NetUtils.getHostPortInAccessibleFormat(cn.getHost(), cn.getHeartbeatPort())));
+            STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
+
+        } // end for compute nodes
     }
 
     public static void updateMemoryUsageMetrics() {

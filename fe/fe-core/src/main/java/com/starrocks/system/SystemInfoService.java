@@ -228,6 +228,9 @@ public class SystemInfoService implements GsonPostProcessable {
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
+
+        // compute nodes are changed, regenerate tablet number metrics
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     public void setComputeNodeOwner(ComputeNode computeNode) {
@@ -518,6 +521,9 @@ public class SystemInfoService implements GsonPostProcessable {
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
         LOG.info("finished to drop {}", dropComputeNode);
+
+        // compute nodes are changed, regenerate tablet number metrics
+        MetricRepo.generateBackendsTabletMetrics();
     }
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
@@ -656,7 +662,7 @@ public class SystemInfoService implements GsonPostProcessable {
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
         LOG.info("finished to drop {}", droppedBackend);
 
-        // backends are changed, regenerated tablet number metrics
+        // backends are changed, regenerate tablet number metrics
         MetricRepo.generateBackendsTabletMetrics();
     }
 
