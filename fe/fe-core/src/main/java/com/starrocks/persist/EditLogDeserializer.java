@@ -45,6 +45,7 @@ import com.starrocks.epack.persist.ManualClusterSnapshotLog;
 import com.starrocks.epack.persist.OperationTypeEPack;
 import com.starrocks.epack.persist.RegisterLicenseLog;
 import com.starrocks.epack.persist.RoleMappingPersistInfo;
+import com.starrocks.epack.persist.ScaleOutLicenseFreeStartTimeLog;
 import com.starrocks.epack.persist.SetPasswordPolicyLog;
 import com.starrocks.epack.persist.UnsetPasswordPolicyLog;
 import com.starrocks.epack.persist.UpdateFailoverGroupLog;
@@ -128,6 +129,7 @@ public class EditLogDeserializer {
             .put(OperationTypeEPack.OP_MANUAL_CLUSTER_SNAPSHOT_LOG, ManualClusterSnapshotLog.class)
             .put(OperationTypeEPack.OP_INIT_SYSTEM_INFO, SystemInfo.class)
             .put(OperationTypeEPack.OP_REGISTER_LICENSE, RegisterLicenseLog.class)
+            .put(OperationTypeEPack.OP_UPDATE_SCALE_OUT_LICENSE_FREE_START_TIME, ScaleOutLicenseFreeStartTimeLog.class)
             .put(OperationTypeEPack.OP_RESTORE_FROM_SNAPSHOT, SnapshotRestoreJob.class)
 
             .put(OperationType.OP_SAVE_TRANSACTION_ID_V2, TransactionIdInfo.class)

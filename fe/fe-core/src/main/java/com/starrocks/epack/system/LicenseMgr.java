@@ -23,6 +23,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.epack.persist.RegisterLicenseLog;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
+import com.starrocks.epack.persist.ScaleOutLicenseFreeStartTimeLog;
 import com.starrocks.epack.security.SecurityUtils;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonUtils;
@@ -64,10 +65,14 @@ public class LicenseMgr {
 
     private static final long FREE_TRIAL_EXPIRE_MS = 1000L * 3600 * 24 * 7; // 7 days
     private static final long LICENSE_TIP_INTERVAL_MS = 1000L * 3600 * 24 * 30; // 30 days
+    private static final long SCALE_OUT_LICENSE_FREE_INTERVAL_MS = 1000L * 3600 * 24 * 7; // 7 days
 
     private FrontendDaemon licenseChecker;
     protected final List<String> licenseList = new ArrayList<>();
     protected SystemInfo systemInfo;
+    private volatile Long scaleOutLicenseFreeStartTime;
+    private volatile Long scaleOutStartTime;
+    private volatile Long scaleOutStartTotalCpuCores;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
     private final AtomicBoolean hasValidLicense = new AtomicBoolean(false);
     private final AtomicBoolean licenseVerified = new AtomicBoolean(false);
@@ -130,7 +135,7 @@ public class LicenseMgr {
 
     protected boolean hasValidLicense() {
         // If licenses are not verified yet, we assume it is valid
-        return !licenseVerified.get() || hasValidLicense.get() || inFreeTrialPeriod();
+        return !licenseVerified.get() || hasValidLicense.get() || inFreeTrialPeriod() || inScaleOutLicenseFreePeriod();
     }
 
     public void checkLicense(StatementBase parseStmt) throws InvalidLicenseException {
@@ -164,29 +169,48 @@ public class LicenseMgr {
     }
 
     protected void verifyAllLicenses() {
+        long currentTotalCpuCores = nodeMgr == null ? 0L : nodeMgr.getTotalCpuCores();
+        long currentTimeMillis = clock.millis();
         long maxExpire = 0;
+        boolean foundValidLicense = false;
+        boolean foundCoreOverageInvalidLicense = false;
         try (CloseableLock ignored = CloseableLock.lock(this.lock.readLock())) {
             for (String license : licenseList) {
                 try {
                     LicenseInfo licenseInfo = verifyLicense(license);
 
-                    verifyLicenseInfo(licenseInfo);
-                    // expire time has been verified in verifyLicense, so maxExpire must be a valid time
+                    // Keep the invalidation reason granular here so scale-out grace is
+                    // opened only for post-scale-out core overage, not for unrelated
+                    // invalid licenses such as expiry or systemID mismatch.
+                    if (!systemInfo.getSystemID().equals(licenseInfo.getSystemID())) {
+                        continue;
+                    }
+                    if (currentTimeMillis > licenseInfo.getExpire()) {
+                        continue;
+                    }
+                    if (currentTotalCpuCores > licenseInfo.getCores()) {
+                        foundCoreOverageInvalidLicense = true;
+                        continue;
+                    }
+
                     maxExpire = Math.max(maxExpire, licenseInfo.getExpire());
-                    hasValidLicense.set(true);
+                    foundValidLicense = true;
                 } catch (InvalidLicenseException ignored1) {
                 }
             }
         }
 
-        if (maxExpire <= 0) {
-            hasValidLicense.set(false);
-        }
+        hasValidLicense.set(foundValidLicense);
+        processScaleOutStateAfterVerify(currentTotalCpuCores, foundValidLicense, foundCoreOverageInvalidLicense);
 
         if (!hasValidLicense.get()) {
             if (inFreeTrialPeriod()) {
                 LOG.warn("Please add a valid license, Creating objects will be rejected after {}",
                         DateUtils.formatTimestampInSeconds(((systemInfo.getBuildTime() + FREE_TRIAL_EXPIRE_MS) / 1000)));
+            } else if (inScaleOutLicenseFreePeriod()) {
+                LOG.warn("No valid license found, cluster is in scale-out grace period until {}",
+                        DateUtils.formatTimestampInSeconds(
+                                (getScaleOutLicenseFreeDeadline() / 1000)));
             } else {
                 LOG.warn("No valid license found, please add a valid license.");
             }
@@ -262,6 +286,10 @@ public class LicenseMgr {
             maxExpire = systemInfo.getBuildTime() + FREE_TRIAL_EXPIRE_MS;
         }
 
+        if (maxExpire <= 0 && inScaleOutLicenseFreePeriod()) {
+            maxExpire = getScaleOutLicenseFreeDeadline();
+        }
+
         if (maxExpire <= 0) {
             return 0L;
         }
@@ -277,6 +305,29 @@ public class LicenseMgr {
 
         long currentTime = clock.millis();
         return (currentTime - systemInfo.getBuildTime()) < FREE_TRIAL_EXPIRE_MS;
+    }
+
+    protected boolean inScaleOutLicenseFreePeriod() {
+        if (scaleOutLicenseFreeStartTime == null) {
+            return false;
+        }
+        return clock.millis() < getScaleOutLicenseFreeDeadline();
+    }
+
+    protected Long getScaleOutLicenseFreeStartTime() {
+        return scaleOutLicenseFreeStartTime;
+    }
+
+    protected Long getScaleOutStartTime() {
+        return scaleOutStartTime;
+    }
+
+    protected Long getScaleOutStartTotalCpuCores() {
+        return scaleOutStartTotalCpuCores;
+    }
+
+    private long getScaleOutLicenseFreeDeadline() {
+        return scaleOutLicenseFreeStartTime + SCALE_OUT_LICENSE_FREE_INTERVAL_MS;
     }
 
     private void initSystemInfo() {
@@ -301,7 +352,8 @@ public class LicenseMgr {
         // update hasValidLicense only on leader node.
         hasValidLicense.set(true);
         EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-        editLogEPack.logRegisterLicense(new RegisterLicenseLog(license), wal -> applyRegisterLicense((RegisterLicenseLog) wal));
+        editLogEPack.logRegisterLicense(new RegisterLicenseLog(license, null),
+                wal -> applyRegisterLicense((RegisterLicenseLog) wal));
     }
 
     private boolean hasSameLicense(String license) {
@@ -318,7 +370,75 @@ public class LicenseMgr {
     public void applyRegisterLicense(RegisterLicenseLog log) {
         try (CloseableLock ignored = CloseableLock.lock(this.lock.writeLock())) {
             licenseList.add(log.getLicense());
+            scaleOutLicenseFreeStartTime = null;
+            scaleOutStartTime = null;
+            scaleOutStartTotalCpuCores = null;
         }
+    }
+
+    public void recordScaleOutStart() {
+        if (scaleOutStartTime != null) {
+            return;
+        }
+        setScaleOutStart(clock.millis(), nodeMgr.getTotalCpuCores());
+    }
+
+    protected void setScaleOutStart(Long startTime, Long totalCpuCores) {
+        scaleOutStartTime = startTime;
+        scaleOutStartTotalCpuCores = totalCpuCores;
+    }
+
+    public void applyScaleOutLicenseFreeStartTime(ScaleOutLicenseFreeStartTimeLog log) {
+        scaleOutLicenseFreeStartTime = log.getScaleOutLicenseFreeStartTime();
+    }
+
+    private void clearScaleOutStart() {
+        if (scaleOutStartTime == null && scaleOutStartTotalCpuCores == null) {
+            return;
+        }
+        setScaleOutStart(null, null);
+    }
+
+    private void updateScaleOutLicenseFreeStartTime(Long newScaleOutLicenseFreeStartTime) {
+        if (scaleOutLicenseFreeStartTime != null
+                && scaleOutLicenseFreeStartTime.equals(newScaleOutLicenseFreeStartTime)) {
+            return;
+        }
+
+        ScaleOutLicenseFreeStartTimeLog log =
+                new ScaleOutLicenseFreeStartTimeLog(newScaleOutLicenseFreeStartTime);
+        EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
+        editLogEPack.logUpdateScaleOutLicenseFreeStartTime(log,
+                wal -> applyScaleOutLicenseFreeStartTime((ScaleOutLicenseFreeStartTimeLog) wal));
+    }
+
+    private void processScaleOutStateAfterVerify(long currentTotalCpuCores,
+                                                 boolean foundValidLicense,
+                                                 boolean foundCoreOverageInvalidLicense) {
+        // No pending scale-out means there is nothing to convert into a grace period.
+        if (scaleOutStartTime == null || scaleOutStartTotalCpuCores == null) {
+            return;
+        }
+
+        // We only start the grace period after the checker observes that the cluster
+        // really grew beyond the baseline captured when scale-out started.
+        if (currentTotalCpuCores <= scaleOutStartTotalCpuCores) {
+            return;
+        }
+
+        // Grace is reserved for the specific case where scale-out made CPU cores exceed
+        // the available license coverage. If another license still covers the current
+        // cluster, or the cluster is invalid for an unrelated reason such as
+        // expiry/systemID mismatch, we just consume the pending marker.
+        if (foundValidLicense || !foundCoreOverageInvalidLicense || scaleOutLicenseFreeStartTime != null) {
+            clearScaleOutStart();
+            return;
+        }
+
+        // The cluster actually grew and is now out of license, so the pending
+        // scale-out start becomes the beginning of the 7-day grace window.
+        updateScaleOutLicenseFreeStartTime(scaleOutStartTime);
+        clearScaleOutStart();
     }
 
     public String getEncryptedLicenseInfo() throws Exception {
@@ -390,40 +510,38 @@ public class LicenseMgr {
         return licenseInfo;
     }
 
-    public void checkLicenseForAddBackend(String host) throws InvalidLicenseException {
-        if (!LicenseToggle.isEnabled || (!hasValidLicense.get() && inFreeTrialPeriod())) {
-            return;
-        }
-        
-        if (nodeMgr.getAllNodeHosts().contains(host)) {
-            return;
-        }
-
-        long maxCpuCores = getMaxCpuCores();
-        long totalCpuCores = nodeMgr.getTotalCpuCores() + nodeMgr.getAnyComputeNodeCpuCores();
-        if (totalCpuCores > maxCpuCores) {
-            throw new InvalidLicenseException("cpu cores not enough after adding backend/computeNode, " +
-                    "cores after adding: %d, cores in license: %d", 
-                    totalCpuCores, maxCpuCores);
-        }
+    public boolean checkLicenseForAddBackend(String host) throws InvalidLicenseException {
+        return checkLicenseForScaleOut(host, "backend/computeNode");
     }
 
-    public void checkLicenseForAddFrontend(String host) throws InvalidLicenseException {
-        if (!LicenseToggle.isEnabled || (!hasValidLicense.get() && inFreeTrialPeriod())) {
-            return;
+    public boolean checkLicenseForAddFrontend(String host) throws InvalidLicenseException {
+        return checkLicenseForScaleOut(host, "frontend");
+    }
+
+    private boolean checkLicenseForScaleOut(String host, String nodeType) throws InvalidLicenseException {
+        if (!LicenseToggle.isEnabled) {
+            return false;
         }
-        
-        if (nodeMgr.getAllNodeHosts().contains(host)) {
-            return;
+
+        // Duplicate-host expansion, free trial, and an already-open grace period
+        // should all bypass the "record pending scale-out start" path.
+        if (nodeMgr.getAllNodeHosts().contains(host) || inFreeTrialPeriod() || inScaleOutLicenseFreePeriod()) {
+            return false;
         }
-        
-        long maxCpuCores = getMaxCpuCores();
-        long totalCpuCores = nodeMgr.getTotalCpuCores() + nodeMgr.getAnyFrontendCpuCores();
-        if (totalCpuCores > maxCpuCores) {
-            throw new InvalidLicenseException("cpu cores not enough after adding frontend, " +
-                    "cores after adding: %d, cores in license: %d", 
-                    totalCpuCores, maxCpuCores);
+
+        verifyAllLicenses();
+        // verifyAllLicenses() may open the grace period when it observes that a prior
+        // pending scale-out has already increased total CPU cores.
+        if (inScaleOutLicenseFreePeriod()) {
+            return false;
         }
+        if (!hasValidLicense()) {
+            throw new InvalidLicenseException("current license is invalid, adding %s is not allowed", nodeType);
+        }
+
+        // Only the first scale-out request while license is still valid should
+        // record the pending baseline for the periodic checker.
+        return scaleOutStartTime == null;
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
@@ -438,9 +556,11 @@ public class LicenseMgr {
         }
 
         if (encryptedSystemInfo == null) {
-            writer.writeJson(new LicenseMgrPersist(licenseList, false, base64Encode(systemInfoStr)));
+            writer.writeJson(new LicenseMgrPersist(licenseList, false, base64Encode(systemInfoStr),
+                    scaleOutLicenseFreeStartTime));
         } else {
-            writer.writeJson(new LicenseMgrPersist(licenseList, true, base64Encode(encryptedSystemInfo)));
+            writer.writeJson(new LicenseMgrPersist(licenseList, true, base64Encode(encryptedSystemInfo),
+                    scaleOutLicenseFreeStartTime));
         }
         writer.close();
     }
@@ -448,6 +568,7 @@ public class LicenseMgr {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         LicenseMgrPersist licenseMgrPersist = reader.readJson(LicenseMgrPersist.class);
         licenseList.addAll(licenseMgrPersist.licenses);
+        scaleOutLicenseFreeStartTime = licenseMgrPersist.scaleOutLicenseFreeStartTime;
         if (licenseMgrPersist.isEncrypted) {
             try {
                 byte[] systemInfoBytes = SecurityUtils.aes128Decrypt(base64Decode(licenseMgrPersist.systemInfoStr),

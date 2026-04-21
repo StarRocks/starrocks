@@ -16,23 +16,12 @@ package com.starrocks.epack.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.JsonWriter;
 
-public class RegisterLicenseLog extends JsonWriter {
-    @SerializedName("license")
-    private String license;
+public class ScaleOutLicenseFreeStartTimeLog extends JsonWriter {
     @SerializedName("scale_out_license_free_start_time")
-    private Long scaleOutLicenseFreeStartTime;
+    private final Long scaleOutLicenseFreeStartTime;
 
-    public RegisterLicenseLog(String license) {
-        this(license, null);
-    }
-
-    public RegisterLicenseLog(String license, Long scaleOutLicenseFreeStartTime) {
-        this.license = license;
+    public ScaleOutLicenseFreeStartTimeLog(Long scaleOutLicenseFreeStartTime) {
         this.scaleOutLicenseFreeStartTime = scaleOutLicenseFreeStartTime;
-    }
-
-    public String getLicense() {
-        return license;
     }
 
     public Long getScaleOutLicenseFreeStartTime() {

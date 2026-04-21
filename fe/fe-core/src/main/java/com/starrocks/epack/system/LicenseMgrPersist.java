@@ -28,9 +28,14 @@ public class LicenseMgrPersist {
     @SerializedName("systemInfoStr")
     String systemInfoStr;
 
-    public LicenseMgrPersist(List<String> licenses, boolean isEncrypted, String systemInfoStr) {
+    @SerializedName("scale_out_license_free_start_time")
+    Long scaleOutLicenseFreeStartTime;
+
+    public LicenseMgrPersist(List<String> licenses, boolean isEncrypted, String systemInfoStr,
+                             Long scaleOutLicenseFreeStartTime) {
         this.licenses = licenses;
         this.isEncrypted = isEncrypted;
         this.systemInfoStr = systemInfoStr;
+        this.scaleOutLicenseFreeStartTime = scaleOutLicenseFreeStartTime;
     }
 }

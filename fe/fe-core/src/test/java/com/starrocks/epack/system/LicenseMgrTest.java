@@ -14,8 +14,15 @@
 package com.starrocks.epack.system;
 
 import com.starrocks.common.util.MachineInfo;
+import com.starrocks.epack.persist.OperationTypeEPack;
+import com.starrocks.epack.persist.RegisterLicenseLog;
+import com.starrocks.epack.persist.ScaleOutLicenseFreeStartTimeLog;
 import com.starrocks.epack.security.SecurityUtils;
+import com.starrocks.journal.JournalEntity;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -39,6 +46,7 @@ public class LicenseMgrTest {
     private static final String SYSTEM_ID = "2f1102e0-7fc6-47fc-9f3e-c4e7e9862c18";
     private static final String AES_KEY = "x8wj$62bzp^!Kj95";
     private static final long FREE_TRIAL_EXPIRE_MS = 1000L * 3600 * 24 * 7; // 7 days
+    private static final long SCALE_OUT_LICENSE_FREE_INTERVAL_MS = 1000L * 3600 * 24 * 7; // 7 days
     private static final String LICENSE_ENCRYPTED_KEY_FOR_TEST = "c2wPS3NsDnxtalt1a1Z9bmlqdXJsanJYbA9pZXNsD0tzbA90a2" +
             "pTdW5UU05uagp8ZQ1LR154S09tRVMMcnp1fWpqaXhuanlvbg95bXB6eXFsalN8bg1bc24PeW1tankNZg0GbmkNVElxa2l7cQ5uSVtTV" +
             "2p0DXVnZX5PC157W29yDVBFbmp1RXQPCwtdDnEJblRLRVtSCk1leWVKcnhldmhodVdyVAtHZWt9e2l6DmVca1dWbWwGXmlrekVmRktm" +
@@ -66,6 +74,12 @@ public class LicenseMgrTest {
             "+w0nRlcFPqQF86V9RTLSDiQTnGfmkKt8n86T8/cXArVkWH8u9/FXbB3ToFgutaRaqTNgOVoTEGsbjnRWldCy/RjD8w+EuvzA4pkMe8V" +
             "Cr8zfmYSBF6IcgeL00ardTk/jMxJbiSoU8p0Xkv4qgqIkgamdjDToH6bSEMQeAsDJxBr46u1IsCSIcBd2vwxhxbUyhM/2FMEChd7o2/" +
             "qh682dnNy+g==";
+
+    private static class CreateDummyStmt extends StatementBase {
+        protected CreateDummyStmt() {
+            super(NodePosition.ZERO);
+        }
+    }
 
     @BeforeAll
     public static void setUp() throws Exception {
@@ -108,10 +122,12 @@ public class LicenseMgrTest {
     public void testSaveLoad() throws Exception {
         String license1 = "aaaadddddddbbbbbbb";
         String license2 = "cccccccccddddddddd";
+        long scaleOutLicenseFreeStartTime = 123456789L;
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         LicenseMgr licenseMgr = new LicenseMgr(null);
         SystemInfo systemInfo = new SystemInfo(SYSTEM_ID, System.currentTimeMillis());
         licenseMgr.applyInitSystemInfo(systemInfo);
+        licenseMgr.applyScaleOutLicenseFreeStartTime(new ScaleOutLicenseFreeStartTimeLog(scaleOutLicenseFreeStartTime));
         licenseMgr.licenseList.add(license1);
         licenseMgr.licenseList.add(license2);
         licenseMgr.save(pseudoImage.getImageWriter());
@@ -123,6 +139,44 @@ public class LicenseMgrTest {
         Assertions.assertEquals(license2, loadedLicenseMgr.licenseList.get(1));
         Assertions.assertEquals(systemInfo.getSystemID(), loadedLicenseMgr.systemInfo.getSystemID());
         Assertions.assertEquals(systemInfo.getBuildTime(), loadedLicenseMgr.systemInfo.getBuildTime());
+        Assertions.assertEquals(scaleOutLicenseFreeStartTime, loadedLicenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(loadedLicenseMgr.getScaleOutStartTime());
+        Assertions.assertNull(loadedLicenseMgr.getScaleOutStartTotalCpuCores());
+    }
+
+    @Test
+    public void testScaleOutLicenseFreeStartTimeLogWriteAndReplay() throws Exception {
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(10L);
+
+        LicenseMgr leaderLicenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = leaderLicenseMgr.verifyLicense(LICENSE1);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        leaderLicenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        leaderLicenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), currentTime - FREE_TRIAL_EXPIRE_MS - 1000L));
+        leaderLicenseMgr.licenseList.add(LICENSE1);
+
+        long scaleOutStartTime = currentTime - TimeUnit.HOURS.toMillis(1);
+        leaderLicenseMgr.setScaleOutStart(scaleOutStartTime, 8L);
+        leaderLicenseMgr.verifyAllLicenses();
+
+        Assertions.assertEquals(scaleOutStartTime, leaderLicenseMgr.getScaleOutLicenseFreeStartTime());
+
+        ScaleOutLicenseFreeStartTimeLog replayLog =
+                (ScaleOutLicenseFreeStartTimeLog) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(
+                        OperationTypeEPack.OP_UPDATE_SCALE_OUT_LICENSE_FREE_START_TIME);
+        Assertions.assertEquals(scaleOutStartTime, replayLog.getScaleOutLicenseFreeStartTime());
+
+        LicenseMgr followerLicenseMgr = new LicenseMgr(mockNodeMgr);
+        GlobalStateMgr followerGlobalStateMgr = Mockito.mock(GlobalStateMgr.class);
+        Mockito.when(followerGlobalStateMgr.getLicenseMgr()).thenReturn(followerLicenseMgr);
+        GlobalStateMgr.getCurrentState().getEditLog().loadJournal(
+                followerGlobalStateMgr,
+                new JournalEntity(OperationTypeEPack.OP_UPDATE_SCALE_OUT_LICENSE_FREE_START_TIME, replayLog));
+
+        Assertions.assertEquals(scaleOutStartTime, followerLicenseMgr.getScaleOutLicenseFreeStartTime());
     }
 
     @Test
@@ -378,30 +432,43 @@ public class LicenseMgrTest {
 
     @Test
     public void testCheckLicenseForAddBackendAndFrontend_WithLicense1AndLicense2() throws Exception {
-        // Configure cores so that adding nodes would exceed licensed cores (8)
-        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
-        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(6L);
-        Mockito.when(mockNodeMgr.getAnyComputeNodeCpuCores()).thenReturn(3L);
-        Mockito.when(mockNodeMgr.getAnyFrontendCpuCores()).thenReturn(3L);
-        Mockito.when(mockNodeMgr.getAllNodeHosts()).thenReturn(new HashSet<>(Arrays.asList("127.0.0.1", "127.0.0.2")));
+        NodeMgr backendNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(backendNodeMgr.getTotalCpuCores()).thenReturn(6L);
+        Mockito.when(backendNodeMgr.getAnyComputeNodeCpuCores()).thenReturn(3L);
+        Mockito.when(backendNodeMgr.getAllNodeHosts()).thenReturn(new HashSet<>(Arrays.asList("127.0.0.1", "127.0.0.2")));
 
-        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseMgr backendLicenseMgr =
+                new LicenseMgr(Clock.systemDefaultZone(), backendNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo backendInfo = backendLicenseMgr.verifyLicense(LICENSE1);
+        long backendCurrentTime = backendInfo.getExpire() - 24L * 3600L * 1000L;
+        backendLicenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(backendCurrentTime), ZoneOffset.UTC));
+        long backendBuildTime = backendCurrentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        backendLicenseMgr.applyInitSystemInfo(new SystemInfo(backendInfo.getSystemID(), backendBuildTime));
+        backendLicenseMgr.licenseList.add(LICENSE1);
+        backendLicenseMgr.licenseList.add(LICENSE2);
+        backendLicenseMgr.verifyAllLicenses();
 
-        // Use license data to set matching system info and a time before expiry, and after free trial
-        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE1);
-        long currentTime = baseInfo.getExpire() - 24L * 3600L * 1000L;
-        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
-        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
-        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        Assertions.assertTrue(backendLicenseMgr.checkLicenseForAddBackend("127.0.0.3"));
+        Assertions.assertNull(backendLicenseMgr.getScaleOutLicenseFreeStartTime());
 
-        // Add both licenses and verify to activate constraints
-        licenseMgr.licenseList.add(LICENSE1);
-        licenseMgr.licenseList.add(LICENSE2);
-        licenseMgr.verifyAllLicenses();
+        NodeMgr frontendNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(frontendNodeMgr.getTotalCpuCores()).thenReturn(6L);
+        Mockito.when(frontendNodeMgr.getAnyFrontendCpuCores()).thenReturn(3L);
+        Mockito.when(frontendNodeMgr.getAllNodeHosts()).thenReturn(new HashSet<>(Arrays.asList("127.0.0.1", "127.0.0.2")));
 
-        // Adding backend/compute or frontend should exceed 8 cores and throw
-        Assertions.assertThrows(InvalidLicenseException.class, () -> licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
-        Assertions.assertThrows(InvalidLicenseException.class, () -> licenseMgr.checkLicenseForAddFrontend("127.0.0.3"));
+        LicenseMgr frontendLicenseMgr =
+                new LicenseMgr(Clock.systemDefaultZone(), frontendNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo frontendInfo = frontendLicenseMgr.verifyLicense(LICENSE1);
+        long frontendCurrentTime = frontendInfo.getExpire() - 24L * 3600L * 1000L;
+        frontendLicenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(frontendCurrentTime), ZoneOffset.UTC));
+        long frontendBuildTime = frontendCurrentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        frontendLicenseMgr.applyInitSystemInfo(new SystemInfo(frontendInfo.getSystemID(), frontendBuildTime));
+        frontendLicenseMgr.licenseList.add(LICENSE1);
+        frontendLicenseMgr.licenseList.add(LICENSE2);
+        frontendLicenseMgr.verifyAllLicenses();
+
+        Assertions.assertTrue(frontendLicenseMgr.checkLicenseForAddFrontend("127.0.0.3"));
+        Assertions.assertNull(frontendLicenseMgr.getScaleOutLicenseFreeStartTime());
     }
 
     @Test
@@ -428,8 +495,7 @@ public class LicenseMgrTest {
         licenseMgr.licenseList.add(LICENSE2);
         licenseMgr.verifyAllLicenses();
 
-        // Because host is duplicate, it should not throw even though cores would exceed
-        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
+        Assertions.assertFalse(licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
     }
 
     @Test
@@ -456,12 +522,11 @@ public class LicenseMgrTest {
         licenseMgr.licenseList.add(LICENSE2);
         licenseMgr.verifyAllLicenses();
 
-        // Because host is duplicate, it should not throw even though cores would exceed
-        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicenseForAddFrontend("127.0.0.3"));
+        Assertions.assertFalse(licenseMgr.checkLicenseForAddFrontend("127.0.0.3"));
     }
 
     @Test
-    public void testCheckLicenseForAddBackend_WithinFreeTrial() {
+    public void testCheckLicenseForAddBackend_WithinFreeTrial() throws Exception {
         // Mock NodeMgr
         NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
         Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(4L);
@@ -479,9 +544,8 @@ public class LicenseMgrTest {
         SystemInfo systemInfo = new SystemInfo(SYSTEM_ID, buildTime);
         licenseMgr.applyInitSystemInfo(systemInfo);
         
-        // Should not throw exception during free trial period
-        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicenseForAddBackend("127.0.0.3"),
-                "Should not throw exception when adding backend during free trial period");
+        Assertions.assertFalse(licenseMgr.checkLicenseForAddBackend("127.0.0.3"),
+                "Should not start scale-out grace when adding backend during free trial period");
     }
 
     @Test
@@ -505,9 +569,281 @@ public class LicenseMgrTest {
         SystemInfo systemInfo = new SystemInfo(SYSTEM_ID, buildTime);
         licenseMgr.applyInitSystemInfo(systemInfo);
         
-        // Should not throw exception during free trial period
-        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicenseForAddFrontend("127.0.0.3"),
-                "Should not throw exception when adding frontend during free trial period");
+        Assertions.assertFalse(licenseMgr.checkLicenseForAddFrontend("127.0.0.3"),
+                "Should not start scale-out grace when adding frontend during free trial period");
+    }
+
+    @Test
+    public void testCheckLicenseForAddBackend_WithinScaleOutGrace_DoesNotRecordScaleOutStart() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(9L);
+        Mockito.when(mockNodeMgr.getAnyComputeNodeCpuCores()).thenReturn(3L);
+        Mockito.when(mockNodeMgr.getAllNodeHosts()).thenReturn(new HashSet<>(Arrays.asList("127.0.0.1", "127.0.0.2")));
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE2);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long graceStartTime = currentTime - TimeUnit.DAYS.toMillis(2);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE2);
+        licenseMgr.applyScaleOutLicenseFreeStartTime(new ScaleOutLicenseFreeStartTimeLog(graceStartTime));
+
+        Assertions.assertFalse(licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
+        Assertions.assertEquals(graceStartTime, licenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTime());
+    }
+
+    @Test
+    public void testCheckLicenseForAddBackend_AfterScaleOutGrace_ShouldThrow() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(9L);
+        Mockito.when(mockNodeMgr.getAnyComputeNodeCpuCores()).thenReturn(3L);
+        Mockito.when(mockNodeMgr.getAllNodeHosts()).thenReturn(new HashSet<>(Arrays.asList("127.0.0.1", "127.0.0.2")));
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE2);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(2);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long graceStartTime = currentTime - SCALE_OUT_LICENSE_FREE_INTERVAL_MS - 1L;
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE2);
+        licenseMgr.applyScaleOutLicenseFreeStartTime(new ScaleOutLicenseFreeStartTimeLog(graceStartTime));
+
+        Assertions.assertThrows(InvalidLicenseException.class,
+                () -> licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
+    }
+
+    @Test
+    public void testCheckLicense_AllowsCreateStatementsWithinScaleOutGrace() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(9L);
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE2);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long graceStartTime = currentTime - TimeUnit.DAYS.toMillis(2);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE2);
+        licenseMgr.applyScaleOutLicenseFreeStartTime(new ScaleOutLicenseFreeStartTimeLog(graceStartTime));
+
+        licenseMgr.verifyAllLicenses();
+        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicense(new CreateDummyStmt()));
+
+        long timeAfterGraceDeadline = graceStartTime + SCALE_OUT_LICENSE_FREE_INTERVAL_MS + 1L;
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(timeAfterGraceDeadline), ZoneOffset.UTC));
+        licenseMgr.verifyAllLicenses();
+        Assertions.assertThrows(InvalidLicenseException.class, () -> licenseMgr.checkLicense(new CreateDummyStmt()));
+    }
+
+    @Test
+    public void testGetLicenseExpireDays_WithScaleOutGraceUsesGraceDeadline() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(9L);
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE2);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long graceStartTime = currentTime - TimeUnit.DAYS.toMillis(2);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE2);
+        licenseMgr.applyScaleOutLicenseFreeStartTime(new ScaleOutLicenseFreeStartTimeLog(graceStartTime));
+
+        long expectedDays = TimeUnit.MILLISECONDS.toDays(graceStartTime + SCALE_OUT_LICENSE_FREE_INTERVAL_MS - currentTime);
+        Assertions.assertEquals(expectedDays, licenseMgr.getLicenseExpireDays());
+    }
+
+    @Test
+    public void testVerifyAllLicenses_SetsScaleOutGraceAfterCpuCoresIncrease() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(6L);
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE2);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long scaleOutStartTime = currentTime - TimeUnit.HOURS.toMillis(1);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE2);
+        licenseMgr.verifyAllLicenses();
+
+        licenseMgr.setScaleOutStart(scaleOutStartTime, 6L);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(9L);
+
+        licenseMgr.verifyAllLicenses();
+
+        Assertions.assertEquals(scaleOutStartTime, licenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTotalCpuCores());
+        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicense(new CreateDummyStmt()));
+    }
+
+    @Test
+    public void testVerifyAllLicenses_ClearsScaleOutStartAfterCpuCoresIncreaseWithinLicense() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(4L);
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE1);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long scaleOutStartTime = currentTime - TimeUnit.HOURS.toMillis(1);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE1);
+        licenseMgr.verifyAllLicenses();
+
+        licenseMgr.setScaleOutStart(scaleOutStartTime, 4L);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(6L);
+
+        licenseMgr.verifyAllLicenses();
+
+        Assertions.assertNull(licenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTotalCpuCores());
+    }
+
+    @Test
+    public void testVerifyAllLicenses_DoesNotStartScaleOutGraceForExpiredLicense() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(6L);
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE2);
+        long currentTime = baseInfo.getExpire() + TimeUnit.HOURS.toMillis(1);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long scaleOutStartTime = currentTime - TimeUnit.HOURS.toMillis(2);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE2);
+        licenseMgr.setScaleOutStart(scaleOutStartTime, 6L);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(9L);
+
+        licenseMgr.verifyAllLicenses();
+
+        Assertions.assertNull(licenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTotalCpuCores());
+        Assertions.assertFalse(licenseMgr.hasValidLicense());
+        Assertions.assertThrows(InvalidLicenseException.class, () -> licenseMgr.checkLicense(new CreateDummyStmt()));
+    }
+
+    @Test
+    public void testVerifyAllLicenses_DoesNotStartScaleOutGraceForSystemIdMismatch() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(6L);
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE2);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long scaleOutStartTime = currentTime - TimeUnit.HOURS.toMillis(1);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID() + "-mismatch", buildTime));
+        licenseMgr.licenseList.add(LICENSE2);
+        licenseMgr.setScaleOutStart(scaleOutStartTime, 6L);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(9L);
+
+        licenseMgr.verifyAllLicenses();
+
+        Assertions.assertNull(licenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTotalCpuCores());
+        Assertions.assertFalse(licenseMgr.hasValidLicense());
+        Assertions.assertThrows(InvalidLicenseException.class, () -> licenseMgr.checkLicense(new CreateDummyStmt()));
+    }
+
+    @Test
+    public void testVerifyAllLicenses_DoesNotStartScaleOutGraceWhenAnotherLicenseIsStillValid() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(6L);
+
+        long currentTime = System.currentTimeMillis();
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long scaleOutStartTime = currentTime - TimeUnit.HOURS.toMillis(1);
+        long expireTime = currentTime + TimeUnit.DAYS.toMillis(30);
+        String systemId = "multi-license-system-id";
+        String smallLicense = "small-license";
+        String largeLicense = "large-license";
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST) {
+            @Override
+            protected LicenseInfo verifyLicense(String license) throws InvalidLicenseException {
+                if (smallLicense.equals(license)) {
+                    return new LicenseInfo("sign", systemId, 8L, expireTime);
+                }
+                if (largeLicense.equals(license)) {
+                    return new LicenseInfo("sign", systemId, 16L, expireTime);
+                }
+                throw new InvalidLicenseException("Unexpected license");
+            }
+        };
+
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(systemId, buildTime));
+        licenseMgr.licenseList.add(smallLicense);
+        licenseMgr.licenseList.add(largeLicense);
+        licenseMgr.setScaleOutStart(scaleOutStartTime, 6L);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(12L);
+
+        licenseMgr.verifyAllLicenses();
+
+        Assertions.assertNull(licenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTotalCpuCores());
+        Assertions.assertTrue(licenseMgr.hasValidLicense());
+        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicense(new CreateDummyStmt()));
+    }
+
+    @Test
+    public void testCheckLicenseForAddBackend_WithPendingScaleOutStart_DoesNotRecordTwice() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(6L);
+        Mockito.when(mockNodeMgr.getAllNodeHosts()).thenReturn(new HashSet<>(Arrays.asList("127.0.0.1", "127.0.0.2")));
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE1);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long scaleOutStartTime = currentTime - TimeUnit.HOURS.toMillis(1);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE1);
+        licenseMgr.verifyAllLicenses();
+        licenseMgr.setScaleOutStart(scaleOutStartTime, 6L);
+
+        Assertions.assertFalse(licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
+        Assertions.assertEquals(scaleOutStartTime, licenseMgr.getScaleOutStartTime());
+        Assertions.assertEquals(6L, licenseMgr.getScaleOutStartTotalCpuCores());
+    }
+
+    @Test
+    public void testCheckLicenseForAddBackend_DetectsGraceDuringVerifyAndDoesNotRecordAgain() throws Exception {
+        NodeMgr mockNodeMgr = Mockito.mock(NodeMgr.class);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(6L);
+        Mockito.when(mockNodeMgr.getAllNodeHosts()).thenReturn(new HashSet<>(Arrays.asList("127.0.0.1", "127.0.0.2")));
+
+        LicenseMgr licenseMgr = new LicenseMgr(Clock.systemDefaultZone(), mockNodeMgr, LICENSE_ENCRYPTED_KEY_FOR_TEST);
+        LicenseInfo baseInfo = licenseMgr.verifyLicense(LICENSE2);
+        long currentTime = baseInfo.getExpire() - TimeUnit.DAYS.toMillis(10);
+        long buildTime = currentTime - FREE_TRIAL_EXPIRE_MS - 1000L;
+        long scaleOutStartTime = currentTime - TimeUnit.HOURS.toMillis(1);
+        licenseMgr.setClock(Clock.fixed(Instant.ofEpochMilli(currentTime), ZoneOffset.UTC));
+        licenseMgr.applyInitSystemInfo(new SystemInfo(baseInfo.getSystemID(), buildTime));
+        licenseMgr.licenseList.add(LICENSE2);
+        licenseMgr.verifyAllLicenses();
+        licenseMgr.setScaleOutStart(scaleOutStartTime, 6L);
+        Mockito.when(mockNodeMgr.getTotalCpuCores()).thenReturn(9L);
+
+        Assertions.assertFalse(licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
+        Assertions.assertEquals(scaleOutStartTime, licenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTime());
     }
 
     @Test
@@ -603,8 +939,7 @@ public class LicenseMgrTest {
         licenseMgr.licenseList.add(LICENSE1);
         licenseMgr.verifyAllLicenses();
 
-        // totalCpuCores = 6 + 2 = 8 equals maxCpuCores, should NOT throw
-        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
+        Assertions.assertTrue(licenseMgr.checkLicenseForAddBackend("127.0.0.3"));
     }
 
     @Test
@@ -625,8 +960,7 @@ public class LicenseMgrTest {
         licenseMgr.licenseList.add(LICENSE1);
         licenseMgr.verifyAllLicenses();
 
-        // totalCpuCores = 6 + 2 = 8 equals maxCpuCores, should NOT throw
-        Assertions.assertDoesNotThrow(() -> licenseMgr.checkLicenseForAddFrontend("127.0.0.3"));
+        Assertions.assertTrue(licenseMgr.checkLicenseForAddFrontend("127.0.0.3"));
     }
 
     @Test
@@ -665,6 +999,20 @@ public class LicenseMgrTest {
         // No licenses added, maxCpuCores = 0; adding would exceed and should throw
         Assertions.assertThrows(InvalidLicenseException.class,
                 () -> licenseMgr.checkLicenseForAddFrontend("127.0.0.3"));
+    }
+
+    @Test
+    public void testApplyRegisterLicense_ClearsScaleOutGraceStartTime() {
+        LicenseMgr licenseMgr = new LicenseMgr(null);
+        licenseMgr.applyScaleOutLicenseFreeStartTime(new ScaleOutLicenseFreeStartTimeLog(123456789L));
+        licenseMgr.setScaleOutStart(223456789L, 16L);
+
+        licenseMgr.applyRegisterLicense(new RegisterLicenseLog(LICENSE1, null));
+
+        Assertions.assertEquals(1, licenseMgr.licenseList.size());
+        Assertions.assertNull(licenseMgr.getScaleOutLicenseFreeStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTime());
+        Assertions.assertNull(licenseMgr.getScaleOutStartTotalCpuCores());
     }
 
 

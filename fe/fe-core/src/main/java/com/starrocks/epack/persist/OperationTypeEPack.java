@@ -54,4 +54,5 @@ public class OperationTypeEPack extends OperationType {
     // License
     public static final short OP_INIT_SYSTEM_INFO = 20610;
     public static final short OP_REGISTER_LICENSE = 20611;
+    public static final short OP_UPDATE_SCALE_OUT_LICENSE_FREE_START_TIME = 20612;
 }
