@@ -31,4 +31,4 @@ scan:
     # from fe
     - "**/parquet-jackson-1.16.0.jar"
     # CVE-2026-2332, ignore for now
-    - "**/jetty-http-9.4.57.v20241219.jar"
+    - "**/jetty-http-9.4.58.v20250814.jar"
