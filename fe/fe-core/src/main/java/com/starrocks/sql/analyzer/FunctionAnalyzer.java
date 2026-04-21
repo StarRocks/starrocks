@@ -952,8 +952,18 @@ public class FunctionAnalyzer {
                         "Function '%s' requires exactly 2 arguments: column and number, but got %d argument(s)",
                         functionName, argumentTypes.length));
             }
+<<<<<<< HEAD
             Type[] args = new Type[] {argumentTypes[0], Type.INT};
             fn = Expr.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+=======
+            Type[] args = new Type[] {argumentTypes[0], IntegerType.INT};
+            fn = ExprUtils.getBuiltinFunction(fnName, args, Function.CompareMode.IS_IDENTICAL);
+            if (fn == null) {
+                throw new SemanticException("No matching function with signature: %s(%s)",
+                        fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, ""),
+                        Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
+            }
+>>>>>>> ec8f1510f5 ([BugFix] Fix NPE on invalid Iceberg transform arguments (#71917))
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }

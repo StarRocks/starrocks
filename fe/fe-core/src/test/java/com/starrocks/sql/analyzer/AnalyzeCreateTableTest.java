@@ -469,6 +469,12 @@ public class AnalyzeCreateTableTest {
         analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table" 
                         + "(k1 int, k2 varchar(10)) partition by truncate(k2)",
                 "Function 'truncate' requires exactly 2 arguments: column and number, but got 1 argument(s)");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 varchar(10)) partition by bucket(4, k2)",
+                "No matching function with signature: bucket(tinyint(4), varchar(10))");
+        analyzeFail("create external table iceberg_catalog.iceberg_db.iceberg_table"
+                        + "(k1 int, k2 varchar(10)) partition by truncate(4, k2)",
+                "No matching function with signature: truncate(tinyint(4), varchar(10))");
         AnalyzeTestUtil.getStarRocksAssert().dropCatalog("iceberg_catalog");
     }
 
