@@ -411,7 +411,7 @@ private:
     // Returns false if fallback rows were detected; shredded fields are already populated and the
     // caller should run the normal per-row path without re-reading shredded fields.
     StatusOr<bool> _read_range_skip_base_payload(const Range<uint64_t>& range, const Filter* filter,
-                                                  VariantColumn* variant_column, NullableColumn* nullable_column);
+                                                 VariantColumn* variant_column, NullableColumn* nullable_column);
 
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
