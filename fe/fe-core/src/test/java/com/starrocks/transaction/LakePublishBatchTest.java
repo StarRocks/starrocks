@@ -208,9 +208,13 @@ public class LakePublishBatchTest {
                 "\", \"storage_medium\" = \"SSD\", \"file_bundling\" = \"true\")";
         starRocksAssert.withTable(sql2);
 
+        // Disable fast schema evolution v2 so a plain "add column" alter goes
+        // through the LakeTableSchemaChangeJob path that the shadow-index
+        // batch-publish scenario in testBatchPublishShadowIndex needs.
         String sql3 = "create table " + TABLE_SCHEMA_CHANGE +
                 " (pk int NOT NULL, v0 int not null) primary KEY (pk) " +
-                "DISTRIBUTED BY HASH(pk) BUCKETS 1;";
+                "DISTRIBUTED BY HASH(pk) BUCKETS 1 " +
+                "PROPERTIES('cloud_native_fast_schema_evolution_v2'='false');";
         starRocksAssert.withTable(sql3);
     }
 
