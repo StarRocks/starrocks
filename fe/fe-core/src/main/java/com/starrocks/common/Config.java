@@ -1129,6 +1129,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
 
+    @ConfField(mutable = true, comment = "Max retry times for failed create tablet tasks in shared-data mode. " +
+            "Only explicitly failed tasks are retried (not timeouts). Set 0 to disable retry.")
+    public static int lake_create_tablet_max_retries = 1;
+
     /**
      * The thrift server max worker threads
      */
