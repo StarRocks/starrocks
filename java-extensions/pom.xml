@@ -255,6 +255,12 @@
                         <groupId>io.netty</groupId>
                         <artifactId>netty-handler</artifactId>
                     </exclusion>
+                    <!-- https://github.com/StarRocks/starrocks/issues/71898 -->
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
                 </exclusions>
             </dependency>
 
@@ -281,6 +287,11 @@
                     <exclusion>
                         <groupId>org.apache.hadoop</groupId>
                         <artifactId>hadoop-common</artifactId>
+                    </exclusion>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -358,12 +369,26 @@
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-azure</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-azure-datalake</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <!-- FIXME: add it back when the openssl in thirdparty upgraded to 3.x -->
+                    <exclusion>
+                        <groupId>org.wildfly.openssl</groupId>
+                        <artifactId>wildfly-openssl</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
