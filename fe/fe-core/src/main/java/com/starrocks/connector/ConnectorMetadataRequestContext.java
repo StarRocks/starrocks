@@ -17,8 +17,8 @@ package com.starrocks.connector;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 
-public class ConnectorMetadatRequestContext {
-    public static ConnectorMetadatRequestContext DEFAULT = new ConnectorMetadatRequestContext();
+public class ConnectorMetadataRequestContext {
+    public static ConnectorMetadataRequestContext DEFAULT = new ConnectorMetadataRequestContext();
     private TvrVersionRange tableVersionRange = TvrTableSnapshot.empty();
     private boolean queryMVRewrite = false;
 

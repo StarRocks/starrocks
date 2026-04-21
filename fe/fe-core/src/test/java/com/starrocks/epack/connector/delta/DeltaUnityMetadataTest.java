@@ -8,7 +8,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.DatabaseTableName;
@@ -221,7 +221,7 @@ public class DeltaUnityMetadataTest {
             }
         };
         List<String> partitionNames = deltaLakeUnityMetadata.listPartitionNames("db1", "table1",
-                ConnectorMetadatRequestContext.DEFAULT);
+                ConnectorMetadataRequestContext.DEFAULT);
         Assert.assertEquals(3, partitionNames.size());
         Assert.assertEquals("ts=1999", partitionNames.get(0));
         Assert.assertEquals("ts=2000", partitionNames.get(1));
