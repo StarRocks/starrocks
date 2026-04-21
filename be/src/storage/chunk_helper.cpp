@@ -14,7 +14,9 @@
 
 #include "storage/chunk_helper.h"
 
+#include <memory>
 #include <numeric>
+#include <type_traits>
 #include <utility>
 
 #include "column/adaptive_nullable_column.h"
@@ -148,7 +150,8 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
     // |schema| maybe partial columns in vertical compaction, so get char column length by name.
     uint32_t len = tschema->column(tschema->field_index(field.name())).length();
 
-    new_offset.resize(num_rows + 1);
+    const uint64_t final_offset = static_cast<uint64_t>(len) * num_rows;
+    new_offset.resize_uninitialized(num_rows + 1, final_offset);
     new_bytes.assign(num_rows * len, 0); // padding 0
 
     size_t from = 0;
@@ -161,10 +164,13 @@ void ChunkHelper::padding_char_column(const starrocks::TabletSchemaCSPtr& tschem
         }
     });
 
-    new_offset.set(0, 0);
-    for (size_t j = 1; j <= num_rows; ++j) {
-        new_offset.set(j, static_cast<uint64_t>(len) * j);
-    }
+    new_offset.visit_storage([&](auto& offsets_buf) {
+        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+        auto* __restrict offset_data = offsets_buf.data();
+        for (size_t j = 0; j <= num_rows; ++j) {
+            offset_data[j] = static_cast<OffsetValue>(static_cast<uint64_t>(len) * j);
+        }
+    });
 
     if (field.is_nullable()) {
         auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -345,6 +351,7 @@ bool ChunkPipelineAccumulator::need_input() const {
 bool ChunkPipelineAccumulator::is_finished() const {
     return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
 }
+
 
 
 CommonExprEvalScopeGuard::CommonExprEvalScopeGuard(const ChunkPtr& chunk,

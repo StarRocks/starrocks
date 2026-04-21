@@ -38,6 +38,65 @@ struct LocateCaseSensitiveUTF8 {
     }
 };
 
+template <typename OffsetValue>
+static void locate_empty_needle_impl(const OffsetValue* __restrict offsets, size_t num_rows,
+                                     const int32_t* __restrict start_data, int32_t* __restrict result_data) {
+    for (size_t i = 0; i < num_rows; ++i) {
+        int32_t start = start_data[i];
+        if (start <= 0) {
+            // start is zero or negative, the result is zero
+            result_data[i] = 0;
+        } else if (start == 1) {
+            // needle and haystack are all empty, the result is one
+            result_data[i] = 1;
+        } else if (start > offsets[i + 1] - offsets[i]) {
+            // start larger than haystack size, the result is zero
+            result_data[i] = 0;
+        } else {
+            result_data[i] = start;
+        }
+    }
+}
+
+template <typename OffsetValue>
+static void locate_non_empty_needle_impl(const OffsetValue* __restrict offsets, size_t num_rows, const char* begin,
+                                         const char* end, Slice needle, const int32_t* __restrict start_data,
+                                         int32_t* __restrict result_data) {
+    const char* pos = begin;
+    size_t i = 0;
+    auto searcher = LocateCaseSensitiveUTF8::createSearcherInBigHaystack(needle.data, needle.size, end - pos);
+
+    /// We will search for the next occurrence in all strings at once.
+    while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
+        /// Determine which index it refers to.
+        while (begin + offsets[i + 1] <= pos) {
+            result_data[i] = 0;
+            ++i;
+        }
+        const int32_t start = start_data[i];
+        const char* row_begin = begin + offsets[i];
+        const char* row_end = begin + offsets[i + 1];
+
+        /// We check that the entry does not pass through the boundaries of strings.
+        if (start <= 0 || pos + needle.size > row_end) {
+            result_data[i] = 0;
+        } else {
+            size_t res_pos = 1 + utf8_len(row_begin, pos);
+            if (res_pos < start) {
+                pos = skip_leading_utf8(pos, row_end, start - res_pos);
+                continue;
+            }
+            result_data[i] = res_pos;
+        }
+        pos = row_end;
+        ++i;
+    }
+
+    if (i < num_rows) {
+        memset(result_data + i, 0, (num_rows - i) * sizeof(result_data[0]));
+    }
+}
+
 // locate haystack is a vector and needle is a constant
 ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const ColumnPtr& needle_ptr,
                                            const ColumnPtr& start_pos_ptr) {
@@ -84,26 +143,14 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
     Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
     auto res = RunTimeColumnType<TYPE_INT>::create();
     res->resize(haystack->size());
+    auto* __restrict result_data = res->get_data().data();
+    const auto* __restrict start_data = start_pos->get_data().data();
+    const size_t num_rows = haystack->size();
 
     if (needle.size == 0) {
         // if needle is empty string, at legal start position in haystack
         offsets.visit_storage([&](const auto& offsets_buf) {
-            const auto* __restrict offset_data = offsets_buf.data();
-            for (size_t i = 0; i < haystack->size(); ++i) {
-                int32_t start = start_pos->get_data()[i];
-                if (start <= 0) {
-                    // start is zero or negative, the result is zero
-                    res->get_data()[i] = 0;
-                } else if (start == 1) {
-                    // needle and haystack are all empty, the result is one
-                    res->get_data()[i] = 1;
-                } else if (start > offset_data[i + 1] - offset_data[i]) {
-                    // start larger than haystack size, the result is zero
-                    res->get_data()[i] = 0;
-                } else {
-                    res->get_data()[i] = start;
-                }
-            }
+            locate_empty_needle_impl(offsets_buf.data(), num_rows, start_data, result_data);
         });
         if (res_null != nullptr) {
             return NullableColumn::create(std::move(res), std::move(res_null));
@@ -112,46 +159,12 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
         }
     }
 
-    const char* begin = haystack->get_slice(0).data;
-    const char* pos = begin;
-    const char* end = pos + haystack->get_immutable_bytes().size();
+    const char* begin = haystack->get_string_begin();
+    const char* end = haystack->get_string_end();
 
-    /// Current index in the array of strings.
-    size_t i = 0;
-
-    auto searcher = LocateCaseSensitiveUTF8::createSearcherInBigHaystack(needle.data, needle.size, end - pos);
-
-    /// We will search for the next occurrence in all strings at once.
     offsets.visit_storage([&](const auto& offsets_buf) {
-        const auto* __restrict offset_data = offsets_buf.data();
-        while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
-            /// Determine which index it refers to.
-            while (begin + offset_data[i + 1] <= pos) {
-                res->get_data()[i] = 0;
-                ++i;
-            }
-            int32_t start = start_pos->get_data()[i];
-
-            /// We check that the entry does not pass through the boundaries of strings.
-            if (start <= 0 || pos + needle.size > begin + offset_data[i + 1]) {
-                res->get_data()[i] = 0;
-            } else {
-                size_t res_pos = 1 + utf8_len(begin + offset_data[i], pos);
-                if (res_pos < start) {
-                    pos = skip_leading_utf8(pos, begin + offset_data[i + 1], start - res_pos);
-                    continue;
-                }
-                res->get_data()[i] = res_pos;
-            }
-            pos = begin + offset_data[i + 1];
-            ++i;
-        }
+        locate_non_empty_needle_impl(offsets_buf.data(), num_rows, begin, end, needle, start_data, result_data);
     });
-
-    if (i < res->size()) {
-        size_t type_size = res->type_size();
-        memset(res->mutable_raw_data() + i * type_size, 0, (res->size() - i) * type_size);
-    }
 
     if (res_null != nullptr) {
         return NullableColumn::create(std::move(res), std::move(res_null));

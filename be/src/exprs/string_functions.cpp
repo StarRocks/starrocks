@@ -251,15 +251,35 @@ static inline void binary_column_non_empty_op(uint8_t* begin, uint8_t* end, Byte
     offsets->set(i + 1, bytes->size());
 }
 
+template <typename OffsetValue>
+static inline void binary_column_empty_op_fast(Bytes* bytes, OffsetValue* offsets, size_t i) {
+    offsets[i + 1] = static_cast<OffsetValue>(bytes->size());
+}
+
+template <typename OffsetValue>
+static inline void binary_column_non_empty_op_fast(uint8_t* begin, uint8_t* end, Bytes* bytes, OffsetValue* offsets,
+                                                   size_t i) {
+    bytes->insert(bytes->end(), begin, end);
+    offsets[i + 1] = static_cast<OffsetValue>(bytes->size());
+}
+
 template <bool off_is_negative, bool allow_out_of_left_bound>
 static inline void ascii_substr(const BinaryColumn* src, Bytes* bytes, Offsets* offsets, int off, int len) {
     const auto size = src->size();
-    size_t i = 0;
-    for (; i < size; ++i) {
-        auto s = src->get_slice(i);
-        ascii_substr_per_slice<off_is_negative, allow_out_of_left_bound>(&s, off, len, binary_column_empty_op,
-                                                                         binary_column_non_empty_op, bytes, offsets, i);
-    }
+    const char* src_base = src->get_string_begin();
+    Offsets::visit_storage_pair(src->get_offset(), *offsets, [&](const auto& src_offsets, auto& dst_offsets) {
+        using DstOffset = typename std::decay_t<decltype(dst_offsets)>::value_type;
+        const auto* __restrict src_offset_data = src_offsets.data();
+        auto* __restrict dst_offset_data = dst_offsets.data();
+        for (size_t i = 0; i < size; ++i) {
+            const uint64_t begin = src_offset_data[i];
+            const uint64_t end = src_offset_data[i + 1];
+            Slice s(src_base + begin, end - begin);
+            ascii_substr_per_slice<off_is_negative, allow_out_of_left_bound>(
+                    &s, off, len, binary_column_empty_op_fast<DstOffset>,
+                    binary_column_non_empty_op_fast<DstOffset>, bytes, dst_offset_data, i);
+        }
+    });
 }
 
 static inline void utf8_substr_from_left(const BinaryColumn* src, Bytes* bytes, Offsets* offsets, int off, int len) {

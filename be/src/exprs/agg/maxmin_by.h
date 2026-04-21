@@ -762,6 +762,63 @@ public:
             result = down_cast<BinaryColumn*>(dst.get());
         }
 
+        if (!dst->is_nullable() && !src[0]->has_null() && !src[1]->has_null()) {
+            const auto& value_offsets = col_maxmin->get_offset();
+            const char* value_data = col_maxmin->get_string_begin();
+            auto* data_column = ColumnHelper::get_data_column(src[0].get());
+            Bytes& bytes = result->get_bytes();
+            auto& result_offsets = result->get_offset();
+            const size_t old_size = bytes.size();
+
+            size_t final_size = old_size;
+            value_offsets.visit_storage([&](const auto& value_offset_buf) {
+                const auto* __restrict value_offset_data = value_offset_buf.data();
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    const size_t value_size = value_offset_data[i + 1] - value_offset_data[i];
+                    final_size += 2 * sizeof(size_t) + value_size + data_column->serialize_size(i);
+                    if constexpr (State::not_filter_nulls_flag) {
+                        final_size += 1;
+                    }
+                }
+            });
+
+            bytes.resize(final_size);
+            result_offsets.resize_uninitialized(chunk_size + 1, final_size);
+            uint8_t* __restrict bytes_data = bytes.data();
+
+            Offsets::visit_storage_pair(value_offsets, result_offsets,
+                                        [&](const auto& value_offset_buf, auto& result_offset_buf) {
+                using ResultOffsetValue = typename std::decay_t<decltype(result_offset_buf)>::value_type;
+                const auto* __restrict value_offset_data = value_offset_buf.data();
+                auto* __restrict result_offset_data = result_offset_buf.data();
+                result_offset_data[0] = static_cast<ResultOffsetValue>(old_size);
+
+                size_t offset = old_size;
+                for (size_t i = 0; i < chunk_size; ++i) {
+                    const size_t value_size = value_offset_data[i + 1] - value_offset_data[i];
+                    const size_t serde_size = data_column->serialize_size(i);
+                    const size_t new_offset = offset + 2 * sizeof(size_t) + value_size + serde_size +
+                                              (State::not_filter_nulls_flag ? 1 : 0);
+                    uint8_t* p = bytes_data + offset;
+                    memcpy(p, &value_size, sizeof(size_t));
+                    p += sizeof(size_t);
+                    memcpy(p, value_data + value_offset_data[i], value_size);
+                    p += value_size;
+                    if constexpr (State::not_filter_nulls_flag) {
+                        *p = 0;
+                        p += 1;
+                    }
+                    memcpy(p, &serde_size, sizeof(size_t));
+                    p += sizeof(size_t);
+                    data_column->serialize(i, p);
+
+                    result_offset_data[i + 1] = static_cast<ResultOffsetValue>(new_offset);
+                    offset = new_offset;
+                }
+            });
+            return;
+        }
+
         Bytes& bytes = result->get_bytes();
         result->get_offset().resize(chunk_size + 1);
 

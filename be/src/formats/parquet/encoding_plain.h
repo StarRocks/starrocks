@@ -214,6 +214,7 @@ public:
         char* datas[read_count + 1];
         size_t i = 0;
         size_t cursor = _offset;
+        size_t total_length = 0;
         //
         for (i = 0; (i < read_count) & (_offset < _data.size); ++i) {
             uint32_t length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(_data.data) + cursor);
@@ -222,6 +223,7 @@ public:
             cursor += length;
             lengths[i] = length;
             max_size = max_size > length ? max_size : length;
+            total_length += length;
         }
 
         _offset = cursor;
@@ -235,13 +237,9 @@ public:
             auto& bytes = binary_column->get_bytes();
             size_t prev_offsets = offsets.size();
             size_t offset = bytes.size();
-            size_t final_offset = offset;
-            size_t cnt = 0;
-            for (size_t i = 0; i < count; ++i) {
-                final_offset += is_nulls[i] ? 0 : lengths[cnt++];
-            }
+            size_t final_offset = offset + total_length;
             offsets.resize_uninitialized(count + prev_offsets, final_offset);
-            cnt = 0;
+            size_t cnt = 0;
             const uint32_t* lengths_ptr = lengths;
             offsets.visit_storage([prev_offsets, count, is_nulls, lengths_ptr, offset, cnt](auto& offsets_buf) mutable {
                 using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
@@ -568,10 +566,7 @@ public:
         }
         auto& offsets = binary_column->get_offset();
         size_t prev_offsets = offsets.size();
-        size_t final_offset = offset;
-        for (size_t i = 0; i < count; ++i) {
-            final_offset += is_nulls[i] ? 0 : _type_length;
-        }
+        size_t final_offset = offset + read_count * _type_length;
         offsets.resize_uninitialized(count + prev_offsets, final_offset);
         {
             // fill offset columns

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <limits>
 #include <map>
 #include <memory>
 #include <type_traits>
@@ -541,21 +542,33 @@ private:
             uint32_t lengths[read_count + 1];
             char* datas[read_count + 1];
 
-            for (size_t i = 0; i < read_count; ++i) {
-                datas[i] = _slices[i].data;
-                lengths[i] = _slices[i].size;
+            // Use a cheap upper bound for the common no-promote path. Only
+            // compute the exact byte count if the upper bound may force a
+            // promotion but the actual payload might still fit in small offsets.
+            auto& offsets = binary_column->get_offset();
+            const uint64_t max_final_offset = offset + static_cast<uint64_t>(read_count) * _max_value_length;
+            const bool need_exact_final_offset =
+                    !offsets.is_large() && max_final_offset > std::numeric_limits<uint32_t>::max();
+            uint64_t total_length = 0;
+
+            if (LIKELY(!need_exact_final_offset)) {
+                for (size_t i = 0; i < read_count; ++i) {
+                    datas[i] = _slices[i].data;
+                    lengths[i] = _slices[i].size;
+                }
+            } else {
+                for (size_t i = 0; i < read_count; ++i) {
+                    datas[i] = _slices[i].data;
+                    lengths[i] = _slices[i].size;
+                    total_length += lengths[i];
+                }
             }
 
             // relocate offsets
-            auto& offsets = binary_column->get_offset();
             size_t prev_offsets = offsets.size();
-            size_t cnt = 0;
-            size_t final_offset = offset;
-            for (size_t i = 0; i < count; ++i) {
-                final_offset += is_nulls[i] ? 0 : lengths[cnt++];
-            }
+            const uint64_t final_offset = need_exact_final_offset ? offset + total_length : max_final_offset;
             offsets.resize_uninitialized(count + prev_offsets, final_offset);
-            cnt = 0;
+            size_t cnt = 0;
             const uint32_t* lengths_ptr = lengths;
             offsets.visit_storage([prev_offsets, count, is_nulls, lengths_ptr, offset, cnt](auto& offsets_buf) mutable {
                 using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
