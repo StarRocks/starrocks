@@ -25,6 +25,7 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
@@ -1206,5 +1207,77 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Assertions.assertNotNull(batch2Plan,
                 "Unrelated pure PCT batch must not be early-SKIPped by orphaned pinning owner " +
                         "state — an exec plan should have been built");
+    }
+
+    /**
+     * Regression for IVM commit owner-match guard: if the pinning owner is overwritten between
+     * {@code beforeCommitted} and {@code afterCommitted} (e.g. leader fail-over + schedule of a
+     * different job), {@code afterCommitted} must NOT call {@code clearTempBaseTableInfoTvrDeltaState}.
+     * Otherwise the newer job's pending TVR state would be wiped and its subsequent batches
+     * would promote incorrect / empty TVR.
+     */
+    @Test
+    public void testIVMCallbackDoesNotClearNewerJobOwner() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`;";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "incremental");
+
+        // Manually stage "IVM has written its delta but transaction commit has not yet fired".
+        MaterializedView.AsyncRefreshContext asyncCtx = mv.getRefreshScheme().getAsyncRefreshContext();
+        String ownerA = "jobA-" + com.starrocks.common.util.UUIDUtil.genUUID();
+        Map<BaseTableInfo, TvrVersionRange> jobAFrozen =
+                Map.of(mv.getBaseTableInfos().get(0), TvrTableSnapshot.of(2L));
+        asyncCtx.replaceTempBaseTableInfoTvrDeltaMap(ownerA, jobAFrozen);
+
+        // Build a callback + capture owner A via beforeCommitted.
+        IVMInsertLoadTxnCallback callback =
+                new IVMInsertLoadTxnCallback(mv.getMvId().getDbId(), mv.getId());
+        callback.beforeCommitted(null);
+
+        // Simulate a newer job taking over ownership between beforeCommitted and afterCommitted.
+        String ownerB = "jobB-" + com.starrocks.common.util.UUIDUtil.genUUID();
+        asyncCtx.replaceTempBaseTableInfoTvrDeltaMap(ownerB,
+                Map.copyOf(asyncCtx.getTempBaseTableInfoTvrDeltaMap()));
+
+        // afterCommitted must detect the owner change and skip clearTempBaseTableInfoTvrDeltaState
+        // so the newer job's pending state survives.
+        callback.afterCommitted(null, true);
+
+        MaterializedView afterMv = getMv("test_mv1");
+        MaterializedView.AsyncRefreshContext ctxAfter = afterMv.getRefreshScheme().getAsyncRefreshContext();
+        Assertions.assertEquals(ownerB, ctxAfter.getTempTvrOwnerStartTaskRunId(),
+                "Newer job's pinning owner must not be cleared by the stale IVM callback");
+        Assertions.assertFalse(ctxAfter.getTempBaseTableInfoTvrDeltaMap().isEmpty(),
+                "Newer job's pending TVR delta map must not be wiped by the stale IVM callback");
+    }
+
+    /**
+     * Verify pinned snapshot id per base table is recorded on the task run's extra message so
+     * it is visible via information_schema.task_runs.EXTRA_MESSAGE for post-mortem debugging.
+     */
+    @Test
+    public void testPinnedSnapshotIdMapRecordedOnExtraMessage() throws Exception {
+        String query = "SELECT id, data, date FROM `iceberg0`.`partitioned_db`.`t1`";
+        MaterializedView mv = createMaterializedViewWithRefreshMode(query, "auto",
+                "`date`", Map.of("partition_refresh_number", "1"));
+
+        advanceTableVersionTo(2);
+        mockListTableDeltaTraits();
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
+        TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
+        MVTaskRunProcessor processor = getMVTaskRunProcessor(taskRun);
+        Assertions.assertTrue(processor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+
+        // After fallback batch 1, setupPinnedRangesIfNeeded should have written the snapshot id
+        // into the task run's MVTaskRunExtraMessage. Pure PCT / non-pinned runs leave it empty.
+        MVTaskRunExtraMessage extraMessage =
+                processor.getMvTaskRunContext().getStatus().getMvTaskRunExtraMessage();
+        Map<String, Long> pinnedSnapshotIdMap = extraMessage.getPinnedSnapshotIdMap();
+        Assertions.assertFalse(pinnedSnapshotIdMap.isEmpty(),
+                "pinnedSnapshotIdMap should be populated on a pinned fallback batch");
+        // Value must equal the PCT-synced snapshot (version 2).
+        Long snapshotId = pinnedSnapshotIdMap.values().iterator().next();
+        Assertions.assertEquals(2L, snapshotId.longValue(),
+                "pinnedSnapshotIdMap value should match the PCT-synced snapshot id");
     }
 }
