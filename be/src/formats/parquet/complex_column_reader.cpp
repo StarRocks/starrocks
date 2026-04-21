@@ -822,6 +822,30 @@ static bool _should_read_shredded_field_node_columns(const ShreddedFieldNode& no
     return false;
 }
 
+static bool _column_chunk_all_null(const ColumnReader* reader) {
+    if (reader == nullptr) {
+        return false;
+    }
+    const tparquet::ColumnChunk* chunk_meta = reader->get_chunk_metadata();
+    if (chunk_meta == nullptr || !chunk_meta->meta_data.__isset.statistics ||
+        !chunk_meta->meta_data.statistics.__isset.null_count) {
+        return false;
+    }
+    return chunk_meta->meta_data.statistics.null_count == chunk_meta->meta_data.num_values;
+}
+
+static bool _column_chunk_all_null_for_num_rows(const ColumnReader* reader, uint64_t num_rows) {
+    if (reader == nullptr) {
+        return false;
+    }
+    const tparquet::ColumnChunk* chunk_meta = reader->get_chunk_metadata();
+    if (chunk_meta == nullptr || !chunk_meta->meta_data.__isset.statistics ||
+        !chunk_meta->meta_data.statistics.__isset.null_count) {
+        return false;
+    }
+    return chunk_meta->meta_data.statistics.null_count == static_cast<int64_t>(num_rows);
+}
+
 static void _clear_shredded_field_node_columns(ShreddedFieldNode* node) {
     if (node == nullptr) {
         return;
@@ -844,7 +868,10 @@ static Status _read_shredded_field_node(const Range<uint64_t>& range, const Filt
         return Status::OK();
     }
     const bool read_node_columns = _should_read_shredded_field_node_columns(*node, requested_paths);
-    if (read_node_columns && node->value_reader != nullptr) {
+    // All-null fallback `value` has no usable remain payload for any row in this row group.
+    // Keep value_column as nullptr so downstream reconstruction treats it the same as
+    // "no fallback payload", while still reading typed_value/children normally.
+    if (read_node_columns && node->value_reader != nullptr && !_column_chunk_all_null(node->value_reader.get())) {
         node->value_column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
         RETURN_IF_ERROR(node->value_reader->read_range(range, filter, node->value_column));
     } else {
@@ -890,7 +917,7 @@ static void _collect_shredded_field_io_range(const ShreddedFieldNode& node,
         return;
     }
     const bool read_node_columns = _should_read_shredded_field_node_columns(node, requested_paths);
-    if (read_node_columns && node.value_reader != nullptr) {
+    if (read_node_columns && node.value_reader != nullptr && !_column_chunk_all_null(node.value_reader.get())) {
         node.value_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
     if (read_node_columns && node.typed_value_reader != nullptr) {
@@ -911,7 +938,7 @@ static void _select_shredded_field_offset_index(const ShreddedFieldNode& node, c
         return;
     }
     const bool read_node_columns = _should_read_shredded_field_node_columns(node, requested_paths);
-    if (read_node_columns && node.value_reader != nullptr) {
+    if (read_node_columns && node.value_reader != nullptr && !_column_chunk_all_null(node.value_reader.get())) {
         node.value_reader->select_offset_index(range, rg_first_row);
     }
     if (read_node_columns && node.typed_value_reader != nullptr) {
@@ -1587,7 +1614,36 @@ public:
     // Per-row "any typed payload exists" summary over shredded fields plus root typed_value.
     // Used only for top-level row null/materialization decisions.
     std::vector<bool> has_typed_value_bitmap;
+
+    bool can_bulk_append_base_payload(bool has_outer_null_channel) const {
+        if (root_typed_value_column != nullptr) {
+            return false;
+        }
+        if (has_outer_null_channel) {
+            return true;
+        }
+        const size_t num_rows = has_typed_value_bitmap.size();
+        for (size_t i = 0; i < num_rows; ++i) {
+            const bool has_typed_value = has_typed_value_bitmap[i];
+            if (metadata_nulls[i] || (value_nulls[i] && !has_typed_value)) {
+                return false;
+            }
+            const Slice raw_metadata_slice = metadata_column->get_slice(i);
+            const Slice raw_value_slice = value_column->get_slice(i);
+            if ((raw_metadata_slice.size == 0 || raw_value_slice.size == 0) && !has_typed_value) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
+
+static void append_null_to_typed_bindings(VariantColumn* variant_column) {
+    DCHECK(variant_column != nullptr);
+    for (auto& typed_column : variant_column->mutable_typed_columns()) {
+        typed_column->append_nulls(1);
+    }
+}
 
 class VariantReadRangeRowMaterializer {
 public:
@@ -2003,17 +2059,29 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
     // Per-row materialization path keeps the top-level metadata/value as the base remain
     // payload. Shredded bindings are stored separately in typed_columns so full-row
     // reconstruction is deferred until a caller asks VariantColumn to materialize a row.
+    const bool bulk_append_base_payload = batch_ctx.can_bulk_append_base_payload(dst->is_nullable());
+    if (bulk_append_base_payload) {
+        variant_column->metadata_column()->append(*metadata_column, 0, num_rows);
+        variant_column->remain_value_column()->append(*value_column, 0, num_rows);
+    }
+
     VariantReadRangeRowMaterializer materializer(batch_ctx, 0, variant_column);
     for (size_t i = 0; i < num_rows; ++i) {
         materializer.set_row(i);
         ASSIGN_OR_RETURN(bool prepared, materializer.prepare());
         if (!prepared) {
-            variant_column->append_shredded_null();
+            if (bulk_append_base_payload) {
+                append_null_to_typed_bindings(variant_column);
+            } else {
+                variant_column->append_shredded_null();
+            }
             reconstructed_nulls[i] = 1;
             has_reconstructed_null = true;
             continue;
         }
-        materializer.append_top_level_row();
+        if (!bulk_append_base_payload) {
+            materializer.append_top_level_row();
+        }
         RETURN_IF_ERROR(materializer.append_bindings());
         reconstructed_nulls[i] = 0;
     }
@@ -2061,12 +2129,7 @@ bool VariantColumnReader::fallback_values_all_null_in_row_group_for_path(const V
     if (found_node == nullptr || found_node->kind != ShreddedFieldNode::Kind::SCALAR) return false;
     if (found_node->value_reader == nullptr) return true;
 
-    const tparquet::ColumnChunk* chunk_meta = found_node->value_reader->get_chunk_metadata();
-    if (chunk_meta == nullptr || !chunk_meta->meta_data.__isset.statistics ||
-        !chunk_meta->meta_data.statistics.__isset.null_count) {
-        return false;
-    }
-    return chunk_meta->meta_data.statistics.null_count == (int64_t)rg_num_rows;
+    return _column_chunk_all_null_for_num_rows(found_node->value_reader.get(), rg_num_rows);
 }
 
 StatusOr<bool> VariantVirtualZoneMapReader::_prepare_delegate_predicates(
