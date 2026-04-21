@@ -261,9 +261,11 @@ public class TableFunctionTable extends Table {
     private void setSchemaForLoadAndQuery() throws DdlException {
         parseFilesForLoadAndQuery();
 
-        // infer schema from files
-        List<Column> columns = new ArrayList<>();
-        if (path.startsWith(FAKE_PATH)) {
+        List<Column> columns;
+        if (explicitSchemaColumns.isPresent()) {
+            columns = new ArrayList<>(explicitSchemaColumns.get());
+        } else if (path.startsWith(FAKE_PATH)) {
+            columns = new ArrayList<>();
             columns.add(new Column("col_int", IntegerType.INT));
             columns.add(new Column("col_string", VarcharType.VARCHAR));
         } else {

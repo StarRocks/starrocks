@@ -13,6 +13,7 @@ import java.util.Map;
 
 import static com.starrocks.catalog.TableFunctionTable.FAKE_PATH;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -91,5 +92,50 @@ public class TableFunctionTableSchemaTest {
         p.put("schema", "a INT NOT NULL");
         DdlException e = assertThrows(DdlException.class, () -> new TableFunctionTable(p));
         assertTrue(e.getMessage().contains("invalid 'schema'"));
+    }
+
+    @Test
+    public void testSchemaOverridesFakePathBuiltins() throws Exception {
+        Map<String, String> p = baseProps();
+        p.put("schema", "foo INT");
+        TableFunctionTable t = new TableFunctionTable(p);
+        assertEquals(1, t.getFullSchema().size());
+        assertEquals("foo", t.getFullSchema().get(0).getName());
+        // col_int / col_string (fake path built-ins) must NOT appear
+        assertTrue(t.getFullSchema().stream().noneMatch(c -> c.getName().equals("col_int")));
+    }
+
+    @Test
+    public void testSchemaPlusColumnsFromPathAppend() throws Exception {
+        Map<String, String> p = baseProps();
+        p.put("schema", "id BIGINT, name VARCHAR(64)");
+        p.put("columns_from_path", "dt,region");
+        TableFunctionTable t = new TableFunctionTable(p);
+        assertEquals(4, t.getFullSchema().size());
+        assertEquals("id", t.getFullSchema().get(0).getName());
+        assertEquals("name", t.getFullSchema().get(1).getName());
+        assertEquals("dt", t.getFullSchema().get(2).getName());
+        assertEquals("region", t.getFullSchema().get(3).getName());
+    }
+
+    @Test
+    public void testSchemaColumnsFromPathConflict() {
+        Map<String, String> p = baseProps();
+        p.put("schema", "dt BIGINT, name VARCHAR(64)");
+        p.put("columns_from_path", "dt,region");
+        DdlException e = assertThrows(DdlException.class, () -> new TableFunctionTable(p));
+        assertTrue(e.getMessage().toLowerCase().contains("dup"));
+    }
+
+    @Test
+    public void testSchemaIgnoredWhenListFilesOnly() throws Exception {
+        Map<String, String> p = baseProps();
+        p.put("schema", "a INT");
+        p.put("list_files_only", "true");
+        TableFunctionTable t = new TableFunctionTable(p);
+        // LIST FILES schema, not the user's schema
+        assertTrue(t.getFullSchema().stream()
+                .anyMatch(c -> c.getName().equalsIgnoreCase("PATH")));
+        assertFalse(t.hasExplicitSchema());
     }
 }
