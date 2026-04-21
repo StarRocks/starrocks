@@ -406,12 +406,23 @@ public:
     bool fallback_values_all_null_in_row_group_for_path(const VariantPath& path, uint64_t rg_num_rows) const;
 
 private:
+    // Fast-path read when _skip_base_payload is true.
+    // Returns true if the fast path handled the read completely.
+    // Returns false if fallback rows were detected; shredded fields are already populated and the
+    // caller should run the normal per-row path without re-reading shredded fields.
+    StatusOr<bool> _read_range_skip_base_payload(const Range<uint64_t>& range, const Filter* filter,
+                                                  VariantColumn* variant_column, NullableColumn* nullable_column);
+
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
     std::vector<VariantPath> _requested_shredded_paths;
     // String form of _requested_shredded_paths, pre-computed at construction time to avoid
     // repeated VariantPath→string conversion on every read_range call.
     std::vector<std::string> _requested_shredded_path_names;
+    // True when every requested path maps to a SCALAR typed_value node in the shredded schema.
+    // In that case metadata/value base payload columns are never needed and can be skipped
+    // entirely (IO range, offset-index selection, and data read).
+    bool _skip_base_payload = false;
     // Cached auto-discovered paths when _requested_shredded_paths is empty (request-all-paths mode).
     // _shredded_fields is fixed after construction, so this only needs to be computed once.
     mutable std::vector<std::string> _cached_auto_paths;

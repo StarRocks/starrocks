@@ -930,6 +930,16 @@ static void _select_shredded_field_offset_index(const ShreddedFieldNode& node, c
 // typed_value fields nest arrays inside arrays beyond reasonable depth.
 static constexpr int kMaxShreddedArrayNestingDepth = 32;
 
+// Returns the first non-null typed_value_column found in the node subtree, or nullptr.
+// Used to derive num_rows when base payload is skipped.
+static const Column* _find_first_typed_col(const ShreddedFieldNode& node) {
+    if (node.typed_value_column != nullptr) return node.typed_value_column.get();
+    for (const auto& child : node.children) {
+        if (const Column* c = _find_first_typed_col(child); c != nullptr) return c;
+    }
+    return nullptr;
+}
+
 // Collect overlays for one ARRAY element row from shredded child nodes recursively.
 // Priority per path: typed scalar value > fallback binary value.
 // Failures while encoding/rebuilding typed payloads are treated as hard errors to avoid silently
@@ -1759,6 +1769,30 @@ Status VariantColumnReader::prepare() {
     for (auto& node : _shredded_fields) {
         RETURN_IF_ERROR(_prepare_shredded_field_node(&node));
     }
+    // Determine whether base payload reads can be optimised.
+    //
+    // When every explicitly requested path resolves to a SCALAR typed_value node and there is
+    // no root-level typed_value re-encoding, the metadata column is never needed (it is only
+    // used for variant binary decoding).  We set _skip_base_payload = true in this case.
+    //
+    // The value (binary payload) column is handled separately:
+    //   - Non-nullable field: value is also skipped — typed_value nullness is sufficient.
+    //   - Nullable field:     value is still read, but only to recover the outer row-null mask.
+    //     (A null typed_value means either "variant row is null" or "field is absent", so the
+    //      value column's null flag is the only reliable source for outer-row nullness.)
+    _skip_base_payload = false;
+    if (!_requested_shredded_path_names.empty() && _top_level.root_typed_value_reader == nullptr) {
+        bool all_scalar = true;
+        for (const auto& p : _requested_shredded_path_names) {
+            const auto* node = find_node_by_path(_shredded_fields, p);
+            if (node == nullptr || node->kind != ShreddedFieldNode::Kind::SCALAR ||
+                node->typed_value_reader == nullptr) {
+                all_scalar = false;
+                break;
+            }
+        }
+        _skip_base_payload = all_scalar;
+    }
     return Status::OK();
 }
 
@@ -1811,6 +1845,9 @@ void VariantColumnReader::set_need_parse_levels(bool need_parse_levels) {
 
 void VariantColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                                   int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+    // Always include metadata and value in IO range.
+    // When _skip_base_payload: metadata is read for outer row-null mask; value is kept so that
+    // if per-field fallback values are detected at read time we can fall back to the per-row path.
     if (_top_level.metadata_reader != nullptr) {
         _top_level.metadata_reader->collect_column_io_range(ranges, end_offset, types, active);
     }
@@ -1844,6 +1881,92 @@ void VariantColumnReader::select_offset_index(const SparseRange<uint64_t>& range
     }
 }
 
+// Fast-path read when _skip_base_payload is true.
+// Reads shredded fields, then calls select_materialized_bindings to detect per-field fallback
+// rows (type mismatch → row value lives in node->value_column instead of typed_value_column).
+// Returns true  → fast path handled everything; caller is done.
+// Returns false → fallback rows detected; shredded fields are already populated and the caller
+//                 must run the normal per-row path without re-reading shredded fields.
+StatusOr<bool> VariantColumnReader::_read_range_skip_base_payload(const Range<uint64_t>& range, const Filter* filter,
+                                                                  VariantColumn* variant_column,
+                                                                  NullableColumn* nullable_column) {
+    _top_level.root_typed_value_column = nullptr;
+    const std::vector<VariantPath>* requested_paths = &_requested_shredded_paths;
+    for (auto& node : _shredded_fields) {
+        RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &node, requested_paths));
+    }
+
+    // Derive num_rows from the first available typed_value_column.
+    size_t num_rows = 0;
+    for (const auto& node : _shredded_fields) {
+        if (const Column* c = _find_first_typed_col(node); c != nullptr) {
+            num_rows = c->size();
+            break;
+        }
+    }
+
+    std::vector<TopBinding> collected_bindings;
+    collect_top_bindings(_shredded_fields, _requested_shredded_path_names, &collected_bindings);
+
+    // If any binding is demoted to VARIANT (type mismatch), signal the caller to use the normal
+    // per-row path. Shredded fields are already populated so the caller skips re-reading them.
+    std::vector<TopBinding> materialized_bindings = select_materialized_bindings(collected_bindings, num_rows);
+    for (const auto& b : materialized_bindings) {
+        if (b.kind == TopBinding::Kind::VARIANT) {
+            return false;
+        }
+    }
+
+    // No fallback rows: bulk-copy typed_value columns directly.
+    std::vector<std::string> typed_paths;
+    std::vector<TypeDescriptor> typed_types;
+    MutableColumns typed_columns;
+    typed_paths.reserve(collected_bindings.size());
+    typed_types.reserve(collected_bindings.size());
+    typed_columns.reserve(collected_bindings.size());
+    for (const auto& binding : collected_bindings) {
+        typed_paths.emplace_back(binding.path);
+        typed_types.emplace_back(binding.type);
+        typed_columns.emplace_back(ColumnHelper::create_column(binding.type, true));
+    }
+    variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
+                                         nullptr, nullptr);
+
+    for (size_t bi = 0; bi < collected_bindings.size(); ++bi) {
+        const TopBinding& binding = collected_bindings[bi];
+        const Column* src = binding.node != nullptr ? binding.node->typed_value_column.get() : nullptr;
+        Column* col_dst = variant_column->mutable_typed_columns()[bi].get();
+        if (src == nullptr) {
+            col_dst->append_nulls(num_rows);
+            continue;
+        }
+        DCHECK_EQ(src->size(), num_rows) << "typed_value_column size mismatch for '" << binding.path << "': expected "
+                                         << num_rows << ", got " << src->size();
+        if (src->size() != num_rows) {
+            col_dst->append_nulls(num_rows);
+            continue;
+        }
+        col_dst->append(*src, 0, num_rows);
+    }
+    DCHECK_EQ(variant_column->size(), num_rows);
+
+    // Outer row-null mask from metadata column: metadata null ↔ variant row is null (shredding spec).
+    // The value column is null for both "variant is null" and "all fields fully shredded", so it
+    // cannot be used as a reliable null indicator here.
+    if (nullable_column != nullptr) {
+        DCHECK(_top_level.metadata_reader != nullptr);
+        ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+        RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
+        const auto* metadata_nullable = down_cast<const NullableColumn*>(metadata_col.get());
+        DCHECK_EQ(metadata_nullable->size(), num_rows);
+        auto* outer_null = nullable_column->null_column_raw_ptr();
+        outer_null->get_data().assign(metadata_nullable->null_column()->get_data().begin(),
+                                      metadata_nullable->null_column()->get_data().end());
+        nullable_column->set_has_null(metadata_nullable->has_null());
+    }
+    return true;
+}
+
 Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     auto* dst_mut = dst->as_mutable_raw_ptr();
     VariantColumn* variant_column = nullptr;
@@ -1858,11 +1981,26 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         variant_column = down_cast<VariantColumn*>(dst_mut);
     }
 
+    // Fast path: all requested paths are SCALAR typed_value leaves and base payload is not needed.
+    // If the fast path detects per-field fallback rows it returns false; shredded fields are
+    // already populated so we fall through to the normal path skipping shredded re-reads.
+    bool shredded_already_read = false;
+    if (_skip_base_payload) {
+        ASSIGN_OR_RETURN(bool handled, _read_range_skip_base_payload(range, filter, variant_column, nullable_column));
+        if (handled) {
+            return Status::OK();
+        }
+        shredded_already_read = true;
+    }
+
     ColumnPtr metadata_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     ColumnPtr value_col = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     RETURN_IF_ERROR(_top_level.metadata_reader->read_range(range, filter, metadata_col));
     RETURN_IF_ERROR(_top_level.value_reader->read_range(range, filter, value_col));
+    // root_typed_value_reader is always nullptr when _skip_base_payload is true, so this branch
+    // is only reached from the non-skip path.
     if (_top_level.root_typed_value_reader != nullptr) {
+        DCHECK(!_skip_base_payload);
         DCHECK(_top_level.root_typed_value_type != nullptr);
         _top_level.root_typed_value_column = ColumnHelper::create_column(*_top_level.root_typed_value_type, true);
         RETURN_IF_ERROR(
@@ -1871,10 +2009,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
         _top_level.root_typed_value_column = nullptr;
     }
 
-    const std::vector<VariantPath>* requested_paths =
-            _requested_shredded_paths.empty() ? nullptr : &_requested_shredded_paths;
-    for (auto& node : _shredded_fields) {
-        RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &node, requested_paths));
+    if (!shredded_already_read) {
+        const std::vector<VariantPath>* requested_paths =
+                _requested_shredded_paths.empty() ? nullptr : &_requested_shredded_paths;
+        for (auto& node : _shredded_fields) {
+            RETURN_IF_ERROR(_read_shredded_field_node(range, filter, &node, requested_paths));
+        }
     }
 
     auto* metadata_nullable = down_cast<NullableColumn*>(metadata_col->as_mutable_raw_ptr());
@@ -1925,96 +2065,26 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
                                            _top_level.root_typed_value_type.get(), metadata_column, value_column,
                                            metadata_nulls, value_nulls);
 
-    // Partition bindings into two groups:
-    //   bulk_indices   – SCALAR bindings whose typed_value_column can be bulk-copied after the loop.
-    //   native_indices – VARIANT bindings that require per-row decode.
-    // Bulk copy is only applicable when there is no root typed value to re-encode and paths are
-    // explicitly requested (not the "all paths" auto-discovery mode).
-    const bool bulk_eligible = _top_level.root_typed_value_column == nullptr && !_requested_shredded_paths.empty();
-    std::vector<size_t> bulk_indices;
-    std::vector<size_t> native_indices;
-    for (size_t bi = 0; bi < materialized_bindings.size(); ++bi) {
-        if (bulk_eligible && materialized_bindings[bi].kind == TopBinding::Kind::SCALAR) {
-            bulk_indices.push_back(bi);
-        } else {
-            native_indices.push_back(bi);
-        }
-    }
+    variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
+                                         BinaryColumn::create(), BinaryColumn::create());
 
-    // When there is at least one binding and all bindings are SCALAR (native_indices empty),
-    // base payload is never accessed by the caller (project_variant_leaf_column reads only
-    // typed_columns). Skip the per-row loop entirely: compute outer-null directly from the raw
-    // null bitmaps and has_typed_value_bitmap, and omit metadata/remain from the output schema.
-    //
-    // Keep the zero-binding case on the generic path below so plain VARIANT files (or batches
-    // where no shredded binding is materialized) still preserve top-level metadata/value.
-    if (!materialized_bindings.empty() && native_indices.empty()) {
-        // All-SCALAR fast path: skip the per-row loop entirely.
-        // Base payload (metadata/remain) is not needed because the caller reads only typed_columns.
-        // Compute outer-null directly from the raw null bitmaps and has_typed_value_bitmap.
-        variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
-                                             nullptr, nullptr);
-        for (size_t i = 0; i < num_rows; ++i) {
-            const bool has_typed = batch_ctx.has_typed_value_bitmap[i];
-            const Slice ms = metadata_column->get_slice(i);
-            const Slice vs = value_column->get_slice(i);
-            const bool is_null = metadata_nulls[i] || (value_nulls[i] && !has_typed) ||
-                                 ((ms.size == 0 || vs.size == 0) && !has_typed);
-            if (is_null) {
-                reconstructed_nulls[i] = 1;
-                has_reconstructed_null = true;
-            }
+    // Per-row materialization path.
+    // - request-all-paths: emit rebuilt top-level metadata/value.
+    // - requested-subset: keep the current row payload as-is; individual bindings are
+    //   materialized from their shredded subtree or via direct raw-row seek when unshredded.
+    VariantReadRangeRowMaterializer materializer(batch_ctx, 0, variant_column);
+    for (size_t i = 0; i < num_rows; ++i) {
+        materializer.set_row(i);
+        ASSIGN_OR_RETURN(bool prepared, materializer.prepare());
+        if (!prepared) {
+            variant_column->append_shredded_null();
+            reconstructed_nulls[i] = 1;
+            has_reconstructed_null = true;
+            continue;
         }
-        // Bulk-populate SCALAR typed_columns.
-        // Each binding's typed_value_column holds the complete batch; bulk-append and then OR in
-        // the outer-null bitmap so rows where the variant row is null become null in the output.
-        for (size_t bi : bulk_indices) {
-            const TopBinding& binding = materialized_bindings[bi];
-            const Column* src = binding.node != nullptr ? binding.node->typed_value_column.get() : nullptr;
-            Column* dst = variant_column->mutable_typed_columns()[bi].get();
-            if (src == nullptr) {
-                // Node was not found in this row group's shredded schema; all rows are null.
-                dst->append_nulls(num_rows);
-                continue;
-            }
-            DCHECK_EQ(src->size(), num_rows) << "typed_value_column size mismatch for binding '" << binding.path
-                                             << "': expected " << num_rows << ", got " << src->size();
-            if (src->size() != num_rows) {
-                dst->append_nulls(num_rows);
-                continue;
-            }
-            dst->append(*src, 0, num_rows);
-            if (has_reconstructed_null) {
-                auto* nullable_dst = down_cast<NullableColumn*>(dst);
-                auto& dst_null_data = nullable_dst->null_column_raw_ptr()->get_data();
-                for (size_t r = 0; r < num_rows; ++r) {
-                    dst_null_data[r] |= reconstructed_nulls[r];
-                }
-                nullable_dst->update_has_null();
-            }
-        }
-    } else {
-        variant_column->set_shredded_columns(std::move(typed_paths), std::move(typed_types), std::move(typed_columns),
-                                             BinaryColumn::create(), BinaryColumn::create());
-
-        // Per-row materialization path.
-        // - request-all-paths: emit rebuilt top-level metadata/value.
-        // - requested-subset: keep the current row payload as-is; individual bindings are
-        //   materialized from their shredded subtree or via direct raw-row seek when unshredded.
-        VariantReadRangeRowMaterializer materializer(batch_ctx, 0, variant_column);
-        for (size_t i = 0; i < num_rows; ++i) {
-            materializer.set_row(i);
-            ASSIGN_OR_RETURN(bool prepared, materializer.prepare());
-            if (!prepared) {
-                variant_column->append_shredded_null();
-                reconstructed_nulls[i] = 1;
-                has_reconstructed_null = true;
-                continue;
-            }
-            materializer.append_top_level_row();
-            RETURN_IF_ERROR(materializer.append_bindings());
-            reconstructed_nulls[i] = 0;
-        }
+        materializer.append_top_level_row();
+        RETURN_IF_ERROR(materializer.append_bindings());
+        reconstructed_nulls[i] = 0;
     }
     DCHECK_EQ(variant_column->size(), num_rows)
             << "Variant column size mismatch: expected " << num_rows << ", got " << variant_column->size();
