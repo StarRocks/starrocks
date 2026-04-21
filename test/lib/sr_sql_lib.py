@@ -1395,9 +1395,10 @@ class StarrocksSQLApiLib(object):
                 log.info("[%s.check] only check with no Error" % sql_id)
                 tools.assert_equal(0, act[0], "shell %s error: %s" % (sql, act))
             elif not sql.startswith(FUNCTION_FLAG):
-                # Function, without error msg
-                log.info("[%s.check] only check with no Error" % sql_id)
+                # SQL: verify no error and result is empty
+                log.info("[%s.check] check no Error and empty result" % sql_id)
                 tools.assert_false(str(act).startswith("E: "), "sql result not match: actual with E(%s)" % str(act))
+                tools.assert_equal("", act, "sql result not match: expected empty but got (%s)" % str(act))
             else:
                 # SQL, with empty result
                 exp = []
