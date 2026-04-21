@@ -96,6 +96,7 @@ import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportAuditStatisticsParams;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -1454,16 +1455,16 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public boolean isEnableLoadProfile() {
-        // Check both session variable and the query option set during planning.
-        // When stream load is sent directly to CN, the ConnectContext is created
-        // with empty session variables, but StreamLoadPlanner may have set
-        // enable_profile=true in TQueryOptions based on the table's
-        // enable_load_profile property.  Without checking the query option,
-        // the profile collected by BE would be silently discarded by FE.
+        // For stream loads sent directly to CN the ConnectContext is created with
+        // empty session variables, so also honor enable_profile on the JobSpec's
+        // query options — StreamLoadPlanner sets it when the table's
+        // enable_load_profile property is on, and JobSpec.fromSyncStreamLoadSpec
+        // propagates it into the coordinator's query options.
         if (connectContext != null && connectContext.getSessionVariable().isEnableLoadProfile()) {
             return true;
         }
-        return jobSpec.getQueryOptions().isSetEnable_profile() && jobSpec.getQueryOptions().isEnable_profile();
+        TQueryOptions queryOptions = jobSpec.getQueryOptions();
+        return queryOptions != null && queryOptions.isSetEnable_profile() && queryOptions.isEnable_profile();
     }
 
     /**
