@@ -250,6 +250,8 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     }
 
     private CloseableIterable<ManifestEntry<F>> entries(boolean onlyLive) {
+        boolean shouldCacheDataFiles = shouldCacheDataFiles();
+        boolean shouldCacheDeleteFiles = shouldCacheDeleteFiles();
         if (hasRowFilter() || hasPartitionFilter() || partitionSet != null) {
             Evaluator evaluator = evaluator();
             InclusiveMetricsEvaluator metricsEvaluator = metricsEvaluator();
@@ -258,9 +260,10 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
             boolean requireStatsProjection = requireStatsProjection(rowFilter, columns);
             Collection<String> projectColumns =
                     requireStatsProjection ? withStatsColumns(columns) : columns;
+            projectColumns = withStatsColumnsForDataFileCache(projectColumns, shouldCacheDataFiles);
             CloseableIterable<ManifestEntry<F>> entries =
                     open(projection(fileSchema, fileProjection, projectColumns, caseSensitive));
-            entries = fillCacheIfNeeded(entries);
+            entries = fillCacheIfNeeded(entries, shouldCacheDataFiles, shouldCacheDeleteFiles);
             return CloseableIterable.filter(
                     content == FileType.DATA_FILES
                             ? scanMetrics.skippedDataFiles()
@@ -272,20 +275,17 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                                     && metricsEvaluator.eval(entry.file())
                                     && inPartitionSet(entry.file()));
         } else {
+            Collection<String> projectColumns = withStatsColumnsForDataFileCache(columns, shouldCacheDataFiles);
             CloseableIterable<ManifestEntry<F>> entries =
-                    open(projection(fileSchema, fileProjection, columns, caseSensitive));
-            entries = fillCacheIfNeeded(entries);
+                    open(projection(fileSchema, fileProjection, projectColumns, caseSensitive));
+            entries = fillCacheIfNeeded(entries, shouldCacheDataFiles, shouldCacheDeleteFiles);
             return onlyLive ? filterLiveEntries(entries) : entries;
         }
     }
 
     // when the identifier field ids is null, it will copy all metrics.
-    private CloseableIterable<ManifestEntry<F>> fillCacheIfNeeded(CloseableIterable<ManifestEntry<F>> entries) {
-        boolean shouldCacheDataFiles =
-                dataFileCache != null && content == FileType.DATA_FILES && dataFileCache.getIfPresent(file.location()) != null;
-        boolean shouldCacheDeleteFiles =
-                deleteFileCache != null && content == FileType.DELETE_FILES &&
-                        deleteFileCache.getIfPresent(file.location()) != null;
+    private CloseableIterable<ManifestEntry<F>> fillCacheIfNeeded(
+            CloseableIterable<ManifestEntry<F>> entries, boolean shouldCacheDataFiles, boolean shouldCacheDeleteFiles) {
         if (!shouldCacheDataFiles && !shouldCacheDeleteFiles) {
             return entries;
         }
@@ -362,6 +362,23 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
                 }
             }
         };
+    }
+
+    private boolean shouldCacheDataFiles() {
+        return dataFileCache != null && content == FileType.DATA_FILES && dataFileCache.getIfPresent(file.location()) != null;
+    }
+
+    private boolean shouldCacheDeleteFiles() {
+        return deleteFileCache != null && content == FileType.DELETE_FILES &&
+                deleteFileCache.getIfPresent(file.location()) != null;
+    }
+
+    private Collection<String> withStatsColumnsForDataFileCache(
+            Collection<String> projectColumns, boolean shouldCacheDataFiles) {
+        if (shouldCacheDataFiles && dataFileCacheWithMetrics && projectColumns != null) {
+            return withStatsColumns(projectColumns);
+        }
+        return projectColumns;
     }
 
     private boolean hasRowFilter() {
