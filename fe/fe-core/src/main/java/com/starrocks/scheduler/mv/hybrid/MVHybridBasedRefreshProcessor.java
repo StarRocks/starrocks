@@ -100,40 +100,28 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
         // reset the task run id for pct
         this.mvContext.getCtx().setQueryId(UUIDUtil.genUUID());
 
-        // Clear stale temp TVR state from any prior attempt (explain-only, failed run, etc.)
-        // before starting a fresh complete-refresh cycle. Without this, a SKIPPED result below
-        // would leave the stale map/owner intact, risking incorrect TVR promotion by a later run.
+        // First-batch setup: drop stale state from any prior attempt and install the freeze hook.
+        // Subsequent batches reuse the persisted owner and do not enter this branch.
         if (mvRefreshParams.isCompleteRefresh()) {
             mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
+            pctProcessor.setAfterSyncHook(() -> {
+                MaterializedView.AsyncRefreshContext refreshContext =
+                        mv.getRefreshScheme().getAsyncRefreshContext();
+                final Map<BaseTableInfo, TvrVersionRange> committedMap =
+                        refreshContext.getBaseTableInfoTvrVersionRangeMap();
+                final Map<BaseTableInfo, TvrVersionRange> frozen = Maps.newHashMap();
+                for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
+                    TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableMaxChangedDelta(
+                            snapshotInfo, committedMap);
+                    logger.info("Base table: {}, changed version range: {}",
+                            snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
+                    frozen.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
+                }
+                refreshContext.replaceTempBaseTableInfoTvrDeltaMap(getStartTaskRunId(), frozen);
+            });
         }
 
-        // ① Execute PCT first — this calls syncAndCheckPCTPartitions() internally,
-        //    which refreshes external tables and re-collects snapshotBaseTables.
-        //    After this returns, snapshotBaseTables reflects the snapshot that PCT will actually process.
-        ProcessExecPlan result = pctProcessor.getProcessExecPlan(taskRunContext);
-
-        // ② Freeze TVR from the SAME snapshotBaseTables that PCT uses.
-        //    This guarantees the persisted TVR matches the snapshot that PCT will scan.
-        //    Skip freeze if PCT found nothing to refresh (SKIPPED) — no subsequent batches will follow.
-        if (mvRefreshParams.isCompleteRefresh()
-                && result.state() == Constants.TaskRunState.SUCCESS) {
-            MaterializedView.AsyncRefreshContext refreshContext =
-                    mv.getRefreshScheme().getAsyncRefreshContext();
-            final Map<BaseTableInfo, TvrVersionRange> committedMap =
-                    refreshContext.getBaseTableInfoTvrVersionRangeMap();
-            Map<BaseTableInfo, TvrVersionRange> frozen = Maps.newHashMap();
-            for (BaseTableSnapshotInfo snapshotInfo : snapshotBaseTables.values()) {
-                TvrVersionRange changedVersionRange = ivmProcessor.getBaseTableMaxChangedDelta(
-                        snapshotInfo, committedMap);
-                logger.info("Base table: {}, changed version range: {}",
-                        snapshotInfo.getBaseTableInfo().getTableName(), changedVersionRange);
-                frozen.put(snapshotInfo.getBaseTableInfo(), changedVersionRange);
-            }
-            String owner = mvContext.getStatus().getStartTaskRunId();
-            refreshContext.replaceTempBaseTableInfoTvrDeltaMap(owner, frozen);
-        }
-
-        return result;
+        return pctProcessor.getProcessExecPlan(taskRunContext);
     }
 
     @VisibleForTesting

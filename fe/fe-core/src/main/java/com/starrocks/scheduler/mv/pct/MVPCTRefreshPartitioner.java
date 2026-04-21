@@ -125,6 +125,7 @@ public abstract class MVPCTRefreshPartitioner {
      */
     public abstract boolean syncAddOrDropPartitions() throws AnalysisException, LockTimeoutException;
 
+
     protected final void publishTopology(PCTPartitionTopology topology) {
         mvContext.setPartitionTopology(topology);
     }
