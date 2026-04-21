@@ -844,6 +844,12 @@ public class TableFunctionTable extends Table {
     }
 
     public void parsePropertiesForUnload(List<Column> columns, SessionVariable sessionVariable) {
+        if (properties.containsKey(PROPERTY_SCHEMA)) {
+            throw new SemanticException(
+                    "'schema' is not supported in INSERT INTO FILES (unload); " +
+                    "output columns are determined by the SELECT list");
+        }
+
         List<String> columnNames = columns.stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());
