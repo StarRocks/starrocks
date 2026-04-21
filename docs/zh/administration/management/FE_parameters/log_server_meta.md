@@ -1377,6 +1377,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当 StarRocks 反序列化 `information_schema.task_runs` 的 TaskRun 历史行时，损坏或无效的 JSON 行通常会导致反序列化记录警告并抛出 RuntimeException。如果此项设置为 `true`，系统将捕获反序列化错误，跳过格式错误的记录，并继续处理剩余行而不是使查询失败。这将使 `information_schema.task_runs` 查询能够容忍 `_statistics_.task_run_history` 表中的错误条目。请注意，启用它将静默丢弃损坏的历史记录（潜在数据丢失），而不是显式报错。
 - 引入版本: v3.3.3, v3.4.0, v3.5.0
 
+### `leader_demotion_drain_timeout_sec`
+
+- 默认值: 180
+- 类型: Int
+- 单位: 秒
+- 是否动态: 是
+- 描述: Leader 降级期间,用于等待每一个仅 Leader 运行的后台 daemon 线程在被中断后退出的超时时间。若超时后仍有线程存活,FE 进程会被终止,因为残留运行的线程再加上后续重新当选时启动的新线程,会同时操作同一批单例状态,危害大于进程重启。当 heartbeat / report / publish / tablet-scheduler 这些 daemon 需要的排空时间超出默认值时,可调大该值。
+- 引入版本: v4.1
+
 ### `lock_checker_interval_second`
 
 - 默认值: 30

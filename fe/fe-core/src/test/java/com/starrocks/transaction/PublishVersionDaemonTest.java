@@ -580,4 +580,43 @@ public class PublishVersionDaemonTest {
         Assertions.assertEquals(1, originalState.getPublishVersionTasks().size());
         Assertions.assertTrue(latestState.getPublishVersionTasks().isEmpty());
     }
+
+    @Test
+    public void testOnStoppedReleasesExecutorsAndDedupSets() throws Exception {
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        // Force lazy init of both executors through their getters; getDeleteTxnLogExecutor is private.
+        ThreadPoolExecutor taskExec = daemon.getTaskExecutor();
+        ThreadPoolExecutor deleteExec =
+                (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertNotNull(taskExec);
+        Assertions.assertNotNull(deleteExec);
+
+        // Populate both dedup sets so we can verify onStopped() clears them.
+        Set<Long> publishing = Sets.newConcurrentHashSet();
+        publishing.add(42L);
+        FieldUtils.writeField(daemon, "publishingTransactionIds", publishing, true);
+        Set<Long> batchTable = Sets.newConcurrentHashSet();
+        batchTable.add(7L);
+        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", batchTable, true);
+
+        daemon.onStopped();
+
+        Assertions.assertTrue(taskExec.isShutdown(), "taskExecutor must be shut down");
+        Assertions.assertTrue(deleteExec.isShutdown(), "deleteTxnLogExecutor must be shut down");
+        Assertions.assertNull(FieldUtils.readField(daemon, "taskExecutor", true));
+        Assertions.assertNull(FieldUtils.readField(daemon, "deleteTxnLogExecutor", true));
+        Assertions.assertTrue(publishing.isEmpty(), "publishingTransactionIds must be cleared");
+        Assertions.assertTrue(batchTable.isEmpty(), "publishingLakeTransactionsBatchTableId must be cleared");
+    }
+
+    @Test
+    public void testOnStoppedTolerantOfNullExecutorsAndNullSets() throws Exception {
+        // Fresh instance: executors and dedup sets may both be null. onStopped must be no-op-safe.
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        FieldUtils.writeField(daemon, "taskExecutor", null, true);
+        FieldUtils.writeField(daemon, "deleteTxnLogExecutor", null, true);
+        FieldUtils.writeField(daemon, "publishingTransactionIds", null, true);
+        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", null, true);
+        Assertions.assertDoesNotThrow(daemon::onStopped);
+    }
 }

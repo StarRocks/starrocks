@@ -353,6 +353,10 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
                         dataCacheMetrics);
         try {
             putToQueue(reportTask);
+        } catch (IllegalStateException e) {
+            // Demotion fence fired inside putToQueue. Propagate so LeaderImpl.report() can
+            // translate this into a NOT_MASTER response and the BE re-resolves the new leader.
+            throw e;
         } catch (Exception e) {
             tStatus.setStatus_code(TStatusCode.INTERNAL_ERROR);
             List<String> errorMsgs = Lists.newArrayList();
@@ -380,9 +384,10 @@ public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
 
     private void putToQueue(ReportTask reportTask) throws Exception {
         if (isStopped()) {
-            // Demotion is in progress; reject new work silently. The inbound fence on the RPC entry
-            // is the primary mechanism, this is defense-in-depth for any internal callers.
-            return;
+            // Demotion is in progress: reject so the caller can translate this into a NOT_MASTER
+            // response (see LeaderImpl#report). Silently dropping would ACK the request as OK and
+            // the BE would never retry against the new leader, losing the report update.
+            throw new IllegalStateException("report handler is stopped during leader demotion");
         }
         try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
             if (!pendingTaskMap.containsKey(reportTask.type)) {

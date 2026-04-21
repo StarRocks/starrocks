@@ -212,4 +212,137 @@ public class LeaderDaemonTest {
         Assertions.assertFalse(onStoppedCalled.get(), "onStopped must NOT run on the timeout path");
         Assertions.assertTrue(d.isStopped());
     }
+
+    @Test
+    public void testDefaultIntervalConstructorAndGetters() {
+        LeaderDaemon d = new LeaderDaemon("default-ctor") {
+            @Override
+            protected void runAfterLeaseValid() {
+            }
+        };
+        Assertions.assertEquals("default-ctor", d.getName());
+        Assertions.assertEquals(30L * 1000L, d.getInterval());
+        d.setInterval(123L);
+        Assertions.assertEquals(123L, d.getInterval());
+    }
+
+    @Test
+    public void testStartIsIdempotent() throws Exception {
+        TestGlobalStateMgr gsm = activeLeader();
+        CountingDaemon d = new CountingDaemon("idempotent-start", 5L, gsm);
+        d.start();
+        Assertions.assertTrue(d.firstCycle.await(3, TimeUnit.SECONDS));
+        // Second start() while running must be a no-op - no second worker thread.
+        d.start();
+        Assertions.assertTrue(d.isRunning());
+        d.stopGracefully(2000L);
+    }
+
+    @Test
+    public void testSetStopIsIdempotent() {
+        TestGlobalStateMgr gsm = activeLeader();
+        CountingDaemon d = new CountingDaemon("idempotent-setstop", 5L, gsm);
+        d.start();
+        d.setStop();
+        // Second setStop() is a no-op and must not throw even after worker is already scheduled to exit.
+        d.setStop();
+        Assertions.assertTrue(d.isStopped());
+        d.stopGracefully(2000L);
+    }
+
+    @Test
+    public void testOnStoppedThrowableIsSwallowed() throws Exception {
+        TestGlobalStateMgr gsm = activeLeader();
+        AtomicBoolean stateReset = new AtomicBoolean();
+        LeaderDaemon d = new LeaderDaemon("onstopped-throw", 5L) {
+            @Override
+            protected GlobalStateMgr getGlobalStateMgr() {
+                return gsm;
+            }
+
+            @Override
+            protected void runAfterLeaseValid() throws InterruptedException {
+                Thread.sleep(5);
+            }
+
+            @Override
+            protected void onStopped() {
+                throw new RuntimeException("boom");
+            }
+        };
+        d.start();
+        Thread.sleep(50);
+        // A throwing onStopped must not prevent stopGracefully from completing its state reset.
+        d.stopGracefully(2000L);
+        Assertions.assertFalse(d.isRunning(), "state reset must still run after onStopped throws");
+        stateReset.set(!d.isRunning());
+        Assertions.assertTrue(stateReset.get());
+    }
+
+    @Test
+    public void testRunAfterLeaseValidThrowableDoesNotKillLoop() throws Exception {
+        TestGlobalStateMgr gsm = activeLeader();
+        AtomicInteger attempts = new AtomicInteger();
+        CountDownLatch afterFailures = new CountDownLatch(3);
+        LeaderDaemon d = new LeaderDaemon("runtime-error", 5L) {
+            @Override
+            protected GlobalStateMgr getGlobalStateMgr() {
+                return gsm;
+            }
+
+            @Override
+            protected void runAfterLeaseValid() {
+                if (attempts.incrementAndGet() <= 3) {
+                    afterFailures.countDown();
+                    throw new RuntimeException("transient");
+                }
+            }
+        };
+        d.start();
+        // Loop must keep running past RuntimeExceptions from runAfterLeaseValid.
+        Assertions.assertTrue(afterFailures.await(3, TimeUnit.SECONDS),
+                "loop must survive runtime exceptions and keep iterating");
+        d.stopGracefully(2000L);
+    }
+
+    @Test
+    public void testStopWhileNotReadyExitsCleanly() throws Exception {
+        // GlobalStateMgr that never reports ready - worker gets stuck in the !isReady() sleep loop.
+        GlobalStateMgr neverReady = new GlobalStateMgr(new NodeMgr()) {
+            @Override
+            public boolean isReady() {
+                return false;
+            }
+        };
+        AtomicBoolean ranBody = new AtomicBoolean();
+        LeaderDaemon d = new LeaderDaemon("never-ready", 5L) {
+            @Override
+            protected GlobalStateMgr getGlobalStateMgr() {
+                return neverReady;
+            }
+
+            @Override
+            protected void runAfterLeaseValid() {
+                ranBody.set(true);
+            }
+        };
+        d.start();
+        Thread.sleep(150);
+        d.stopGracefully(2000L);
+        // Body must never have been invoked because GSM stayed unready; the worker must still have exited.
+        Assertions.assertFalse(ranBody.get());
+        Assertions.assertFalse(d.isRunning());
+        Assertions.assertTrue(d.isStopped());
+    }
+
+    @Test
+    public void testSetStopBeforeStartIsSafe() {
+        CountingDaemon d = new CountingDaemon("setstop-before-start", 5L, activeLeader());
+        // Before start(), there is no worker to interrupt. setStop() must still flip isStopped.
+        d.setStop();
+        Assertions.assertTrue(d.isStopped());
+        // stopGracefully without a worker thread must be a no-op that returns cleanly.
+        d.stopGracefully(100L);
+        Assertions.assertFalse(d.isRunning());
+    }
 }

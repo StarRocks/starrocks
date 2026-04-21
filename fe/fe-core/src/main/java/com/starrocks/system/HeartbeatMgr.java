@@ -210,7 +210,15 @@ public class HeartbeatMgr extends LeaderDaemon {
                 if (isChanged) {
                     hbPackage.addHbResponse(response);
                 }
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (InterruptedException e) {
+                // Demotion interrupts the worker to make it exit before the drain timeout;
+                // keep draining would make {@link #onJoinTimeout()} fire and terminate the JVM.
+                // Restore the flag so LeaderDaemon.loop observes stop and abandon the rest -
+                // the next leader will re-run heartbeats from scratch.
+                Thread.currentThread().interrupt();
+                LOG.warn("heartbeat drain interrupted, abandoning remaining responses");
+                return;
+            } catch (ExecutionException e) {
                 LOG.warn("got exception when doing heartbeat", e);
             }
         } // end for all results
