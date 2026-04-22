@@ -203,6 +203,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.stream.PhysicalStreamScanOperator;
+import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -959,7 +960,7 @@ public class PlanFragmentBuilder {
 
             tupleDescriptor.computeMemLayout();
 
-            // set unused output columns 
+            // set unused output columns
             setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
 
             // set isPreAggregation
@@ -3575,6 +3576,13 @@ public class PlanFragmentBuilder {
 
             Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
             projectMap.putAll(consume.getCteOutputColumnRefMap());
+            // cteOutputColumnRefMap can map several consumer columns to the same producer
+            // column (e.g. after a no-op CAST is folded away).  Without this substitution the
+            // ProjectNode below would emit a chunk with shared Column pointers, which downstream
+            // operators (e.g. SelectNode's filter) are not generally safe to mutate.
+            // CloneDuplicateColRefRule cannot fix this because cteOutputColumnRefMap's value type
+            // is ColumnRefOperator, not ScalarOperator, so a CloneOperator cannot live in it.
+            CloneDuplicateColRefRule.substColumnRefOperatorWithCloneOperator(projectMap);
             consumeFragment = buildProjectNode(optExpression, new Projection(projectMap), consumeFragment, context);
             consumeFragment.setQueryGlobalDicts(cteFragment.getQueryGlobalDicts());
             consumeFragment.setQueryGlobalDictExprs(cteFragment.getQueryGlobalDictExprs());

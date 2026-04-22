@@ -24,10 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 // ProjectOperator or Projection of Operator may have several ColumnRefs remapped to the same ColumnRef, for an example:
 // 1.ColumnRef(1)->ColumnRef(1);
@@ -47,29 +44,29 @@ public class CloneDuplicateColRefRule implements TreeRewriteRule {
         return root;
     }
 
-    private static class Visitor extends OptExpressionVisitor<Void, Void> {
-        void substColumnRefOperatorWithCloneOperator(Map<ColumnRefOperator, ScalarOperator> colRefMap) {
-            if (colRefMap == null || colRefMap.isEmpty()) {
-                return;
-            }
-
-            Map<ScalarOperator, Integer> duplicateColRefs = Maps.newHashMap();
-            colRefMap.forEach((k, v) -> {
-                if (!v.isColumnRef()) {
-                    return;
-                }
-                duplicateColRefs.put(v, duplicateColRefs.getOrDefault(v, 0) + 1);
-            });
-
-            for (ColumnRefOperator key : colRefMap.keySet()) {
-                ScalarOperator value = colRefMap.get(key);
-                if (value.isColumnRef() && duplicateColRefs.get(value) > 1 && !key.equals(value)) {
-                    duplicateColRefs.put(value, duplicateColRefs.get(value) - 1);
-                    colRefMap.put(key, new CloneOperator(value));
-                }
-            }
+    public static void substColumnRefOperatorWithCloneOperator(Map<ColumnRefOperator, ScalarOperator> colRefMap) {
+        if (colRefMap == null || colRefMap.isEmpty()) {
+            return;
         }
 
+        Map<ScalarOperator, Integer> duplicateColRefs = Maps.newHashMap();
+        colRefMap.forEach((k, v) -> {
+            if (!v.isColumnRef()) {
+                return;
+            }
+            duplicateColRefs.put(v, duplicateColRefs.getOrDefault(v, 0) + 1);
+        });
+
+        for (ColumnRefOperator key : colRefMap.keySet()) {
+            ScalarOperator value = colRefMap.get(key);
+            if (value.isColumnRef() && duplicateColRefs.get(value) > 1 && !key.equals(value)) {
+                duplicateColRefs.put(value, duplicateColRefs.get(value) - 1);
+                colRefMap.put(key, new CloneOperator(value));
+            }
+        }
+    }
+
+    private static class Visitor extends OptExpressionVisitor<Void, Void> {
         @Override
         public Void visit(OptExpression optExpression, Void context) {
             if (optExpression.getOp() instanceof PhysicalProjectOperator) {
