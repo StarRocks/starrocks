@@ -54,13 +54,10 @@ class ExecEnv;
 //     is the only method that talks HTTP. Tests override it to capture
 //     the payload in memory; production ships it over HttpClient.
 //
-// NOTE: this commit provides the scan / batching / local-file cleanup
-// machinery but STUBS the actual HTTP post to FE. Filling in the Stream
-// Load client (merge-commit header, auth, FE discovery, retry) is the
-// scope of a dedicated follow-up commit -- the scan/batch loop is useful
-// in isolation because it exercises the file layout the writer produces
-// and lets us ship the feature-flagged daemon without coupling to the
-// Stream Load client refactor.
+// `post_to_stream_load()` issues a real HttpClient PUT with merge-commit
+// headers and parses the FE response; tests override it to capture the
+// payload in memory. FE discovery / auth / retry semantics are handled by
+// the shared HttpClient layer.
 class RejectedRecordSyncDaemon {
 public:
     explicit RejectedRecordSyncDaemon(ExecEnv* env);

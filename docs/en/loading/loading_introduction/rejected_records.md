@@ -157,12 +157,20 @@ WHERE target_database = 'mydb'
 
 ## Permissions
 
-By default, only `root` can see rows in `_statistics_.rejected_records`.
-A built-in row access policy hides rows from every other user even if
-they have been granted `SELECT` on the table. A future release will
-widen this so a user sees rows whose `target_database.target_table` they
-can `SELECT`; until then, operator-run dashboards should use `root`
-(or a role that has been granted `impersonate root`).
+Access to `_statistics_.rejected_records` is controlled by a built-in
+row access policy:
+
+- **Admin users** (e.g. `root`, or any role with the admin privilege)
+  see all rows.
+- **Non-admin users** see only rows whose `target_database.target_table`
+  they can `SELECT` on. Rows for tables the user has no SELECT privilege
+  on are filtered out of the result set.
+- If the policy cannot resolve or validate the target for a row, that
+  row is hidden (fail-closed).
+
+For operator-run dashboards, either use an admin account if full
+visibility is required, or grant `SELECT` on the relevant target tables
+to the reporting role.
 
 ## Limitations
 
