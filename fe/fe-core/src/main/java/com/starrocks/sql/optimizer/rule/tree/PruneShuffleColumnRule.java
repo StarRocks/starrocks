@@ -179,7 +179,7 @@ public class PruneShuffleColumnRule implements TreeRewriteRule {
                         continue;
                     }
                     HashDistributionDesc joinDesc = ((HashDistributionSpec) spec).getHashDistributionDesc();
-                    if (joinDesc.getDistributionCols().size() < 2) {
+                    if (joinDesc.getDistributionCols().size() <= maxColumnIndex) {
                         continue;
                     }
                     DistributionCol selected = joinDesc.getDistributionCols().get(maxColumnIndex);
