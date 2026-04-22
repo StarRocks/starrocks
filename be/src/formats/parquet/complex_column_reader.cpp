@@ -1320,11 +1320,11 @@ static const ShreddedFieldNode* find_node_by_path(const std::vector<ShreddedFiel
 // provided.  Stops at ARRAY boundaries (does not recurse into array element children) and at SCALAR
 // leaves.  Struct-like NONE nodes are recursed.
 static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& nodes,
-                                          std::vector<std::string>* paths) {
+                                          std::vector<VariantPath>* paths) {
     for (const auto& node : nodes) {
         if (node.kind != ShreddedFieldNode::Kind::NONE) {
             // SCALAR leaf or ARRAY boundary — emit and stop recursing.
-            paths->push_back(node.full_path);
+            paths->push_back(node.parsed_full_path);
         } else if (!node.children.empty()) {
             // Struct-like grouping node — recurse into children.
             collect_all_top_binding_paths(node.children, paths);
@@ -1337,35 +1337,60 @@ static void collect_all_top_binding_paths(const std::vector<ShreddedFieldNode>& 
 // If a requested path is not found in current file/row-group shredded fields, keep it as VARIANT
 // with null node so output typed_columns keep request-shape stability.
 // When shredded_paths is empty, all paths are auto-discovered from the nodes tree.
+//
+// Accepts pre-parsed VariantPath objects directly to avoid string→VariantPath round-trips.
+// Callers must not pass string-form paths.
 static void collect_top_bindings(const std::vector<ShreddedFieldNode>& nodes,
-                                 const std::vector<std::string>& shredded_paths, std::vector<TopBinding>* out) {
+                                 const std::vector<VariantPath>& shredded_paths, std::vector<TopBinding>* out) {
     if (out == nullptr) {
         return;
     }
-    std::vector<std::string> auto_paths;
-    const std::vector<std::string>* effective_paths = &shredded_paths;
+    // For unshredded columns (no shredded nodes), skip binding collection entirely.
+    // Bindings with node==nullptr cause a per-row seek+encode in append_variant_binding_row
+    // that writes sub-variants into typed_columns, only for _fill_dst_chunk to read them back
+    // and seek again.  For unshredded files, _fill_dst_chunk/_seek_base navigates the path
+    // directly from the base payload in one pass, which is both simpler and faster.
+    if (nodes.empty()) {
+        return;
+    }
+    std::vector<VariantPath> auto_paths;
+    const std::vector<VariantPath>* effective_paths = &shredded_paths;
     if (shredded_paths.empty()) {
         collect_all_top_binding_paths(nodes, &auto_paths);
         effective_paths = &auto_paths;
         if (effective_paths->empty()) return;
     }
     for (const auto& path : *effective_paths) {
-        const ShreddedFieldNode* node = find_node_by_path(nodes, path);
+        // Derive the canonical string form for binding.path (used in error messages).
+        // Paths in shredded_paths are object-segment-only (guaranteed by add_path validation),
+        // so to_shredded_path() always succeeds here.
+        auto path_str_opt = path.to_shredded_path();
+        DCHECK(path_str_opt.has_value()) << "shredded path must not contain array segments";
+        std::string path_str = path_str_opt.value_or("");
+
+        const ShreddedFieldNode* node = find_shredded_field_node_for_path(nodes, path);
         if (node == nullptr) {
             // Path requested but not shredded in this file/RG: keep requested typed path.
-            out->push_back(
-                    {.kind = TopBinding::Kind::VARIANT, .path = path, .type = variant_type_desc(), .node = nullptr});
+            out->push_back({.kind = TopBinding::Kind::VARIANT,
+                            .path = std::move(path_str),
+                            .type = variant_type_desc(),
+                            .node = nullptr,
+                            .parsed_path = path});
             continue;
         }
         if (node->kind == ShreddedFieldNode::Kind::SCALAR && node->typed_value_column != nullptr) {
             out->push_back({.kind = TopBinding::Kind::SCALAR,
-                            .path = path,
+                            .path = std::move(path_str),
                             .type = *node->typed_value_read_type,
-                            .node = node});
+                            .node = node,
+                            .parsed_path = path});
         } else {
             // Array boundary / struct children / fallback-only: pack as plain VariantColumn.
-            out->push_back(
-                    {.kind = TopBinding::Kind::VARIANT, .path = path, .type = variant_type_desc(), .node = node});
+            out->push_back({.kind = TopBinding::Kind::VARIANT,
+                            .path = std::move(path_str),
+                            .type = variant_type_desc(),
+                            .node = node,
+                            .parsed_path = path});
         }
     }
 }
@@ -1491,13 +1516,8 @@ Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBind
         return Status::OK();
     }
 
-    auto parsed_path = VariantPathParser::parse_shredded_path(std::string_view(binding.path));
-    if (!parsed_path.ok()) {
-        return parsed_path.status().clone_and_prepend(
-                strings::Substitute("parse variant binding path failed, path=$0", binding.path));
-    }
-
-    auto field = VariantPath::seek_view(full_row, parsed_path.value(), 0);
+    // Use the pre-parsed path cached in binding (parsed once at binding-build time).
+    auto field = VariantPath::seek_view(full_row, binding.parsed_path, 0);
     if (!field.ok()) {
         // Path not found (e.g. type mismatch at intermediate node): treat as missing.
         append_null();
@@ -1770,10 +1790,10 @@ Status VariantColumnReader::prepare() {
     //     (A null typed_value means either "variant row is null" or "field is absent", so the
     //      value column's null flag is the only reliable source for outer-row nullness.)
     _skip_base_payload = false;
-    if (!_requested_shredded_path_names.empty() && _top_level.root_typed_value_reader == nullptr) {
+    if (!_requested_shredded_paths.empty() && _top_level.root_typed_value_reader == nullptr) {
         bool all_scalar = true;
-        for (const auto& p : _requested_shredded_path_names) {
-            const auto* node = find_node_by_path(_shredded_fields, p);
+        for (const auto& path : _requested_shredded_paths) {
+            const auto* node = find_shredded_field_node_for_path(_shredded_fields, path);
             if (node == nullptr || node->kind != ShreddedFieldNode::Kind::SCALAR ||
                 node->typed_value_reader == nullptr) {
                 all_scalar = false;
@@ -1895,7 +1915,7 @@ StatusOr<bool> VariantColumnReader::_read_range_skip_base_payload(const Range<ui
     }
 
     std::vector<TopBinding> collected_bindings;
-    collect_top_bindings(_shredded_fields, _requested_shredded_path_names, &collected_bindings);
+    collect_top_bindings(_shredded_fields, _requested_shredded_paths, &collected_bindings);
 
     // If any binding is demoted to VARIANT (type mismatch), signal the caller to use the normal
     // per-row path. Shredded fields are already populated so the caller skips re-reading them.
@@ -2021,13 +2041,12 @@ Status VariantColumnReader::read_range(const Range<uint64_t>& range, const Filte
 
     // When no explicit paths are requested, auto-discover paths from the shredded field tree.
     // The tree is fixed after construction, so cache the result to avoid repeated traversal.
-    // _requested_shredded_path_names is pre-computed at construction time for the explicit case.
     if (_requested_shredded_paths.empty() && !_auto_paths_cached) {
         collect_all_top_binding_paths(_shredded_fields, &_cached_auto_paths);
         _auto_paths_cached = true;
     }
-    const std::vector<std::string>& effective_paths =
-            _requested_shredded_paths.empty() ? _cached_auto_paths : _requested_shredded_path_names;
+    const std::vector<VariantPath>& effective_paths =
+            _requested_shredded_paths.empty() ? _cached_auto_paths : _requested_shredded_paths;
 
     std::vector<TopBinding> collected_bindings;
     collect_top_bindings(_shredded_fields, effective_paths, &collected_bindings);

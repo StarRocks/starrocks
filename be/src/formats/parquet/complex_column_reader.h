@@ -304,6 +304,8 @@ struct TopBinding {
     std::string path;
     TypeDescriptor type;
     const ShreddedFieldNode* node = nullptr;
+    // Cached parsed form of `path` to avoid re-parsing on every row.
+    VariantPath parsed_path;
 };
 
 // VariantColumnReader handles the reading of Parquet columns that represent variant types.
@@ -364,15 +366,6 @@ public:
         // Both readers must be non-null for VariantColumnReader to function correctly
         DCHECK(_top_level.metadata_reader != nullptr) << "VariantColumnReader: metadata reader cannot be null";
         DCHECK(_top_level.value_reader != nullptr) << "VariantColumnReader: value reader cannot be null";
-        // Pre-compute string form of requested paths once at construction time.
-        // Paths parsed from shredded_path strings never contain array segments, so
-        // to_shredded_path() is guaranteed to succeed.
-        _requested_shredded_path_names.reserve(_requested_shredded_paths.size());
-        for (const auto& path : _requested_shredded_paths) {
-            auto s = path.to_shredded_path();
-            DCHECK(s.has_value()) << "requested shredded path must not contain array segments";
-            _requested_shredded_path_names.emplace_back(std::move(*s));
-        }
     }
 
     ~VariantColumnReader() override = default;
@@ -416,16 +409,13 @@ private:
     VariantTopLevelReaders _top_level;
     std::vector<ShreddedFieldNode> _shredded_fields;
     std::vector<VariantPath> _requested_shredded_paths;
-    // String form of _requested_shredded_paths, pre-computed at construction time to avoid
-    // repeated VariantPath→string conversion on every read_range call.
-    std::vector<std::string> _requested_shredded_path_names;
     // True when every requested path maps to a SCALAR typed_value node in the shredded schema.
     // In that case metadata/value base payload columns are never needed and can be skipped
     // entirely (IO range, offset-index selection, and data read).
     bool _skip_base_payload = false;
     // Cached auto-discovered paths when _requested_shredded_paths is empty (request-all-paths mode).
     // _shredded_fields is fixed after construction, so this only needs to be computed once.
-    mutable std::vector<std::string> _cached_auto_paths;
+    mutable std::vector<VariantPath> _cached_auto_paths;
     mutable bool _auto_paths_cached = false;
 };
 

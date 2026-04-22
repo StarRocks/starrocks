@@ -307,7 +307,8 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowNoNodeValidPath) {
     TopBinding binding{.kind = TopBinding::Kind::VARIANT,
                        .path = "city",
                        .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
-                       .node = nullptr};
+                       .node = nullptr,
+                       .parsed_path = VariantPath({VariantSegment::make_object("city")})};
 
     auto st = VariantColumnReader::append_variant_binding_row(
             0, binding, full_row.get_metadata().raw(),
@@ -315,22 +316,6 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowNoNodeValidPath) {
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_EQ(1, dst->size());
     EXPECT_FALSE(down_cast<NullableColumn*>(dst.get())->is_null(0));
-}
-
-// node == nullptr, path string is syntactically invalid → parse error  (lines 1318-1319)
-TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowNoNodeInvalidPath) {
-    auto full_row = parse_variant_json(R"({"a":1})");
-    auto dst = NullableColumn::create(VariantColumn::create(), NullColumn::create());
-    // Bracket syntax that VariantPathParser rejects as invalid
-    TopBinding binding{.kind = TopBinding::Kind::VARIANT,
-                       .path = "[invalid",
-                       .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
-                       .node = nullptr};
-
-    auto st = VariantColumnReader::append_variant_binding_row(
-            0, binding, full_row.get_metadata().raw(),
-            VariantRowRef(full_row.get_metadata().raw(), full_row.get_value().raw()), dst.get());
-    EXPECT_FALSE(st.ok());
 }
 
 // ─── encode_datum error paths ───────────────────────────────────────────────
@@ -453,7 +438,8 @@ TEST(ParquetComplexColumnReaderTest, AppendVariantBindingRowSeekFail) {
     TopBinding binding{.kind = TopBinding::Kind::VARIANT,
                        .path = "name",
                        .type = TypeDescriptor::from_logical_type(LogicalType::TYPE_VARIANT),
-                       .node = nullptr};
+                       .node = nullptr,
+                       .parsed_path = VariantPath({VariantSegment::make_object("name")})};
 
     auto st = VariantColumnReader::append_variant_binding_row(
             0, binding, full_row.get_metadata().raw(),
