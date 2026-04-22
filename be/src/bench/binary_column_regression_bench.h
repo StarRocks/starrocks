@@ -1097,6 +1097,11 @@ static void register_binary_column_regression_full() {
                                         "/offset:0/count:65536/dst:empty"),
                       [len](benchmark::State& state) { bench_append_range(state, 262144, len, 0, 65536, false); });
     }
+    register_case(case_name(suite, "append_Column_range", "src_rows:262144/len:4/offset:0/count:65536/dst:empty"),
+                  [](benchmark::State& state) { bench_append_range(state, 262144, 4, 0, 65536, false); });
+    register_case(case_name(suite, "append_Column_range",
+                            "src_rows:262144/len:4/offset:7/count:65536/dst:prefilled"),
+                  [](benchmark::State& state) { bench_append_range(state, 262144, 4, 7, 65536, true); });
 
     for (auto [src_rows, len, selected] :
          {std::tuple<size_t, size_t, size_t>{65536, 32, 32768},
@@ -1117,6 +1122,10 @@ static void register_binary_column_regression_full() {
                             "src_rows:65536/len:32/selected:32768/from:7/index:random/dst:prefilled"),
                   [](benchmark::State& state) {
                       bench_append_selective(state, 65536, 32, 32768, IndexPattern::RANDOM, 7, true);
+                  });
+    register_case(case_name(suite, "append_selective", "src_rows:65536/len:4/selected:32768/from:0/index:random"),
+                  [](benchmark::State& state) {
+                      bench_append_selective(state, 65536, 4, 32768, IndexPattern::RANDOM, 0, false);
                   });
 
     for (size_t len : {8UL, 128UL}) {
@@ -1165,6 +1174,13 @@ static void register_binary_column_regression_full() {
                 }
             }
         }
+    }
+    for (size_t rows : {65536UL, 262144UL}) {
+        register_case(case_name(suite, "filter_range",
+                                "rows:" + std::to_string(rows) + "/len:4/range:full/filter:random50"),
+                      [rows](benchmark::State& state) {
+                          bench_filter_range(state, rows, 4, FilterPattern::RANDOM_50, false);
+                      });
     }
 
     for (size_t len : {8UL, 128UL}) {
@@ -1280,6 +1296,18 @@ static void register_binary_column_regression_full() {
         register_case(case_name(suite, "deserialize_and_append_loop", "rows:4096/len:" + std::to_string(len)),
                       [len](benchmark::State& state) { bench_deserialize_scalar_loop(state, 4096, len); });
     }
+    register_case(case_name(suite, "serialize_batch", "rows:4096/len:4/nullable:false"),
+                  [](benchmark::State& state) {
+                      bench_serialize_batch(state, 4096, 4, false, FilterPattern::KEEP_NONE);
+                  });
+    register_case(case_name(suite, "serialize_batch_at_interval", "rows:4096/len:4/mode:fit/nullable:false"),
+                  [](benchmark::State& state) {
+                      bench_serialize_batch_at_interval(state, 4096, 4, false, false, LenPattern::FIXED);
+                  });
+    register_case(case_name(suite, "deserialize_and_append_batch", "rows:4096/len:4/nullable:false"),
+                  [](benchmark::State& state) {
+                      bench_deserialize_batch(state, 4096, 4, false, FilterPattern::KEEP_NONE);
+                  });
 }
 
 } // namespace starrocks::bench
