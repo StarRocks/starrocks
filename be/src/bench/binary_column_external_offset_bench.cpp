@@ -2490,6 +2490,43 @@ static void bench_row_store_encoder_simple_encode(benchmark::State& state, size_
     state.counters["value_columns_per_row"] = static_cast<double>(num_value_columns);
 }
 
+static void bench_exchange_perf_update_external(benchmark::State& state, size_t rows, size_t len,
+                                                size_t num_value_columns, bool nullable) {
+    CHECK_GT(rows, 0);
+    CHECK_GT(len, 0);
+    CHECK_GT(num_value_columns, 0);
+
+    std::vector<TypeDescriptor> arg_types(num_value_columns, TypeDescriptor::from_logical_type(TYPE_VARCHAR));
+    auto ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context(
+            std::move(arg_types), TypeDescriptor::from_logical_type(TYPE_BIGINT)));
+    const auto* func = get_aggregate_function("exchange_bytes", TYPE_BIGINT, TYPE_BIGINT, false);
+    CHECK(func != nullptr) << "aggregate function not found: exchange_bytes";
+
+    auto columns = make_row_store_value_columns(rows, len, num_value_columns, nullable);
+    std::vector<const Column*> raw_columns;
+    raw_columns.reserve(columns.size());
+    for (const auto& column : columns) {
+        raw_columns.emplace_back(column.get());
+    }
+    ManagedAggState agg_state(ctx.get(), func);
+
+    for (auto _ : state) {
+        state.PauseTiming();
+        func->reset(ctx.get(), columns, agg_state.state());
+        state.ResumeTiming();
+
+        for (size_t row = 0; row < rows; ++row) {
+            func->update(ctx.get(), raw_columns.data(), agg_state.state(), row);
+        }
+        benchmark::DoNotOptimize(agg_state.state());
+        benchmark::ClobberMemory();
+    }
+
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations() * rows));
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * rows * len * num_value_columns));
+    state.counters["value_columns_per_row"] = static_cast<double>(num_value_columns);
+}
+
 static void bench_column_predicate_in_branchless_external(benchmark::State& state, size_t rows, size_t len) {
     CHECK_LE(rows, static_cast<size_t>(std::numeric_limits<uint16_t>::max()));
     auto column = make_unique_fixed_column(rows, len);
@@ -2788,6 +2825,22 @@ static void register_p1_cases() {
                                             "/nullable:" + bool_name(nullable)),
                       [=](benchmark::State& state) {
                           bench_row_store_encoder_simple_encode(state, 65536, len, value_columns, nullable);
+                      });
+    }
+
+    for (const auto& spec : {std::tuple<size_t, size_t, bool>{4, 1, false},
+                             std::tuple<size_t, size_t, bool>{32, 1, false},
+                             std::tuple<size_t, size_t, bool>{128, 1, false},
+                             std::tuple<size_t, size_t, bool>{4, 4, false},
+                             std::tuple<size_t, size_t, bool>{32, 4, false},
+                             std::tuple<size_t, size_t, bool>{4, 4, true}}) {
+        const auto [len, value_columns, nullable] = spec;
+        register_case(ext_case_name("P1_EXTRA", "exchange_perf_update",
+                                    "rows:65536/len:" + std::to_string(len) +
+                                            "/value_cols:" + std::to_string(value_columns) +
+                                            "/nullable:" + bool_name(nullable)),
+                      [=](benchmark::State& state) {
+                          bench_exchange_perf_update_external(state, 65536, len, value_columns, nullable);
                       });
     }
 
