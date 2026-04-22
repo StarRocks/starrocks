@@ -35,10 +35,10 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
-#include "storage/rowset/segment_iterator.h"
-#include "storage/seek_range.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
+#include "storage/rowset/segment_iterator.h"
+#include "storage/seek_range.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
@@ -3899,7 +3899,7 @@ TxnLogPtr make_op_compaction_log(int64_t source_tablet_id) {
 // Helper: build a PK tablet metadata where `rowset_id`'s segment is marked
 // shared across children (mirrors split-family structure). Returns the rowset.
 RowsetMetadataPB* add_shared_rowset(TabletMetadataPB* metadata, uint32_t rowset_id, int64_t version,
-                                     const std::string& segment_filename) {
+                                    const std::string& segment_filename) {
     auto* rowset = metadata->add_rowsets();
     rowset->set_id(rowset_id);
     rowset->set_version(version);
@@ -4218,11 +4218,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_triggers_rebuild_
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
     auto st = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
-                                               txn_info, false, tablet_metadatas, tablet_ranges);
+                                              txn_info, false, tablet_metadatas, tablet_ranges);
 
     ASSERT_FALSE(st.ok());
-    EXPECT_EQ(std::string::npos, st.to_string().find("same column updated independently"))
-            << st.to_string();
+    EXPECT_EQ(std::string::npos, st.to_string().find("same column updated independently")) << st.to_string();
 }
 
 // Extracted Segment helper — calling segment_seek_range_to_rowid_range with

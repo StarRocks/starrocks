@@ -464,7 +464,7 @@ Status dcg_pass1_collect(const std::vector<TabletMergeContext>& merge_contexts,
                     // against the previously stored entry. Index lookup is safe
                     // even if the vector reallocated between insertions.
                     RETURN_IF_ERROR(verify_dcg_entry_consistency(target_work.entries[it->second].single_entry, 0,
-                                                                  normalized, i));
+                                                                 normalized, i));
                     continue;
                 }
 
@@ -505,8 +505,7 @@ StatusOr<std::pair<const RowsetMetadataPB*, int>> locate_target_in_merged(const 
 }
 
 // Step B — resolve the merged tablet schema PB for a given rowset.
-const TabletSchemaPB* resolve_rowset_schema_pb(const TabletMetadataPB& new_metadata,
-                                               const RowsetMetadataPB& rowset) {
+const TabletSchemaPB* resolve_rowset_schema_pb(const TabletMetadataPB& new_metadata, const RowsetMetadataPB& rowset) {
     const auto& rowset_to_schema = new_metadata.rowset_to_schema();
     const auto it = rowset_to_schema.find(rowset.id());
     if (it != rowset_to_schema.end()) {
@@ -543,10 +542,9 @@ Status compute_row_windows(TabletManager* tablet_mgr, int64_t new_tablet_id, con
     }
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(base_info.path));
-    ASSIGN_OR_RETURN(auto base_segment,
-                     Segment::open(fs, base_info, /*segment_id=*/0, full_tablet_schema,
-                                   /*footer_length_hint=*/nullptr, /*partial_rowset_footer=*/nullptr,
-                                   /*lake_io_opts=*/LakeIOOptions{}, tablet_mgr));
+    ASSIGN_OR_RETURN(auto base_segment, Segment::open(fs, base_info, /*segment_id=*/0, full_tablet_schema,
+                                                      /*footer_length_hint=*/nullptr, /*partial_rowset_footer=*/nullptr,
+                                                      /*lake_io_opts=*/LakeIOOptions{}, tablet_mgr));
 
     const rowid_t num_rows = static_cast<rowid_t>(base_segment->num_rows());
 
@@ -560,7 +558,7 @@ Status compute_row_windows(TabletManager* tablet_mgr, int64_t new_tablet_id, con
         if (ref.effective_range != nullptr) {
             ASSIGN_OR_RETURN(auto seek_range,
                              TabletRangeHelper::create_seek_range_from(*ref.effective_range, full_tablet_schema,
-                                                                        /*mem_pool=*/nullptr));
+                                                                       /*mem_pool=*/nullptr));
             LakeIOOptions lake_io_opts{.fill_data_cache = false};
             ASSIGN_OR_RETURN(auto rowid_range_opt,
                              segment_seek_range_to_rowid_range(base_segment, seek_range, lake_io_opts));
@@ -612,8 +610,8 @@ Status compute_row_windows(TabletManager* tablet_mgr, int64_t new_tablet_id, con
     for (size_t k = 0; k + 1 < out_windows->size(); ++k) {
         if ((*out_windows)[k].range.end() != (*out_windows)[k + 1].range.begin()) {
             return Status::NotSupported(fmt::format("DCG rebuild: row window coverage gap or overlap ({}->{} vs {})",
-                                                     (*out_windows)[k].range.begin(), (*out_windows)[k].range.end(),
-                                                     (*out_windows)[k + 1].range.begin()));
+                                                    (*out_windows)[k].range.begin(), (*out_windows)[k].range.end(),
+                                                    (*out_windows)[k + 1].range.begin()));
         }
     }
     if (out_windows->back().range.end() != num_rows) {
@@ -702,8 +700,8 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target(TabletManager* tablet_mgr
     // Step B — resolve full tablet schema + rebuild schema.
     const TabletSchemaPB* pb = resolve_rowset_schema_pb(new_metadata, target_rowset);
     if (pb == nullptr) {
-        return Status::NotSupported(fmt::format("DCG rebuild: no tablet schema available for rowset {}",
-                                                 target_rowset.id()));
+        return Status::NotSupported(
+                fmt::format("DCG rebuild: no tablet schema available for rowset {}", target_rowset.id()));
     }
     TabletSchemaCSPtr full_tablet_schema = TabletSchema::create(*pb);
     if (full_tablet_schema->sort_key_idxes().empty()) {
@@ -799,8 +797,7 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target(TabletManager* tablet_mgr
 
         auto cs_it = column_sources.find(uid);
         if (cs_it == column_sources.end()) {
-            return Status::InternalError(
-                    fmt::format("DCG rebuild: rebuild_schema has UID {} with no source", uid));
+            return Status::InternalError(fmt::format("DCG rebuild: rebuild_schema has UID {} with no source", uid));
         }
         const auto& cs = cs_it->second;
 
@@ -813,13 +810,13 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target(TabletManager* tablet_mgr
             auto override_it = cs.by_child.find(w.child_index);
             source = (override_it != cs.by_child.end()) ? override_it->second : cs.donor;
             ASSIGN_OR_RETURN(auto seg, get_source_segment(source));
-            RETURN_IF_ERROR(read_column_range(seg, entry_schemas[source], uid, w.range.begin(), w.range.end(),
-                                              out_col.get()));
+            RETURN_IF_ERROR(
+                    read_column_range(seg, entry_schemas[source], uid, w.range.begin(), w.range.end(), out_col.get()));
         }
 
         if (out_col->size() != static_cast<size_t>(num_rows)) {
-            return Status::InternalError(fmt::format("DCG rebuild: column UID {} size {} != num_rows {}", uid,
-                                                      out_col->size(), num_rows));
+            return Status::InternalError(
+                    fmt::format("DCG rebuild: column UID {} size {} != num_rows {}", uid, out_col->size(), num_rows));
         }
         rebuilt_columns[col_idx] = std::move(out_col);
     }
@@ -842,8 +839,8 @@ StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target(TabletManager* tablet_mgr
         writer_opts.encryption_meta = std::move(pair.encryption_meta);
     }
     ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(wopts, new_path));
-    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), /*segment_id=*/0, rebuild_schema,
-                                                           writer_opts);
+    auto segment_writer =
+            std::make_unique<SegmentWriter>(std::move(wfile), /*segment_id=*/0, rebuild_schema, writer_opts);
     RETURN_IF_ERROR(segment_writer->init(false));
     RETURN_IF_ERROR(segment_writer->append_chunk(*out_chunk));
     uint64_t seg_file_size = 0;
