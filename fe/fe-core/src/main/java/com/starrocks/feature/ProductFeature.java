@@ -86,6 +86,13 @@ public class ProductFeature {
                 "Automatically creates consistent cluster snapshots at configured intervals for recovery and cloning.",
                 "https://docs.starrocks.io/docs/administration/cluster_snapshot/"
         ));
+        features.add(new ProductFeature(
+                "oidc-email-username",
+                "Allow email-format usernames for users created with authentication_oauth2 or " +
+                        "authentication_jwt, so the StarRocks username can match an IdP principal " +
+                        "claim (e.g. email / preferred_username) directly.",
+                ""
+        ));
         FEATURES = ImmutableList.copyOf(features);
     }
 

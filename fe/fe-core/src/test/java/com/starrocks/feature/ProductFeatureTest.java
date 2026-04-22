@@ -24,9 +24,10 @@ public class ProductFeatureTest {
     @Test
     public void testProductFeature() {
         List<ProductFeature> features = ProductFeature.getFeatures();
-        Assertions.assertEquals(7, features.size());
+        Assertions.assertEquals(8, features.size());
         Assertions.assertEquals("multi-cngroup", features.get(4).getName());
         Assertions.assertEquals("automated-cluster-snapshot", features.get(6).getName());
+        Assertions.assertEquals("oidc-email-username", features.get(7).getName());
     }
 
     @Test
@@ -39,5 +40,17 @@ public class ProductFeatureTest {
         Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("multi-cngroup")));
         Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("ArrowFlightSQL")));
         Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("automated-cluster-snapshot")));
+        Assertions.assertTrue(features.stream().anyMatch(feature -> feature.getName().equals("oidc-email-username")));
+    }
+
+    @Test
+    public void testOidcEmailUsernameFeature() {
+        ProductFeature feature = ProductFeature.getFeatures().stream()
+                .filter(f -> f.getName().equals("oidc-email-username"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("oidc-email-username feature not found"));
+        Assertions.assertEquals("", feature.getLink());
+        Assertions.assertTrue(feature.getDescription().contains("authentication_oauth2"));
+        Assertions.assertTrue(feature.getDescription().contains("authentication_jwt"));
     }
 }
