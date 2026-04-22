@@ -2008,16 +2008,16 @@ TEST(ArrowConverterTest, ReportErrorMessageSelectStateNoWriter) {
 
 TEST(ArrowConverterTest, ReportErrorMessageThrottlesByMaxCounter) {
     // Line 1168-1169: counter > MAX_ERROR_MESSAGE_COUNTER → early return.
-    // MAX_ERROR_MESSAGE_COUNTER is 50 based on arrow_to_starrocks_converter.h.
+    // MAX_ERROR_MESSAGE_COUNTER is 100 (file-local constant).
     auto state = make_arrow_load_state();
     ArrowConvertContext ctx;
     ctx.state = state.get();
     ctx.current_slot = nullptr;
     ctx.current_file = "file.parquet";
-    ctx.error_message_counter = 51; // already past the cap
+    ctx.error_message_counter = 101; // already past the cap of 100
     EXPECT_NO_FATAL_FAILURE(ctx.report_error_message("over limit reason", "raw data", 0));
     // Counter must NOT have incremented (the guard returned before incrementing).
-    EXPECT_EQ(51, ctx.error_message_counter);
+    EXPECT_EQ(101, ctx.error_message_counter);
 }
 
 TEST(ArrowConverterTest, ReportErrorMessageLoadStateWithNullSlot) {
