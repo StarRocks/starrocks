@@ -49,7 +49,10 @@ public:
     void doRun() {
         Run();
         _finished.store(true, std::memory_order_seq_cst);
-        if (_has_consumer.load(std::memory_order_acquire)) {
+        // seq_cst pairs with the seq_cst store of _has_consumer in waitUtilFinished
+        // to guarantee that at least one of the two threads observes the other's
+        // write (Dekker-style), so no wakeup can be lost.
+        if (_has_consumer.load(std::memory_order_seq_cst)) {
             _cv.notify_one();
         }
     }
