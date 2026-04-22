@@ -38,6 +38,11 @@ public class EnforceUniqueNode extends PlanNode {
         this.nullableTupleIds.addAll(child.getNullableTupleIds());
     }
 
+    /** Physical chunk indices of the unique-key columns — exposed for unit-test inspection. */
+    public List<Integer> getUniqueKeyColIndices() {
+        return uniqueKeyColIndices;
+    }
+
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.ENFORCE_UNIQUE_NODE;

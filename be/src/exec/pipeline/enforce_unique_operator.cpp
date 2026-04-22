@@ -79,10 +79,32 @@ Status EnforceUniqueOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
         row_pos_nullable = down_cast<const NullableColumn*>(row_pos_col.get());
     }
 
-    // Get the underlying data columns (unwrap nullable/const)
-    const auto* file_path_data = ColumnHelper::get_binary_column(file_path_col.get());
-    const auto* row_pos_data_col = ColumnHelper::get_data_column(row_pos_col.get());
-    const auto* row_pos_data = down_cast<const FixedLengthColumn<int64_t>*>(row_pos_data_col)->get_data().data();
+    // Get the underlying data columns (unwrap nullable/const).
+    //
+    // Defense-in-depth type check: the FE resolves unique_key_col_indices by
+    // slot ID now (MergeIntoPlanner::insertEnforceUniqueNode), so this shouldn't
+    // fire in practice. But down_cast is unchecked in RELEASE builds, so without
+    // these guards a bad index — i.e. the historical Bug #1 where indices [0,1]
+    // pointed at non-binary/non-int64 data columns — would dereference garbage
+    // and SIGSEGV instead of producing a diagnosable error. Verify the unwrapped
+    // types first and fail with a clear message if they mismatch.
+    const Column* file_path_inner = ColumnHelper::get_data_column(file_path_col.get());
+    if (!file_path_inner->is_binary()) {
+        return Status::InternalError(
+                "EnforceUniqueOperator: expected _file key column (index " +
+                std::to_string(_unique_key_col_indices[0]) + ") to be a binary column, got " +
+                file_path_inner->get_name());
+    }
+    const Column* row_pos_data_col = ColumnHelper::get_data_column(row_pos_col.get());
+    const auto* row_pos_typed = dynamic_cast<const FixedLengthColumn<int64_t>*>(row_pos_data_col);
+    if (row_pos_typed == nullptr) {
+        return Status::InternalError(
+                "EnforceUniqueOperator: expected _pos key column (index " +
+                std::to_string(_unique_key_col_indices[1]) + ") to be FixedLengthColumn<int64_t>, got " +
+                row_pos_data_col->get_name());
+    }
+    const auto* file_path_data = down_cast<const BinaryColumn*>(file_path_inner);
+    const auto* row_pos_data = row_pos_typed->get_data().data();
 
     for (size_t i = 0; i < num_rows; ++i) {
         // Skip rows where any key column is null

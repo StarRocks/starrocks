@@ -20,6 +20,10 @@ import com.starrocks.planner.EnforceUniqueNode;
 import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
+import com.starrocks.planner.TupleDescriptor;
+import com.starrocks.planner.TupleId;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
@@ -27,6 +31,12 @@ import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -241,5 +251,78 @@ public class MergeIntoPlanTest extends PlanTestBase {
         assertTrue(!explainString.contains("'first_wins'"),
                 "Duplicate SET must NOT emit the first literal in the plan; " +
                         "got:\n" + explainString);
+    }
+
+    @Test
+    public void testEnforceUniqueKeyIndicesMatchPhysicalLayout() throws Exception {
+        // Regression for the `[0, 1]` hardcoding bug (and its common-sub-slot
+        // follow-up): EnforceUniqueNode's uniqueKeyColIndices must reflect the
+        // ACTUAL physical positions of _file and _pos in the plan-root's chunk
+        // output, NOT a hardcoded pair.
+        //
+        // We construct a MERGE whose source is a multi-branch UNION ALL. This
+        // forces source-side ColumnRefOperators (and common sub-expressions
+        // from the MergeIntoAnalyzer's `_file IS NOT NULL` CASE predicate) to
+        // get slot IDs, and gives the optimizer enough room to assign some of
+        // them before _file / _pos. The emitted ExecPlan must:
+        //
+        //   - find the EnforceUniqueNode we inserted
+        //   - compute physicalOrder = materialized slots of the plan root's
+        //     tuple(s), sorted ascending by slot ID
+        //   - verify uniqueKeyColIndices[0] lands on the slot referenced by
+        //     outputExprs[0] (i.e. _file), and [1] lands on outputExprs[1] (_pos)
+        //
+        // Locks in: slot-ID-based resolution + materialized-only filter.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (" +
+                "  SELECT 1 AS id, 'a' AS data, '2024-01-01' AS date " +
+                "  UNION ALL SELECT 2 AS id, 'b' AS data, '2024-01-01' AS date " +
+                "  UNION ALL SELECT 3 AS id, 'c' AS data, '2024-01-01' AS date " +
+                ") AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data " +
+                "WHEN NOT MATCHED THEN INSERT (id, data, date) VALUES (s.id, s.data, s.date)";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertNotNull(execPlan);
+
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        PlanNode root = sinkFragment.getPlanRoot();
+        assertTrue(root instanceof EnforceUniqueNode,
+                "Sink fragment root must be EnforceUniqueNode; was: " + root.getClass().getSimpleName());
+        EnforceUniqueNode enforceNode = (EnforceUniqueNode) root;
+        List<Integer> indices = enforceNode.getUniqueKeyColIndices();
+        assertEquals(2, indices.size(), "Expected exactly 2 unique-key indices (_file, _pos)");
+        assertNotEquals(indices.get(0), indices.get(1), "_file and _pos indices must differ");
+
+        // Compute the expected physical layout the same way the planner does:
+        // materialized slots of the EnforceUnique child's tuple, sorted by slot-ID.
+        PlanNode child = enforceNode.getChild(0);
+        List<SlotId> physicalOrder = new ArrayList<>();
+        for (TupleId tid : child.getTupleIds()) {
+            TupleDescriptor tupleDesc = execPlan.getDescTbl().getTupleDesc(tid);
+            if (tupleDesc == null) {
+                continue;
+            }
+            for (SlotDescriptor slot : tupleDesc.getSlots()) {
+                if (slot.isMaterialized()) {
+                    physicalOrder.add(slot.getId());
+                }
+            }
+        }
+        physicalOrder.sort(Comparator.comparingInt(SlotId::asInt));
+
+        // outputExprs[0] is _file, outputExprs[1] is _pos (MergeIntoAnalyzer order).
+        // The key-col indices must resolve back to those same slot IDs.
+        List<com.starrocks.sql.ast.expression.Expr> outputExprs = execPlan.getOutputExprs();
+        SlotId expectedFileSlot = ((com.starrocks.sql.ast.expression.SlotRef) outputExprs.get(0)).getSlotId();
+        SlotId expectedPosSlot = ((com.starrocks.sql.ast.expression.SlotRef) outputExprs.get(1)).getSlotId();
+        assertEquals(expectedFileSlot, physicalOrder.get(indices.get(0)),
+                "uniqueKeyColIndices[0] must point at the _file slot. " +
+                        "indices=" + indices + ", physicalOrder=" + physicalOrder +
+                        ", expected _file slot=" + expectedFileSlot);
+        assertEquals(expectedPosSlot, physicalOrder.get(indices.get(1)),
+                "uniqueKeyColIndices[1] must point at the _pos slot. " +
+                        "indices=" + indices + ", physicalOrder=" + physicalOrder +
+                        ", expected _pos slot=" + expectedPosSlot);
     }
 }
