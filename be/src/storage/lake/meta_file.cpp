@@ -290,19 +290,23 @@ void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
     drop_keys.reserve(op.dropped_size());
     std::unordered_set<int64_t> drop_ids;
     for (const auto& d : op.dropped()) {
-        // Skip malformed entries: reading default 0 for col_unique_id or
-        // default INDEX_UNKNOWN for index_type would fabricate a key that
-        // could falsely match a real (col_uid=0, BITMAP) entry. FE always
-        // sets these via do_process_drop_index_only validation, but we keep
-        // this belt-and-suspenders for replayed legacy logs.
+        // index_id identifies the TabletIndexPB to remove and is safe to
+        // collect even when col_unique_id / index_type are missing — the
+        // index_id-based removal is independent of the IDG key set.
+        if (d.has_index_id()) drop_ids.insert(d.index_id());
+        // Skip building the IDG tombstone key when col_unique_id or
+        // index_type is missing: reading default 0 or INDEX_UNKNOWN would
+        // fabricate a key that could falsely match a real (col_uid=0,
+        // BITMAP) entry. FE always sets these via
+        // do_process_drop_index_only validation; this is belt-and-suspenders
+        // for replayed legacy logs.
         if (!d.has_col_unique_id() || !d.has_index_type()) {
-            LOG(WARNING) << "apply_drop_index: drop entry missing col_unique_id or index_type; skipping";
+            LOG(WARNING) << "apply_drop_index: drop entry missing col_unique_id or index_type; skipping key";
             continue;
         }
         uint64_t k = (static_cast<uint64_t>(static_cast<uint32_t>(d.col_unique_id())) << 32) |
                      static_cast<uint32_t>(d.index_type());
         drop_keys.insert(k);
-        if (d.has_index_id()) drop_ids.insert(d.index_id());
     }
 
     // 2. Remove matching TabletIndexPB from schema (idempotent: FE may have
