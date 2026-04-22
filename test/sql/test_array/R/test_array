@@ -320,6 +320,7 @@ select array_generate(3,3);
 -- !result
 select array_generate(3,2,1);
 -- result:
+[]
 -- !result
 select array_generate("2025-10-01", "2025-10-05",1);
 -- result:
@@ -331,6 +332,7 @@ select array_generate("2025-10-01", "2025-10-05",interval 1 day);
 -- !result
 select array_generate("2025-10-01", "2025-10-05",interval 0 day);
 -- result:
+[]
 -- !result
 select array_generate("2025-10-01", 10000, interval 0 day);
 -- result:
@@ -452,6 +454,7 @@ select array_repeat([1,2],3);
 -- !result
 select array_repeat(1,-1);
 -- result:
+[]
 -- !result
 CREATE TABLE IF NOT EXISTS repeat_test (COLA INT, COLB INT) PROPERTIES ("replication_num"="1");
 -- result:

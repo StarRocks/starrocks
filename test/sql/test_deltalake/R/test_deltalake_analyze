@@ -53,8 +53,18 @@ analyze table delta_test_${uuid0}.delta_oss_db.t_partition_timestamp_ntz;
 -- !result
 select column_name, row_count, data_size, hll_cardinality(ndv), `max`, `min` from default_catalog._statistics_.external_column_statistics
     where catalog_name="delta_test_${uuid0}" and db_name="delta_oss_db" and table_name="t_partition_timestamp_ntz"
-    order by column_name;
+    order by column_name, max;
 -- result:
+col_int	1	4	1	1	1
+col_int	1	4	1	2	2
+col_int	1	4	1	3	3
+col_int	1	4	1	4	4
+col_int	1	4	1	5	5
+col_timestamp_ntz	1	8	1	2024-01-02 01:02:03	2024-01-02 01:02:03
+col_timestamp_ntz	1	8	1	2024-01-03 04:05:06	2024-01-03 04:05:06
+col_timestamp_ntz	1	8	1	2024-01-04 01:02:03	2024-01-04 01:02:03
+col_timestamp_ntz	1	8	1	2024-01-05 04:05:06	2024-01-05 04:05:06
+col_timestamp_ntz	1	8	0		
 -- !result
 drop catalog delta_test_${uuid0}
 -- result:
