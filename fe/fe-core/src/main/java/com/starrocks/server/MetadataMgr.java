@@ -49,10 +49,6 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
-<<<<<<< HEAD
-import com.starrocks.connector.ConnectorMetadatRequestContext;
-=======
->>>>>>> a9520cee2d ([Refactor] Rename ConnectorMetadataRequestContext (#71984))
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorMgr;
