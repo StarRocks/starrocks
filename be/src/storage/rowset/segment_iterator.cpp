@@ -31,6 +31,7 @@
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "fs/fs_factory.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
@@ -294,7 +295,9 @@ private:
         std::shared_ptr<VectorIndexReader> ann_reader;
 
         // Helper method to check if rowid should always be built
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const {
+            return use_vector_index && !use_ivfpq;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -338,8 +341,12 @@ private:
     Status _apply_tablet_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
-    uint32_t segment_id() const { return _segment->id(); }
-    uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t segment_id() const {
+        return _segment->id();
+    }
+    uint32_t num_rows() const {
+        return _segment->num_rows();
+    }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
@@ -3687,12 +3694,16 @@ StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const 
     }
 
     // SegmentReadOptions::stats is documented as required by ColumnIterator init
-    // (sanity_check() CHECK_NOTNULLs it), so supply a local OlapReaderStatistics
-    // even though nothing downstream inspects the accumulated stats here.
+    // (sanity_check() CHECK_NOTNULLs it). SegmentReadOptions::fs is required by
+    // _init_column_iterator_by_cid, which opens a RandomAccessFile on the
+    // segment's file. Supply both from locals — nothing downstream inspects the
+    // accumulated stats here.
     OlapReaderStatistics local_stats;
+    ASSIGN_OR_RETURN(auto file_system, FileSystemFactory::CreateSharedFromString(segment->file_info().path));
     SegmentReadOptions read_options;
     read_options.lake_io_opts = lake_io_opts;
     read_options.stats = &local_stats;
+    read_options.fs = std::move(file_system);
     SegmentIterator iterator(segment, iterator_schema, read_options);
     return iterator.resolve_range_to_rowid_range(range);
 }
