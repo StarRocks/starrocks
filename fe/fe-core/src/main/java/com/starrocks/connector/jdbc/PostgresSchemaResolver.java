@@ -81,13 +81,19 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 }
             } catch (SQLException ignored) { }
 
-            if (!columnName.equals(columnName.toLowerCase())) {
-                columnName = "\"" + columnName + "\"";
-            }
+            columnName = normalizeColumnName(columnSet.getString("COLUMN_NAME"));
             fullSchema.add(new Column(columnName, type,
                     columnSet.getString("IS_NULLABLE").equals(SchemaConstants.YES), comment));
         }
         return fullSchema;
+    }
+
+    @Override
+    protected String normalizeColumnName(String columnName) {
+        if (!columnName.equals(columnName.toLowerCase())) {
+            return "\"" + columnName + "\"";
+        }
+        return columnName;
     }
 
     @Override
