@@ -226,16 +226,22 @@ public class SystemInfoService implements GsonPostProcessable {
 
     // Final entry of adding compute node
     public void addComputeNode(String host, int heartbeatPort, String warehouse, String cnGroupName) throws DdlException {
-        try {
-            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend(host);
-        } catch (InvalidLicenseException e) {
-            LOG.warn("failed to add compute node: {}:{}, {}", host, heartbeatPort, e.getMessage());
-            throw new DdlException(e.getMessage());
-        }
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         newComputeNode.setBackendState(BackendState.using);
         // NOTICE: this will not update the state of warehouse, only set WarehouseId and groupId of newComputeNode.
         addComputeNodeToWarehouse(newComputeNode, warehouse, cnGroupName);
+
+        boolean recordScaleOutStart;
+        try {
+            recordScaleOutStart = GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend(host);
+        } catch (InvalidLicenseException e) {
+            LOG.warn("failed to add compute node: {}:{}, {}", host, heartbeatPort, e.getMessage());
+            throw new DdlException(e.getMessage());
+        }
+
+        if (recordScaleOutStart) {
+            GlobalStateMgr.getCurrentState().getLicenseMgr().recordScaleOutStart();
+        }
 
         // try to record the historical compute nodes
         // This will trigger another wal persist if update historical nodes is enabled.
@@ -345,17 +351,22 @@ public class SystemInfoService implements GsonPostProcessable {
 
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort, String warehouse, String cnGroupName) throws DdlException {
+        Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
+        newBackend.setBackendState(BackendState.using);
+        // NOTICE: this will not update the state of warehouse, only set WarehouseId and groupId of newBackend.
+        addComputeNodeToWarehouse(newBackend, warehouse, cnGroupName);
+
+        boolean recordScaleOutStart;
         try {
-            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend(host);
+            recordScaleOutStart = GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddBackend(host);
         } catch (InvalidLicenseException e) {
             LOG.warn("failed to add backend: {}:{}, {}", host, heartbeatPort, e.getMessage());
             throw new DdlException(e.getMessage());
         }
 
-        Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
-        newBackend.setBackendState(BackendState.using);
-        // NOTICE: this will not update the state of warehouse, only set WarehouseId and groupId of newBackend.
-        addComputeNodeToWarehouse(newBackend, warehouse, cnGroupName);
+        if (recordScaleOutStart) {
+            GlobalStateMgr.getCurrentState().getLicenseMgr().recordScaleOutStart();
+        }
 
         // try to record the historical backend nodes
         // This will trigger another wal persist if update historical nodes is enabled.
@@ -1594,4 +1605,3 @@ public class SystemInfoService implements GsonPostProcessable {
         throw new DdlException("not implemented");
     }
 }
-

@@ -747,13 +747,6 @@ public class NodeMgr {
     }
 
     public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
-        try {
-            GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddFrontend(host);
-        } catch (InvalidLicenseException e) {
-            LOG.warn("failed to add frontend: {}:{}, {}", host, editLogPort, e.getMessage());
-            throw new DdlException(e.getMessage());
-        }
-
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
@@ -778,6 +771,15 @@ public class NodeMgr {
                 throw new DdlException("No available frontend ID can allocate to new frontend");
             }
 
+            boolean recordScaleOutStart;
+            try {
+                recordScaleOutStart =
+                        GlobalStateMgr.getCurrentState().getLicenseMgr().checkLicenseForAddFrontend(host);
+            } catch (InvalidLicenseException e) {
+                LOG.warn("failed to add frontend: {}:{}, {}", host, editLogPort, e.getMessage());
+                throw new DdlException(e.getMessage());
+            }
+
             if (GlobalStateMgr.getCurrentState().getHaProtocol() instanceof BDBHA) {
                 BDBHA bdbha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
                 if (role == FrontendNodeType.FOLLOWER) {
@@ -790,6 +792,10 @@ public class NodeMgr {
                 // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
                 // xxx. It conflicts with the socket already used by the member: xxxx)
                 bdbha.removeNodeIfExist(host, editLogPort, nodeName);
+            }
+
+            if (recordScaleOutStart) {
+                GlobalStateMgr.getCurrentState().getLicenseMgr().recordScaleOutStart();
             }
 
             Frontend fe = new Frontend(fid, role, nodeName, host, editLogPort);
