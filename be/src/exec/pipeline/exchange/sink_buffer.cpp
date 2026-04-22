@@ -222,8 +222,13 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
         VLOG_OPERATOR << fmt::format(
                 "fragment_instance_id {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}, "
                 "_num_sending_rpc {}, chunk is full {}",
+<<<<<<< HEAD
                 print_id(_fragment_ctx->fragment_instance_id()), _num_uncancelled_sinkers, _is_finishing,
                 _num_remaining_eos, _num_sending_rpc, is_full());
+=======
+                print_id(_fragment_ctx->fragment_instance_id()), _is_finishing.load(), _num_remaining_eos.load(),
+                _num_sending_rpc.load(), is_full());
+>>>>>>> bbef286d9d ([Refactor] Do not rely on implicit conversions in {fmt} calls  (#72022))
     }
 }
 
