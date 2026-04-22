@@ -5359,14 +5359,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return topNPushDownAggMode;
     }
 
-    public void setEnableLabeledColumnStatisticOutput(boolean flag) {
-        this.enableLabeledColumnStatisticOutput = flag;
-    }
-
-    public boolean isEnableLabeledColumnStatisticOutput() {
-        return this.enableLabeledColumnStatisticOutput;
-    }
-
     public void setMcvRowPercentagePropagationThreshold(double mcvRowPercentagePropagationThreshold) {
         this.mcvRowPercentagePropagationThreshold = mcvRowPercentagePropagationThreshold;
     }
