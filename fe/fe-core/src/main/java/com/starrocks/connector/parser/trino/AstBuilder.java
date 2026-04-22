@@ -36,7 +36,6 @@ import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.ParseNode;
-import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -180,6 +179,7 @@ import io.trino.sql.tree.NotExpression;
 import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
 import io.trino.sql.tree.Offset;
+import io.trino.sql.tree.Property;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
 import io.trino.sql.tree.Rollup;
@@ -1354,11 +1354,42 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitProperty(Property node, ParseTreeContext context) {
+        String key = node.getName().getValue();
+        if (node.isSetToDefault()) {
+            // StarRocks' property map has no representation for "unset/use default"
+            // distinct from the empty string. Reject explicitly so callers don't get
+            // silently coerced to "" and bypass connector defaults.
+            throw trinoParserUnsupportedException(String.format(
+                    "SET DEFAULT is not supported for property [%s]; omit the property to use the default",
+                    key));
+        }
+        Expression valueExpr = node.getNonDefaultValue();
+        String value;
+        if (valueExpr instanceof StringLiteral) {
+            value = ((StringLiteral) valueExpr).getValue();
+        } else if (valueExpr instanceof Identifier) {
+            value = ((Identifier) valueExpr).getValue();
+        } else if (valueExpr instanceof LongLiteral) {
+            value = Long.toString(((LongLiteral) valueExpr).getValue());
+        } else if (valueExpr instanceof BooleanLiteral) {
+            value = Boolean.toString(((BooleanLiteral) valueExpr).getValue());
+        } else if (valueExpr instanceof DoubleLiteral) {
+            value = Double.toString(((DoubleLiteral) valueExpr).getValue());
+        } else {
+            throw trinoParserUnsupportedException(String.format(
+                    "Unsupported property value expression [%s] for property [%s]", valueExpr, key));
+        }
+        return new com.starrocks.sql.ast.Property(key, value);
+    }
+
+    @Override
     protected ParseNode visitCreateTableAsSelect(CreateTableAsSelect node, ParseTreeContext context) {
         Map<String, String> properties = new HashMap<>();
         if (node.getProperties() != null) {
-            List<Property> propertyList = visit(node.getProperties(), context, Property.class);
-            for (Property property : propertyList) {
+            List<com.starrocks.sql.ast.Property> propertyList =
+                    visit(node.getProperties(), context, com.starrocks.sql.ast.Property.class);
+            for (com.starrocks.sql.ast.Property property : propertyList) {
                 properties.put(property.getKey(), property.getValue());
             }
         }
