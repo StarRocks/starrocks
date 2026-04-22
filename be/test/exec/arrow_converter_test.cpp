@@ -32,7 +32,9 @@
 #include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/file_scanner/parquet_scanner.h"
+#include "gen_cpp/InternalService_types.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "types/datetime_value.h"
 #include "util/arrow/row_batch.h"
 
@@ -1952,6 +1954,126 @@ PARALLEL_TEST(ArrowConverterTest, test_string_view_strict_overflow_with_ctx) {
     // Strings that exceed CHAR(10) — filtered out
     ASSERT_EQ(filter[1], 0);
     ASSERT_EQ(filter[3], 0);
+}
+
+// ===========================================================================
+// New: ArrowConvertContext::report_error_message coverage
+// (arrow_to_starrocks_converter.cpp lines 1165-1223)
+// ===========================================================================
+
+// Helper: build a minimal LOAD RuntimeState with no ExecEnv (so
+// rejected_record_writer's resolve_file_path returns empty and the file write
+// is skipped, but all the JSON-building code still executes).
+static std::unique_ptr<RuntimeState> make_arrow_load_state() {
+    TQueryOptions opts;
+    opts.query_type = TQueryType::LOAD;
+    opts.log_rejected_record_num = -1;
+    opts.__set_load_job_type(TLoadJobType::STREAM_LOAD);
+    TQueryGlobals globals;
+    TUniqueId id;
+    auto state = std::make_unique<RuntimeState>(id, opts, globals, /*exec_env=*/nullptr);
+    state->set_db("arrow_test_db");
+    state->set_table_name("arrow_test_table");
+    state->set_load_label("arrow_test_label");
+    return state;
+}
+
+TEST(ArrowConverterTest, ReportErrorMessageNullStateIsNoOp) {
+    // Line 1167: state == nullptr → early return, no crash.
+    ArrowConvertContext ctx;
+    ctx.state = nullptr;
+    ctx.current_slot = nullptr;
+    EXPECT_NO_FATAL_FAILURE(ctx.report_error_message("some reason", "raw data", 0));
+}
+
+TEST(ArrowConverterTest, ReportErrorMessageSelectStateNoWriter) {
+    // Lines 1168-1173: state != nullptr, but not a LOAD query → writer is
+    // nullptr so only append_error_msg_to_file is called (which is also a
+    // no-op for non-LOAD queries).
+    TQueryOptions opts;
+    opts.query_type = TQueryType::SELECT;
+    opts.log_rejected_record_num = -1;
+    TQueryGlobals globals;
+    TUniqueId id;
+    RuntimeState state(id, opts, globals, /*exec_env=*/nullptr);
+
+    ArrowConvertContext ctx;
+    ctx.state = &state;
+    ctx.current_slot = nullptr;
+    ctx.current_file = "s3://bucket/data.parquet";
+    ctx.error_message_counter = 0;
+    EXPECT_NO_FATAL_FAILURE(ctx.report_error_message("reason", "raw", -1));
+    EXPECT_EQ(1, ctx.error_message_counter);
+}
+
+TEST(ArrowConverterTest, ReportErrorMessageThrottlesByMaxCounter) {
+    // Line 1168-1169: counter > MAX_ERROR_MESSAGE_COUNTER → early return.
+    // MAX_ERROR_MESSAGE_COUNTER is 50 based on arrow_to_starrocks_converter.h.
+    auto state = make_arrow_load_state();
+    ArrowConvertContext ctx;
+    ctx.state = state.get();
+    ctx.current_slot = nullptr;
+    ctx.current_file = "file.parquet";
+    ctx.error_message_counter = 51; // already past the cap
+    EXPECT_NO_FATAL_FAILURE(ctx.report_error_message("over limit reason", "raw data", 0));
+    // Counter must NOT have incremented (the guard returned before incrementing).
+    EXPECT_EQ(51, ctx.error_message_counter);
+}
+
+TEST(ArrowConverterTest, ReportErrorMessageLoadStateWithNullSlot) {
+    // Lines 1170-1223: full path with null current_slot (col_name stays empty,
+    // key becomes "_raw"). row_offset_in_array=-1 and
+    // current_batch_first_row_in_file=-1 → row_in_file is omitted from JSON.
+    auto state = make_arrow_load_state();
+    ArrowConvertContext ctx;
+    ctx.state = state.get();
+    ctx.current_slot = nullptr;
+    ctx.current_file = "s3://bucket/part0.parquet";
+    ctx.current_batch_first_row_in_file = -1;
+    ctx.file_size = -1;
+    ctx.file_mtime_ms = -1;
+    ctx.error_message_counter = 0;
+
+    EXPECT_NO_FATAL_FAILURE(ctx.report_error_message("type mismatch", "bad_value", /*row_offset=*/-1));
+    EXPECT_EQ(1, ctx.error_message_counter);
+}
+
+TEST(ArrowConverterTest, ReportErrorMessageLoadStateWithNamedSlot) {
+    // Lines 1170-1223: current_slot is non-null; col_name goes into key and
+    // source_info JSON. Covers the branch where all three optional source_info
+    // fields are set (row_in_file, file_size, file_mtime_ms).
+    auto state = make_arrow_load_state();
+    SlotDescriptor slot(1, "amount", TypeDescriptor(TYPE_BIGINT));
+    ArrowConvertContext ctx;
+    ctx.state = state.get();
+    ctx.current_slot = &slot;
+    ctx.current_file = "gs://bucket/data.parquet";
+    ctx.current_batch_first_row_in_file = 100;
+    ctx.file_size = 65536;
+    ctx.file_mtime_ms = 1700000000000LL;
+    ctx.error_message_counter = 0;
+
+    EXPECT_NO_FATAL_FAILURE(ctx.report_error_message("string length 50 exceeds max length 20", "aaaaabbbbbcccccddddd",
+                                                     /*row_offset_in_array=*/5));
+    EXPECT_EQ(1, ctx.error_message_counter);
+}
+
+TEST(ArrowConverterTest, ReportErrorMessageLoadStateRowOffsetNegative) {
+    // row_offset_in_array=-1 but current_batch_first_row_in_file >= 0 →
+    // row_in_file is still omitted because the condition requires both >= 0.
+    auto state = make_arrow_load_state();
+    SlotDescriptor slot(2, "name", TypeDescriptor(TYPE_VARCHAR));
+    ArrowConvertContext ctx;
+    ctx.state = state.get();
+    ctx.current_slot = &slot;
+    ctx.current_file = "file.parquet";
+    ctx.current_batch_first_row_in_file = 200;
+    ctx.file_size = 1024;
+    ctx.file_mtime_ms = -1; // omit mtime
+    ctx.error_message_counter = 0;
+
+    EXPECT_NO_FATAL_FAILURE(ctx.report_error_message("invalid utf8", "\\xfe\\xff", /*row_offset=*/-1));
+    EXPECT_EQ(1, ctx.error_message_counter);
 }
 
 } // namespace starrocks
