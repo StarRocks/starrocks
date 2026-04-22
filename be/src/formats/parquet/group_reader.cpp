@@ -856,9 +856,10 @@ StatusOr<Datum> GroupReader::_get_extended_bigint_value(SlotId slot_id) const {
 //
 // Post-processing steps applied before returning:
 //   - Deduplication: paths collected from multiple access-path entries are de-duped by string.
-//   - Prefix pruning: if both "a.b" and "a.b.c" are present, "a.b" is redundant (the reader
-//     for "a.b.c" already covers it) and is dropped. Pruning uses parsed segment comparison
-//     rather than string prefix matching to avoid false matches like "a.bc" vs "a.b".
+//   - Ancestor pruning: if both "a.b" and "a.b.c" are present, "a.b.c" is redundant (the
+//     "a.b" request already covers the "a.b.c" subtree) and is dropped. Pruning uses parsed
+//     segment comparison rather than string prefix matching to avoid false matches like
+//     "a.bc" vs "a.b".
 VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(std::string_view column_name) const {
     VariantShreddedReadHints hints;
     if (_param.column_access_paths == nullptr || _param.column_access_paths->empty()) {
@@ -888,34 +889,47 @@ VariantShreddedReadHints GroupReader::_get_variant_shredded_hints(std::string_vi
         }
     }
 
-    // Deduplicate and prune redundant prefix paths.
-    // A path p is redundant if another collected path q has p as a strict prefix:
-    // reading q already subsumes p, so keeping p would cause unnecessary work.
-    std::vector<std::string> pruned_paths;
-    std::vector<VariantPath> pruned_parsed_paths;
-    pruned_paths.reserve(hints.shredded_paths.size());
-    pruned_parsed_paths.reserve(hints.parsed_shredded_paths.size());
-    for (size_t i = 0; i < hints.shredded_paths.size(); ++i) {
+    // Deduplicate and prune redundant descendant paths.
+    // A path p is redundant if another collected path q is a strict ancestor of p:
+    // requesting q already covers p's entire subtree, so keeping p causes unnecessary work.
+    // Example: if both "a.b" and "a.b.c" are present, "a.b.c" is dropped because the
+    // "a.b" request already causes "a.b.c" columns to be read.
+    //
+    // Determine which paths to keep in a read-only pass over the original vectors, then
+    // build the output in a separate pass.  Moving elements during the comparison pass
+    // would leave moved-from slots (empty segments) that act as universal ancestors and
+    // incorrectly prune all subsequent paths.
+    const size_t n = hints.shredded_paths.size();
+    std::vector<bool> keep(n, false);
+    for (size_t i = 0; i < n; ++i) {
         // Drop exact string duplicates.
         if (!unique_paths.emplace(hints.shredded_paths[i]).second) {
             continue;
         }
-        // Drop paths that are a strict prefix of another path in the collected set.
-        bool is_prefix_of_another = false;
-        for (size_t j = 0; j < hints.parsed_shredded_paths.size(); ++j) {
+        // Drop path i if any other path j is a strict ancestor of i.
+        bool has_ancestor = false;
+        for (size_t j = 0; j < n; ++j) {
             if (i == j) {
                 continue;
             }
-            if (hints.parsed_shredded_paths[i].is_strict_prefix_of(hints.parsed_shredded_paths[j])) {
-                is_prefix_of_another = true;
+            if (hints.parsed_shredded_paths[j].is_strict_prefix_of(hints.parsed_shredded_paths[i])) {
+                has_ancestor = true;
                 break;
             }
         }
-        if (is_prefix_of_another) {
-            continue;
+        if (!has_ancestor) {
+            keep[i] = true;
         }
-        pruned_paths.emplace_back(std::move(hints.shredded_paths[i]));
-        pruned_parsed_paths.emplace_back(std::move(hints.parsed_shredded_paths[i]));
+    }
+    std::vector<std::string> pruned_paths;
+    std::vector<VariantPath> pruned_parsed_paths;
+    pruned_paths.reserve(n);
+    pruned_parsed_paths.reserve(n);
+    for (size_t i = 0; i < n; ++i) {
+        if (keep[i]) {
+            pruned_paths.emplace_back(std::move(hints.shredded_paths[i]));
+            pruned_parsed_paths.emplace_back(std::move(hints.parsed_shredded_paths[i]));
+        }
     }
     hints.shredded_paths = std::move(pruned_paths);
     hints.parsed_shredded_paths = std::move(pruned_parsed_paths);
