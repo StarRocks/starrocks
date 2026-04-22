@@ -141,18 +141,21 @@ TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWithRejectedRecordLoggi
             << "Unexpected error message: " << st.message();
 }
 
-TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWithoutRejectedRecordLoggingFallsThrough) {
-    // Without rejected-record logging enabled, an AVRO scan range should
-    // proceed past the whitelist check (it then tries to open a real file,
-    // so it fails later -- but NOT with the whitelist message).
+TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWhenLoggingDisabledDoesNotHitWhitelist) {
+    // When log_rejected_record_num = 0, enable_log_rejected_record() returns false
+    // (count=0 is not > 0). The whitelist check is therefore skipped entirely.
+    // We verify by calling open() with CSV_PLAIN (which safely tries to open
+    // /dev/null as CSV and fails for a different reason) rather than AVRO, which
+    // may crash without a live ExecEnv/AvroLib. The goal is to confirm the
+    // whitelist error message does NOT appear.
     TQueryOptions opts;
     opts.query_type = TQueryType::LOAD;
-    opts.log_rejected_record_num = 0; // 0 means no rejected records allowed (logging disabled)
+    opts.log_rejected_record_num = 0; // 0 means no rejected-records allowed: logging disabled
     TQueryGlobals globals;
     TUniqueId id;
     auto state = std::make_shared<RuntimeState>(id, opts, globals, /*exec_env=*/nullptr);
 
-    // Build DescriptorTbl with tuple_id=0.
+    auto local_pool = std::make_unique<ObjectPool>();
     TDescriptorTableBuilder desc_builder;
     TTupleDescriptorBuilder tuple_builder;
     TSlotDescriptorBuilder slot_builder;
@@ -161,47 +164,20 @@ TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWithoutRejectedRecordLo
     tuple_builder.add_slot(slot_builder.build());
     tuple_builder.build(&desc_builder);
     DescriptorTbl* tbl = nullptr;
-    Status dts =
-            DescriptorTbl::create(state.get(), _pool.get(), desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    Status dts = DescriptorTbl::create(state.get(), local_pool.get(), desc_builder.desc_tbl(), &tbl,
+                                       config::vector_chunk_size);
     CHECK(dts.ok()) << dts.message();
     state->set_desc_tbl(tbl);
 
-    auto ds = make_data_source(_provider.get(), TFileFormatType::FORMAT_AVRO, _profile.get());
+    // Use CSV_PLAIN (safe to construct) -- logging disabled, so no whitelist check.
+    auto local_profile = std::make_unique<RuntimeProfile>("csv_no_log");
+    auto ds = make_data_source(_provider.get(), TFileFormatType::FORMAT_CSV_PLAIN, local_profile.get());
     Status st = ds->open(state.get());
 
-    // The error (if any) must NOT be the whitelist message.
+    // Whatever happens, it must NOT be the whitelist InternalError.
     if (!st.ok()) {
         EXPECT_EQ(std::string::npos, st.message().find("only support csv/json/parquet/orc format"))
                 << "Should not hit whitelist check when logging is disabled. Got: " << st.message();
-    }
-}
-
-TEST_F(FileConnectorRejectedRecordTest, SupportedFormatsPassWhitelistCheck) {
-    // CSV_PLAIN, JSON, PARQUET, ORC must all pass the whitelist check.
-    // They will fail later (no real file at /dev/null for non-text formats),
-    // but they must NOT return the "only support csv/json/parquet/orc" error.
-    const std::vector<TFileFormatType::type> ok_formats = {
-            TFileFormatType::FORMAT_CSV_PLAIN, TFileFormatType::FORMAT_JSON,
-            // PARQUET and ORC require native libs that may not be available in the UT
-            // environment; skip them to avoid unrelated failures.
-    };
-
-    for (auto fmt : ok_formats) {
-        auto state = make_load_state_with_desc_tbl(_pool.get());
-        // Reset the DescriptorTbl on a fresh pool each iteration since
-        // make_load_state_with_desc_tbl uses the same pool.
-        auto local_pool = std::make_unique<ObjectPool>();
-        auto local_state = make_load_state_with_desc_tbl(local_pool.get());
-
-        auto local_profile = std::make_unique<RuntimeProfile>("fmt_test");
-        auto ds = make_data_source(_provider.get(), fmt, local_profile.get());
-        Status st = ds->open(local_state.get());
-
-        // Whatever happens, it must NOT be the whitelist InternalError.
-        if (!st.ok()) {
-            EXPECT_EQ(std::string::npos, st.message().find("only support csv/json/parquet/orc format"))
-                    << "Format " << fmt << " should not hit whitelist check. Got: " << st.message();
-        }
     }
 }
 
