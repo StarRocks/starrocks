@@ -959,8 +959,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
 
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
+<<<<<<< HEAD
     public static final String ENABLE_DEFER_PROJECT_AFTER_TOPN = "enable_defer_project_after_topn";
 
+=======
+
+    public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
+
+    public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
+    public static final String MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD = "mcv_row_percentage_propagation_threshold";
+    
+>>>>>>> 9d770e1eec ([Enhancement] Add MCV propagation for UNION (#70989))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2574,6 +2583,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
     private boolean enableParallelPrepareMetadata = false;
+
+    // The percentage of rows that need to be contained in MCVs so that MCV propagation through operators is enabled
+    // while losing bucket information. Lowering this threshold can lead to worse plans.
+    @VarAttr(name = MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double mcvRowPercentagePropagationThreshold = 0.5;
 
     // To set ANN tuning parameters for user.
     // Since the session variables does not support map variables,
@@ -5349,6 +5363,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return topNPushDownAggMode;
     }
 
+<<<<<<< HEAD
+=======
+    public void setEnableLabeledColumnStatisticOutput(boolean flag) {
+        this.enableLabeledColumnStatisticOutput = flag;
+    }
+
+    public boolean isEnableLabeledColumnStatisticOutput() {
+        return this.enableLabeledColumnStatisticOutput;
+    }
+
+    public void setMcvRowPercentagePropagationThreshold(double mcvRowPercentagePropagationThreshold) {
+        this.mcvRowPercentagePropagationThreshold = mcvRowPercentagePropagationThreshold;
+    }
+
+    public double getMcvRowPercentagePropagationThreshold() {
+        return mcvRowPercentagePropagationThreshold;
+    }
+
+>>>>>>> 9d770e1eec ([Enhancement] Add MCV propagation for UNION (#70989))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
