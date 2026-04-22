@@ -1,0 +1,78 @@
+-- name: test_email_username_external_auth
+-- Verify that email-format usernames are accepted when creating a user with
+-- an IdP-backed auth plugin (authentication_oauth2 or authentication_jwt) and
+-- that the user can be managed (SHOW AUTHENTICATION / GRANT / REVOKE / ALTER /
+-- DROP) across its full lifecycle. Non-IdP CREATE paths must continue to
+-- reject email usernames.
+drop user if exists 'alice@example.com';
+-- result:
+-- !result
+drop user if exists 'bob@example.com';
+-- result:
+-- !result
+create user 'alice@example.com' identified with authentication_oauth2 as '{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}';
+-- result:
+-- !result
+show authentication for 'alice@example.com';
+-- result:
+'alice@example.com'@'%'	No	AUTHENTICATION_OAUTH2	{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}
+-- !result
+grant select on *.* to 'alice@example.com';
+-- result:
+-- !result
+show grants for 'alice@example.com';
+-- result:
+'alice@example.com'@'%'	default_catalog	GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'alice@example.com'@'%'
+-- !result
+revoke select on *.* from 'alice@example.com';
+-- result:
+-- !result
+alter user 'alice@example.com' identified with authentication_oauth2 as '{"jwks_url": "http://idp.example.com/jwks2", "principal_field": "email"}';
+-- result:
+-- !result
+drop user 'alice@example.com';
+-- result:
+-- !result
+create user 'bob@example.com' identified with authentication_jwt as '{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}';
+-- result:
+-- !result
+show authentication for 'bob@example.com';
+-- result:
+'bob@example.com'@'%'	No	AUTHENTICATION_JWT	{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}
+-- !result
+grant select on *.* to 'bob@example.com';
+-- result:
+-- !result
+show grants for 'bob@example.com';
+-- result:
+'bob@example.com'@'%'	default_catalog	GRANT SELECT ON ALL TABLES IN ALL DATABASES TO USER 'bob@example.com'@'%'
+-- !result
+revoke select on *.* from 'bob@example.com';
+-- result:
+-- !result
+alter user 'bob@example.com' identified with authentication_jwt as '{"jwks_url": "http://idp.example.com/jwks2", "principal_field": "email"}';
+-- result:
+-- !result
+drop user 'bob@example.com';
+-- result:
+-- !result
+create user 'alice@example.com';
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: invalid user name: alice@example.com.')
+-- !result
+create user 'alice@example.com' identified by 'password';
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: invalid user name: alice@example.com.')
+-- !result
+create user 'alice@example.com' identified with mysql_native_password by 'password';
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: invalid user name: alice@example.com.')
+-- !result
+create user 'a%b@example.com' identified with authentication_oauth2 as '{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}';
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: invalid user name: a%b@example.com.')
+-- !result
+create user 'a%b@example.com' identified with authentication_jwt as '{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}';
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: invalid user name: a%b@example.com.')
+-- !result

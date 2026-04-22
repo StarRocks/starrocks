@@ -572,7 +572,7 @@ public class SetStmtAnalyzer {
             var.setUser(new UserRef(userIdentity.getUser(), userIdentity.getHost(), userIdentity.isDomain()));
         } else {
             userIdentity = new UserIdentity(user.getUser(), user.getHost(), user.isDomain());
-            AuthenticationAnalyzer.analyzeUser(user);
+            AuthenticationAnalyzer.analyzeUser(user, true);
         }
 
         UserAuthenticationInfo userAuthenticationInfo =

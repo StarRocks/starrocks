@@ -161,6 +161,74 @@ public class PrivilegeStmtAnalyzerV2Test {
     }
 
     @Test
+    public void testCreateOAuth2UserWithEmail() throws Exception {
+        String email = "tony.xia@celerdata.com";
+        String oauth2AuthString =
+                "'{\"jwks_url\": \"https://example.com/jwks\", \"principal_field\": \"email\"}'";
+
+        // 1. CREATE USER with OAuth2 + email username: analyzer must accept
+        String createSql = "create user '" + email + "' identified with authentication_oauth2 as "
+                + oauth2AuthString;
+        CreateUserStmt createStmt = (CreateUserStmt) analyzeSuccess(createSql);
+        Assertions.assertEquals(email, createStmt.getUser().getUser());
+        Assertions.assertEquals("%", createStmt.getUser().getHost());
+        ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createStmt);
+
+        try {
+            // 2. SHOW AUTHENTICATION FOR email-oauth2 user: analyzer must accept
+            analyzeSuccess("show authentication for '" + email + "'");
+
+            // 3. GRANT to an email-oauth2 user: analyzer must accept
+            analyzeSuccess("grant select on db1.tbl1 to '" + email + "'");
+            analyzeSuccess("revoke select on db1.tbl1 from '" + email + "'");
+
+            // 4. ALTER USER with OAuth2: analyzer must accept
+            analyzeSuccess("alter user '" + email + "' identified with authentication_oauth2 as "
+                    + oauth2AuthString);
+
+            // 5. EXECUTE AS email-oauth2 user: analyzer must accept
+            analyzeSuccess("execute as '" + email + "' with no revert");
+        } finally {
+            // 6. DROP USER: analyzer must accept
+            DropUserStmt dropStmt = (DropUserStmt) analyzeSuccess("drop user '" + email + "'");
+            ctx.getGlobalStateMgr().getAuthenticationMgr().dropUser(dropStmt);
+        }
+
+        // 7. CREATE USER with email but a non-OAuth2 auth plugin: analyzer must reject
+        analyzeFail("create user '" + email + "'", "invalid user name");
+        analyzeFail("create user '" + email + "' identified by 'password'", "invalid user name");
+        analyzeFail("create user '" + email + "' identified with mysql_native_password by 'p'",
+                "invalid user name");
+    }
+
+    @Test
+    public void testCreateJwtUserWithEmail() throws Exception {
+        String email = "tony.xia.jwt@celerdata.com";
+        String jwtAuthString =
+                "'{\"jwks_url\": \"https://example.com/jwks\", \"principal_field\": \"email\"}'";
+
+        // CREATE USER with authentication_jwt + email username: analyzer must accept
+        String createSql = "create user '" + email + "' identified with authentication_jwt as "
+                + jwtAuthString;
+        CreateUserStmt createStmt = (CreateUserStmt) analyzeSuccess(createSql);
+        Assertions.assertEquals(email, createStmt.getUser().getUser());
+        Assertions.assertEquals("%", createStmt.getUser().getHost());
+        ctx.getGlobalStateMgr().getAuthenticationMgr().createUser(createStmt);
+
+        try {
+            // Management paths must also accept the email-named JWT user end-to-end.
+            analyzeSuccess("show authentication for '" + email + "'");
+            analyzeSuccess("grant select on db1.tbl1 to '" + email + "'");
+            analyzeSuccess("revoke select on db1.tbl1 from '" + email + "'");
+            analyzeSuccess("alter user '" + email + "' identified with authentication_jwt as "
+                    + jwtAuthString);
+        } finally {
+            DropUserStmt dropStmt = (DropUserStmt) analyzeSuccess("drop user '" + email + "'");
+            ctx.getGlobalStateMgr().getAuthenticationMgr().dropUser(dropStmt);
+        }
+    }
+
+    @Test
     public void testGrantRevokeSelectTableDbPrivilege() throws Exception {
         String sql = "grant select on db1.tbl1 to test_user";
         Assertions.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));

@@ -23,6 +23,7 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.epack.authorization.PasswordPolicy;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -32,6 +33,7 @@ import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserRef;
 
 import java.util.Map;
@@ -43,6 +45,10 @@ public class AuthenticationAnalyzer {
     }
 
     public static void analyzeUser(UserRef userIdent) {
+        analyzeUser(userIdent, false);
+    }
+
+    public static void analyzeUser(UserRef userIdent, boolean allowEmail) {
         String user = userIdent.getUser();
         String host = userIdent.getHost();
 
@@ -50,10 +56,24 @@ public class AuthenticationAnalyzer {
             throw new SemanticException("Does not support anonymous user");
         }
 
-        FeNameFormat.checkUserName(user);
+        FeNameFormat.checkUserName(user, allowEmail);
 
         // reuse createMysqlPattern to validate host pattern
         PatternMatcher.createMysqlPattern(host, CaseSensibility.HOST.getCaseSensibility());
+    }
+
+    // Auth plugins where the StarRocks username must literally equal an external IdP
+    // principal claim (JWT 'sub' / 'email' / 'preferred_username', OAuth2 principal_field).
+    // For these, relax the local username regex to accept email-format identifiers.
+    // Password-based plugins (mysql_native_password), LDAP, and Kerberos still use the
+    // strict regex.
+    private static boolean allowsEmailUsername(UserAuthOption authOption) {
+        if (authOption == null) {
+            return false;
+        }
+        String plugin = authOption.getAuthPlugin();
+        return AuthPlugin.Server.AUTHENTICATION_OAUTH2.toString().equalsIgnoreCase(plugin)
+                || AuthPlugin.Server.AUTHENTICATION_JWT.toString().equalsIgnoreCase(plugin);
     }
 
     public static void checkUserExist(UserRef user, boolean checkExist) {
@@ -124,7 +144,7 @@ public class AuthenticationAnalyzer {
 
         @Override
         public Void visitCreateUserStatement(CreateUserStmt stmt, ConnectContext context) {
-            analyzeUser(stmt.getUser());
+            analyzeUser(stmt.getUser(), allowsEmailUsername(stmt.getAuthOption()));
             checkUserNotExist(stmt.getUser(), stmt.isIfNotExists());
             if (!stmt.getDefaultRoles().isEmpty()) {
                 stmt.getDefaultRoles().forEach(r -> validRoleName(r, "Valid role name fail", true));
@@ -142,7 +162,7 @@ public class AuthenticationAnalyzer {
 
         @Override
         public Void visitAlterUserStatement(AlterUserStmt stmt, ConnectContext context) {
-            analyzeUser(stmt.getUser());
+            analyzeUser(stmt.getUser(), true);
             checkUserExist(stmt.getUser(), !stmt.isIfExists());
             UserIdentity userIdentity = new UserIdentity(stmt.getUser().getUser(), stmt.getUser().getHost(),
                     stmt.getUser().isDomain());
@@ -155,7 +175,7 @@ public class AuthenticationAnalyzer {
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
             UserRef user = stmt.getUser();
-            analyzeUser(user);
+            analyzeUser(user, true);
             checkUserExist(user, !stmt.isIfExists());
 
             if (needProtectAdminUser(user, session)) {
@@ -174,7 +194,7 @@ public class AuthenticationAnalyzer {
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
             UserRef user = statement.getUser();
             if (user != null) {
-                analyzeUser(user);
+                analyzeUser(user, true);
                 checkUserExist(user, true);
             } else if (!statement.isAll()) {
                 statement.setUser(new UserRef(context.getCurrentUserIdentity().getUser(),
@@ -189,7 +209,7 @@ public class AuthenticationAnalyzer {
             if (stmt.isAllowRevert()) {
                 throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
             }
-            analyzeUser(stmt.getToUser());
+            analyzeUser(stmt.getToUser(), true);
             // Skip existence check for external users since they don't exist in local storage
             if (!stmt.getToUser().isExternal()) {
                 checkUserExist(stmt.getToUser(), true);

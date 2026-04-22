@@ -54,6 +54,16 @@ public class FeNameFormat {
     // The username by kerberos authentication may include the host name, so additional adaptation is required.
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
 
+    // RFC 5321 caps an email at 254 octets; used only when the caller opts into email-as-username
+    // (currently CREATE USER ... IDENTIFIED WITH authentication_oauth2).
+    // Note: '%' is intentionally NOT permitted even though RFC 5322 allows it in the local part.
+    // A stored username is later compiled into a MySQL LIKE pattern via
+    // PatternMatcher.createMysqlPattern for login matching, where '%' expands to '.*'; allowing
+    // it would let e.g. 'a%b@example.com' authenticate as 'axxb@example.com'.
+    private static final String EMAIL_USER_NAME_REGEX =
+            "^[A-Za-z0-9._+\\-]+@[A-Za-z0-9.\\-]+\\.[A-Za-z]{2,}$";
+    private static final int EMAIL_USER_NAME_MAX_LENGTH = 254;
+
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
 
     public static final Set<String> FORBIDDEN_COLUMN_NAMES;
@@ -161,9 +171,22 @@ public class FeNameFormat {
     }
 
     public static void checkUserName(String userName) {
-        if (Strings.isNullOrEmpty(userName) || !userName.matches(MYSQL_USER_NAME_REGEX) || userName.length() > 64) {
+        checkUserName(userName, false);
+    }
+
+    public static void checkUserName(String userName, boolean allowEmail) {
+        if (Strings.isNullOrEmpty(userName)) {
             throw new SemanticException("invalid user name: " + userName);
         }
+        if (userName.matches(MYSQL_USER_NAME_REGEX) && userName.length() <= 64) {
+            return;
+        }
+        if (allowEmail
+                && userName.length() <= EMAIL_USER_NAME_MAX_LENGTH
+                && userName.matches(EMAIL_USER_NAME_REGEX)) {
+            return;
+        }
+        throw new SemanticException("invalid user name: " + userName);
     }
 
     public static void checkRoleName(String role, boolean canBeAdmin, String errMsg) {
