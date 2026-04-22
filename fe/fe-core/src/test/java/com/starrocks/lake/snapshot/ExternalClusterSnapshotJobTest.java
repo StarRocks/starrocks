@@ -63,6 +63,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -1229,7 +1230,8 @@ public class ExternalClusterSnapshotJobTest {
     private void mockAggregatorSuccess() {
         new MockUp<LakeAggregator>() {
             @Mock
-            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    Collection<ComputeNode> candidateNodes) {
                 return new ComputeNode(1L, "127.0.0.1", 9050);
             }
         };
@@ -1238,7 +1240,8 @@ public class ExternalClusterSnapshotJobTest {
     private void mockAggregatorFailure() {
         new MockUp<LakeAggregator>() {
             @Mock
-            public ComputeNode chooseAggregatorNode(ComputeResource computeResource) {
+            public ComputeNode chooseAggregatorNode(ComputeResource computeResource,
+                                                    Collection<ComputeNode> candidateNodes) {
                 return null; // cause chooseAggregatorNodeId to return 0
             }
         };
