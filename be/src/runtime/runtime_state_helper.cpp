@@ -66,6 +66,9 @@ ObjectPool* RuntimeStateHelper::global_obj_pool(const RuntimeState* state) {
 }
 
 Status RuntimeStateHelper::create_error_log_file(RuntimeState* state) {
+    if (state->_exec_env == nullptr || state->_exec_env->load_path_mgr() == nullptr) {
+        return Status::InternalError("ExecEnv or load_path_mgr is not initialized");
+    }
     RETURN_IF_ERROR(state->_exec_env->load_path_mgr()->get_load_error_file_name(state->_fragment_instance_id,
                                                                                 &state->_error_log_file_path));
     std::string error_log_absolute_path =
