@@ -1,11 +1,11 @@
 ---
 displayed_sidebar: docs
-sidebar_label: "Feature Differences"
+sidebar_label: "功能差异"
 ---
 
 import EditionSpecificFeature from '../_assets/commonMarkdown/Edition_Specific_Feature.mdx'
 
-# 无共享集群和共享数据集群之间的功能差异
+# 存算一体集群和存算分离集群之间的功能差异
 
 本主题列出了存算一体集群和存算分离集群支持的功能差异。
 
