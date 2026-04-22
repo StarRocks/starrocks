@@ -420,10 +420,22 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             info.inputStringColumns.intersect(alls);
             if (!info.isEmpty()) {
                 context.operatorDecodeInfo.put(operator, info);
-                if (operator instanceof PhysicalHashAggregateOperator hashAgg &&
-                        (hashAgg.getType().isLocal() || !hashAgg.isSplit())) {
+                if (operator instanceof PhysicalHashAggregateOperator hashAgg) {
                     hashAgg.getAggregations().keySet().forEach(agg -> {
-                        context.aggIdToDecodeInfoMap.put(agg.getId(), info);
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
+                if (operator instanceof PhysicalWindowOperator window) {
+                    window.getAnalyticCall().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
+                if (operator instanceof PhysicalTopNOperator topN && topN.getPreAggCall() != null) {
+                    topN.getPreAggCall().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
                     });
                 }
             }

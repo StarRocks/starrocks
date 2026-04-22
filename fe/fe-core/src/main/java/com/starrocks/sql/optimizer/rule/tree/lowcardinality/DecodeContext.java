@@ -91,7 +91,7 @@ class DecodeContext {
     // all string aggregate expressions
     Map<Integer, List<CallOperator>> stringAggregateExprs = Maps.newHashMap();
 
-    Map<Integer, DecodeInfo> aggIdToDecodeInfoMap = Maps.newHashMap();
+    Map<Integer, ColumnRefSet> aggIdToSupportColumns = Maps.newHashMap();
 
     // The string columns used by the operator
     // IdentityHashMap: use object == object, operator equals is not enough
@@ -243,12 +243,8 @@ class DecodeContext {
         // rewrite string aggregate expression
         AggregateRewriter rewriter = new AggregateRewriter();
         stringAggregateExprs.forEach((aggId, aggFns) -> {
-            DecodeInfo decodeInfo = aggIdToDecodeInfoMap.get(aggId);
-            if (decodeInfo == null) {
-                return;
-            }
-            ColumnRefSet supportColumns = decodeInfo.inputStringColumns.clone();
-            supportColumns.union(aggId);
+            ColumnRefSet supportColumns = aggIdToSupportColumns.get(aggId);
+            Preconditions.checkNotNull(supportColumns);
             rewriter.setSupportColumns(supportColumns);
             for (CallOperator aggFn : aggFns) {
                 CallOperator new1stAggFn = (CallOperator) (aggFn.accept(rewriter, null));
