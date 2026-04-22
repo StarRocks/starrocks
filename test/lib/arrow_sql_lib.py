@@ -63,7 +63,18 @@ class ArrowSqlLib(BaseConnectionLib):
 
         try:
             if len(sql_statements) == 1:
-                return self._execute_single(sql_statements[0])
+                result = self._execute_single(sql_statements[0])
+                if not result.status:
+                    return result
+                # For non-SELECT/WITH statements, suppress the Arrow Flight DDL
+                # StatusResult row so callers see an empty result (consistent with
+                # MySQL protocol behaviour).  SELECT/WITH always pass through as-is,
+                # even if the column happens to be named StatusResult.
+                stripped = sql_statements[0].strip().upper()
+                is_query = stripped.startswith('SELECT') or stripped.startswith('WITH')
+                if not is_query and not self._is_query_result(result):
+                    return SQLRawResult(status=True, result=(), msg="OK", desc=None)
+                return result
 
             # If multiple SQL statements, execute each and return query result
             results = []
@@ -155,15 +166,12 @@ class ArrowSqlLib(BaseConnectionLib):
         return statements if statements else [sql]  # Return original if no split occurred
 
     def _execute_single(self, sql: str) -> SQLRawResult:
-        """Execute a single SQL statement."""
+        """Execute a single SQL statement and return the raw result."""
         with self.connector.cursor() as cursor:
             cursor.execute(sql)
             arrow_table = cursor.fetch_arrow_table()
             res = convert_arrow_table_to_mysql_rows(arrow_table)
-            result = SQLRawResult(status=True, result=res, msg="OK", desc=cursor.description)
-            if not self._is_query_result(result):
-                return SQLRawResult(status=True, result=(), msg="OK", desc=cursor.description)
-            return result
+            return SQLRawResult(status=True, result=res, msg="OK", desc=cursor.description)
 
     def _is_query_result(self, result: SQLRawResult) -> bool:
         """
@@ -180,10 +188,9 @@ class ArrowSqlLib(BaseConnectionLib):
         col_name = result.desc[0][0]
         col_type = str(result.desc[0][1])
 
-        # DDL status response: single 'StatusResult' string column whose sole value is '0'
+        # DDL status response: single 'StatusResult' string column
         if col_name == 'StatusResult' and 'string' in col_type.lower():
-            if result.result == (('0',),):
-                return False
+            return False
 
         return True
 
