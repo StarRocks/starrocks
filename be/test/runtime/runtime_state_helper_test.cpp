@@ -142,4 +142,46 @@ TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryNonEmptySourceBuildsJs
     EXPECT_NE(nullptr, state->rejected_record_writer_or_null());
 }
 
+// ===========================================================================
+// runtime_state.h:302 - note_rejected_record() inline method
+// ===========================================================================
+
+TEST(RuntimeStateNoteRejectedRecordTest, NoteRejectedRecordIncrements) {
+    // note_rejected_record() bumps _num_log_rejected_rows. After calling it
+    // enough times, enable_log_rejected_record() should flip to false when
+    // log_rejected_record_num is a positive cap.
+    TQueryOptions opts;
+    opts.query_type = TQueryType::LOAD;
+    opts.log_rejected_record_num = 2; // allow at most 2 rejected rows
+    TQueryGlobals globals;
+    TUniqueId id;
+    auto state = std::make_unique<RuntimeState>(id, opts, globals, /*exec_env=*/nullptr);
+
+    // Before any rejection, logging is enabled.
+    EXPECT_TRUE(state->enable_log_rejected_record());
+
+    // After 1 rejection: still enabled (count=1 < cap=2).
+    state->note_rejected_record(); // line 302 in runtime_state.h
+    EXPECT_TRUE(state->enable_log_rejected_record());
+
+    // After 2 rejections: now at cap (count=2, not > cap=2), so disabled.
+    state->note_rejected_record();
+    EXPECT_FALSE(state->enable_log_rejected_record());
+}
+
+TEST(RuntimeStateNoteRejectedRecordTest, NoteRejectedRecordUnlimitedCapAlwaysEnabled) {
+    // log_rejected_record_num == -1 means unlimited; logging is never disabled.
+    TQueryOptions opts;
+    opts.query_type = TQueryType::LOAD;
+    opts.log_rejected_record_num = -1;
+    TQueryGlobals globals;
+    TUniqueId id;
+    auto state = std::make_unique<RuntimeState>(id, opts, globals, /*exec_env=*/nullptr);
+
+    for (int i = 0; i < 100; ++i) {
+        state->note_rejected_record();
+    }
+    EXPECT_TRUE(state->enable_log_rejected_record());
+}
+
 } // namespace starrocks

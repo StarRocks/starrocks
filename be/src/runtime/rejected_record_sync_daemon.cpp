@@ -264,9 +264,20 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
     commit();
 }
 
+std::vector<std::string> RejectedRecordSyncDaemon::store_path_roots() const {
+    std::vector<std::string> roots;
+    if (_env != nullptr) {
+        for (const auto& sp : _env->store_paths()) {
+            roots.push_back(sp.path);
+        }
+    }
+    return roots;
+}
+
 std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
     std::vector<std::string> out;
-    if (_env == nullptr) {
+    const std::vector<std::string> roots = store_path_roots();
+    if (roots.empty()) {
         return out;
     }
     // Per-tick suffix so a crash mid-tick leaves recoverable files --
@@ -279,8 +290,8 @@ std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
                                                          .count()));
 
     std::vector<std::string> candidates;
-    for (const auto& sp : _env->store_paths()) {
-        std::string rejected_root = sp.path + kRejectedRecordDir;
+    for (const auto& root : roots) {
+        std::string rejected_root = root + kRejectedRecordDir;
         // Pick up both live `.jsonl` (rename them into this tick) and
         // orphaned `.syncing.*` from previous crashed / killed ticks
         // (re-claim them by rename into this tick's suffix, so we don't

@@ -79,6 +79,13 @@ public:
     int64_t sync_failures() const { return _sync_failures.load(std::memory_order_relaxed); }
 
 protected:
+    // Returns the list of store-path root directories that scan_once() should
+    // walk. Production returns one entry per element in _env->store_paths().
+    // Tests override this to inject a temporary directory without needing a
+    // live ExecEnv, which allows the real scan_once() / collect_jsonl() /
+    // is_claimable() logic to execute under test control.
+    virtual std::vector<std::string> store_path_roots() const;
+
     // Enumerate .jsonl files under every store path's rejected_record tree.
     // Exposed for tests. Relative ordering is filesystem-defined; callers
     // should not rely on it.
