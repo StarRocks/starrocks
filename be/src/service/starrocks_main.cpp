@@ -69,6 +69,7 @@
 #include "common/util/debug_util.h"
 #include "common/util/thrift_server.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/fs_provider_bootstrap.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
@@ -237,6 +238,9 @@ int main(int argc, char** argv) {
         Aws::Http::SetHttpClientFactory(std::make_shared<starrocks::poco::PocoHttpClientFactory>());
     }
 #endif
+
+    EXIT_IF_ERROR(starrocks::fs::install_builtin_file_system_providers());
+    LOG(INFO) << "file system provider registry init successfully";
 
     std::vector<starrocks::StorePath> paths;
     auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);

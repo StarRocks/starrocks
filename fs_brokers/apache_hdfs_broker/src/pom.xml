@@ -49,7 +49,7 @@ under the License.
         <log4j.version>2.17.1</log4j.version>
         <jackson.version>2.21.1</jackson.version>
         <avro.version>1.11.4</avro.version>
-        <jetty.version>9.4.57.v20241219</jetty.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
         <io.netty.version>4.1.128.Final</io.netty.version>
     </properties>
 

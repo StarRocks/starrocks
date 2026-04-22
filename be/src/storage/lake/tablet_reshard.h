@@ -79,6 +79,21 @@ private:
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info);
 
+// Convert |txn_log| so it can be applied to the target tablet identified by
+// |publish_tablet_info|.
+//
+// For MERGING_TABLET, a compaction payload (op_compaction / op_parallel_compaction)
+// is dropped rather than re-projected: the payload's input/output rowset-id
+// references live in the source tablet's rowset-id space, which is not valid
+// against the merged tablet. After dropping, the log becomes a pure no-op at
+// apply time; background compaction on the merged tablet will re-run the
+// optimization in the merged rssid space. The compaction's already-written
+// output files (segments, sstables, lcrm) are scheduled for async deletion
+// via delete_files_async so they do not leak.
+//
+// SPLITTING / IDENTICAL cross-publishes pass through the existing per-type
+// transforms (set_all_data_files_shared / update_rowset_ranges / stat-scaling
+// for split; tablet_id rewrite for identical).
 StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
                                     const PublishTabletInfo& publish_tablet_info);
 

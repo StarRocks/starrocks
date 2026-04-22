@@ -9,5 +9,16 @@
     "reason": "Reviewed compatibility exception after a multi-release deprecation window.",
     "owner": "engprod"
   },
-  "waivers": []
+  "waivers": [
+    {
+      "path": "gensrc/thrift/PlanNodes.thrift",
+      "container_or_method": "TLakeScanNode",
+      "field_number": 57,
+      "field_name": "vector_search_options",
+      "rule": "field_type_changed",
+      "base_signature": "57: optional list<Exprs.TExpr> partition_conjuncts",
+      "reason": "Reassign tag 57 on TLakeScanNode to TVectorSearchOptions for shared-data vector index scan. partition_conjuncts (added only days earlier in #71897 and not yet in any release) is moved to tag 60 to avoid wire conflicts with the vector_search_options field already in use by downstream forks.",
+      "owner": "sevev"
+    }
+  ]
 }

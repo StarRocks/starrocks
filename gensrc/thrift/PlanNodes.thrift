@@ -731,7 +731,9 @@ struct TLakeScanNode {
 
   56: optional bool enable_global_late_materialization
 
-  57: optional list<Exprs.TExpr> partition_conjuncts
+  57: optional TVectorSearchOptions vector_search_options
+
+  60: optional list<Exprs.TExpr> partition_conjuncts
 }
 
 struct TEqJoinCondition {

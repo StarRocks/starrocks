@@ -81,6 +81,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -298,6 +299,17 @@ public abstract class BaseMVRefreshProcessor {
         }
         logger.info("setup pinned context for {} base tables, owner={}",
                 pinnedMap.size(), mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId());
+
+        // Expose snapshot ids on task run extra message for post-mortem debugging via
+        // information_schema.task_runs.EXTRA_MESSAGE.
+        if (!pinnedMap.isEmpty()) {
+            Map<String, Long> snapshotIds = new HashMap<>(pinnedMap.size());
+            for (Map.Entry<String, TvrVersionRange> e : pinnedMap.entrySet()) {
+                snapshotIds.put(e.getKey(), e.getValue().end().orElse(-1L));
+            }
+            updateTaskRunStatus(status ->
+                    status.getMvTaskRunExtraMessage().setPinnedSnapshotIdMap(snapshotIds));
+        }
     }
 
     /**

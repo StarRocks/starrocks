@@ -24,6 +24,7 @@ set(CORE_FILES
     fd_cache.cpp
     fs_options.cpp
     fs_memory.cpp
+    fs_factory.cpp
     fs_posix.cpp
     fs_registry.cpp
     fs_scheme.cpp
@@ -36,7 +37,7 @@ ADD_BE_LIB(FSCore
 target_link_libraries(FSCore PUBLIC IOCore)
 
 set(EXEC_FILES
-    fs_factory.cpp
+    fs_provider_bootstrap.cpp
     fs_options_helper.cpp
     key_cache.cpp
     fs_broker.cpp

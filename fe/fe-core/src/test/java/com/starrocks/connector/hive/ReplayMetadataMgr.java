@@ -25,7 +25,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -143,7 +143,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
 
     @Override
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
-                                           ConnectorMetadatRequestContext requestContext) {
+                                           ConnectorMetadataRequestContext requestContext) {
         return replayTableMap.get(catalogName).get(dbName).get(tableName).partitionNames;
     }
 

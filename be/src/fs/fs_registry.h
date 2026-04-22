@@ -76,8 +76,7 @@ private:
     std::unique_ptr<FrozenFileSystemProviderRegistry> _frozen;
 };
 
-FileSystemProviderRegistry& global_fs_provider_registry();
-
-Status register_fs_provider(const FileSystemProvider& provider);
+const FrozenFileSystemProviderRegistry& default_file_system_provider_registry();
+void install_default_file_system_provider_registry(const FrozenFileSystemProviderRegistry& registry);
 
 } // namespace starrocks::fs

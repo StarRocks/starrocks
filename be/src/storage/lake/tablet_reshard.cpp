@@ -20,11 +20,13 @@
 #include <unordered_map>
 
 #include "common/logging.h"
+#include "runtime/exec_env.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_reshard_helper.h"
 #include "storage/lake/tablet_splitter.h"
+#include "storage/lake/vacuum.h" // delete_files_async
 
 // Layer 1: Reshard operation overall metrics
 bvar::Adder<int64_t> g_tablet_reshard_total("tablet_reshard_total");
@@ -332,6 +334,32 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     return Status::OK();
 }
 
+// Transform |txn_log| (which still carries the source tablet id) for publish
+// on the merged tablet. Drops compaction as a no-op (background compaction
+// will rerun it on the merged tablet) and asynchronously deletes the output
+// files that the compaction had already written under the source tablet's path.
+// Other op shapes (op_write only, or empty log) pass through unchanged.
+Status convert_txn_log_for_merging(TxnLogPB* txn_log) {
+    if (!txn_log->has_op_compaction() && !txn_log->has_op_parallel_compaction()) {
+        return Status::OK();
+    }
+    delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
+            *txn_log, ExecEnv::GetInstance()->lake_tablet_manager()));
+    txn_log->clear_op_compaction();
+    txn_log->clear_op_parallel_compaction();
+    return Status::OK();
+}
+
+// Transform |txn_log| for publish on one of the split child tablets.
+Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr& base_tablet_metadata,
+                                     const PublishTabletInfo& publish_tablet_info) {
+    tablet_reshard_helper::set_all_data_files_shared(txn_log);
+    RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(txn_log, base_tablet_metadata->range()));
+    tablet_reshard_helper::update_txn_log_data_stats(txn_log, publish_tablet_info.get_split_count(),
+                                                     publish_tablet_info.get_split_index());
+    return Status::OK();
+}
+
 } // namespace
 
 std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info) {
@@ -345,35 +373,34 @@ std::ostream& operator<<(std::ostream& out, const PublishTabletInfo& tablet_info
 
 StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetadataPtr& base_tablet_metadata,
                                     const PublishTabletInfo& publish_tablet_info) {
-    if (publish_tablet_info.get_publish_tablet_type() == PublishTabletInfo::PUBLISH_NORMAL) {
+    const auto type = publish_tablet_info.get_publish_tablet_type();
+    if (type == PublishTabletInfo::PUBLISH_NORMAL) {
         return txn_log;
     }
 
     g_tablet_reshard_cross_publish_total << 1;
-    switch (publish_tablet_info.get_publish_tablet_type()) {
+    auto new_txn_log = std::make_shared<TxnLogPB>(*txn_log);
+
+    // Each case increments its per-type metric and applies any op-level
+    // transform while the log still carries the source tablet id (critical for
+    // MERGING, benign for others). Final tablet_id rewrite happens uniformly.
+    switch (type) {
     case PublishTabletInfo::SPLITTING_TABLET:
         g_tablet_reshard_cross_publish_splitting_total << 1;
+        RETURN_IF_ERROR(convert_txn_log_for_splitting(new_txn_log.get(), base_tablet_metadata, publish_tablet_info));
         break;
     case PublishTabletInfo::MERGING_TABLET:
         g_tablet_reshard_cross_publish_merging_total << 1;
+        RETURN_IF_ERROR(convert_txn_log_for_merging(new_txn_log.get()));
         break;
     case PublishTabletInfo::IDENTICAL_TABLET:
         g_tablet_reshard_cross_publish_identical_total << 1;
         break;
     default:
-        break;
+        return Status::InternalError(fmt::format("unknown publish tablet type: {}", static_cast<int>(type)));
     }
 
-    auto new_txn_log = std::make_shared<TxnLogPB>(*txn_log);
     new_txn_log->set_tablet_id(publish_tablet_info.get_tablet_id_in_metadata());
-
-    if (publish_tablet_info.get_publish_tablet_type() == PublishTabletInfo::SPLITTING_TABLET) {
-        tablet_reshard_helper::set_all_data_files_shared(new_txn_log.get());
-        RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(new_txn_log.get(), base_tablet_metadata->range()));
-        tablet_reshard_helper::update_txn_log_data_stats(new_txn_log.get(), publish_tablet_info.get_split_count(),
-                                                         publish_tablet_info.get_split_index());
-    }
-
     return new_txn_log;
 }
 

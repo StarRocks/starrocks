@@ -28,7 +28,11 @@ void PipelineTimerTask::waitUtilFinished() {
     if (_finished.load(std::memory_order_acquire)) {
         return;
     }
-    _has_consumer.store(true, std::memory_order_release);
+    // seq_cst is required: it pairs with the seq_cst load of _has_consumer in
+    // doRun() so that if doRun observes no consumer (and thus skips notify),
+    // this thread is guaranteed to observe _finished == true in the while-loop
+    // below and return without sleeping.
+    _has_consumer.store(true, std::memory_order_seq_cst);
     std::unique_lock lock(_mutex);
     while (!_finished) {
         _cv.wait(lock);
