@@ -294,7 +294,9 @@ private:
         std::shared_ptr<VectorIndexReader> ann_reader;
 
         // Helper method to check if rowid should always be built
-        bool always_build_rowid() const { return use_vector_index && !use_ivfpq; }
+        bool always_build_rowid() const {
+            return use_vector_index && !use_ivfpq;
+        }
     };
 
     // Inverted index related context, only created when needed
@@ -338,8 +340,12 @@ private:
     Status _apply_tablet_range();
     StatusOr<std::optional<Range<>>> _seek_range_to_rowid_range(const SeekRange& range);
 
-    uint32_t segment_id() const { return _segment->id(); }
-    uint32_t num_rows() const { return _segment->num_rows(); }
+    uint32_t segment_id() const {
+        return _segment->id();
+    }
+    uint32_t num_rows() const {
+        return _segment->num_rows();
+    }
 
     Status _lookup_ordinal(const SeekTuple& key, bool lower, rowid_t end, rowid_t* rowid);
     Status _lookup_ordinal(const Slice& index_key, const Schema& short_key_schema, bool lower, rowid_t end,
@@ -3676,20 +3682,25 @@ StatusOr<std::optional<Range<rowid_t>>> segment_seek_range_to_rowid_range(const 
 
     // Schema is only used by the iterator's constructor; _seek_range_to_rowid_range
     // picks the right schema from range.lower()/range.upper() on each side.
-    Schema iter_schema;
+    Schema iterator_schema;
     if (!range.upper().empty()) {
-        iter_schema = range.upper().schema();
+        iterator_schema = range.upper().schema();
     } else if (!range.lower().empty()) {
-        iter_schema = range.lower().schema();
+        iterator_schema = range.lower().schema();
     } else {
         // (-inf, +inf): the full segment.
         return std::optional<Range<rowid_t>>{Range<rowid_t>{0, segment->num_rows()}};
     }
 
-    SegmentReadOptions read_opts;
-    read_opts.lake_io_opts = lake_io_opts;
-    SegmentIterator iter(segment, iter_schema, read_opts);
-    return iter.resolve_range_to_rowid_range(range);
+    // SegmentReadOptions::stats is documented as required by ColumnIterator init
+    // (sanity_check() CHECK_NOTNULLs it), so supply a local OlapReaderStatistics
+    // even though nothing downstream inspects the accumulated stats here.
+    OlapReaderStatistics local_stats;
+    SegmentReadOptions read_options;
+    read_options.lake_io_opts = lake_io_opts;
+    read_options.stats = &local_stats;
+    SegmentIterator iterator(segment, iterator_schema, read_options);
+    return iterator.resolve_range_to_rowid_range(range);
 }
 
 } // namespace starrocks
