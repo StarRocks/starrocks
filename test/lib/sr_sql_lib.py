@@ -1385,13 +1385,7 @@ class StarrocksSQLApiLib(object):
                 exp = []
             return
 
-<<<<<<< HEAD
-        if any(re.compile(condition).search(sql) is not None for condition in skip.skip_res_cmd) or any(
-                condition in sql for condition in skip.skip_res_cmd
-        ):
-=======
         if any(re.search(condition, sql) for condition in skip.skip_res_cmd):
->>>>>>> 2974ba3bc2 ([BugFix] SQLTester strict empty result validation for SQL statements (#71982))
             log.info("[%s.check] skip check" % sql_id)
             return
 
