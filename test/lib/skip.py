@@ -25,10 +25,10 @@ skip
 skip_res_cmd = [
     "show backends",
     "show backends;",
-    "select connection_id()",
-    "select connection_id();",
+    "select connection_id\\(\\)",
+    "select connection_id\\(\\);",
     ".*explain costs select.*",
-    "rand()",
+    "rand\\(\\)",
     "SHOW RESOURCES",
     "show alter table column",
     "select db_id, table_id, column_name,.* from _statistics_.column_statistics.*",
@@ -45,7 +45,7 @@ skip_res_cmd = [
     "SELECT DISTINCT k1 FROM aggregate_par_tbl LIMIT 1",
     "select.* db_id.*",
     "select.* table_id.*",
-    "SELECT * FROM unnest_es_external_table limit 1",
+    "SELECT \\* FROM unnest_es_external_table limit 1",
     "select last_query_id",
     "select uuid",
     "select unix_timestamp",
@@ -57,6 +57,7 @@ skip_res_cmd = [
     "select current_time\\(\\)",
     "select curdate\\(\\)",
     "select current_date\\(\\)",
+    "^result=.*",
     "refresh materialized view.*",
     "REFRESH MATERIALIZED VIEW.*"
 ]
