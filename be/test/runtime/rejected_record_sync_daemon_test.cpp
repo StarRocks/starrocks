@@ -15,12 +15,12 @@
 #include "runtime/rejected_record_sync_daemon.h"
 
 #include <gtest/gtest.h>
+#include <utime.h>
 
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <string>
-#include <utime.h>
 #include <vector>
 
 #include "common/status.h"

@@ -79,13 +79,11 @@ TEST(RuntimeStateHelperRejectedRecordWriterTest, SelectQueryReturnsNullptr) {
 TEST(RuntimeStateHelperRejectedRecordWriterTest, LoadQueryReturnsNonNullWriter) {
     // Covers lines 174-178: lazy construction under lock.
     auto state = make_load_state();
-    EXPECT_EQ(nullptr, state->rejected_record_writer_or_null())
-            << "writer should not exist before first call";
+    EXPECT_EQ(nullptr, state->rejected_record_writer_or_null()) << "writer should not exist before first call";
 
     RejectedRecordWriter* w = RuntimeStateHelper::rejected_record_writer(state.get());
     ASSERT_NE(nullptr, w);
-    EXPECT_EQ(w, state->rejected_record_writer_or_null())
-            << "writer should be stored on the state after construction";
+    EXPECT_EQ(w, state->rejected_record_writer_or_null()) << "writer should be stored on the state after construction";
 }
 
 TEST(RuntimeStateHelperRejectedRecordWriterTest, LoadQueryReturnsSameInstanceOnSecondCall) {
@@ -105,8 +103,8 @@ TEST(RuntimeStateHelperAppendRejectedRecordTest, SelectQueryIsNoOp) {
     // Lines 129-131: query_type != LOAD → early return.
     auto state = make_select_state();
     // Should silently do nothing.
-    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(
-            state.get(), "raw record", "error msg", "source_file.csv"));
+    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(state.get(), "raw record", "error msg",
+                                                                               "source_file.csv"));
     // No writer should have been created.
     EXPECT_EQ(nullptr, state->rejected_record_writer_or_null());
 }
@@ -117,8 +115,8 @@ TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryCreatesWriterAndDelega
     // resolve_file_path and the writer construction is exercised.
     auto state = make_load_state();
 
-    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(
-            state.get(), "10001,Alice,bad_value", "column type mismatch", "data.csv"));
+    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(state.get(), "10001,Alice,bad_value",
+                                                                               "column type mismatch", "data.csv"));
 
     // Writer must have been constructed as a side-effect.
     EXPECT_NE(nullptr, state->rejected_record_writer_or_null());
@@ -129,8 +127,8 @@ TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryEmptySourceIsWrappedWi
     // the writer's append_raw is called with an empty source_info string.
     auto state = make_load_state();
 
-    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(
-            state.get(), "raw_row", "some error", /*source=*/""));
+    EXPECT_NO_FATAL_FAILURE(
+            RuntimeStateHelper::append_rejected_record_to_file(state.get(), "raw_row", "some error", /*source=*/""));
     EXPECT_NE(nullptr, state->rejected_record_writer_or_null());
 }
 
@@ -139,8 +137,8 @@ TEST(RuntimeStateHelperAppendRejectedRecordTest, LoadQueryNonEmptySourceBuildsJs
     // {"source": "<source>"} is constructed and passed as source_info.
     auto state = make_load_state();
 
-    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(
-            state.get(), "10001,Alice", "type error", "hdfs://nn/data/part0000.csv"));
+    EXPECT_NO_FATAL_FAILURE(RuntimeStateHelper::append_rejected_record_to_file(state.get(), "10001,Alice", "type error",
+                                                                               "hdfs://nn/data/part0000.csv"));
     EXPECT_NE(nullptr, state->rejected_record_writer_or_null());
 }
 

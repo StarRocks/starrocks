@@ -121,7 +121,7 @@ TQueryOptions make_load_options(TLoadJobType::type job_type, bool set_job_type =
 // empty → append_serialized skips the write but still runs all the JSON-
 // building code and the enable_log_rejected_record() guard.
 std::unique_ptr<RuntimeState> make_load_state(TLoadJobType::type job_type = TLoadJobType::STREAM_LOAD,
-                                               bool set_job_type = true) {
+                                              bool set_job_type = true) {
     TQueryOptions opts = make_load_options(job_type, set_job_type);
     TQueryGlobals globals;
     TUniqueId id;
@@ -334,8 +334,8 @@ TEST(RejectedRecordWriterAppendTest, AppendFromChunkNullSourceInfoJson) {
     std::vector<std::string> col_names = {"score"};
 
     // source_info is valid JSON object → add_parsed_json happy path with a null column value
-    writer.append_from_chunk(*chunk, 0, col_names, "NULL_VIOLATION", "NOT NULL column received null",
-                             "score", R"({"file":"data.orc"})");
+    writer.append_from_chunk(*chunk, 0, col_names, "NULL_VIOLATION", "NOT NULL column received null", "score",
+                             R"({"file":"data.orc"})");
 }
 
 TEST(RejectedRecordWriterAppendTest, AppendWithUserName) {
