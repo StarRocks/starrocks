@@ -22,8 +22,6 @@
 //   567      writer->append_from_chunk call
 //   571      closing / return
 
-#include "formats/orc/orc_chunk_reader.h"
-
 #include <gtest/gtest.h>
 
 #include <memory>
@@ -34,6 +32,7 @@
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "formats/orc/orc_chunk_reader.h"
 #include "gen_cpp/InternalService_types.h"
 #include "rapidjson/document.h"
 #include "runtime/rejected_record_writer.h"

@@ -555,9 +555,8 @@ void orc_emit_rejected_rows(RejectedRecordWriter* writer, const Chunk& chunk,
         // source_info is kept minimal -- ORC doesn't have a per-row file
         // offset in this path. The Phase 3 daemon enriches with the load
         // label / file name from job metadata.
-        writer->append_from_chunk(chunk, i, col_names, "ORC_ROW_REJECTED",
-                                  "Row filtered by ORC broker-load validation", /*error_column=*/"",
-                                  "{\"format\":\"orc\"}");
+        writer->append_from_chunk(chunk, i, col_names, "ORC_ROW_REJECTED", "Row filtered by ORC broker-load validation",
+                                  /*error_column=*/"", "{\"format\":\"orc\"}");
     }
 }
 

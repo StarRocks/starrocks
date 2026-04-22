@@ -790,8 +790,7 @@ TEST(RejectedRecordSyncDaemonRemoveFileTest, RemoveFileErrorBranchHitOnPermissio
 
     // Make the directory non-writable.
     std::error_code ec;
-    std::filesystem::permissions(inner_dir, std::filesystem::perms::owner_read |
-                                                    std::filesystem::perms::owner_exec,
+    std::filesystem::permissions(inner_dir, std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec,
                                  std::filesystem::perm_options::replace, ec);
     if (ec) {
         GTEST_SKIP() << "Cannot set directory permissions: " << ec.message();
@@ -802,8 +801,8 @@ TEST(RejectedRecordSyncDaemonRemoveFileTest, RemoveFileErrorBranchHitOnPermissio
         std::string dir;
         ~Restore() {
             std::error_code e;
-            std::filesystem::permissions(dir, std::filesystem::perms::owner_all,
-                                         std::filesystem::perm_options::replace, e);
+            std::filesystem::permissions(dir, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace,
+                                         e);
         }
     } restore{inner_dir};
 

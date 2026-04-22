@@ -21,11 +21,10 @@
 //   244  format_type != FORMAT_ORC
 //   245  return Status::InternalError(...)
 
-#include "exec/file_scan_node.h"
-
 #include <gtest/gtest.h>
 
 #include "common/status.h"
+#include "exec/file_scan_node.h"
 #include "gen_cpp/InternalService_types.h"
 
 namespace starrocks {
@@ -37,16 +36,11 @@ namespace starrocks {
 
 TEST(CheckRejectedRecordFormatSupportTest, LoggingDisabledAlwaysOk) {
     // logging_enabled = false -> skip check entirely.
-    EXPECT_TRUE(
-            check_rejected_record_format_support(false, TFileFormatType::FORMAT_AVRO).ok());
-    EXPECT_TRUE(
-            check_rejected_record_format_support(false, TFileFormatType::FORMAT_CSV_PLAIN).ok());
-    EXPECT_TRUE(
-            check_rejected_record_format_support(false, TFileFormatType::FORMAT_JSON).ok());
-    EXPECT_TRUE(
-            check_rejected_record_format_support(false, TFileFormatType::FORMAT_PARQUET).ok());
-    EXPECT_TRUE(
-            check_rejected_record_format_support(false, TFileFormatType::FORMAT_ORC).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(false, TFileFormatType::FORMAT_AVRO).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(false, TFileFormatType::FORMAT_CSV_PLAIN).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(false, TFileFormatType::FORMAT_JSON).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(false, TFileFormatType::FORMAT_PARQUET).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(false, TFileFormatType::FORMAT_ORC).ok());
 }
 
 // ===========================================================================
@@ -55,14 +49,10 @@ TEST(CheckRejectedRecordFormatSupportTest, LoggingDisabledAlwaysOk) {
 // ===========================================================================
 
 TEST(CheckRejectedRecordFormatSupportTest, SupportedFormatsReturnOkWhenLoggingEnabled) {
-    EXPECT_TRUE(
-            check_rejected_record_format_support(true, TFileFormatType::FORMAT_CSV_PLAIN).ok());
-    EXPECT_TRUE(
-            check_rejected_record_format_support(true, TFileFormatType::FORMAT_JSON).ok());
-    EXPECT_TRUE(
-            check_rejected_record_format_support(true, TFileFormatType::FORMAT_PARQUET).ok());
-    EXPECT_TRUE(
-            check_rejected_record_format_support(true, TFileFormatType::FORMAT_ORC).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(true, TFileFormatType::FORMAT_CSV_PLAIN).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(true, TFileFormatType::FORMAT_JSON).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(true, TFileFormatType::FORMAT_PARQUET).ok());
+    EXPECT_TRUE(check_rejected_record_format_support(true, TFileFormatType::FORMAT_ORC).ok());
 }
 
 // ===========================================================================
@@ -106,8 +96,7 @@ TEST(CheckRejectedRecordFormatSupportTest, ErrorMessageMatchesCanonicalString) {
     auto st = check_rejected_record_format_support(true, TFileFormatType::FORMAT_AVRO);
     EXPECT_FALSE(st.ok());
     // Both file_scan_node.cpp and file_connector.cpp use the same message.
-    EXPECT_STREQ("only support csv/json/parquet/orc format to log rejected record",
-                 st.message().c_str());
+    EXPECT_STREQ("only support csv/json/parquet/orc format to log rejected record", st.message().c_str());
 }
 
 } // namespace starrocks
