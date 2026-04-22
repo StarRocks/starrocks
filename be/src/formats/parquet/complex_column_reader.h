@@ -462,9 +462,9 @@ public:
                                           const uint64_t rg_num_rows) const override;
 
 private:
-    StatusOr<bool> _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
-                                                uint64_t rg_num_rows, const ColumnReader** leaf_reader,
-                                                std::vector<const ColumnPredicate*>* rewritten_predicates) const;
+    bool _prepare_delegate_predicates(const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool,
+                                      uint64_t rg_num_rows, const ColumnReader** leaf_reader,
+                                      std::vector<const ColumnPredicate*>* rewritten_predicates) const;
 
     VariantColumnReader* _source;
     VariantPath _leaf_path;

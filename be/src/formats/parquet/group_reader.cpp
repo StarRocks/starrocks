@@ -616,7 +616,9 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         // ── Phase 4: variant virtual conjunct evaluation ───────────────────────
         // active_chunk has count rows; variant_filter is also size count.
         // Simple element-wise AND merges it with chunk_filter (also size count).
-        ASSIGN_OR_RETURN(Filter variant_filter, _apply_deferred_variant_conjuncts(active_chunk, count));
+        auto deferred_projected_chunk = std::make_shared<Chunk>();
+        ASSIGN_OR_RETURN(Filter variant_filter,
+                         _apply_deferred_variant_conjuncts(active_chunk, count, &deferred_projected_chunk));
         if (!variant_filter.empty()) {
             if (SIMD::count_nonzero(variant_filter.data(), variant_filter.size()) == 0) {
                 continue;
@@ -634,6 +636,11 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             active_chunk->filter(chunk_filter);
             if (active_chunk->num_rows() == 0) {
                 continue;
+            }
+            // Keep deferred projected virtual columns aligned with active_chunk rows.
+            // Both were built on the same pre-filter row space [0, count).
+            if (deferred_projected_chunk != nullptr && deferred_projected_chunk->num_columns() > 0) {
+                deferred_projected_chunk->filter_range(chunk_filter, 0, count);
             }
         }
 
@@ -693,7 +700,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         {
             SCOPED_RAW_TIMER(&_param.stats->group_dict_decode_ns);
             *row_count = active_chunk->num_rows();
-            RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, chunk));
+            RETURN_IF_ERROR(_fill_dst_chunk(active_chunk, deferred_projected_chunk, chunk));
         }
         break;
     }
@@ -1486,28 +1493,31 @@ const cctz::time_zone& GroupReader::_get_variant_projection_timezone() {
 //
 // Returns an empty Filter when there are no conjuncts (all rows pass).
 // Returns the applied filter otherwise; caller checks for all-zero to skip the range.
-StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count) {
+StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count,
+                                                                ChunkPtr* projected_chunk) {
+    DCHECK(projected_chunk != nullptr);
+    *projected_chunk = std::make_shared<Chunk>();
     if (_deferred_variant_virtual_conjunct_ctxs.empty()) {
         return Filter{};
     }
     SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
 
-    // Build eval_chunk: one projected column per virtual slot whose source is available.
+    // Build eval_chunk: one projected column per deferred-conjunct virtual slot whose source is available.
     // Physical sources and active hidden sources are in active_chunk.
     // Lazy hidden sources are absent from active_chunk and are skipped here; by design,
     // virtual columns with conjuncts always use active sources, so this is correct.
     ChunkPtr eval_chunk = std::make_shared<Chunk>();
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
-        bool source_in_chunk = active_chunk->is_slot_exist(projection.source_slot_id);
         bool has_conjunct = _deferred_conjunct_slot_ids.count(slot_id) > 0;
-        if (!source_in_chunk) {
-            if (has_conjunct) {
-                return Status::InternalError(
-                        fmt::format("variant virtual column {} has deferred conjunct but source slot {} "
-                                    "is not in active_chunk",
-                                    slot_id, projection.source_slot_id));
-            }
+        if (!has_conjunct) {
             continue;
+        }
+        bool source_in_chunk = active_chunk->is_slot_exist(projection.source_slot_id);
+        if (!source_in_chunk) {
+            return Status::InternalError(
+                    fmt::format("variant virtual column {} has deferred conjunct but source slot {} "
+                                "is not in active_chunk",
+                                slot_id, projection.source_slot_id));
         }
         const ColumnPtr& source_col = active_chunk->get_column_by_slot_id(projection.source_slot_id);
         ASSIGN_OR_RETURN(auto result_col,
@@ -1515,6 +1525,7 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
                                                      _get_variant_projection_timezone()));
         eval_chunk->append_column(std::move(result_col), slot_id);
     }
+    *projected_chunk = eval_chunk;
 
     // Guard: if no columns were projected, treat as all-pass.
     if (eval_chunk->num_columns() == 0) {
@@ -1546,7 +1557,7 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
 //   - Lazy hidden variant sources (read in Phase 6, merged into active_chunk)
 // All projection sources are therefore found directly in active_chunk.
 //
-Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
+Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, const ChunkPtr& projected_chunk, ChunkPtr* chunk) {
     active_chunk->check_or_die();
 
     // Pass 1: virtual projections — must run BEFORE Pass 2.
@@ -1555,6 +1566,22 @@ Status GroupReader::_fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk) {
     // 791-793).  Pass 2 performs a destructive swap that would move the physical source
     // column out of active_chunk, so virtual projections must read their sources first.
     for (const auto& [slot_id, projection] : _variant_virtual_projections) {
+        // Reuse deferred-conjunct projection if available; this avoids a second
+        // project_variant_leaf_column(path seek + decode) for the same virtual slot.
+        if (projected_chunk != nullptr && projected_chunk->is_slot_exist(slot_id)) {
+            const ColumnPtr& projected_col = projected_chunk->get_column_by_slot_id(slot_id);
+            if (projected_col == nullptr) {
+                return Status::InternalError(
+                        fmt::format("variant deferred projected column for slot {} is null", slot_id));
+            }
+            if (projected_col->size() != active_chunk->num_rows()) {
+                return Status::InternalError(
+                        fmt::format("variant deferred projected column row count mismatch for slot {}: {} vs {}",
+                                    slot_id, projected_col->size(), active_chunk->num_rows()));
+            }
+            (*chunk)->get_column_by_slot_id(slot_id) = projected_col;
+            continue;
+        }
         if (!active_chunk->is_slot_exist(projection.source_slot_id)) {
             return Status::InternalError(fmt::format("variant virtual column source slot {} not found in active_chunk",
                                                      projection.source_slot_id));

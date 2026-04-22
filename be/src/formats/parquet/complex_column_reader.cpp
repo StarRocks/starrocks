@@ -2151,27 +2151,32 @@ bool VariantColumnReader::fallback_values_all_null_in_row_group_for_path(const V
     return _column_chunk_all_null_for_num_rows(found_node->value_reader.get(), rg_num_rows);
 }
 
-StatusOr<bool> VariantVirtualZoneMapReader::_prepare_delegate_predicates(
+bool VariantVirtualZoneMapReader::_prepare_delegate_predicates(
         const std::vector<const ColumnPredicate*>& predicates, ObjectPool* pool, const uint64_t rg_num_rows,
         const ColumnReader** leaf_reader, std::vector<const ColumnPredicate*>* rewritten_predicates) const {
     DCHECK(pool != nullptr);
     DCHECK(leaf_reader != nullptr);
     DCHECK(rewritten_predicates != nullptr);
+    *leaf_reader = nullptr;
 
     if (_source == nullptr) {
-        return Status::NotFound("variant virtual leaf reader is not available");
+        VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+                  << " because source reader is unavailable";
+        return false;
     }
     *leaf_reader = _source->filterable_typed_value_reader_for_path(_leaf_path);
     const TypeDescriptor* leaf_type = _source->typed_value_read_type_for_path(_leaf_path);
     if (*leaf_reader == nullptr || leaf_type == nullptr) {
-        return Status::NotFound("variant virtual leaf reader is not available");
+        VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+                  << " because leaf reader/type is unavailable";
+        return false;
     }
     // Variant shredding only permits data skipping on typed_value statistics when the paired
     // fallback `value` column is null for the entire row group. Otherwise min/max/bloom on
     // typed_value cover only the typed subset, while the engine may still match fallback rows
     // via implicit variant casts (for example Variant -> STRING), so skipping would be unsafe.
     if (!_source->fallback_values_all_null_in_row_group_for_path(_leaf_path, rg_num_rows)) {
-        LOG(INFO) << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+        VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
                   << " because fallback value column may contain non-null rows in this row group";
         return false;
     }
@@ -2180,8 +2185,10 @@ StatusOr<bool> VariantVirtualZoneMapReader::_prepare_delegate_predicates(
     // once during planning instead of per filter invocation.
     Status st = rewrite_delegate_predicates(predicates, *leaf_type, pool, rewritten_predicates);
     if (!st.ok()) {
-        return st.clone_and_prepend(fmt::format("slot type {} cannot delegate to leaf type {}",
-                                                _virtual_slot_type.debug_string(), leaf_type->debug_string()));
+        VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
+                  << ", slot type " << _virtual_slot_type.debug_string() << " cannot delegate to leaf type "
+                  << leaf_type->debug_string() << ": " << st.to_string();
+        return false;
     }
     return true;
 }
@@ -2192,13 +2199,7 @@ StatusOr<bool> VariantVirtualZoneMapReader::row_group_zone_map_filter(
     ObjectPool pool;
     const ColumnReader* leaf = nullptr;
     std::vector<const ColumnPredicate*> rewritten_predicates;
-    auto prepare = _prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates);
-    if (!prepare.ok()) {
-        LOG(WARNING) << "skip variant virtual zone-map pushdown: " << prepare.status().to_string();
-        return false;
-    }
-    bool can_delegate = prepare.value();
-    if (!can_delegate) {
+    if (!_prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates)) {
         return false;
     }
     return leaf->row_group_zone_map_filter(rewritten_predicates, pred_relation, rg_first_row, rg_num_rows);
@@ -2210,13 +2211,7 @@ StatusOr<bool> VariantVirtualZoneMapReader::page_index_zone_map_filter(
     ObjectPool pool;
     const ColumnReader* leaf = nullptr;
     std::vector<const ColumnPredicate*> rewritten_predicates;
-    auto prepare = _prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates);
-    if (!prepare.ok()) {
-        LOG(WARNING) << "skip variant virtual page-index pushdown: " << prepare.status().to_string();
-        return false;
-    }
-    bool can_delegate = prepare.value();
-    if (!can_delegate) {
+    if (!_prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates)) {
         return false;
     }
 
@@ -2232,13 +2227,7 @@ StatusOr<bool> VariantVirtualZoneMapReader::row_group_bloom_filter(
     ObjectPool pool;
     const ColumnReader* leaf = nullptr;
     std::vector<const ColumnPredicate*> rewritten_predicates;
-    auto prepare = _prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates);
-    if (!prepare.ok()) {
-        LOG(WARNING) << "skip variant virtual bloom-filter pushdown: " << prepare.status().to_string();
-        return false;
-    }
-    bool can_delegate = prepare.value();
-    if (!can_delegate) {
+    if (!_prepare_delegate_predicates(predicates, &pool, rg_num_rows, &leaf, &rewritten_predicates)) {
         return false;
     }
     return leaf->row_group_bloom_filter(rewritten_predicates, pred_relation, rg_first_row, rg_num_rows);
