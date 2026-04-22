@@ -96,10 +96,11 @@ public class FunctionAnalyzer {
 
             if (functionCallExpr.getChild(1).getType().isDatetime()) {
 
-                if (!Lists.newArrayList("year", "quarter", "month", "week", "day", "hour", "minute", "second")
-                        .contains(lowerParam)) {
+                if (!Lists.newArrayList("year", "quarter", "month", "week", "day", "hour", "minute", "second",
+                        "millisecond", "microsecond").contains(lowerParam)) {
                     throw new SemanticException("date_trunc function can't support argument other than " +
-                            "year|quarter|month|week|day|hour|minute|second", functionCallExpr.getChild(0).getPos());
+                            "year|quarter|month|week|day|hour|minute|second|millisecond|microsecond",
+                            functionCallExpr.getChild(0).getPos());
                 }
             } else if (functionCallExpr.getChild(1).getType().isDate()) {
                 if (!Lists.newArrayList("year", "quarter", "month", "week", "day")

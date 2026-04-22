@@ -78,9 +78,11 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select date_trunc(\"hour\", th) from tall");
         analyzeSuccess("select date_trunc(\"minute\", th) from tall");
         analyzeSuccess("select date_trunc(\"second\", th) from tall");
+        analyzeSuccess("select date_trunc(\"millisecond\", th) from tall");
+        analyzeSuccess("select date_trunc(\"microsecond\", th) from tall");
 
         analyzeFail("select date_trunc(\"foo\", th) from tall",
-                "date_trunc function can't support argument other than year|quarter|month|week|day|hour|minute|second");
+                "year|quarter|month|week|day|hour|minute|second|millisecond|microsecond");
 
         analyzeFail("select date_trunc(ta, th) from tall",
                 "date_trunc requires first parameter must be a string constant");
