@@ -272,7 +272,9 @@ StatusOr<ColumnPtr> build_variant_projection_column(const VariantColumn* variant
         RETURN_IF_ERROR(cast_status);
     }
 
-    return builder.build(false);
+    // Keep virtual-column schema stable across chunks: variant leaf extraction is semantically nullable,
+    // so always return NullableColumn instead of data-dependent nullable/non-nullable output.
+    return builder.build_nullable_column();
 }
 
 template <LogicalType ResultType>
@@ -313,7 +315,9 @@ StatusOr<ColumnPtr> build_decimal_variant_projection_column(const VariantColumn*
         }
     }
 
-    return builder.build(false);
+    // Keep virtual-column schema stable across chunks: variant leaf extraction is semantically nullable,
+    // so always return NullableColumn instead of data-dependent nullable/non-nullable output.
+    return builder.build_nullable_column();
 }
 
 StatusOr<ColumnPtr> project_variant_leaf_column(const ColumnPtr& variant_src, const VariantPath& path,
@@ -640,7 +644,14 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             // Keep deferred projected virtual columns aligned with active_chunk rows.
             // Both were built on the same pre-filter row space [0, count).
             if (deferred_projected_chunk != nullptr && deferred_projected_chunk->num_columns() > 0) {
-                deferred_projected_chunk->filter_range(chunk_filter, 0, count);
+                if (deferred_projected_chunk->num_rows() == count) {
+                    deferred_projected_chunk->filter_range(chunk_filter, 0, count);
+                } else if (deferred_projected_chunk->num_rows() != active_chunk->num_rows()) {
+                    return Status::InternalError(
+                            fmt::format("variant deferred projected chunk row count mismatch: projected_rows={}, "
+                                        "pre_filter_rows={}, active_rows={}",
+                                        deferred_projected_chunk->num_rows(), count, active_chunk->num_rows()));
+                }
             }
         }
 

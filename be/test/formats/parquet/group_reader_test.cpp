@@ -329,6 +329,10 @@ static StatusOr<std::string> variant_json_at(const ColumnPtr& column, size_t row
     return row->to_json();
 }
 
+static Status fill_dst_chunk_without_projected(GroupReader* group_reader, ChunkPtr& active_chunk, ChunkPtr* dst_chunk) {
+    return group_reader->_fill_dst_chunk(active_chunk, ChunkPtr{}, dst_chunk);
+}
+
 static ColumnPtr make_typed_only_variant_column_for_virtual_column_test() {
     auto variant = VariantColumn::create();
     MutableColumns typed_columns;
@@ -2591,7 +2595,7 @@ TEST_F(GroupReaderTest, VariantVirtualColumnMapsPrefixAndLeafPathsIndependently)
     dst_chunk->append_column(ColumnHelper::create_column(prefix_slot->type(), true), prefix_slot->id());
     dst_chunk->append_column(ColumnHelper::create_column(source_slot->type(), true), source_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
 
     const auto& leaf_result = dst_chunk->get_column_by_slot_id(leaf_slot->id());
     ASSERT_EQ(2, leaf_result->size());
@@ -2634,7 +2638,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromPhysicalSourceSlot)
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     EXPECT_EQ(11, result->get(0).get_int64());
@@ -2668,7 +2672,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnReturnsNullForNullAndMi
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     EXPECT_TRUE(result->is_null(0));
@@ -2701,7 +2705,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedVirtualColumnRespectsSourc
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     EXPECT_TRUE(result->is_null(0));
@@ -2734,7 +2738,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsExactTypedDecimalVirtualColumn) {
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     EXPECT_EQ(1050, result->get(0).get_int32());
@@ -2767,7 +2771,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnWithWidening) {
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     EXPECT_EQ(1050, result->get(0).get_int64());
@@ -2800,7 +2804,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualVarcharColumnFromPhysicalSour
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     EXPECT_EQ("11", result->get(0).get_slice().to_string());
@@ -2838,7 +2842,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnFromHiddenVariantSource
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     EXPECT_EQ(11, result->get(0).get_int64());
@@ -2882,7 +2886,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsVirtualColumnWhenVirtualSlotPrecedes
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
     dst_chunk->append_column(ColumnHelper::create_column(source_slot->type(), true), source_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
 
     const auto& projected = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, projected->size());
@@ -2980,7 +2984,7 @@ TEST_F(GroupReaderTest, ProcessColumnsDefersVirtualColumnConjunctsUntilAfterProj
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
     dst_chunk->append_column(ColumnHelper::create_column(source_slot->type(), true), source_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     ASSERT_EQ(2, dst_chunk->num_rows());
 
     ASSERT_OK(ChunkPredicateEvaluator::eval_conjuncts(group_reader->_deferred_variant_virtual_conjunct_ctxs,
@@ -3398,7 +3402,7 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenSourceSlotMissingFromActiveC
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
 
-    auto status = group_reader->_fill_dst_chunk(active_chunk, ChunkPtr{}, &dst_chunk);
+    auto status = fill_dst_chunk_without_projected(group_reader, active_chunk, &dst_chunk);
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_internal_error());
 }
@@ -3450,7 +3454,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnFromRawVariantFa
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     // 10 → 10.00 in DECIMAL32(5,2) stored as 1000; 20 → 2000.
@@ -3492,7 +3496,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnFromBigintTypedL
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     // 11 → 11.00 stored as 1100; 22 → 2200.
@@ -3535,7 +3539,7 @@ TEST_F(GroupReaderTest, FillDstChunkProjectsDecimalVirtualColumnOverflowBecomesN
     auto dst_chunk = std::make_shared<Chunk>();
     dst_chunk->append_column(ColumnHelper::create_column(virtual_slot->type(), true), virtual_slot->id());
 
-    ASSERT_OK(group_reader->_fill_dst_chunk(read_chunk, ChunkPtr{}, &dst_chunk));
+    ASSERT_OK(fill_dst_chunk_without_projected(group_reader, read_chunk, &dst_chunk));
     const auto& result = dst_chunk->get_column_by_slot_id(virtual_slot->id());
     ASSERT_EQ(2, result->size());
     EXPECT_EQ(500, result->get(0).get_int32()); // 5 × 100 = 500
