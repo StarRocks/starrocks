@@ -42,8 +42,7 @@ protected:
 // CSVScanner::ScannerCSVReader::_fill_buffer for the state-machine parser.
 class StringCSVReader : public starrocks::CSVReader {
 public:
-    StringCSVReader(const starrocks::CSVParseOptions& parse_options, std::string data,
-                    size_t max_chunk = SIZE_MAX)
+    StringCSVReader(const starrocks::CSVParseOptions& parse_options, std::string data, size_t max_chunk = SIZE_MAX)
             : CSVReader(parse_options), _data(std::move(data)), _max_chunk(max_chunk) {}
 
     // Collects each row's fields as copied strings so tests don't have to

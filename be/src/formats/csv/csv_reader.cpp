@@ -270,10 +270,10 @@ Status CSVReader::more_rows() {
                         *(_buff.position()) == '\r') {
                         if (_buff.available() < 2) {
                             status = readMore(notGetLine);
-                            if (!status.ok()) {                // LCOV_EXCL_START
+                            if (!status.ok()) { // LCOV_EXCL_START
                                 is_enclose_column = true;
                                 curState = NEWROW;
-                                goto newrow_label;             // LCOV_EXCL_STOP
+                                goto newrow_label; // LCOV_EXCL_STOP
                             }
                         }
                         if (_buff.available() >= 2 && *(_buff.position() + 1) == '\n') {
