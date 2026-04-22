@@ -188,21 +188,26 @@ TEST(OrcEmitRejectedRowsTest, BuildJsonFromChunkContainsCorrectValues) {
 // Covers lines 554-557 of orc_chunk_reader.cpp.
 // ===========================================================================
 
-TEST(OrcEmitRejectedRowsTest, NullSlotDescriptorFallsBackToEmptyColName) {
-    // Single-row chunk, single column, slot is nullptr.
+TEST(OrcEmitRejectedRowsTest, NullSlotDescriptorFallsBackToPositionalColName) {
+    // When the col_names entry is empty (as produced by the nullptr-slot path
+    // in orc_emit_rejected_rows: `slot != nullptr ? slot->col_name() : ""`),
+    // RejectedRecordWriter::pick_name falls back to "col_<idx>" so the row is
+    // still capturable. Verify that with col_names={""}
+    // the JSON uses "col_0" (positional fallback), not an empty key.
     auto col = Int64Column::create();
     col->append(42);
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(std::move(col), 1);
 
+    // Empty string triggers the positional-name fallback inside pick_name().
     std::vector<std::string> col_names = {""};
     std::string json = RejectedRecordWriter::build_json_from_chunk(*chunk, 0, col_names);
 
-    // JSON should have an empty-string key with value "42".
+    // JSON should use the positional fallback key "col_0".
     auto doc = parse_json(json);
     ASSERT_TRUE(doc.IsObject());
-    ASSERT_TRUE(doc.HasMember(""));
-    EXPECT_STREQ("42", doc[""].GetString());
+    ASSERT_TRUE(doc.HasMember("col_0")) << "Expected positional key 'col_0', got: " << json;
+    EXPECT_STREQ("42", doc["col_0"].GetString());
 }
 
 // ===========================================================================
