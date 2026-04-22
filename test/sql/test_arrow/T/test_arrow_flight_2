@@ -41,16 +41,4 @@ CREATE TABLE flight_demo.test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DI
 
 INSERT INTO flight_demo.test2 VALUES (1, 18), (2, 20);
 
-<<<<<<< HEAD
 SELECT * FROM (SELECT id, name FROM flight_demo.test) AS sub WHERE id = 1;
-=======
-SELECT * FROM test order by id asc;
-
-[UC]SHOW CREATE TABLE test;
-
-CREATE TABLE test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
-
-INSERT INTO test2 VALUES (1, 18), (2, 20);
-
-SELECT * FROM (SELECT id, name FROM test) AS sub WHERE id = 1;
->>>>>>> 2974ba3bc2 ([BugFix] SQLTester strict empty result validation for SQL statements (#71982))
