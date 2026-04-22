@@ -263,20 +263,17 @@ Status CSVReader::more_rows() {
                     _escape_pos.insert(_buff.position_offset() - 1);
                 } else {
                     // CRLF compatibility (issue #51725): when the row
-                    // delimiter is exactly "\n" and the bytes after the
-                    // closing enclose begin a "\r\n" sequence, consume
-                    // the stray '\r' here. Otherwise ORDINARY would
-                    // retain it as column content, producing a trailing
-                    // "\r" (and its visible enclose char) in the emitted
-                    // value.
+                    // delimiter is "\n" and the next two bytes are
+                    // "\r\n", consume the stray '\r' here so ORDINARY
+                    // does not retain it as column content.
                     if (_row_delimiter_length == 1 && _parse_options.row_delimiter[0] == '\n' &&
                         *(_buff.position()) == '\r') {
-                        if (UNLIKELY(_buff.available() < 2)) {
+                        if (_buff.available() < 2) {
                             status = readMore(notGetLine);
-                            if (!status.ok()) {
+                            if (!status.ok()) {                // LCOV_EXCL_START
                                 is_enclose_column = true;
                                 curState = NEWROW;
-                                goto newrow_label;
+                                goto newrow_label;             // LCOV_EXCL_STOP
                             }
                         }
                         if (_buff.available() >= 2 && *(_buff.position() + 1) == '\n') {

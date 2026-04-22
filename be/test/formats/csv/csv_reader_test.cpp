@@ -42,8 +42,9 @@ protected:
 // CSVScanner::ScannerCSVReader::_fill_buffer for the state-machine parser.
 class StringCSVReader : public starrocks::CSVReader {
 public:
-    StringCSVReader(const starrocks::CSVParseOptions& parse_options, std::string data)
-            : CSVReader(parse_options), _data(std::move(data)) {}
+    StringCSVReader(const starrocks::CSVParseOptions& parse_options, std::string data,
+                    size_t max_chunk = SIZE_MAX)
+            : CSVReader(parse_options), _data(std::move(data)), _max_chunk(max_chunk) {}
 
     // Collects each row's fields as copied strings so tests don't have to
     // worry about the underlying buffer being reused.
@@ -72,7 +73,7 @@ protected:
         DCHECK(_buff.free_space() > 0);
         size_t free_space = _buff.free_space();
         size_t remaining = _data.size() - _pos;
-        size_t to_copy = std::min(free_space, remaining);
+        size_t to_copy = std::min({free_space, remaining, _max_chunk});
         if (to_copy > 0) {
             memcpy(_buff.limit(), _data.data() + _pos, to_copy);
             _buff.add_limit(to_copy);
@@ -103,6 +104,7 @@ protected:
 private:
     std::string _data;
     size_t _pos = 0;
+    size_t _max_chunk;
 };
 
 class CSVReaderTest : public ::testing::Test {
@@ -353,6 +355,27 @@ TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_with_escaped_enclose) {
     ASSERT_EQ(2u, rows[0].size());
     EXPECT_EQ("a", rows[0][0]);
     EXPECT_EQ("it's fine", rows[0][1]);
+}
+
+// Exercises the readMore() path inside the CRLF fix: feeding data one
+// byte at a time forces the buffer to hold only '\r' when the closing
+// enclose is consumed, so _buff.available() < 2 triggers readMore to
+// pull in the '\n'. Covers the buffer-boundary scenario flagged in
+// code review.
+TEST_F(CSVReaderTest, test_more_rows_enclose_crlf_buffer_boundary) {
+    starrocks::CSVParseOptions options("\n", ",", 0, false, 0, '\'');
+    std::string data = "a,'{\"x\":1}'\r\nb,'{\"y\":2}'\r\n";
+    StringCSVReader reader(options, data, 1);
+
+    std::vector<std::vector<std::string>> rows;
+    ASSERT_TRUE(reader.read_all_rows(&rows).ok());
+    ASSERT_EQ(2u, rows.size());
+    ASSERT_EQ(2u, rows[0].size());
+    EXPECT_EQ("a", rows[0][0]);
+    EXPECT_EQ("{\"x\":1}", rows[0][1]);
+    ASSERT_EQ(2u, rows[1].size());
+    EXPECT_EQ("b", rows[1][0]);
+    EXPECT_EQ("{\"y\":2}", rows[1][1]);
 }
 
 } // namespace starrocks::csv
