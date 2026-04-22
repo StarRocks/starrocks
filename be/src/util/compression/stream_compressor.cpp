@@ -396,7 +396,7 @@ StatusOr<std::unique_ptr<StreamCompressor>> StreamCompressor::create_compressor(
         compressor = std::make_unique<ZstdStreamCompressor>();
         break;
     default:
-        return Status::InternalError(fmt::format("Unknown compress type: {}", type));
+        return Status::InternalError(fmt::format("Unknown compress type: {}", static_cast<int>(type)));
     }
 
     RETURN_IF_ERROR(compressor->init());
