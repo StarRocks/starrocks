@@ -210,6 +210,9 @@ private:
     //     _fill_dst_chunk.
     StatusOr<Filter> _apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count,
                                                        ChunkPtr* projected_chunk);
+    Status _align_deferred_projected_chunk_after_filter(const ChunkPtr& active_chunk,
+                                                        const ChunkPtr& deferred_projected_chunk,
+                                                        const Filter& chunk_filter, size_t pre_filter_rows);
     // Fills output chunk and computes virtual projections. For slots present in
     // `projected_chunk`, reuse precomputed columns (from deferred conjunct evaluation) to
     // avoid re-projecting and re-seeking variant paths.

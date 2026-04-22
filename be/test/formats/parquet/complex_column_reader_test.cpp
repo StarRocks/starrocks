@@ -1028,4 +1028,18 @@ TEST(VariantZoneMapTest, ZoneMapReaderSkipsWhenFallbackValueMayContainNonNullRow
     EXPECT_FALSE(bloom_result.value());
 }
 
+TEST(ParquetComplexColumnReaderTest, VariantVirtualZoneMapReaderSkipsWhenSourceIsNull) {
+    ASSIGN_OR_ABORT(auto leaf_path, VariantPathParser::parse_shredded_path(std::string_view("age")));
+    VariantVirtualZoneMapReader zm_reader(nullptr, std::move(leaf_path),
+                                          TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT));
+
+    ObjectPool pool;
+    const ColumnReader* leaf_reader = nullptr;
+    std::vector<const ColumnPredicate*> rewritten_predicates;
+    bool prepared = zm_reader._prepare_delegate_predicates({}, &pool, 10, &leaf_reader, &rewritten_predicates);
+    EXPECT_FALSE(prepared);
+    EXPECT_EQ(nullptr, leaf_reader);
+    EXPECT_TRUE(rewritten_predicates.empty());
+}
+
 } // namespace starrocks::parquet

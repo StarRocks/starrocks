@@ -3373,6 +3373,59 @@ TEST_F(GroupReaderTest, ApplyDeferredVariantConjunctsProjectsSourceAndFilters) {
     EXPECT_EQ(2u, active_chunk->num_rows());
 }
 
+TEST_F(GroupReaderTest, AlignDeferredProjectedChunkAfterFilterReturnsErrorWhenRowCountMismatch) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    active_col->append_datum(Datum(int64_t{1}));
+    active_col->append_datum(Datum(int64_t{2}));
+    active_chunk->append_column(active_col, SlotId(1));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    auto projected_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    projected_col->append_datum(Datum(int64_t{99}));
+    projected_chunk->append_column(projected_col, SlotId(2));
+
+    Filter filter = {1, 0};
+    auto st = group_reader->_align_deferred_projected_chunk_after_filter(active_chunk, projected_chunk, filter, 2);
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, AlignDeferredProjectedChunkAfterFilterAppliesFilterForPreFilterRows) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    auto active_chunk = std::make_shared<Chunk>();
+    auto active_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    active_col->append_datum(Datum(int64_t{1}));
+    active_col->append_datum(Datum(int64_t{2}));
+    active_chunk->append_column(active_col, SlotId(1));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    auto projected_col = ColumnHelper::create_column(TYPE_BIGINT_DESC, true);
+    projected_col->append_datum(Datum(int64_t{11}));
+    projected_col->append_datum(Datum(int64_t{22}));
+    projected_chunk->append_column(projected_col, SlotId(2));
+
+    Filter filter = {1, 0};
+    ASSERT_OK(group_reader->_align_deferred_projected_chunk_after_filter(active_chunk, projected_chunk, filter, 2));
+    ASSERT_EQ(1u, projected_chunk->num_rows());
+    EXPECT_EQ(11, projected_chunk->get_column_by_slot_id(SlotId(2))->get(0).get_int64());
+}
+
 // ── _fill_dst_chunk error path ────────────────────────────────────────────────
 
 // Covers: Status::InternalError in _fill_dst_chunk when source slot absent
@@ -3405,6 +3458,100 @@ TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenSourceSlotMissingFromActiveC
     auto status = fill_dst_chunk_without_projected(group_reader, active_chunk, &dst_chunk);
     EXPECT_FALSE(status.ok());
     EXPECT_TRUE(status.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnIsNull) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(260, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column vc{};
+    vc.slot_desc = vslot;
+    param->read_cols.emplace_back(vc);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-31)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+
+    auto active_chunk = std::make_shared<Chunk>();
+    active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-31));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    projected_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
+    projected_chunk->get_column_by_slot_id(vslot->id()).reset();
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
+
+    auto status = group_reader->_fill_dst_chunk(active_chunk, projected_chunk, &dst_chunk);
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, FillDstChunkReturnsErrorWhenDeferredProjectedColumnRowCountMismatch) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    auto* vslot =
+            _pool.add(new SlotDescriptor(261, "v.a", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)));
+
+    param->read_cols.clear();
+    GroupReaderParam::Column vc{};
+    vc.slot_desc = vslot;
+    param->read_cols.emplace_back(vc);
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+
+    ASSIGN_OR_ABORT(auto proj, make_virtual_projection_for_test("a.b.c", vslot->type(), SlotId(-32)));
+    group_reader->_variant_virtual_projections.emplace(vslot->id(), std::move(proj));
+
+    auto active_chunk = std::make_shared<Chunk>();
+    active_chunk->append_column(make_typed_only_variant_column_for_virtual_column_test(), SlotId(-32));
+
+    auto projected_chunk = std::make_shared<Chunk>();
+    auto projected_col = ColumnHelper::create_column(vslot->type(), true);
+    projected_col->append_datum(Datum(int64_t{1}));
+    projected_chunk->append_column(projected_col, vslot->id());
+
+    auto dst_chunk = std::make_shared<Chunk>();
+    dst_chunk->append_column(ColumnHelper::create_column(vslot->type(), true), vslot->id());
+
+    auto status = group_reader->_fill_dst_chunk(active_chunk, projected_chunk, &dst_chunk);
+    ASSERT_FALSE(status.ok());
+    ASSERT_TRUE(status.is_internal_error());
+}
+
+TEST_F(GroupReaderTest, GetVariantShreddedHintsReturnsEmptyOnInvalidAccessPath) {
+    auto* param = _create_group_reader_param();
+    FileMetaData* file_meta;
+    ASSERT_OK(_create_filemeta(&file_meta, param));
+    param->file_metadata = file_meta;
+
+    std::vector<ColumnAccessPathPtr> column_access_paths;
+    ASSIGN_OR_ABORT(auto root, ColumnAccessPath::create(TAccessPathType::ROOT, "data", 0));
+    ASSIGN_OR_ABORT(auto field_arr, ColumnAccessPath::create(TAccessPathType::FIELD, "arr", 0, root->absolute_path()));
+    ASSIGN_OR_ABORT(auto offset_0,
+                    ColumnAccessPath::create(TAccessPathType::OFFSET, "0", 0, field_arr->absolute_path()));
+    field_arr->children().emplace_back(std::move(offset_0));
+    root->children().emplace_back(std::move(field_arr));
+    column_access_paths.emplace_back(std::move(root));
+    param->column_access_paths = &column_access_paths;
+
+    SkipRowsContextPtr skip_rows_ctx = std::make_shared<SkipRowsContext>();
+    auto* group_reader = _pool.add(new GroupReader(*param, 0, skip_rows_ctx, 0));
+    auto hints = group_reader->_get_variant_shredded_hints("data");
+    EXPECT_TRUE(hints.shredded_paths.empty());
+    EXPECT_TRUE(hints.parsed_shredded_paths.empty());
 }
 
 // ── Decimal virtual column fallback tests ──────────────────────────────────────

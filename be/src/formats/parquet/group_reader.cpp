@@ -643,16 +643,8 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
             }
             // Keep deferred projected virtual columns aligned with active_chunk rows.
             // Both were built on the same pre-filter row space [0, count).
-            if (deferred_projected_chunk != nullptr && deferred_projected_chunk->num_columns() > 0) {
-                if (deferred_projected_chunk->num_rows() == count) {
-                    deferred_projected_chunk->filter_range(chunk_filter, 0, count);
-                } else if (deferred_projected_chunk->num_rows() != active_chunk->num_rows()) {
-                    return Status::InternalError(
-                            fmt::format("variant deferred projected chunk row count mismatch: projected_rows={}, "
-                                        "pre_filter_rows={}, active_rows={}",
-                                        deferred_projected_chunk->num_rows(), count, active_chunk->num_rows()));
-                }
-            }
+            RETURN_IF_ERROR(_align_deferred_projected_chunk_after_filter(active_chunk, deferred_projected_chunk,
+                                                                         chunk_filter, count));
         }
 
         // Compute the post-filter range / slice for Phase 5 and Phase 6 lazy reads.
@@ -1557,6 +1549,25 @@ StatusOr<Filter> GroupReader::_apply_deferred_variant_conjuncts(ChunkPtr& active
     // active_chunk is NOT filtered here; the caller merges this filter with
     // chunk_filter and applies the combined result once after Phase 4.
     return filter;
+}
+
+Status GroupReader::_align_deferred_projected_chunk_after_filter(const ChunkPtr& active_chunk,
+                                                                 const ChunkPtr& deferred_projected_chunk,
+                                                                 const Filter& chunk_filter, size_t pre_filter_rows) {
+    if (deferred_projected_chunk == nullptr || deferred_projected_chunk->num_columns() == 0) {
+        return Status::OK();
+    }
+    if (deferred_projected_chunk->num_rows() == pre_filter_rows) {
+        deferred_projected_chunk->filter_range(chunk_filter, 0, pre_filter_rows);
+        return Status::OK();
+    }
+    if (deferred_projected_chunk->num_rows() != active_chunk->num_rows()) {
+        return Status::InternalError(
+                fmt::format("variant deferred projected chunk row count mismatch: projected_rows={}, "
+                            "pre_filter_rows={}, active_rows={}",
+                            deferred_projected_chunk->num_rows(), pre_filter_rows, active_chunk->num_rows()));
+    }
+    return Status::OK();
 }
 
 // _fill_dst_chunk copies physical columns from active_chunk into *chunk, then computes
