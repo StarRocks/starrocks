@@ -224,6 +224,11 @@ private:
 
     Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
 
+    // Record coordinator claims announced via the open/incremental_open RPC's
+    // `lake_tablet_params().coordinated_partition_ids`. Picks the smallest sender_id
+    // when multiple senders claim the same partition.
+    void _record_coordinator_claims(const PTabletWriterOpenRequest& params);
+
     // write access to the delta writers map
     inline std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>>* mutable_delta_writers() {
         return _delta_writers_impl.mutable_delta_writers();
@@ -287,6 +292,18 @@ private:
     bool _is_incremental_channel{false};
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
     TxnLogCollector _txn_log_collector;
+
+    // partition_id -> sender_id of the elected coordinator for that partition.
+    // A sender claims coordination by including the partition id in the
+    // `coordinated_partition_ids` field of its (incremental_)open RPC. When multiple
+    // senders claim the same partition, the smallest sender_id wins.
+    //
+    // At close time, each sender only collects txn logs for partitions it coordinates
+    // (plus sender 0's fallback for unclaimed partitions, preserving legacy behavior
+    // for non-incremental channels). This makes the collection mechanism robust to
+    // incremental-only channels where sender 0 may not be present.
+    mutable StackTraceMutex<bthread::Mutex> _partition_coordinator_mtx;
+    std::unordered_map<int64_t, int32_t> _partition_coordinator;
 
     std::map<string, string> _column_to_expr_value;
 
@@ -364,6 +381,8 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
         _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
         _num_initial_senders.store(params.num_senders(), std::memory_order_release);
     }
+
+    _record_coordinator_claims(params);
 
     for (auto& index_schema : params.schema().indexes()) {
         if (index_schema.id() != _index_id) {
@@ -648,17 +667,63 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
     }
 
-    // Sender 0 is responsible for waiting for all other senders to finish and collecting txn logs
-    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() && (request.sender_id() == 0) &&
+    // Per-partition coordinator dispatch for combined txn log mode.
+    //
+    // Each partition has exactly one coordinator sender that collects and returns its
+    // txn logs to FE. The coordinator is declared via `coordinated_partition_ids` in
+    // the sender's (incremental_)open RPC (see `_record_coordinator_claims`).
+    //
+    // A given sender therefore returns logs for:
+    //   1. Partitions it coordinates (recorded in _partition_coordinator), AND
+    //   2. (Sender 0 only) Partitions that were never claimed by anyone — the legacy
+    //      fallback that preserves existing behavior for non-incremental channels and
+    //      handles RPCs from older, pre-fix FE/driver versions.
+    //
+    // Different partitions are assigned to (potentially) different senders, but each
+    // partition still has exactly one writer downstream (the coordinator's FE sink).
+    // Since different partitions map to different S3 paths for combined_log, there is
+    // no write collision. Same partition -> same physical path is still safe because
+    // only one sender will be its coordinator.
+    if (_finish_mode == lake::kDontWriteTxnLog && request.eos() &&
         response->status().status_code() == TStatusCode::OK) {
-        rolk.unlock();
-        auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
-        auto ok = _txn_log_collector.wait(t);
-        auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
-        if (st.ok()) {
-            context->add_txn_logs(_txn_log_collector.logs());
-        } else {
-            context->update_status(st);
+        const int32_t sender_id = request.sender_id();
+        const bool is_fallback_sender_0 = (sender_id == 0);
+
+        std::unordered_set<int64_t> my_partitions;
+        std::unordered_set<int64_t> claimed_partitions;
+        {
+            std::lock_guard l(_partition_coordinator_mtx);
+            for (auto& [pid, sid] : _partition_coordinator) {
+                claimed_partitions.insert(pid);
+                if (sid == sender_id) my_partitions.insert(pid);
+            }
+        }
+
+        if (!my_partitions.empty() || is_fallback_sender_0) {
+            rolk.unlock();
+            auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
+            auto ok = _txn_log_collector.wait(t);
+            auto st =
+                    ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
+            if (st.ok()) {
+                auto all_logs = _txn_log_collector.logs();
+                std::vector<TxnLogPtr> my_logs;
+                my_logs.reserve(all_logs.size());
+                for (auto& log : all_logs) {
+                    int64_t pid = log->partition_id();
+                    if (my_partitions.count(pid) > 0) {
+                        // I coordinate this partition.
+                        my_logs.emplace_back(std::move(log));
+                    } else if (is_fallback_sender_0 && claimed_partitions.count(pid) == 0) {
+                        // Sender 0 fallback: pick up partitions no one claimed.
+                        my_logs.emplace_back(std::move(log));
+                    }
+                    // else: someone else coordinates this partition; they'll return it.
+                }
+                context->add_txn_logs(my_logs);
+            } else {
+                context->update_status(st);
+            }
         }
     }
 }
@@ -913,6 +978,7 @@ Status LakeTabletsChannel::incremental_open(const PTabletWriterOpenRequest& para
         _num_remaining_senders.fetch_add(1, std::memory_order_release);
         _senders[params.sender_id()].has_incremental_open = true;
     }
+    _record_coordinator_claims(params);
     return Status::OK();
 }
 
@@ -923,6 +989,25 @@ Status LakeTabletsChannel::log_and_error_tablet_not_found(int64_t tablet_id, con
             signature, _txn_id, print_id(id), tablet_id);
     LOG(WARNING) << msg;
     return Status::InternalError(msg);
+}
+
+void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenRequest& params) {
+    if (!params.has_lake_tablet_params()) {
+        return;
+    }
+    const auto& claimed = params.lake_tablet_params().coordinated_partition_ids();
+    if (claimed.empty()) {
+        return;
+    }
+    int32_t sender_id = params.sender_id();
+    std::lock_guard l(_partition_coordinator_mtx);
+    for (int64_t pid : claimed) {
+        auto it = _partition_coordinator.find(pid);
+        // Smallest sender_id wins (deterministic election across concurrent claimers).
+        if (it == _partition_coordinator.end() || sender_id < it->second) {
+            _partition_coordinator[pid] = sender_id;
+        }
+    }
 }
 
 void LakeTabletsChannel::update_profile() {

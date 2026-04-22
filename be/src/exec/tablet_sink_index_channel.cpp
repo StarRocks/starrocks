@@ -191,6 +191,22 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.mutable_lake_tablet_params()->set_write_txn_log(!_parent->_write_txn_log);
         request.mutable_lake_tablet_params()->set_enable_data_file_bundling(_parent->_enable_data_file_bundling);
         request.mutable_lake_tablet_params()->set_is_multi_statements_txn(_parent->_is_multi_statements_txn);
+        // For incremental opens (auto-partition / lazy partition discovery), declare this
+        // sender as coordinator candidate for every partition present in the tablet list.
+        // The CN will pick the smallest sender_id among candidates as the actual coordinator
+        // and route that partition's txn logs to it at close time. See combined_txn_log
+        // dispatch logic in LakeTabletsChannel::add_chunk.
+        if (incremental_open) {
+            std::set<int64_t> claimed;
+            for (const auto& t : tablets) {
+                if (t.has_partition_id()) {
+                    claimed.insert(t.partition_id());
+                }
+            }
+            for (int64_t pid : claimed) {
+                request.mutable_lake_tablet_params()->add_coordinated_partition_ids(pid);
+            }
+        }
     }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
