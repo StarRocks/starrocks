@@ -46,15 +46,15 @@ authentication_ldap_simple_bind_root_pwd =
 ```Properties
 # 直接绑定认证的 DN 模式。
 # 使用 ${USER} 作为用户名的占位符。
-# 多个模式之间用冒号 ':' 分隔。
+# 多个模式之间用分号 ';' 分隔。
 authentication_ldap_simple_bind_dn_pattern =
 ```
 
 例如：`uid=${USER},ou=People,dc=example,dc=com`
 
-如果用户分布在多个 OU 中，可以指定多个模式，用冒号分隔：
+如果用户分布在多个 OU 中，可以指定多个模式，用分号分隔：
 
-`uid=${USER},ou=Engineering,dc=example,dc=com:uid=${USER},ou=Marketing,dc=example,dc=com`
+`uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
 
 系统将按顺序尝试每个模式，并返回第一个成功绑定的结果。
 

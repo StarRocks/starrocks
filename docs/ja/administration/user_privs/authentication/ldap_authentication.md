@@ -46,15 +46,15 @@ authentication_ldap_simple_bind_root_pwd =
 ```Properties
 # ダイレクトバインド認証の DN パターン。
 # ユーザー名のプレースホルダーとして ${USER} を使用します。
-# 複数のパターンはコロン ':' で区切ります。
+# 複数のパターンはセミコロン ';' で区切ります。
 authentication_ldap_simple_bind_dn_pattern =
 ```
 
 例: `uid=${USER},ou=People,dc=example,dc=com`
 
-ユーザーが複数の OU に分散している場合は、コロンで区切って複数のパターンを指定できます:
+ユーザーが複数の OU に分散している場合は、セミコロンで区切って複数のパターンを指定できます:
 
-`uid=${USER},ou=Engineering,dc=example,dc=com:uid=${USER},ou=Marketing,dc=example,dc=com`
+`uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
 
 システムは各パターンを順番に試行し、最初にバインドに成功した結果を返します。
 

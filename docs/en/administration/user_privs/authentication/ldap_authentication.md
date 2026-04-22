@@ -46,15 +46,15 @@ If you wish to use **direct bind mode** (skip the search step and bind directly 
 ```Properties
 # The DN pattern for direct bind authentication.
 # Use ${USER} as a placeholder for the username.
-# Multiple patterns can be separated by colon ':'.
+# Multiple patterns can be separated by semicolon ';'.
 authentication_ldap_simple_bind_dn_pattern =
 ```
 
 For example: `uid=${USER},ou=People,dc=example,dc=com`
 
-If you have users across multiple OUs, you can specify multiple patterns separated by colons:
+If you have users across multiple OUs, you can specify multiple patterns separated by semicolons:
 
-`uid=${USER},ou=Engineering,dc=example,dc=com:uid=${USER},ou=Marketing,dc=example,dc=com`
+`uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
 
 The system will try each pattern in order and return the first successful bind.
 

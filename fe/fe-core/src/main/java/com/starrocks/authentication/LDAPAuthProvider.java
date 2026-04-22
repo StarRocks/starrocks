@@ -127,10 +127,10 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     }
 
     // Try each DN pattern in order, return the first successfully bound DN.
-    // Patterns are separated by colon ':'.
+    // Patterns are separated by semicolon ';'.
     protected String authenticateByPattern(String user, String password) throws Exception {
         String safeUser = escapeDnValue(normalizeUsername(user));
-        String[] rawPatterns = ldapBindDNPattern.split(":");
+        String[] rawPatterns = ldapBindDNPattern.split(";");
         // Pre-validate all patterns before attempting any bind
         String[] patterns = new String[rawPatterns.length];
         for (int i = 0; i < rawPatterns.length; i++) {

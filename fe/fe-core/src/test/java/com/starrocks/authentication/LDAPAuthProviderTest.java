@@ -353,7 +353,7 @@ class LDAPAuthProviderTest {
                 null, null,
                 null, null, null, "uid",
                 /* ldapUserDN */ null,
-                "uid=${USER},ou=A,dc=test,dc=com:uid=${USER},ou=B,dc=test,dc=com");
+                "uid=${USER},ou=A,dc=test,dc=com;uid=${USER},ou=B,dc=test,dc=com");
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
@@ -389,7 +389,7 @@ class LDAPAuthProviderTest {
                 null, null,
                 null, null, null, "uid",
                 /* ldapUserDN */ null,
-                "uid=${USER},ou=A,dc=test,dc=com:uid=${USER},ou=B,dc=test,dc=com");
+                "uid=${USER},ou=A,dc=test,dc=com;uid=${USER},ou=B,dc=test,dc=com");
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
@@ -438,7 +438,7 @@ class LDAPAuthProviderTest {
                 null, null,
                 null, null, null, "uid",
                 /* ldapUserDN */ null,
-                "uid=${USER},ou=A,dc=test,dc=com:uid=shared,dc=test,dc=com");
+                "uid=${USER},ou=A,dc=test,dc=com;uid=shared,dc=test,dc=com");
 
         AccessControlContext authCtx = new AccessControlContext();
         UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");

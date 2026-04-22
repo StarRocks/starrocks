@@ -109,7 +109,7 @@ For more details, see the DN matching mechanism in [Authenticate User Groups](..
 ##### authentication_ldap_simple_bind_dn_pattern
 
 - Required: No
-- Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. The pattern must produce a valid LDAP Distinguished Name (DN); UPN-style patterns like `${USER}@domain` are not supported. For example, `uid=${USER},ou=People,dc=example,dc=com`. Multiple patterns can be separated by colons, and the system will try each pattern in order until one succeeds. When this parameter is set, the system skips the search step and directly binds with the constructed DN, so `authentication_ldap_simple_bind_base_dn`, `authentication_ldap_simple_user_search_attr`, `authentication_ldap_simple_bind_root_dn`, and `authentication_ldap_simple_bind_root_pwd` are not required.
+- Description: The DN pattern for direct bind authentication. Use `${USER}` as a placeholder for the username. The pattern must produce a valid LDAP Distinguished Name (DN); UPN-style patterns like `${USER}@domain` are not supported. For example, `uid=${USER},ou=People,dc=example,dc=com`. Multiple patterns can be separated by semicolons, and the system will try each pattern in order until one succeeds. When this parameter is set, the system skips the search step and directly binds with the constructed DN, so `authentication_ldap_simple_bind_base_dn`, `authentication_ldap_simple_user_search_attr`, `authentication_ldap_simple_bind_root_dn`, and `authentication_ldap_simple_bind_root_pwd` are not required.
 
 ##### authentication_ldap_simple_ssl_conn_allow_insecure
 
