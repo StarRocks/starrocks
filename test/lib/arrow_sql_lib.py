@@ -168,7 +168,8 @@ class ArrowSqlLib(BaseConnectionLib):
     def _is_query_result(self, result: SQLRawResult) -> bool:
         """
         Check if the result is a query result.
-        Non-query result: cursor.description has only one column named 'StatusResult' with string type.
+        Arrow Flight DDL returns a single string column named 'StatusResult' with value '0'.
+        Any other result (including SELECT ... AS StatusResult) is a real query result.
         """
         if not result.desc:
             return False
@@ -176,13 +177,13 @@ class ArrowSqlLib(BaseConnectionLib):
         if len(result.desc) != 1:
             return True  # More than one column, it's a query
 
-        # Check if it's StatusResult column
         col_name = result.desc[0][0]
-        col_type = str(result.desc[0][1])  # Convert to string for comparison
+        col_type = str(result.desc[0][1])
 
-        # Check if it's a StatusResult (non-query result)
+        # DDL status response: single 'StatusResult' string column whose sole value is '0'
         if col_name == 'StatusResult' and 'string' in col_type.lower():
-            return False
+            if result.result == (('0',),):
+                return False
 
         return True
 
