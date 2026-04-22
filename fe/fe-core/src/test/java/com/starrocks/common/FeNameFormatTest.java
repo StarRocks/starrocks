@@ -125,6 +125,59 @@ public class FeNameFormatTest {
     }
 
     @Test
+    public void testCheckUserName() {
+        // legacy strict mode (allowEmail=false, default): unchanged behavior
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("alice"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("a.b.c"));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("svc/host.example.com"));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName(""));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName(null));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName("aaa~bbb"));
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkUserName("alice@example.com"));
+
+        // allowEmail=true accepts email-format usernames but still rejects garbage
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("alice", true));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("alice@example.com", true));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("tony.xia@celerdata.com", true));
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName("a.b+tag@sub.example.co.uk", true));
+        // malformed email still rejected
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkUserName("alice@", true));
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkUserName("@example.com", true));
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkUserName("alice@@example.com", true));
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkUserName("alice@example", true));
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkUserName("aaa~bbb@example.com", true));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName("", true));
+        Assertions.assertThrows(SemanticException.class, () -> FeNameFormat.checkUserName(null, true));
+        // '%' must be rejected even though RFC 5322 allows it in the email local part:
+        // PatternMatcher.createMysqlPattern later treats '%' as a login-match wildcard,
+        // so accepting it here would let 'a%b@example.com' authenticate 'axxb@example.com'.
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkUserName("a%b@example.com", true));
+
+        // length cap: local part >64 still fine as long as whole name <=254
+        StringBuilder longLocal = new StringBuilder();
+        for (int i = 0; i < 80; i++) {
+            longLocal.append('a');
+        }
+        String longEmail = longLocal + "@example.com";
+        Assertions.assertDoesNotThrow(() -> FeNameFormat.checkUserName(longEmail, true));
+        // but a name over 254 chars is rejected even if the regex matches
+        StringBuilder tooLong = new StringBuilder();
+        for (int i = 0; i < 250; i++) {
+            tooLong.append('a');
+        }
+        String tooLongEmail = tooLong + "@example.com";
+        Assertions.assertThrows(SemanticException.class,
+                () -> FeNameFormat.checkUserName(tooLongEmail, true));
+    }
+
+    @Test
     public void testCheckColNameInSharedData() {
         new MockUp<RunMode>() {
             @Mock

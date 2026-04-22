@@ -1,0 +1,38 @@
+-- name: test_email_username_external_auth
+-- Verify that email-format usernames are accepted when creating a user with
+-- an IdP-backed auth plugin (authentication_oauth2 or authentication_jwt) and
+-- that the user can be managed (SHOW AUTHENTICATION / GRANT / REVOKE / ALTER /
+-- DROP) across its full lifecycle. Non-IdP CREATE paths must continue to
+-- reject email usernames.
+
+drop user if exists 'alice@example.com';
+drop user if exists 'bob@example.com';
+
+-- OAuth2 path -------------------------------------------------------------
+create user 'alice@example.com' identified with authentication_oauth2 as '{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}';
+show authentication for 'alice@example.com';
+grant select on *.* to 'alice@example.com';
+show grants for 'alice@example.com';
+revoke select on *.* from 'alice@example.com';
+alter user 'alice@example.com' identified with authentication_oauth2 as '{"jwks_url": "http://idp.example.com/jwks2", "principal_field": "email"}';
+drop user 'alice@example.com';
+
+-- JWT path ----------------------------------------------------------------
+create user 'bob@example.com' identified with authentication_jwt as '{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}';
+show authentication for 'bob@example.com';
+grant select on *.* to 'bob@example.com';
+show grants for 'bob@example.com';
+revoke select on *.* from 'bob@example.com';
+alter user 'bob@example.com' identified with authentication_jwt as '{"jwks_url": "http://idp.example.com/jwks2", "principal_field": "email"}';
+drop user 'bob@example.com';
+
+-- Non-IdP CREATE paths must still reject an email username.
+create user 'alice@example.com';
+create user 'alice@example.com' identified by 'password';
+create user 'alice@example.com' identified with mysql_native_password by 'password';
+
+-- '%' in an email-format name must still be rejected even under OAuth2/JWT
+-- because stored usernames are compiled into MySQL LIKE patterns at login;
+-- '%' would let e.g. 'a%b@example.com' match 'axxb@example.com'.
+create user 'a%b@example.com' identified with authentication_oauth2 as '{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}';
+create user 'a%b@example.com' identified with authentication_jwt as '{"jwks_url": "http://idp.example.com/jwks", "principal_field": "email"}';

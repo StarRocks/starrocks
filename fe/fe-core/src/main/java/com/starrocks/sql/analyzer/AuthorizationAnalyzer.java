@@ -120,7 +120,7 @@ public class AuthorizationAnalyzer {
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
             // validate user/role
             if (stmt.getUser() != null) {
-                AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+                AuthenticationAnalyzer.analyzeUser(stmt.getUser(), true);
                 AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
             } else {
                 validRoleName(stmt.getRole(), "Can not grant/revoke to role", true);
@@ -194,7 +194,7 @@ public class AuthorizationAnalyzer {
                 userIdentities.add(null);
             } else {
                 for (UserRef userRef : stmt.getUserPrivilegeObjectList()) {
-                    AuthenticationAnalyzer.analyzeUser(userRef);
+                    AuthenticationAnalyzer.analyzeUser(userRef, true);
                     // If userRef is external, skip existence check since external users don't exist in local storage
                     if (!userRef.isExternal()) {
                         AuthenticationAnalyzer.checkUserExist(userRef, true);
@@ -439,7 +439,7 @@ public class AuthorizationAnalyzer {
                         "set default role statement is not supported for ephemeral user " + currentUser);
             }
 
-            AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+            AuthenticationAnalyzer.analyzeUser(stmt.getUser(), true);
             AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
 
             UserIdentity userIdentity = new UserIdentity(stmt.getUser().getUser(), stmt.getUser().getHost(),
@@ -471,7 +471,7 @@ public class AuthorizationAnalyzer {
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
             if (stmt.getGrantType() == GrantType.USER) {
-                AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+                AuthenticationAnalyzer.analyzeUser(stmt.getUser(), true);
                 AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
                 if (AuthenticationAnalyzer.needProtectAdminUser(stmt.getUser(), session)) {
                     throw new SemanticException("roles of 'admin' user cannot be changed because of " +
@@ -494,7 +494,7 @@ public class AuthorizationAnalyzer {
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             if (stmt.getGrantType() == GrantType.USER) {
                 if (stmt.getUser() != null) {
-                    AuthenticationAnalyzer.analyzeUser(stmt.getUser());
+                    AuthenticationAnalyzer.analyzeUser(stmt.getUser(), true);
                     AuthenticationAnalyzer.checkUserExist(stmt.getUser(), true);
                 }
             } else if (stmt.getGrantType() == GrantType.ROLE) {
