@@ -15,6 +15,8 @@
 package com.starrocks.qe;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -155,5 +157,51 @@ public class StmtExecutorTest {
             StmtExecutor executor = new StmtExecutor(new ConnectContext(), stmt);
             Assertions.assertEquals(ctx.getSessionVariable().getInsertTimeoutS(), executor.getExecTimeout());
         }
+    }
+
+    @Test
+    public void testGetRedactedOriginStmtInStringScenarios() {
+        // Case 1: Plain SQL should not be rewritten.
+        StatementBase plainStmt = SqlParser.parseSingleStatement("SELECT * FROM t0 WHERE id = 1",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor plainExecutor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), plainStmt);
+        Assertions.assertEquals("SELECT * FROM t0 WHERE id = 1", plainExecutor.getRedactedOriginStmtInString());
+
+        // Case 2: FILES credentials should be redacted.
+        StatementBase filesStmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor filesExecutor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), filesStmt);
+        String redacted = filesExecutor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(redacted.contains("RETRY_SECRET"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testBuildTopLevelProfileSqlStatementScenarios() {
+        // Case 1: Plain SQL keeps original text.
+        ConnectContext plainCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(plainCtx);
+        StatementBase plainStmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor plainExecutor = new StmtExecutor(plainCtx, plainStmt);
+        RuntimeProfile plainProfile = com.starrocks.common.jmockit.Deencapsulation.invoke(plainExecutor,
+                "buildTopLevelProfile");
+        String plainSql = plainProfile.getChild("Summary").getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertEquals("SELECT 1", plainSql);
+
+        // Case 2: Credential SQL is redacted in profile.
+        ConnectContext filesCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(filesCtx);
+        StatementBase filesStmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"PROFILE_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor filesExecutor = new StmtExecutor(filesCtx, filesStmt);
+        RuntimeProfile filesProfile = com.starrocks.common.jmockit.Deencapsulation.invoke(filesExecutor,
+                "buildTopLevelProfile");
+        String filesSql = filesProfile.getChild("Summary").getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertFalse(filesSql.contains("PROFILE_SECRET"));
+        Assertions.assertTrue(filesSql.contains("***"));
     }
 }
