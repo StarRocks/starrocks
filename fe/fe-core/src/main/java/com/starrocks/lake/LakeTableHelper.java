@@ -76,12 +76,9 @@ public class LakeTableHelper {
         boolean succ = cleaner.cleanTable();
         if (succ) {
             table.removeTabletsFromInvertedIndex();
-<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getWarehouseMgr().removeTableWarehouseInfo(table.getId());
-=======
             // Best-effort deletion: StarMgrMetaSyncer will clean up any remaining orphaned shard groups.
             deleteShardGroupMeta(table);
->>>>>>> c753afcae9 ([BugFix] Delete shard group meta when erasing lake table from recycle bin (#69973))
         }
         return succ;
     }
