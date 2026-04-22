@@ -14,26 +14,43 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.planner.DataPartition;
+import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.PlanNodeId;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.QueryState.MysqlStateType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
 import com.starrocks.sql.ast.txn.RollbackStmt;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.LargeInPredicateException;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TDescriptorTable;
+import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -46,9 +63,32 @@ import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class StmtExecutorTest {
+    private static class DummyPlanNode extends PlanNode {
+        DummyPlanNode(PlanNodeId id, long cardinality) {
+            super(id, "DummyPlanNode");
+            this.cardinality = cardinality;
+        }
+
+        @Override
+        protected void toThrift(TPlanNode msg) {
+            // no-op for unit tests
+        }
+    }
+
+    private static ExecPlan buildMinimalExecPlan(long cardinality) {
+        ExecPlan execPlan = new ExecPlan();
+        PlanNode root = new DummyPlanNode(new PlanNodeId(0), cardinality);
+        PlanFragment fragment = new PlanFragment(new PlanFragmentId(0), root, DataPartition.UNPARTITIONED);
+        execPlan.getFragments().add(fragment);
+        Deencapsulation.setField(execPlan, "descTbl", new DescriptorTable());
+        return execPlan;
+    }
 
     @Test
     public void testIsForwardToLeader(@Mocked ConnectContext ctx) {
@@ -211,6 +251,310 @@ public class StmtExecutorTest {
         Assertions.assertNotNull(summaryProfile);
         Assertions.assertEquals("Running", summaryProfile.getInfoString(ProfileManager.QUERY_STATE));
         Assertions.assertEquals("default_warehouse", summaryProfile.getInfoString(ProfileManager.WAREHOUSE_CNGROUP));
+    }
+
+    @Test
+    public void testGetRedactedOriginStmtInStringScenarios() {
+        // Case 1: Plain SQL should be returned as-is.
+        StatementBase plainStmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM t0 WHERE id = 1",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor plainExecutor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), plainStmt);
+        String plainResult = plainExecutor.getRedactedOriginStmtInString();
+        Assertions.assertEquals("SELECT * FROM t0 WHERE id = 1", plainResult);
+
+        // Case 2: INSERT ... SELECT FROM FILES should redact both key and secret.
+        StatementBase insertSelectFilesStmt = SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT * FROM FILES(" +
+                        "\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"format\"=\"parquet\", " +
+                        "\"aws.s3.access_key\"=\"AKIA_STMT_EXECUTOR\", " +
+                        "\"aws.s3.secret_key\"=\"STMT_EXECUTOR_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor insertSelectFilesExecutor =
+                new StmtExecutor(UtFrameUtils.createDefaultCtx(), insertSelectFilesStmt);
+        String insertSelectFilesRedacted = insertSelectFilesExecutor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(insertSelectFilesRedacted.contains("AKIA_STMT_EXECUTOR"));
+        Assertions.assertFalse(insertSelectFilesRedacted.contains("STMT_EXECUTOR_SECRET"));
+        Assertions.assertTrue(insertSelectFilesRedacted.contains("***"));
+
+        // Case 3: SELECT FROM FILES should redact secret.
+        StatementBase selectFilesStmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"RETRY_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor selectFilesExecutor = new StmtExecutor(UtFrameUtils.createDefaultCtx(), selectFilesStmt);
+        String selectFilesRedacted = selectFilesExecutor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(selectFilesRedacted.contains("RETRY_SECRET"));
+        Assertions.assertTrue(selectFilesRedacted.contains("***"));
+    }
+
+    @Test
+    public void testBuildTopLevelProfileSqlStatementScenarios() {
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public String getWarehouseComputeResourceName(ComputeResource computeResource) {
+                return "default_warehouse";
+            }
+        };
+
+        // Case 1: Plain SELECT should not be changed.
+        ConnectContext plainCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(plainCtx);
+        StatementBase plainStmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor plainExecutor = new StmtExecutor(plainCtx, plainStmt);
+        RuntimeProfile plainProfile = Deencapsulation.invoke(plainExecutor, "buildTopLevelProfile");
+        RuntimeProfile plainSummaryProfile = plainProfile.getChild("Summary");
+        String plainSqlInProfile = plainSummaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(plainSqlInProfile);
+        Assertions.assertFalse(plainSqlInProfile.contains("***"),
+                "Plain SELECT should skip credential redaction in profile SQL");
+
+        // Case 2: Audit-encrypt path should redact password.
+        ConnectContext encryptCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(encryptCtx);
+        StatementBase encryptStmt = SqlParser.parseSingleStatement(
+                "CREATE USER 'u1' IDENTIFIED BY 'secret'",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor encryptExecutor = new StmtExecutor(encryptCtx, encryptStmt);
+        RuntimeProfile encryptProfile = Deencapsulation.invoke(encryptExecutor, "buildTopLevelProfile");
+        RuntimeProfile encryptSummaryProfile = encryptProfile.getChild("Summary");
+        String encryptSqlInProfile = encryptSummaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(encryptSqlInProfile);
+        Assertions.assertFalse(encryptSqlInProfile.contains("secret"));
+        Assertions.assertTrue(encryptSqlInProfile.contains("***"));
+
+        // NOTE: The `enable_sql_desensitize_in_log` digest-mode path exists on branch-4.1 / main but
+        // not on branch-4.0, so the corresponding coverage from the original PR is intentionally
+        // omitted here. Adding it would require new config + FormatOptions.setEnableDigest APIs.
+
+        // Case 3: Credential marker path should redact FILES secret.
+        ConnectContext markerCtx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(markerCtx);
+        StatementBase markerStmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"PROFILE_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor markerExecutor = new StmtExecutor(markerCtx, markerStmt);
+        RuntimeProfile markerProfile = Deencapsulation.invoke(markerExecutor, "buildTopLevelProfile");
+        RuntimeProfile markerSummaryProfile = markerProfile.getChild("Summary");
+        String markerSqlInProfile = markerSummaryProfile.getInfoString(ProfileManager.SQL_STATEMENT);
+        Assertions.assertNotNull(markerSqlInProfile);
+        Assertions.assertFalse(markerSqlInProfile.contains("PROFILE_SECRET"));
+        Assertions.assertTrue(markerSqlInProfile.contains("***"));
+    }
+
+    @Test
+    public void testAddRunningQueryDetailRedactsFilesSecretWhenMarkerDetected() {
+        boolean oldCollect = Config.enable_collect_query_detail_info;
+        Config.enable_collect_query_detail_info = true;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            StatementBase stmt = SqlParser.parseSingleStatement(
+                    "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                            "\"aws.s3.secret_key\"=\"DETAIL_SECRET\")",
+                    SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            executor.addRunningQueryDetail(stmt);
+            QueryDetail queryDetail = ctx.getQueryDetail();
+            Assertions.assertNotNull(queryDetail);
+            Assertions.assertFalse(queryDetail.getSql().contains("DETAIL_SECRET"));
+            Assertions.assertTrue(queryDetail.getSql().contains("***"));
+        } finally {
+            Config.enable_collect_query_detail_info = oldCollect;
+        }
+    }
+
+    @Test
+    public void testExecuteAnalyzeProfileStmtBranchSetsErrorWhenProfileMissing() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "ANALYZE PROFILE FROM 'missing-query-id'", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        executor.execute();
+        Assertions.assertTrue(ctx.getState().isError());
+    }
+
+    @Test
+    public void testQueryRetryLoopInvokesHandleQueryStmtOnce() throws Exception {
+        int oldRetryTime = Config.max_query_retry_time;
+        Config.max_query_retry_time = 1;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            StatementBase stmt = SqlParser.parseSingleStatement("SELECT 1", SqlModeHelper.MODE_DEFAULT);
+            StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+            new MockUp<StatementPlanner>() {
+                @Mock
+                public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                    return buildMinimalExecPlan(1);
+                }
+            };
+
+            executor.execute();
+            Assertions.assertNotNull(ctx.getState());
+        } finally {
+            Config.max_query_retry_time = oldRetryTime;
+        }
+    }
+
+    @Test
+    public void testInsertNoRowsForHiveLikeTableSetsOk(@Mocked DefaultCoordinator coordinator) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        // On branch-4.0, StmtExecutor.handleDMLStmt calls stmt.getTableName().normalization(context)
+        // at the top, which requires a non-empty current database on the context. The upstream PR
+        // on branch-4.1 normalizes earlier, so this ctx.setDatabase call is not needed there.
+        ctx.setDatabase("test_db");
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t0 SELECT 1 WHERE FALSE", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        Table targetTable = new Table(Table.TableType.HIVE);
+        new MockUp<InsertStmt>() {
+            @Mock
+            public Table getTargetTable() {
+                return targetTable;
+            }
+        };
+
+        ExecPlan execPlan = buildMinimalExecPlan(1);
+        new MockUp<DefaultCoordinator.Factory>() {
+            @Mock
+            public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
+                                                            List<ScanNode> scanNodes,
+                                                            TDescriptorTable descTable, ExecPlan plan) {
+                return coordinator;
+            }
+        };
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void setLoadJobType(com.starrocks.thrift.TLoadJobType loadJobType) {
+            }
+
+            @Mock
+            public void setLoadJobId(Long jobId) {
+            }
+
+            @Mock
+            public void exec() {
+            }
+
+            @Mock
+            public boolean join(int timeoutSecond) {
+                return true;
+            }
+
+            @Mock
+            public boolean isDone() {
+                return true;
+            }
+
+            @Mock
+            public Status getExecStatus() {
+                return new Status();
+            }
+
+            @Mock
+            public java.util.Map<String, String> getLoadCounters() {
+                return new HashMap<>();
+            }
+
+            @Mock
+            public String getTrackingUrl() {
+                return "";
+            }
+        };
+
+        executor.handleDMLStmt(execPlan, stmt);
+        Assertions.assertEquals(MysqlStateType.OK, ctx.getState().getStateType());
+    }
+
+    @Test
+    public void testPlannerFailurePathUsesRedactedSqlWithoutPrivateMocking() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"PLANNER_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                throw new StarRocksPlannerException(ErrorType.INTERNAL_ERROR, "mock planner failure");
+            }
+        };
+
+        executor.execute();
+        String redacted = executor.getRedactedOriginStmtInString();
+        Assertions.assertTrue(ctx.getState().isError());
+        Assertions.assertFalse(redacted.contains("PLANNER_SECRET"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testLargeInPredicateFailurePathUsesRedactedSqlWithoutPrivateMocking() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        UUID queryId = UUIDUtil.genUUID();
+        ctx.setQueryId(queryId);
+        ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+        StatementBase stmt = SqlParser.parseSingleStatement(
+                "SELECT * FROM FILES(\"path\"=\"s3://bucket/data.parquet\", " +
+                        "\"aws.s3.secret_key\"=\"LARGE_IN_SECRET\")",
+                SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<StatementPlanner>() {
+            @Mock
+            public static ExecPlan plan(StatementBase ignoredStmt, ConnectContext ignoredCtx) {
+                throw new LargeInPredicateException("mock large in failure");
+            }
+        };
+
+        Assertions.assertThrows(LargeInPredicateException.class, executor::execute);
+        String redacted = executor.getRedactedOriginStmtInString();
+        Assertions.assertFalse(redacted.contains("LARGE_IN_SECRET"));
+        Assertions.assertTrue(redacted.contains("***"));
+    }
+
+    @Test
+    public void testHandleDdlStmtLogsRedactedSqlOnQueryStateException() throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext.threadLocalInfo.set(ctx);
+        StatementBase stmt = SqlParser.parseSingleStatement("CREATE TABLE t0(k1 INT)", SqlModeHelper.MODE_DEFAULT);
+        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+
+        new MockUp<DDLStmtExecutor>() {
+            @Mock
+            public ShowResultSet execute(StatementBase ignoredStmt, ConnectContext ignoredCtx) throws Exception {
+                throw new QueryStateException(MysqlStateType.ERR, "mock ddl failure");
+            }
+        };
+
+        Deencapsulation.invoke(executor, "handleDdlStmt");
     }
 
     @Test
