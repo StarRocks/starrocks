@@ -119,6 +119,26 @@ public class MergeIntoAnalyzerIcebergTest {
                 "Error should mention column count mismatch: " + exception.getMessage());
     }
 
+    @Test
+    public void testMergeIntoInsertDuplicateColumnRejected() {
+        // WHEN NOT MATCHED THEN INSERT (id, data, data) VALUES (...) — 'data'
+        // listed twice. Must reject with ERR_DUP_FIELDNAME to match plain
+        // INSERT (InsertAnalyzer rejects the same pattern at line ~287).
+        // Without this check the emission layer silently kept the FIRST
+        // value for the duplicated column.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'x' AS data) AS s " +
+                "ON t.id = s.id " +
+                "WHEN NOT MATCHED THEN INSERT (id, data, data) VALUES (s.id, 'a', 'b')";
+        MergeIntoStmt stmt = parseMerge(sql);
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> MergeIntoAnalyzer.analyze(stmt, connectContext));
+        assertTrue(exception.getMessage().toLowerCase().contains("duplicate")
+                        || exception.getMessage().toLowerCase().contains("column name"),
+                "Error should mention duplicate column name: " + exception.getMessage());
+    }
+
     // ---- Success cases ----
 
     @Test

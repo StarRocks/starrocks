@@ -15,11 +15,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -55,6 +58,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public class MergeIntoAnalyzer {
 
@@ -142,13 +146,22 @@ public class MergeIntoAnalyzer {
                                 "MERGE INTO INSERT VALUES count %d does not match target table column count %d",
                                 values.size(), targetDataColumnCount);
                     }
-                    // Validate target column names exist
+                    // Validate target column names exist and are unique.
+                    // Uniqueness matches plain INSERT (InsertAnalyzer line ~287 uses
+                    // the same ErrorCode.ERR_DUP_FIELDNAME); without this check the
+                    // emission layer (getNotMatchedColumnValue) would silently keep
+                    // the FIRST value for a duplicated column and discard later ones.
                     if (targetCols != null) {
+                        Set<String> seen = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
                         for (String colName : targetCols) {
                             Column col = icebergTable.getColumn(colName);
                             if (col == null) {
                                 throw new SemanticException("table '%s' does not have column '%s'",
                                         tableName.getTbl(), colName);
+                            }
+                            if (!seen.add(colName)) {
+                                ErrorReport.reportSemanticException(
+                                        ErrorCode.ERR_DUP_FIELDNAME, colName);
                             }
                         }
                     }
@@ -339,11 +352,21 @@ public class MergeIntoAnalyzer {
     private static Expr getMatchedColumnValue(MergeWhenClause clause, Column col,
                                               TableName targetSlotTableName) {
         if (clause instanceof MergeWhenMatchedUpdateClause updateClause) {
-            // Check if this column is in the SET list
+            // If the same column is assigned multiple times in one SET list
+            // (`SET a = 1, a = 2`), the LAST assignment wins — matches StarRocks
+            // native OLAP UPDATE semantics and MySQL's left-to-right rule. The
+            // validation layer in analyzeIcebergTable already uses Map.put()
+            // (last-wins) when collecting assignmentByColName; this loop must
+            // agree, otherwise the two layers emit inconsistent results. Do NOT
+            // return on first match — keep scanning to the end.
+            Expr lastMatch = null;
             for (ColumnAssignment assign : updateClause.getAssignments()) {
                 if (assign.getColumn().equalsIgnoreCase(col.getName())) {
-                    return assign.getExpr();
+                    lastMatch = assign.getExpr();
                 }
+            }
+            if (lastMatch != null) {
+                return lastMatch;
             }
             // Column not in SET list — keep original value from target
             return new SlotRef(targetSlotTableName, col.getName());

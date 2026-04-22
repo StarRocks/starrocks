@@ -221,4 +221,25 @@ public class MergeIntoPlanTest extends PlanTestBase {
         assertTrue(explainString.contains("ICEBERG ROW DELTA SINK"),
                 "Positional INSERT MERGE should produce ICEBERG ROW DELTA SINK");
     }
+
+    @Test
+    public void testMergeDuplicateSetLastWins() throws Exception {
+        // Regression for dup-SET precedence: when the SET list targets the
+        // same column twice, the LAST assignment must reach the plan — matching
+        // StarRocks OLAP UPDATE and MySQL. Prior to the fix, the analyzer's
+        // emission layer (getMatchedColumnValue) returned on the FIRST match
+        // while the validation-layer Map.put() was last-wins, so the two
+        // layers silently disagreed.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = 'first_wins', data = 'last_wins'";
+        String explainString = getMergeExecPlanString(sql);
+        assertTrue(explainString.contains("'last_wins'"),
+                "Duplicate SET should emit the LAST literal in the plan; " +
+                        "got:\n" + explainString);
+        assertTrue(!explainString.contains("'first_wins'"),
+                "Duplicate SET must NOT emit the first literal in the plan; " +
+                        "got:\n" + explainString);
+    }
 }
