@@ -255,8 +255,8 @@ inline std::string gen_filename_from(int64_t txn_id, std::string_view old_file_n
         return std::string(old_file_name);
     }
 
-    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name)) &&
-        !is_cols(old_file_name)) {
+    if (UNLIKELY(!is_segment(old_file_name) && !is_del(old_file_name) && !is_delvec(old_file_name) &&
+                 !is_cols(old_file_name) && !is_idx(old_file_name))) {
         // not a valid file
         return {};
     }

@@ -733,19 +733,27 @@ Status SchemaChangeHandler::do_process_drop_index_only(const TAlterTabletReqV2& 
     }
 
     for (const auto& di : request.drop_indexes) {
-        auto* d = op->add_dropped();
-        if (di.__isset.index_id) d->set_index_id(di.index_id);
-        if (di.__isset.col_unique_id) d->set_col_unique_id(di.col_unique_id);
-        if (di.__isset.index_type) {
-            // Convert Thrift TIndexType to proto IndexType via the shared
-            // conversion helper on TabletIndex to stay consistent with the
-            // rest of the schema code.
-            auto converted = TabletIndex::convert_index_type_from_thrift(di.index_type);
-            if (!converted.ok()) {
-                return converted.status();
-            }
-            d->set_index_type(*converted);
+        // All three fields identify the drop target and must be present.
+        // index_id selects the TabletIndexPB to tombstone; (col_unique_id,
+        // index_type) matches the IDG key or legacy footer-embedded payload.
+        // Missing any of them would either no-op silently or match the wrong
+        // entry (defaults: col_unique_id=0, index_type=INDEX_UNKNOWN), so we
+        // reject malformed requests up front.
+        if (!di.__isset.index_id || !di.__isset.col_unique_id || !di.__isset.index_type) {
+            return Status::InvalidArgument(
+                    "DROP INDEX fast path requires index_id, col_unique_id, and index_type on every drop entry");
         }
+        auto* d = op->add_dropped();
+        d->set_index_id(di.index_id);
+        d->set_col_unique_id(di.col_unique_id);
+        // Convert Thrift TIndexType to proto IndexType via the shared
+        // conversion helper on TabletIndex to stay consistent with the
+        // rest of the schema code.
+        auto converted = TabletIndex::convert_index_type_from_thrift(di.index_type);
+        if (!converted.ok()) {
+            return converted.status();
+        }
+        d->set_index_type(*converted);
     }
 
     LOG(INFO) << "DROP INDEX fast path commit: tablet=" << request.new_tablet_id << " txn_id=" << request.txn_id

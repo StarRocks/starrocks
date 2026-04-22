@@ -14,6 +14,9 @@
 
 #include "storage/lake/index_delta_group_loader.h"
 
+#include <glog/logging.h>
+
+#include <algorithm>
 #include <unordered_set>
 
 #include "storage/olap_common.h"
@@ -48,6 +51,14 @@ Status LakeIndexDeltaGroupLoader::load(const TabletSegmentId& tsid, int64_t quer
         // Visibility filter: entries created after the query's snapshot are
         // not visible. Older snapshots see no IDG and fall back to footer.
         if (entry_pb.version() > query_version) {
+            continue;
+        }
+        // Skip malformed entries whose index_file path is missing or empty —
+        // downstream open would fail with a confusing error. FE-written
+        // entries always carry a path.
+        if (!entry_pb.has_index_file() || entry_pb.index_file().empty()) {
+            LOG(WARNING) << "IDG entry missing index_file; segment_id=" << tsid.segment_id
+                         << " version=" << entry_pb.version() << "; skipping";
             continue;
         }
         // Build tombstone set for this entry.

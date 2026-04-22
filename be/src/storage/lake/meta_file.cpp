@@ -249,7 +249,12 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    entries may coexist on the same segment from successive alters.
     auto* idg_map = _tablet_meta->mutable_idg_meta()->mutable_idgs();
     for (const auto& se : op.segment_entries()) {
-        if (!se.has_entry()) continue;
+        // Defense-in-depth: an entry missing segment_id would index the map at
+        // default 0 and corrupt segment 0's IDG. FE always sets both fields.
+        if (!se.has_entry() || !se.has_segment_id()) {
+            LOG_IF(WARNING, !se.has_segment_id()) << "apply_add_index: segment_entry missing segment_id; skipping";
+            continue;
+        }
         IndexDeltaGroupVerPB& ver = (*idg_map)[se.segment_id()];
         // Build new entries list: [new_entry, old_entries...]
         IndexDeltaGroupVerPB merged;
@@ -285,6 +290,15 @@ void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
     drop_keys.reserve(op.dropped_size());
     std::unordered_set<int64_t> drop_ids;
     for (const auto& d : op.dropped()) {
+        // Skip malformed entries: reading default 0 for col_unique_id or
+        // default INDEX_UNKNOWN for index_type would fabricate a key that
+        // could falsely match a real (col_uid=0, BITMAP) entry. FE always
+        // sets these via do_process_drop_index_only validation, but we keep
+        // this belt-and-suspenders for replayed legacy logs.
+        if (!d.has_col_unique_id() || !d.has_index_type()) {
+            LOG(WARNING) << "apply_drop_index: drop entry missing col_unique_id or index_type; skipping";
+            continue;
+        }
         uint64_t k = (static_cast<uint64_t>(static_cast<uint32_t>(d.col_unique_id())) << 32) |
                      static_cast<uint32_t>(d.index_type());
         drop_keys.insert(k);
