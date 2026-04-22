@@ -711,8 +711,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             rolk.unlock();
             auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
             auto ok = _txn_log_collector.wait(t);
-            auto st =
-                    ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
+            auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
             if (st.ok()) {
                 auto all_logs = _txn_log_collector.logs();
                 std::vector<TxnLogPtr> my_logs;
