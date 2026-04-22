@@ -26,7 +26,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "util/runtime_profile.h"
+#include "common/runtime_profile.h"
 
 namespace starrocks::connector {
 
