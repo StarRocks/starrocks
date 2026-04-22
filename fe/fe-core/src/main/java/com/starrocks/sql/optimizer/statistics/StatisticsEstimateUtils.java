@@ -63,7 +63,54 @@ public class StatisticsEstimateUtils {
                 .setNullsFraction(newNullFraction)
                 .setAverageRowSize(newAverageRowSize)
                 .setDistinctValuesCount(newRange.getDistinctValues());
+
+        // Merge MCVs from both sides. MCVs are combined by summing frequencies for shared keys
+        // and keeping unique keys as-is. Only merge if neither side has buckets and the MCVs
+        // represent a majority of the total rows to avoid propagation irrelevant MCVs that could be used
+        // for a bad estimation downstream.
+        final var mergedHistogram =
+                mergeHistogramsForUnion(left.getHistogram(), leftRowCount, right.getHistogram(), rightRowCount);
+        if (mergedHistogram != null) {
+            builder.setHistogram(mergedHistogram);
+        }
+
         return builder.build();
+    }
+
+    private static Histogram mergeHistogramsForUnion(Histogram left, double leftRowCount,
+                                                     Histogram right, double rightRowCount) {
+        if (left == null && right == null) {
+            return null;
+        }
+
+        Map<String, Long> leftMcv = left != null ? left.getMCV() : Map.of();
+        Map<String, Long> rightMcv = right != null ? right.getMCV() : Map.of();
+
+        if (leftMcv.isEmpty() && rightMcv.isEmpty()) {
+            return null;
+        }
+
+        final var mergedMcv = new HashMap<>(leftMcv);
+        for (final var entry : rightMcv.entrySet()) {
+            mergedMcv.merge(entry.getKey(), entry.getValue(), Long::sum);
+        }
+
+        // Neither side has buckets
+        boolean noBuckets = (left == null || left.getBuckets() == null || left.getBuckets().isEmpty())
+                && (right == null || right.getBuckets() == null || right.getBuckets().isEmpty());
+
+        // The merged MCV rows account for at least 50% of the total rows.
+        final double totalRowCount = leftRowCount + rightRowCount;
+        final long mcvRowCount = mergedMcv.values().stream().mapToLong(Long::longValue).sum();
+        final var mcvRowPropagationThreshold = ConnectContext.get().getSessionVariable()
+                .getMcvRowPercentagePropagationThreshold();
+        boolean mcvRepresentative = totalRowCount > 0 && mcvRowCount >= mcvRowPropagationThreshold * totalRowCount;
+
+        if (noBuckets || mcvRepresentative) {
+            return new Histogram(List.of(), mergedMcv);
+        }
+
+        return null;
     }
 
     public static Statistics adjustStatisticsByRowCount(Statistics statistics, double rowCount) {
