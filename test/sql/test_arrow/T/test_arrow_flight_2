@@ -34,7 +34,7 @@ SELECT * FROM test WHERE id = 5;
 
 SELECT * FROM test order by id asc;
 
-SHOW CREATE TABLE test;
+[UC]SHOW CREATE TABLE test;
 
 CREATE TABLE test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 

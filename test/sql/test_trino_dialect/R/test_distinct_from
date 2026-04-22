@@ -25,3 +25,4 @@ select 1 is not distinct from null;
 select null is not distinct from null;
 -- result:
 1
+-- !result
