@@ -53,11 +53,6 @@ public class CloneDuplicateColRefRule implements TreeRewriteRule {
                 return;
             }
 
-            List<Map.Entry<ColumnRefOperator, ScalarOperator>> entries =
-                    colRefMap.entrySet().stream()
-                            .sorted(Comparator.comparing(entry -> entry.getKey().getId()))
-                            .collect(Collectors.toList());
-
             Map<ScalarOperator, Integer> duplicateColRefs = Maps.newHashMap();
             colRefMap.forEach((k, v) -> {
                 if (!v.isColumnRef()) {
