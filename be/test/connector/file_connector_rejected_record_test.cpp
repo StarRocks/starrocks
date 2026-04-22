@@ -17,10 +17,9 @@
 // When enable_log_rejected_record() is true, formats other than CSV/JSON/
 // PARQUET/ORC must return InternalError.
 
-#include "connector/file_connector.h"
-
 #include <gtest/gtest.h>
 
+#include "connector/file_connector.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptor_helper.h"
@@ -93,7 +92,7 @@ TScanRange make_scan_range(TFileFormatType::type format) {
 // Build the provider and data source for a given format type.
 // provider is stored via the unique_ptr and must outlive data_source.
 std::unique_ptr<FileDataSource> make_data_source(const FileDataSourceProvider* provider, TFileFormatType::type format,
-                                                  RuntimeProfile* root_profile) {
+                                                 RuntimeProfile* root_profile) {
     TScanRange scan_range = make_scan_range(format);
     auto ds = std::make_unique<FileDataSource>(provider, scan_range);
     ds->set_runtime_profile(root_profile);
@@ -161,8 +160,8 @@ TEST_F(FileConnectorRejectedRecordTest, UnsupportedFormatWithoutRejectedRecordLo
     tuple_builder.add_slot(slot_builder.build());
     tuple_builder.build(&desc_builder);
     DescriptorTbl* tbl = nullptr;
-    Status dts = DescriptorTbl::create(state.get(), _pool.get(), desc_builder.desc_tbl(), &tbl,
-                                       config::vector_chunk_size);
+    Status dts =
+            DescriptorTbl::create(state.get(), _pool.get(), desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     CHECK(dts.ok()) << dts.message();
     state->set_desc_tbl(tbl);
 
@@ -181,8 +180,7 @@ TEST_F(FileConnectorRejectedRecordTest, SupportedFormatsPassWhitelistCheck) {
     // They will fail later (no real file at /dev/null for non-text formats),
     // but they must NOT return the "only support csv/json/parquet/orc" error.
     const std::vector<TFileFormatType::type> ok_formats = {
-            TFileFormatType::FORMAT_CSV_PLAIN,
-            TFileFormatType::FORMAT_JSON,
+            TFileFormatType::FORMAT_CSV_PLAIN, TFileFormatType::FORMAT_JSON,
             // PARQUET and ORC require native libs that may not be available in the UT
             // environment; skip them to avoid unrelated failures.
     };
