@@ -30,6 +30,14 @@ namespace starrocks {
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options);
 void close_s3_clients();
 
+namespace fs {
+
+struct FileSystemProvider;
+
+FileSystemProvider new_s3_file_system_provider(int priority = 10);
+
+} // namespace fs
+
 class S3ClientFactory {
 public:
     using ClientConfiguration = Aws::Client::ClientConfiguration;

@@ -155,7 +155,7 @@ arrow_flight_port = 9419
 
 #### Configure Arrow Flight Proxy (Optional)
 
-If your BE nodes are not directly accessible from client applications, (for example, when deployed in private networks or Kubernetes environments), you can enable the Arrow Flight proxy feature on the FE to route data from BE nodes through the FE.
+If your BE nodes are not directly accessible from client applications (for example, when deployed in private networks or Kubernetes environments), you can enable the Arrow Flight proxy feature on the FE to route data from BE nodes through the FE.
 
 The proxy feature is controlled by two global variables: 
 
@@ -174,7 +174,7 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 
 :::note
 
-- The proxy feature is enabled by default, which may result in 8-10% lower throughput compared to direct BE connections. If your clients have direct network access to BE nodes, you can disable the proxy to achieve optimal performance: `SET GLOBAL arrow_flight_proxy_enabled = false;`
+- The proxy feature is enabled by default, which may result in 8-10% lower throughput compared to direct BE connections. If your clients have direct network access to BE nodes, or you have limited memory resources on the FE side, you can disable the proxy to achieve optimal performance: `SET GLOBAL arrow_flight_proxy_enabled = false;`.
 - When `arrow_flight_proxy` is empty, tickets will automatically route through the FE node that the client initially connected to.
 - **Important**: The `arrow_flight_proxy` and `arrow_flight_proxy_enabled` settings should be configured globally using `SET GLOBAL`. Session-level settings are not supported.
 - **Session restart required**: Changing the proxy settings only affects new sessions. Existing Arrow Flight SQL sessions will continue using their original settings until they reconnect.
@@ -431,11 +431,7 @@ The examples of output listed below are implemented based on the optional module
    execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
    execute("SET query_mem_limit = 2147483648;")
    execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
-   execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
-   execute("SET arrow_flight_proxy_enabled = true;")
-   execute("SET arrow_flight_proxy = 'fe-proxy.example.com';")
-   execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
-   
+
    # Step 6: Aggregation query
    print_header("Step 6: Aggregation Query")
    execute("""
@@ -519,48 +515,6 @@ The examples of output listed below are implemented based on the optional module
    
    ⏱️  Execution time: 0.005 seconds
 
-   🟡 SQL:
-   SHOW VARIABLES LIKE '%arrow_flight_proxy%';
-   
-   🟢 Result:
-
-     Variable_name Value
-     arrow_flight_proxy      
-     arrow_flight_proxy_enabled  true
-
-   ⏱️  Execution time: 0.006 seconds
-
-   🟡 SQL:
-   SET arrow_flight_proxy_enabled = true;
-
-   🟢 Result:
-
-   StatusResult
-              0
-
-   ⏱️  Execution time: 0.008 seconds
-
-   🟡 SQL:
-   SET arrow_flight_proxy = 'fe-proxy.example.com';
-
-   🟢 Result:
-
-   StatusResult
-              0
-
-   ⏱️  Execution time: 0.007 seconds
-
-   🟡 SQL:
-   SHOW VARIABLES LIKE '%arrow_flight_proxy%';
-
-   🟢 Result:
-
-         Variable_name    Value
-         arrow_flight_proxy   fe-proxy.example.com
-         arrow_flight_proxy_enabled   true
-
-    ⏱️  Execution time: 0.006 seconds
-   
    ================================================================================
    🟢 Step 6: Aggregation Query
    ================================================================================
@@ -1211,10 +1165,6 @@ print_header("Step 5: Session Variables")
 execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
 execute("SET query_mem_limit = 2147483648;")
 execute("SHOW VARIABLES LIKE '%query_mem_limit%';")
-execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
-execute("SET arrow_flight_proxy_enabled = true;")
-execute("SET arrow_flight_proxy = 'fe-proxy.example.com';")
-execute("SHOW VARIABLES LIKE '%arrow_flight_proxy%';")
 
 # =============================================================================
 # Step 6: Aggregation Query

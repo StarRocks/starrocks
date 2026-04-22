@@ -163,7 +163,8 @@ std::unique_ptr<BenchScanner> create_bench_scanner(const std::vector<TBrokerRang
                                                    const std::string& multi_column_separator = "|") {
     // Init RuntimeState
     ObjectPool _obj_pool;
-    RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+    RuntimeState* state = _obj_pool.add(
+            new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
     state->init_instance_mem_tracker();
 
     /// TBrokerScanRangeParams

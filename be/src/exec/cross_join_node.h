@@ -15,11 +15,12 @@
 #pragma once
 
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "exec/pipeline_node.h"
+#include "exec/runtime_filter/runtime_filter_descriptor.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
-#include "runtime/runtime_filter/runtime_filter_descriptor.h"
 #include "runtime/runtime_state_fwd.h"
 
 namespace starrocks {
@@ -37,8 +38,7 @@ public:
     Status init(const TPlanNode& tnode, RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context) override;
+    StatusOr<pipeline::OpFactories> decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
     // rewrite conjuncts as RuntimeFilter according to could_rewrite.
     // now we only support rewrites with chunk rows of 1.
@@ -53,8 +53,7 @@ public:
 
 private:
     template <class BuildFactory, class ProbeFactory>
-    std::vector<std::shared_ptr<pipeline::OperatorFactory>> _decompose_to_pipeline(
-            pipeline::PipelineBuilderContext* context);
+    StatusOr<pipeline::OpFactories> _decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
 
     TJoinOp::type _join_op = TJoinOp::type::CROSS_JOIN;
     std::vector<ExprContext*> _join_conjuncts;

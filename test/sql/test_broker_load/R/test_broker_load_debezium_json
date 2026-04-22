@@ -1,0 +1,226 @@
+-- name: test_broker_load_debezium
+create database db_${uuid0};
+-- result:
+-- !result
+
+use db_${uuid0};
+-- result:
+-- !result
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_broker_load/debezium/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_broker_load/data/debezium_payload.json oss://${oss_bucket}/test_broker_load/debezium/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 259. OK num: 1(upload 1 files).
+-- !result
+
+shell: ossutil64 cp --force ./sql/test_broker_load/data/debezium_no_payload.json oss://${oss_bucket}/test_broker_load/debezium/${uuid0}/ | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 223. OK num: 1(upload 1 files).
+-- !result
+
+
+-- test_debezium_payload
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+LOAD LABEL label0_${uuid1} (
+    DATA INFILE("s3://${oss_bucket}/test_broker_load/debezium/${uuid0}/debezium_payload.json")
+    INTO TABLE t1
+    FORMAT AS "json"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600",
+    "envelope" = "debezium"
+);
+-- result:
+-- !result
+
+function: wait_load_finish("label0_${uuid1}")
+-- result:
+None
+-- !result
+
+select * from t1 order by id;
+-- result:
+1	Alice	25
+2	Bob	30
+3	Charlie	35
+-- !result
+
+drop table t1;
+-- result:
+-- !result
+
+
+-- test_debezium_no_payload
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+LOAD LABEL label1_${uuid1} (
+    DATA INFILE("s3://${oss_bucket}/test_broker_load/debezium/${uuid0}/debezium_no_payload.json")
+    INTO TABLE t1
+    FORMAT AS "json"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600",
+    "envelope" = "debezium"
+);
+-- result:
+-- !result
+
+function: wait_load_finish("label1_${uuid1}")
+-- result:
+None
+-- !result
+
+select * from t1 order by id;
+-- result:
+1	Alice	25
+2	Bob	30
+3	Charlie	35
+-- !result
+
+drop table t1;
+-- result:
+-- !result
+
+
+-- test_debezium_jsonpaths
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100)
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+LOAD LABEL label2_${uuid1} (
+    DATA INFILE("s3://${oss_bucket}/test_broker_load/debezium/${uuid0}/debezium_payload.json")
+    INTO TABLE t1
+    FORMAT AS "json"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600",
+    "envelope" = "debezium",
+    "jsonpaths" = "[\"$.id\",\"$.name\"]"
+);
+-- result:
+-- !result
+
+function: wait_load_finish("label2_${uuid1}")
+-- result:
+None
+-- !result
+
+select * from t1 order by id;
+-- result:
+1	Alice
+2	Bob
+3	Charlie
+-- !result
+
+drop table t1;
+-- result:
+-- !result
+
+
+-- test_debezium_error_with_json_root
+CREATE TABLE t1 (
+    id INT NOT NULL,
+    name VARCHAR(100),
+    age INT
+) PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+
+LOAD LABEL label3_${uuid1} (
+    DATA INFILE("s3://${oss_bucket}/test_broker_load/debezium/dummy.json")
+    INTO TABLE t1
+    FORMAT AS "json"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600",
+    "envelope" = "debezium",
+    "json_root" = "$.payload"
+);
+-- result:
+[REGEX].*json_root cannot be specified when envelope.*
+-- !result
+
+
+-- test_debezium_error_with_strip_outer_array
+LOAD LABEL label4_${uuid1} (
+    DATA INFILE("s3://${oss_bucket}/test_broker_load/debezium/dummy.json")
+    INTO TABLE t1
+    FORMAT AS "json"
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600",
+    "envelope" = "debezium",
+    "strip_outer_array" = "true"
+);
+-- result:
+[REGEX].*strip_outer_array cannot be specified when envelope.*
+-- !result
+
+
+drop database db_${uuid0};
+-- result:
+-- !result
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_broker_load/debezium/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

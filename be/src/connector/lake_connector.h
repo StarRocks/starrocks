@@ -22,7 +22,23 @@
 #include "storage/lake/versioned_tablet.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 
+namespace starrocks {
+class TabletSchema;
+class TabletMetadataPB;
+class SlotDescriptor;
+namespace lake {
+class TabletManager;
+}
+} // namespace starrocks
+
 namespace starrocks::connector {
+
+// Check if all PK columns are in the selected slots. Used by CACHE SELECT to
+// decide whether to warm up persistent index SST files.
+bool has_all_pk_columns_selected(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>& slots);
+
+// Warm up persistent index SST files for cloud-native PK tables.
+Status warmup_pk_index_sst_files(const TabletMetadataPB* metadata, lake::TabletManager* tablet_mgr);
 
 class LakeConnector final : public Connector {
 public:
@@ -216,7 +232,7 @@ class LakeDataSourceProvider final : public DataSourceProvider {
 public:
     friend class LakeDataSource;
     LakeDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
-    ~LakeDataSourceProvider() override = default;
+    ~LakeDataSourceProvider() override;
 
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
@@ -232,6 +248,7 @@ public:
 
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
+    lake::TabletManager* tablet_manager() const { return _tablet_manager; }
 
     // possiable physical distribution optimize of data source
     bool sorted_by_keys_per_tablet() const override {
@@ -267,7 +284,7 @@ protected:
     const TLakeScanNode _t_lake_scan_node;
 
     // for ut
-    lake::TabletManager* _tablet_manager;
+    lake::TabletManager* _tablet_manager = nullptr;
 
     bool _could_split = false;
     bool _could_split_physically = false;
@@ -279,6 +296,13 @@ private:
                                                    TTabletInternalParallelMode::type tablet_internal_parallel_mode,
                                                    int64_t* scan_dop, int64_t* splitted_scan_rows) const;
     StatusOr<bool> _could_split_tablet_physically(const std::vector<TScanRangeParams>& scan_ranges) const;
+
+    // Partition conjuncts used for BE-side dynamic partition pruning. Distinct from the
+    // inherited `_partition_exprs` in DataSourceProvider which stores bucket expressions.
+    std::vector<ExprContext*> _partition_conjunct_ctxs;
+    // RuntimeState captured during init(); used by the destructor to close
+    // _partition_conjunct_ctxs without reaching back through _scan_node.
+    RuntimeState* _runtime_state = nullptr;
 };
 
 } // namespace starrocks::connector

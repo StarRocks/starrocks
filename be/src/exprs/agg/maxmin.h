@@ -21,7 +21,7 @@
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_traits.h"
 #include "gutil/casts.h"
@@ -37,6 +37,7 @@ struct MaxAggregateData<LT, AggregateComplexLTGuard<LT>> {
     T result = RunTimeTypeLimits<LT>::min_value();
 
     void reset() { result = RunTimeTypeLimits<LT>::min_value(); }
+    const T& get_result() const { return result; }
 };
 
 // TODO(murphy) refactor the guard with AggDataTypeTraits
@@ -51,7 +52,7 @@ struct MaxAggregateData<LT, StringLTGuard<LT>> {
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
+    Slice get_result() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
 
     void reset() {
         _buffer.clear();
@@ -72,6 +73,7 @@ struct MinAggregateData<LT, AggregateComplexLTGuard<LT>> {
     T result = RunTimeTypeLimits<LT>::max_value();
 
     void reset() { result = RunTimeTypeLimits<LT>::max_value(); }
+    const T& get_result() const { return result; }
 };
 
 template <LogicalType LT>
@@ -85,7 +87,7 @@ struct MinAggregateData<LT, StringLTGuard<LT>> {
 
     bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
+    Slice get_result() const { return {_buffer.data(), _size > -1 ? (size_t)_size : 0}; }
 
     void reset() {
         _buffer.clear();
@@ -129,17 +131,17 @@ struct MaxElement<LT, State, StringLTGuard<LT>> {
     // final result. If retract's row is greater or equal to now maxest value,
     // need sync details from detail state table.
     static bool is_sync(State& state, const Slice& right) {
-        return !state.has_value() || state.slice().compare(right) <= 0;
+        return !state.has_value() || state.get_result().compare(right) <= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+        if (!state.has_value() || memcompare_padded(state.get_result().get_data(), state.get_result().get_size(),
                                                     right.get_data(), right.get_size()) < 0) {
             state.assign(right);
         }
     }
 
     static bool equals(const State& state, const Slice& right) {
-        return !state.has_value() || state.slice().compare(right) == 0;
+        return !state.has_value() || state.get_result().compare(right) == 0;
     }
 };
 
@@ -149,17 +151,17 @@ struct MinElement<LT, State, StringLTGuard<LT>> {
     // final result. If retract's row is smaller or equal to now maxest value,
     // need sync details from detail state table.
     static bool is_sync(State& state, const Slice& right) {
-        return !state.has_value() || state.slice().compare(right) >= 0;
+        return !state.has_value() || state.get_result().compare(right) >= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+        if (!state.has_value() || memcompare_padded(state.get_result().get_data(), state.get_result().get_size(),
                                                     right.get_data(), right.get_size()) > 0) {
             state.assign(right);
         }
     }
 
     static bool equals(const State& state, const Slice& right) {
-        return !state.has_value() || state.slice().compare(right) == 0;
+        return !state.has_value() || state.get_result().compare(right) == 0;
     }
 };
 
@@ -207,7 +209,7 @@ public:
                 int64_t frame_end = current_frame_last_position + 1;
                 if (has_null) {
                     const auto null_column = down_cast<const NullColumn*>(columns[1]);
-                    const uint8_t* f_data = null_column->raw_data();
+                    const auto& f_data = null_column->immutable_data();
                     for (size_t i = frame_start; i < frame_end; ++i) {
                         if (f_data[i] == 0) {
                             update(ctx, columns, state, i);
@@ -271,7 +273,7 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        auto value = ColumnHelper::get_binary_slice(columns[0], row_num);
+        auto value = GetContainer<LT>::get_data(columns[0], row_num);
         OP()(this->data(state), value);
     }
 
@@ -288,21 +290,20 @@ public:
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
                                              bool ignore_subtraction, bool ignore_addition,
                                              [[maybe_unused]] bool has_null) const override {
-        const Column* data_column = ColumnHelper::get_data_column(columns[0]);
+        const auto& datas = GetContainer<LT>::get_data(columns[0]);
 
         const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
         int64_t current_frame_last_position = current_row_position + rows_end_offset;
         if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
             previous_frame_first_position < partition_end) {
-            if (OP::equals(this->data(state),
-                           ColumnHelper::get_binary_slice(data_column, previous_frame_first_position))) {
+            if (OP::equals(this->data(state), datas[previous_frame_first_position])) {
                 current_frame_last_position = std::min(current_frame_last_position, partition_end - 1);
                 this->data(state).reset();
                 int64_t frame_start = previous_frame_first_position + 1;
                 int64_t frame_end = current_frame_last_position + 1;
                 if (has_null) {
                     const auto null_column = down_cast<const NullColumn*>(columns[1]);
-                    const uint8_t* f_data = null_column->raw_data();
+                    const auto& f_data = null_column->immutable_data();
                     for (size_t i = frame_start; i < frame_end; ++i) {
                         if (f_data[i] == 0) {
                             update(ctx, columns, state, i);
@@ -332,7 +333,7 @@ public:
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
         auto* column = down_cast<BinaryColumn*>(to);
-        column->append(this->data(state).slice());
+        column->append(this->data(state).get_result());
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
@@ -343,14 +344,14 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(to->is_binary());
         auto* column = down_cast<BinaryColumn*>(to);
-        column->append(this->data(state).slice());
+        column->append(this->data(state).get_result());
     }
 
     void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
                     size_t end) const override {
         DCHECK_GT(end, start);
         for (size_t i = start; i < end; ++i) {
-            ColumnHelper::append_binary_value(dst, this->data(state).slice());
+            ColumnHelper::append_column_value<LT>(dst, this->data(state).get_result());
         }
     }
 

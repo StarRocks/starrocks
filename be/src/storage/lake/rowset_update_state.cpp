@@ -18,6 +18,7 @@
 #include "base/phmap/phmap.h"
 #include "base/time/time.h"
 #include "base/utility/defer_op.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/tracer.h"
 #include "fs/fs_factory.h"
@@ -76,24 +77,36 @@ Status SegmentPKIterator::_load() {
 }
 
 Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                               PrimaryKeyEncodingType encoding_type) {
+                               PrimaryKeyEncodingType encoding_type, bool defer_data_load) {
     _iter = iter;
     _pkey_schema = pkey_schema;
     _lazy_load = lazy_load;
+    _defer_data_load = defer_data_load;
     _begin_rowid_offsets.push_back(0);
     RETURN_IF(encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
               Status::InvalidArgument("PK_ENCODING_TYPE_NONE is not a valid encoding type"));
     _encoding_type = encoding_type;
-    _status = _load();
-    if (_status.ok()) {
-        _memory_usage =
-                _pk_column_chunk->memory_usage() + (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
+    if (!_defer_data_load) {
+        _status = _load();
+        if (_status.ok()) {
+            _memory_usage = _pk_column_chunk->memory_usage() +
+                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
+        }
     }
     return _status;
 }
 
 bool SegmentPKIterator::done() {
-    return _pk_column_chunk->is_empty() || !_status.ok();
+    // Deferred first load: trigger on first done() call
+    if (_defer_data_load) {
+        _defer_data_load = false;
+        _status = _load();
+        if (_status.ok() && _pk_column_chunk != nullptr) {
+            _memory_usage = _pk_column_chunk->memory_usage() +
+                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
+        }
+    }
+    return (_pk_column_chunk == nullptr || _pk_column_chunk->is_empty()) || !_status.ok();
 }
 
 Status SegmentPKIterator::status() {
@@ -458,8 +471,9 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->standalone_pk_column()->clone_empty();
     std::vector<uint32_t> delete_idxes;
     const int64* data = nullptr;
-    TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
-                                _auto_increment_partial_update_states[segment_id].write_column->raw_data()));
+    RawDataVisitor visitor;
+    RETURN_IF_ERROR(_auto_increment_partial_update_states[segment_id].write_column->accept(&visitor));
+    data = reinterpret_cast<const int64*>(visitor.result());
 
     // just check the rows which are not exist in the previous version
     // because the rows exist in the previous version may contain 0 which are specified by the user
@@ -806,8 +820,9 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
         _auto_increment_delete_pks[segment_id] = _upserts[segment_id]->standalone_pk_column()->clone_empty();
         std::vector<uint32_t> delete_idxes;
         const int64* data = nullptr;
-        TRY_CATCH_BAD_ALLOC(data = reinterpret_cast<const int64*>(
-                                    _auto_increment_partial_update_states[segment_id].write_column->raw_data()));
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(_auto_increment_partial_update_states[segment_id].write_column->accept(&visitor));
+        data = reinterpret_cast<const int64*>(visitor.result());
 
         // just check the rows which are not exist in the previous version
         // because the rows exist in the previous version may contain 0 which are specified by the user
@@ -875,7 +890,6 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
     const auto* begin = reinterpret_cast<const uint8_t*>(read_buffer.data());
     const auto* end = begin + read_buffer.size();
     RETURN_IF_ERROR(Serd::deserialize(begin, end, col.get()));
-    col->raw_data();
     _memory_usage += col->memory_usage();
     _deletes[del_id] = std::move(col);
     TRACE("end read $0-th deletes files", del_id);

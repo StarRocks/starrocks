@@ -88,7 +88,7 @@ public:
     bool is_close_done() override;
 
     // sync close() interface
-    Status close(RuntimeState* state, Status close_status) override;
+    Status close(RuntimeState* state, const Status& close_status) override;
 
     // This should be called in OlapTableSinkOperator::prepare only once
     void set_profile(RuntimeProfile* profile) override;
@@ -96,8 +96,6 @@ public:
     RuntimeProfile* profile() override { return _profile; }
 
     ObjectPool* pool() { return _pool; }
-
-    Status reset_epoch(RuntimeState* state);
 
     TabletSinkProfile* ts_profile() const { return _ts_profile; }
 

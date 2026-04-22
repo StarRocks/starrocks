@@ -15,17 +15,30 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Range;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.KeysType;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.LiteralExpr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -39,17 +52,20 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
+import com.starrocks.type.PrimitiveType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 /**
@@ -152,7 +168,11 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
         try {
             OptExpression result = null;
             if (checkRewritePartitionValues(aggregationOperator, scanOperator, table)) {
-                result = optimizeWithPartitionValues(aggregationOperator, table, minMax);
+                result = optimizeWithPartitionValues(aggregationOperator, table,
+                        Pair.create(this::getMinListPartitionValue, this::getMaxListPartitionValue));
+            } else if (checkRewriteDayRangePartition(aggregationOperator, scanOperator, table)) {
+                result = optimizeWithPartitionValues(aggregationOperator, table,
+                        Pair.create(this::getRangePartitionValue, this::getRangePartitionValue));
             } else if (checkPartitionPrune(aggregationOperator, scanOperator, table)) {
                 result = optimizeWithPartitionPrune(input, aggregationOperator, scanOperator, table, minMax);
             } else if (checkRewriteTopN(aggregationOperator, scanOperator, table, minMax)) {
@@ -288,8 +308,10 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
      */
     private OptExpression optimizeWithPartitionValues(LogicalAggregationOperator aggregationOperator,
                                                       OlapTable table,
-                                                      Pair<Boolean, Boolean> hasMinMax) {
-        ListPartitionInfo partitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+                                                      Pair<BiFunction<Long, PartitionInfo, ScalarOperator>,
+                                                              BiFunction<Long, PartitionInfo, ScalarOperator>>
+                                                              minMaxFunction) {
+        PartitionInfo partitionInfo = table.getPartitionInfo();
         List<Partition> nonEmpty = table.getNonEmptyPartitions();
         Set<Long> nonEmptyPartitionIds = nonEmpty.stream().map(Partition::getId).collect(Collectors.toSet());
 
@@ -302,11 +324,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 if (CollectionUtils.isEmpty(sorted)) {
                     return null;
                 }
-                long minPartition = sorted.get(0);
-                ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(minPartition);
-                Preconditions.checkState(!partitionValues.isEmpty());
-                ConstantOperator minValue = partitionValues.minValue().toConstant();
-                valueRow.add(minValue);
+                valueRow.add(minMaxFunction.first.apply(sorted.get(0), partitionInfo));
                 columns.add(entry.getKey());
             } else if (isMax(entry.getValue())) {
                 List<Long> sorted = partitionInfo.getSortedPartitions(false);
@@ -314,11 +332,7 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 if (CollectionUtils.isEmpty(sorted)) {
                     return null;
                 }
-                long maxPartition = sorted.get(0);
-                ListPartitionInfo.ListPartitionCell partitionValues = partitionInfo.getPartitionListExpr(maxPartition);
-                Preconditions.checkState(!partitionValues.isEmpty());
-                ConstantOperator maxValue = partitionValues.maxValue().toConstant();
-                valueRow.add(maxValue);
+                valueRow.add(minMaxFunction.second.apply(sorted.get(0), partitionInfo));
                 columns.add(entry.getKey());
             }
         }
@@ -327,6 +341,127 @@ public class PartitionColumnMinMaxRewriteRule extends TransformationRule {
                 .setColumnRefSet(columns)
                 .build();
         return OptExpression.create(values);
+    }
+
+    public ScalarOperator getMinListPartitionValue(long partitionId, PartitionInfo partitionInfo) {
+        ListPartitionInfo.ListPartitionCell partitionValues =
+                ((ListPartitionInfo) partitionInfo).getPartitionListExpr(partitionId);
+        Preconditions.checkState(!partitionValues.isEmpty());
+        return partitionValues.minValue().toConstant();
+    }
+
+    public ScalarOperator getMaxListPartitionValue(long partitionId, PartitionInfo partitionInfo) {
+        ListPartitionInfo.ListPartitionCell partitionValues =
+                ((ListPartitionInfo) partitionInfo).getPartitionListExpr(partitionId);
+        Preconditions.checkState(!partitionValues.isEmpty());
+        return partitionValues.maxValue().toConstant();
+    }
+
+    public ScalarOperator getRangePartitionValue(long partitionId, PartitionInfo partitionInfo) {
+        LiteralExpr partitionValue =
+                ((RangePartitionInfo) partitionInfo).getRange(partitionId).lowerEndpoint().getKeys().get(0);
+        return SqlToScalarOperatorTranslator.translate(partitionValue);
+    }
+
+    private boolean isRangePartitionValues(LogicalAggregationOperator aggregationOperator,
+                                           LogicalScanOperator scanOperator,
+                                           OlapTable olapTable) {
+        if (!checkPartitionPrune(aggregationOperator, scanOperator, olapTable)) {
+            return false;
+        }
+        if (!olapTable.getPartitionInfo().isRangePartition()) {
+            return false;
+        }
+        RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+        if (partitionInfo.getPartitionColumnsSize() > 1) {
+            return false;
+        }
+        return partitionInfo.isPartitionedBy(olapTable, PrimitiveType.DATE);
+    }
+
+    /**
+     * Apply this optimization if:
+     * 1. DUPLICATED TABLE, no delete and no filter
+     * 2. RANGE-EXPRESSION-PARTITIONED table and Partition by date_trunc('day', column) and column is date type
+     * 3. Or RANGE-PARTITIONED table and Partition by date column and the min/max partition range size is 86400s
+     */
+    public boolean checkRewriteDayRangePartition(LogicalAggregationOperator aggregationOperator,
+                                                 LogicalScanOperator scanOperator,
+                                                 OlapTable olapTable) {
+        if (!isRangePartitionValues(aggregationOperator, scanOperator, olapTable)) {
+            return false;
+        }
+        RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
+        if (partitionInfo.getType() != PartitionType.EXPR_RANGE &&
+                partitionInfo.getType() != PartitionType.EXPR_RANGE_V2) {
+            // check if day range partition
+            return partitionInfo.getIdToRange(false).values().stream().allMatch(this::isDayRange);
+        }
+
+        List<Expr> partitionExprs;
+        if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
+            ExpressionRangePartitionInfoV2 rangePartitionInfoV2 = (ExpressionRangePartitionInfoV2) partitionInfo;
+            partitionExprs = rangePartitionInfoV2.getPartitionExprs(olapTable.getIdToColumn());
+        } else {
+            ExpressionRangePartitionInfo rangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            partitionExprs = rangePartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+        }
+
+        if (partitionExprs.size() != 1) {
+            return false;
+        }
+
+        Expr partitionExpr = partitionExprs.get(0);
+
+        // should be date_trunc('day', column)
+        if (partitionExpr instanceof FunctionCallExpr) {
+            FunctionCallExpr funcCall = (FunctionCallExpr) partitionExpr;
+            if (FunctionSet.DATE_TRUNC.equalsIgnoreCase(funcCall.getFunctionName())) {
+                List<Expr> args = funcCall.getChildren();
+                if (args.size() == 2) {
+                    Expr timeUnit = args.get(0);
+                    Expr partitionColumn = args.get(1);
+
+                    if (timeUnit instanceof StringLiteral) {
+                        if ("day".equalsIgnoreCase(((StringLiteral) timeUnit).getValue())) {
+                            if (!(partitionColumn instanceof SlotRef
+                                    && partitionColumn.getType().getPrimitiveType() == PrimitiveType.DATE)) {
+                                return false;
+                            }
+                            return partitionInfo.getIdToRange(false).values().stream()
+                                    .allMatch(this::isDayRange);
+                        }
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private boolean isDayRange(Range<PartitionKey> range) {
+        if (range.lowerBoundType() != BoundType.CLOSED
+                || range.upperBoundType() != BoundType.OPEN) {
+            return false;
+        }
+
+        PartitionKey lowerEndpoint = range.lowerEndpoint();
+        PartitionKey upperEndpoint = range.upperEndpoint();
+
+        if (lowerEndpoint.getKeys().size() != 1 || upperEndpoint.getKeys().size() != 1) {
+            return false;
+        }
+        LiteralExpr lowerBound = lowerEndpoint.getKeys().get(0);
+        LiteralExpr upperBound = upperEndpoint.getKeys().get(0);
+        if (!(lowerBound instanceof DateLiteral lowerDate) || !(upperBound instanceof DateLiteral upperDate)) {
+            return false;
+        }
+        // ignore shadow partition
+        if (PartitionKey.isShadowDateLiteral(lowerDate)) {
+            return true;
+        }
+        return upperDate.toLocalDateTime().toEpochSecond(ZoneOffset.UTC) ==
+                lowerDate.toLocalDateTime().toEpochSecond(ZoneOffset.UTC) + 86400;
     }
 
     private static boolean isMax(CallOperator call) {

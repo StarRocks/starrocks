@@ -46,7 +46,6 @@
 #include <rapidjson/prettywriter.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "agent/master_info.h"
 #include "base/metrics.h"
 #include "base/string/string_parser.hpp"
 #include "base/time/time.h"
@@ -56,6 +55,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
+#include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
@@ -594,6 +594,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
     } else {
         request.__set_strip_outer_array(false);
+    }
+    if (!http_req->header(HTTP_ENVELOPE).empty()) {
+        auto envelope_str = http_req->header(HTTP_ENVELOPE);
+        if (boost::iequals(envelope_str, "debezium")) {
+            request.__set_envelope(TEnvelopeType::DEBEZIUM);
+        } else if (!boost::iequals(envelope_str, "none")) {
+            return Status::InvalidArgument(fmt::format("Unknown envelope type: {}", envelope_str));
+        }
     }
     if (!http_req->header(HTTP_PARTIAL_UPDATE).empty()) {
         if (boost::iequals(http_req->header(HTTP_PARTIAL_UPDATE), "false")) {

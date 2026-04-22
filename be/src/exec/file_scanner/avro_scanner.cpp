@@ -419,7 +419,7 @@ StatusOr<ChunkPtr> AvroScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
         }
 
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[column_pos]->evaluate_checked(nullptr, src_chunk.get()));
-        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), std::move(col));
+        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), col);
         cast_chunk->append_column(std::move(col), slot->id());
     }
 
@@ -724,7 +724,7 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
 }
 
 Status AvroScanner::_construct_column(const avro_value_t& input_value, Column* column, const TypeDescriptor& type_desc,
-                                      const std::string& col_name) {
+                                      std::string_view col_name) {
     return add_adaptive_nullable_column(column, type_desc, col_name, input_value, !_strict_mode);
 }
 

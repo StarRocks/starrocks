@@ -35,6 +35,7 @@
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
@@ -72,7 +73,9 @@ StatusOr<size_t> LocalLookUpRequestContext::fill_response(const ChunkPtr& result
 }
 
 void LocalLookUpRequestContext::callback(const Status& status) {
-    fetch_ctx->unit->finished_request_num++;
+    if (auto unit = fetch_ctx->unit.lock(); unit != nullptr) {
+        unit->finished_request_num++;
+    }
 }
 
 // Deserialize remote request payload into a reusable chunk for processing.
@@ -807,7 +810,7 @@ auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& r
 
         // not the same segment file
         if (!same_segment) {
-            ranges.add(std::move(cur_range));
+            ranges.add(cur_range);
             locators.emplace_back(cur_tablet, cur_rss_id, std::move(ranges));
 
             // reset
@@ -827,13 +830,13 @@ auto NativeLookUpTask::_build_row_id_range(RuntimeState* state, const Columns& r
 
         // new rowid -> new range
         else if (rowid != cur_range.end() - 1) {
-            ranges.add(std::move(cur_range));
+            ranges.add(cur_range);
             cur_range = Range<rowid_t>(rowid, rowid + 1);
         }
     }
 
     // flush the last range
-    ranges.add(std::move(cur_range));
+    ranges.add(cur_range);
     locators.emplace_back(cur_tablet, cur_rss_id, std::move(ranges));
     replicated->push_back(replicated->back() + current_group_size);
 
@@ -901,6 +904,11 @@ auto NativeLookUpTask::_late_materialize_by_row_locators(RuntimeState* state, co
     for (const auto& slot : slots) {
         size_t column_index = accumulated->schema()->get_field_index_by_name(slot->col_name());
         accumulated->set_slot_id_to_index(slot->id(), column_index);
+        auto column = accumulated->get_column_by_slot_id(slot->id());
+        if (slot->is_nullable() && !column->is_nullable()) {
+            auto nullable_column = NullableColumn::wrap_if_necessary(std::move(column));
+            accumulated->update_column(std::move(nullable_column), slot->id());
+        }
     }
 
     return accumulated;

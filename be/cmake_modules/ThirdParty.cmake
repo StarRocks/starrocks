@@ -43,6 +43,24 @@ list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib/cmake)
 list(APPEND CMAKE_PREFIX_PATH ${THIRDPARTY_DIR}/lib64/cmake)
 link_directories(${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64)
 
+function(starrocks_resolve_thirdparty_library out_var file_name)
+    if (APPLE)
+        set(search_dirs "${THIRDPARTY_DIR}/lib" "${THIRDPARTY_DIR}/lib64")
+    else()
+        set(search_dirs "${THIRDPARTY_DIR}/lib64" "${THIRDPARTY_DIR}/lib")
+    endif()
+
+    foreach(search_dir IN LISTS search_dirs)
+        if (EXISTS "${search_dir}/${file_name}")
+            set(${out_var} "${search_dir}/${file_name}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+
+    list(GET search_dirs 0 default_search_dir)
+    set(${out_var} "${default_search_dir}/${file_name}" PARENT_SCOPE)
+endfunction()
+
 # Set Boost
 set(Boost_DEBUG FALSE)
 set(Boost_USE_MULTITHREADED ON)
@@ -56,6 +74,17 @@ if (NOT APPLE)
     find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context iostreams)
 else()
     find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context iostreams)
+    set(BOOST_APPLE_LIBRARIES "")
+    foreach(BOOST_LIBRARY IN LISTS Boost_LIBRARIES)
+        get_filename_component(BOOST_LIBRARY_NAME "${BOOST_LIBRARY}" NAME)
+        if (BOOST_LIBRARY_NAME MATCHES "^libboost_.*\\.(a|dylib)$")
+            starrocks_resolve_thirdparty_library(BOOST_LIBRARY_RESOLVED "${BOOST_LIBRARY_NAME}")
+            list(APPEND BOOST_APPLE_LIBRARIES "${BOOST_LIBRARY_RESOLVED}")
+        else()
+            list(APPEND BOOST_APPLE_LIBRARIES "${BOOST_LIBRARY}")
+        endif()
+    endforeach()
+    set(Boost_LIBRARIES "${BOOST_APPLE_LIBRARIES}")
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -65,14 +94,17 @@ set(JEMALLOC_HOME "${THIRDPARTY_DIR}/jemalloc")
 
 # Set all libraries
 
+starrocks_resolve_thirdparty_library(CLUCENE_CORE_LIBRARY libclucene-core-static.a)
 add_library(clucene-core STATIC IMPORTED)
-set_target_properties(clucene-core PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-core-static.a)
+set_target_properties(clucene-core PROPERTIES IMPORTED_LOCATION ${CLUCENE_CORE_LIBRARY})
 
+starrocks_resolve_thirdparty_library(CLUCENE_SHARED_LIBRARY libclucene-shared-static.a)
 add_library(clucene-shared STATIC IMPORTED)
-set_target_properties(clucene-shared PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-shared-static.a)
+set_target_properties(clucene-shared PROPERTIES IMPORTED_LOCATION ${CLUCENE_SHARED_LIBRARY})
 
+starrocks_resolve_thirdparty_library(CLUCENE_CONTRIBS_LIBRARY libclucene-contribs-lib.a)
 add_library(clucene-contribs-lib STATIC IMPORTED)
-set_target_properties(clucene-contribs-lib PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libclucene-contribs-lib.a)
+set_target_properties(clucene-contribs-lib PROPERTIES IMPORTED_LOCATION ${CLUCENE_CONTRIBS_LIBRARY})
 
 add_library(gflags STATIC IMPORTED GLOBAL)
 set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
@@ -139,8 +171,18 @@ add_library(icudata STATIC IMPORTED)
 set_target_properties(icudata PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libicudata.a)
 
 
-# Allow FindOpenSSL() to find correct static libraries
-set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE PATH "root directory of an OpenSSL installation")
+# Allow FindOpenSSL() to find correct static libraries from the prepared thirdparty root.
+set(OPENSSL_ROOT_DIR ${THIRDPARTY_DIR} CACHE PATH "root directory of an OpenSSL installation" FORCE)
+set(OPENSSL_USE_STATIC_LIBS TRUE CACHE BOOL "Prefer static OpenSSL from the prepared thirdparty root" FORCE)
+if (EXISTS "${THIRDPARTY_DIR}/include/openssl/ssl.h")
+    set(OPENSSL_INCLUDE_DIR "${THIRDPARTY_DIR}/include" CACHE PATH "OpenSSL include directory" FORCE)
+endif()
+if (EXISTS "${THIRDPARTY_DIR}/lib/libcrypto.a")
+    set(OPENSSL_CRYPTO_LIBRARY "${THIRDPARTY_DIR}/lib/libcrypto.a" CACHE FILEPATH "OpenSSL crypto library" FORCE)
+endif()
+if (EXISTS "${THIRDPARTY_DIR}/lib/libssl.a")
+    set(OPENSSL_SSL_LIBRARY "${THIRDPARTY_DIR}/lib/libssl.a" CACHE FILEPATH "OpenSSL ssl library" FORCE)
+endif()
 message(STATUS "Using OpenSSL Root Dir: ${OPENSSL_ROOT_DIR}")
 add_library(crypto STATIC IMPORTED GLOBAL)
 set_target_properties(crypto PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcrypto.a)
@@ -155,7 +197,8 @@ endforeach()
 find_package(AWSSDK REQUIRED COMPONENTS core s3 s3-crt transfer identity-management sts)
 include_directories(${AWSSDK_INCLUDE_DIRS})
 
-set(Poco_ROOT_DIR ${THIRDPARTY_DIR})
+set(Poco_ROOT "${THIRDPARTY_DIR}" CACHE PATH "Poco search path" FORCE)
+set(Poco_ROOT_DIR "${THIRDPARTY_DIR}" CACHE PATH "Poco search path" FORCE)
 find_package(Poco REQUIRED COMPONENTS Net NetSSL)
 include_directories(${Poco_INCLUDE_DIRS})
 
@@ -188,29 +231,36 @@ else()
     set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${JEMALLOC_HOME}/lib-static/libjemalloc.a)
 endif()
 
+starrocks_resolve_thirdparty_library(BROTLICOMMON_LIBRARY libbrotlicommon.a)
 add_library(brotlicommon STATIC IMPORTED)
-set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
+set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${BROTLICOMMON_LIBRARY})
 
+starrocks_resolve_thirdparty_library(BROTLIDEC_LIBRARY libbrotlidec.a)
 add_library(brotlidec STATIC IMPORTED)
-set_target_properties(brotlidec PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlidec.a)
+set_target_properties(brotlidec PROPERTIES IMPORTED_LOCATION ${BROTLIDEC_LIBRARY})
 
+starrocks_resolve_thirdparty_library(BROTLIENC_LIBRARY libbrotlienc.a)
 add_library(brotlienc STATIC IMPORTED)
-set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlienc.a)
+set_target_properties(brotlienc PROPERTIES IMPORTED_LOCATION ${BROTLIENC_LIBRARY})
 
+starrocks_resolve_thirdparty_library(ZSTD_LIBRARY libzstd.a)
 add_library(zstd STATIC IMPORTED)
-set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libzstd.a)
+set_target_properties(zstd PROPERTIES IMPORTED_LOCATION ${ZSTD_LIBRARY})
 
 add_library(streamvbyte STATIC IMPORTED)
 set_target_properties(streamvbyte PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libstreamvbyte_static.a)
 
+starrocks_resolve_thirdparty_library(ARROW_LIBRARY libarrow.a)
 add_library(arrow STATIC IMPORTED)
-set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libarrow.a)
+set_target_properties(arrow PROPERTIES IMPORTED_LOCATION ${ARROW_LIBRARY})
 
+starrocks_resolve_thirdparty_library(PARQUET_LIBRARY libparquet.a)
 add_library(parquet STATIC IMPORTED)
-set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libparquet.a)
+set_target_properties(parquet PROPERTIES IMPORTED_LOCATION ${PARQUET_LIBRARY})
 
+starrocks_resolve_thirdparty_library(BRPC_LIBRARY libbrpc.a)
 add_library(brpc STATIC IMPORTED GLOBAL)
-set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrpc.a)
+set_target_properties(brpc PROPERTIES IMPORTED_LOCATION ${BRPC_LIBRARY})
 
 add_library(rocksdb STATIC IMPORTED GLOBAL)
 set_target_properties(rocksdb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librocksdb.a)
@@ -274,11 +324,13 @@ set_target_properties(roaring PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(cctz STATIC IMPORTED)
 set_target_properties(cctz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libcctz.a)
 
+starrocks_resolve_thirdparty_library(BENCHMARK_LIBRARY libbenchmark.a)
 add_library(benchmark STATIC IMPORTED)
-set_target_properties(benchmark PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbenchmark.a)
+set_target_properties(benchmark PROPERTIES IMPORTED_LOCATION ${BENCHMARK_LIBRARY})
 
+starrocks_resolve_thirdparty_library(BENCHMARK_MAIN_LIBRARY libbenchmark_main.a)
 add_library(benchmark_main STATIC IMPORTED)
-set_target_properties(benchmark_main PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbenchmark_main.a)
+set_target_properties(benchmark_main PROPERTIES IMPORTED_LOCATION ${BENCHMARK_MAIN_LIBRARY})
 
 if (ENABLE_MULTI_DYNAMIC_LIBS)
     add_library(fmt SHARED IMPORTED)
@@ -300,12 +352,14 @@ if (ENABLE_MULTI_DYNAMIC_LIBS)
     endif()
     install(FILES ${FMT_SHARED_FILES} DESTINATION ${OUTPUT_DIR}/lib)
 else()
+    starrocks_resolve_thirdparty_library(FMT_STATIC_LIBRARY libfmt.a)
     add_library(fmt STATIC IMPORTED)
-    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libfmt.a)
+    set_target_properties(fmt PROPERTIES IMPORTED_LOCATION ${FMT_STATIC_LIBRARY})
 endif()
 
+starrocks_resolve_thirdparty_library(RYU_LIBRARY libryu.a)
 add_library(ryu STATIC IMPORTED)
-set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libryu.a)
+set_target_properties(ryu PROPERTIES IMPORTED_LOCATION ${RYU_LIBRARY})
 
 add_library(libz STATIC IMPORTED GLOBAL)
 set_target_properties(libz PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libz.a)
@@ -331,32 +385,39 @@ set_target_properties(simdutf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib
 add_library(velocypack STATIC IMPORTED)
 set_target_properties(velocypack PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libvelocypack.a)
 
+starrocks_resolve_thirdparty_library(HTTP_CLIENT_CURL_LIBRARY libhttp_client_curl.a)
 add_library(http_client_curl STATIC IMPORTED GLOBAL)
-set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libhttp_client_curl.a)
+set_target_properties(http_client_curl PROPERTIES IMPORTED_LOCATION ${HTTP_CLIENT_CURL_LIBRARY})
 
+starrocks_resolve_thirdparty_library(OPENTELEMETRY_COMMON_LIBRARY libopentelemetry_common.a)
 add_library(opentelemetry_common STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_common PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_common.a)
+set_target_properties(opentelemetry_common PROPERTIES IMPORTED_LOCATION ${OPENTELEMETRY_COMMON_LIBRARY})
 
+starrocks_resolve_thirdparty_library(OPENTELEMETRY_TRACE_LIBRARY libopentelemetry_trace.a)
 add_library(opentelemetry_trace STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_trace.a)
+set_target_properties(opentelemetry_trace PROPERTIES IMPORTED_LOCATION ${OPENTELEMETRY_TRACE_LIBRARY})
 
+starrocks_resolve_thirdparty_library(OPENTELEMETRY_RESOURCES_LIBRARY libopentelemetry_resources.a)
 add_library(opentelemetry_resources STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_resources.a)
+set_target_properties(opentelemetry_resources PROPERTIES IMPORTED_LOCATION ${OPENTELEMETRY_RESOURCES_LIBRARY})
 
 add_library(jansson STATIC IMPORTED GLOBAL)
 set_target_properties(jansson PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjansson.a)
 
+starrocks_resolve_thirdparty_library(AVRO_LIBRARY libavro.a)
 add_library(avro STATIC IMPORTED GLOBAL)
-set_target_properties(avro PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavro.a)
+set_target_properties(avro PROPERTIES IMPORTED_LOCATION ${AVRO_LIBRARY})
 
+starrocks_resolve_thirdparty_library(AVROCPP_LIBRARY libavrocpp_s.a)
 add_library(avrocpp STATIC IMPORTED GLOBAL)
-set_target_properties(avrocpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libavrocpp_s.a)
+set_target_properties(avrocpp PROPERTIES IMPORTED_LOCATION ${AVROCPP_LIBRARY})
 
 add_library(serdes STATIC IMPORTED GLOBAL)
 set_target_properties(serdes PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libserdes.a)
 
+starrocks_resolve_thirdparty_library(OPENTELEMETRY_JAEGER_LIBRARY libopentelemetry_exporter_jaeger_trace.a)
 add_library(opentelemetry_exporter_jaeger_trace STATIC IMPORTED GLOBAL)
-set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libopentelemetry_exporter_jaeger_trace.a)
+set_target_properties(opentelemetry_exporter_jaeger_trace PROPERTIES IMPORTED_LOCATION ${OPENTELEMETRY_JAEGER_LIBRARY})
 
 if (APPLE)
     add_library(libxml2 SHARED IMPORTED GLOBAL)

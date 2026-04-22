@@ -27,6 +27,8 @@ CONF_Bool(compress_rowbatches, "true");
 // Compress ratio when shuffle row_batches in network, not in storage engine.
 // If ratio is less than this value, use uncompressed data instead.
 CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
+// If true, skip compression when serialized_size exceeds the codec's max input size limit (instead of returning an error).
+CONF_mBool(enable_rpc_compress_overflow_skip, "true");
 
 // (Advanced) Maximum size of per-query receive-side buffer.
 CONF_mInt32(exchg_node_buffer_size_bytes, "10485760");
@@ -177,6 +179,9 @@ CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
+
+// limit local exchange buffer size by dop * local_exchange_buffer_mem_limit_per_driver for union operators.
+CONF_mBool(local_exchange_buffer_mem_limit_by_consumer_dop, "true");
 
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");

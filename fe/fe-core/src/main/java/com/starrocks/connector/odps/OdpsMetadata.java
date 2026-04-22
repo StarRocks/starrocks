@@ -46,8 +46,8 @@ import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionInfo;
@@ -223,7 +223,8 @@ public class OdpsMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
         List<Partition> partitions = get(partitionCache, odpsTableName);

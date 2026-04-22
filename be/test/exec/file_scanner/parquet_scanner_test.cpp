@@ -105,7 +105,8 @@ class ParquetScannerTest : public ::testing::Test {
         /// Init RuntimeState
         auto query_globals = TQueryGlobals();
         query_globals.time_zone = timezone;
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, static_cast<ExecEnv*>(nullptr)));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
 
@@ -314,7 +315,8 @@ class ParquetScannerTest : public ::testing::Test {
         RuntimeProfile* profile = _obj_pool.add(new RuntimeProfile("test_prof", true));
         ScannerCounter* counter = _obj_pool.add(new ScannerCounter());
         auto query_globals = TQueryGlobals();
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), query_globals, static_cast<ExecEnv*>(nullptr)));
 
         auto ranges = generate_ranges({path}, 0, {});
         TBrokerScanRange* broker_scan_range = _obj_pool.add(new TBrokerScanRange());

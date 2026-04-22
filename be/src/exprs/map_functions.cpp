@@ -144,8 +144,9 @@ StatusOr<ColumnPtr> MapFunctions::map_size(FunctionContext* context, const Colum
     }
 
     if (arg0->has_null()) {
-        return NullableColumn::create(std::move(col_result),
-                                      down_cast<const NullableColumn*>(arg0.get())->null_column());
+        auto null_column = NullColumn::static_pointer_cast(
+                Column::mutate(down_cast<const NullableColumn*>(arg0.get())->null_column()));
+        return NullableColumn::create(std::move(col_result), std::move(null_column));
     } else {
         return col_result;
     }
@@ -211,7 +212,7 @@ StatusOr<ColumnPtr> MapFunctions::map_entries(FunctionContext* context, const Co
 
     // Provide field names to avoid anonymous struct check failure
     std::vector<std::string> field_names = {"key", "value"};
-    auto struct_column = StructColumn::create(std::move(struct_fields), std::move(field_names));
+    auto struct_column = StructColumn::create(struct_fields, std::move(field_names));
 
     auto null_column = NullColumn::create(struct_column->size(), 0);
     auto nullable_struct = NullableColumn::create(std::move(struct_column), std::move(null_column));
@@ -454,9 +455,9 @@ StatusOr<ColumnPtr> MapFunctions::map_concat(FunctionContext* context, const Col
         keys->fnv_hash(hash.get(), 0, keys->size());
         hash_values[i] = std::move(hash);
         all_nulls[i] = std::move(null);
-        all_keys[i] = std::move(keys);
-        all_values[i] = std::move(values);
-        all_offsets[i] = std::move(offsets);
+        all_keys[i] = keys;
+        all_values[i] = values;
+        all_offsets[i] = offsets;
     }
     // create dest
     auto dest_null = all_nulls[0]->clone_empty();

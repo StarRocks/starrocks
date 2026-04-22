@@ -49,14 +49,14 @@
 #include "storage/rowset/indexed_column_reader.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/types.h"
+#include "types/storage_type_traits.h"
 #include "types/type_info.h"
-#include "types/type_traits.h"
 
 namespace starrocks {
 
 template <LogicalType type>
 struct ZoneMapDatumBase {
-    using CppType = typename TypeTraits<type>::CppType;
+    using CppType = StorageCppType<type>;
     CppType value;
 
     virtual ~ZoneMapDatumBase() = default;
@@ -178,7 +178,7 @@ struct ZoneMap {
 
 template <LogicalType type>
 class ZoneMapIndexWriterImpl final : public ZoneMapIndexWriter {
-    using CppType = typename TypeTraits<type>::CppType;
+    using CppType = StorageCppType<type>;
 
 public:
     // TypeInfo is used for all kinds of types. It is used to change the content of datum of the max/min value.

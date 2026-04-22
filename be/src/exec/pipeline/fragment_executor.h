@@ -21,10 +21,10 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gutil/macros.h"
+#include "runtime/exec_env_fwd.h"
 
 namespace starrocks {
 class DataSink;
-class ExecEnv;
 class RuntimeProfile;
 class TPlanFragmentExecParams;
 class RuntimeState;
@@ -89,8 +89,6 @@ public:
         return _common_request.fragment.__isset.output_sink || _unique_request.fragment.__isset.output_sink;
     }
     const TDataSink& output_sink() const;
-
-    const bool is_stream_pipeline() const { return _common_request.is_stream_pipeline; }
 
 private:
     static const std::vector<TScanRangeParams> _no_scan_ranges;

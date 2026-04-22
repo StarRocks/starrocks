@@ -107,6 +107,9 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(pk_index_sst_read_error_total);
     REGISTER_STARROCKS_METRIC(pk_index_sst_write_error_total);
 
+    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_total);
+    REGISTER_STARROCKS_METRIC(staros_shard_info_fallback_failed_total);
+
     // clone
     _metrics.register_metric("clone_task_copy_bytes", MetricLabels().add("type", "INTER_NODE"),
                              &(_fast_metrics->clone_task_inter_node_copy_bytes));
@@ -296,6 +299,8 @@ void GlobalMetricsRegistry::initialize(const std::vector<std::string>& paths, bo
     }
 
     _file_scan_metrics = std::make_unique<FileScanMetrics>(&_metrics);
+    _catalog_scan_metrics = std::make_unique<CatalogScanMetrics>(&_metrics);
+    _spill_metrics = std::make_unique<SpillMetrics>(&_metrics);
 
 #ifndef __APPLE__
     if (init_jvm_metrics) {

@@ -30,14 +30,14 @@
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/tablet_index.h"
 #include "types/logical_type.h"
-#include "types/type_traits.h"
+#include "types/storage_type_traits.h"
 
 namespace starrocks {
 
 template <LogicalType field_type>
 class BuiltinInvertedWriterImpl : public BuiltinInvertedWriter {
 public:
-    using CppType = typename CppTypeTraits<field_type>::CppType;
+    using CppType = StorageCppType<field_type>;
 
     explicit BuiltinInvertedWriterImpl(std::unique_ptr<BitmapIndexWriter>& writer, const TabletIndex* inverted_index)
             : _builtin_writer(std::move(writer)) {

@@ -201,7 +201,8 @@ Status DataStreamSender::Channel::init(RuntimeState* state) {
                         ", maybe version is not compatible.";
         return Status::InternalError("no brpc destination");
     }
-    _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
+    auto* query_execution_services = state->query_execution_services();
+    _brpc_stub = query_execution_services->rpc->brpc_stub_cache->get_stub(_brpc_dest_addr);
     if (UNLIKELY(_brpc_stub == nullptr)) {
         auto msg = fmt::format("The brpc stub of {}:{} is null.", _brpc_dest_addr.hostname, _brpc_dest_addr.port);
         LOG(WARNING) << msg;
@@ -368,11 +369,9 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
-          _current_channel_idx(0),
+
           _part_type(sink.output_partition.type),
-          _profile(nullptr),
-          _serialize_chunk_timer(nullptr),
-          _bytes_sent_counter(nullptr),
+
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
           _enable_exchange_pass_through(enable_exchange_pass_through),
@@ -607,7 +606,7 @@ Status DataStreamSender::send_chunk(RuntimeState* state, Chunk* chunk) {
     return Status::OK();
 }
 
-Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
+Status DataStreamSender::close(RuntimeState* state, const Status& exec_status) {
     RETURN_IF_ERROR(DataSink::close(state, exec_status));
     ScopedTimer<MonotonicStopWatch> close_timer(_profile != nullptr ? _profile->total_time_counter() : nullptr);
     // TODO: only close channels that didn't have any errors

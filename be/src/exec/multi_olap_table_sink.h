@@ -173,7 +173,7 @@ public:
      * @param close_status The status of the close operation.
      * @return The status of the close operation.
      */
-    Status close(RuntimeState* state, Status close_status) override;
+    Status close(RuntimeState* state, const Status& close_status) override;
 
     /**
      * @brief Returns the runtime profile for the MultiOlapTableSink.
@@ -183,16 +183,6 @@ public:
      * @return The runtime profile for the sink.
      */
     RuntimeProfile* profile() override;
-
-    /**
-     * @brief Resets the epoch of the MultiOlapTableSink.
-     * 
-     * This method is called to reset the epoch of the sink.
-     * 
-     * @param state The runtime state.
-     * @return The status of the epoch reset operation.
-     */
-    Status reset_epoch(RuntimeState* state);
 
     void set_profile(RuntimeProfile* profile) override;
 

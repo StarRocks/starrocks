@@ -16,7 +16,7 @@
 
 #include <boost/algorithm/string.hpp>
 
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/schema_scanner/schema_analyze_status.h"
@@ -82,8 +82,7 @@ namespace starrocks {
 
 StarRocksServer* SchemaScanner::_s_starrocks_server;
 
-SchemaScanner::SchemaScanner(ColumnDesc* columns, int column_num)
-        : _is_init(false), _param(nullptr), _columns(columns), _column_num(column_num) {}
+SchemaScanner::SchemaScanner(ColumnDesc* columns, int column_num) : _columns(columns), _column_num(column_num) {}
 
 SchemaScanner::~SchemaScanner() = default;
 
@@ -353,7 +352,7 @@ bool SchemaScanner::_parse_expr_predicate(Expr* conjunct, const std::string& col
     if (slot_id_mapping.find(slot_id) == slot_id_mapping.end()) {
         return false;
     }
-    auto& slot_name = slot_id_mapping.at(slot_id)->col_name();
+    auto slot_name = slot_id_mapping.at(slot_id)->col_name();
     if (!boost::iequals(slot_name, col_name)) {
         return false;
     }

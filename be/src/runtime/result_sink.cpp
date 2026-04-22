@@ -105,7 +105,9 @@ Status ResultSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(prepare_exprs(state));
 
     // create sender
-    RETURN_IF_ERROR(state->exec_env()->result_mgr()->create_sender(state->fragment_instance_id(), _buf_size, &_sender));
+    auto* query_execution_services = state->query_execution_services();
+    RETURN_IF_ERROR(query_execution_services->runtime->result_mgr->create_sender(state->fragment_instance_id(),
+                                                                                 _buf_size, &_sender));
 
     // create writer based on sink type
     switch (_sink_type) {
@@ -150,7 +152,7 @@ Status ResultSink::send_chunk(RuntimeState* state, Chunk* chunk) {
     return _writer->append_chunk(chunk);
 }
 
-Status ResultSink::close(RuntimeState* state, Status exec_status) {
+Status ResultSink::close(RuntimeState* state, const Status& exec_status) {
     if (_closed) {
         return Status::OK();
     }
@@ -172,8 +174,9 @@ Status ResultSink::close(RuntimeState* state, Status exec_status) {
         }
         (void)_sender->close(final_status);
     }
-    (void)state->exec_env()->result_mgr()->cancel_at_time(time(nullptr) + config::result_buffer_cancelled_interval_time,
-                                                          state->fragment_instance_id());
+    auto* query_execution_services = state->query_execution_services();
+    (void)query_execution_services->runtime->result_mgr->cancel_at_time(
+            time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
     ExprExecutor::close(_output_expr_ctxs, state);
 
     _closed = true;

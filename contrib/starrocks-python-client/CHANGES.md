@@ -1,6 +1,11 @@
 Version history
 ===============
 
+**Unreleased**
+
+- Fix parsing of reflected nested `STRUCT` / `ARRAY` / `MAP` column types when inline field comments are present (#69817)
+- Deserialize complex types to matching Python list, dict types (#70480 by @chris-celerdata)
+
 **1.3.3**
 
 - Add back support for SQLAlchemy 1.4 (#65976 by @rad-pat)

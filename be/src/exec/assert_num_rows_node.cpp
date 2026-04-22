@@ -27,9 +27,9 @@ namespace starrocks {
 AssertNumRowsNode::AssertNumRowsNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : PipelineNode(pool, tnode, descs),
           _desired_num_rows(tnode.assert_num_rows_node.desired_num_rows),
-          _subquery_string(tnode.assert_num_rows_node.subquery_string),
+          _subquery_string(tnode.assert_num_rows_node.subquery_string)
 
-          _has_assert(false) {
+{
     if (tnode.assert_num_rows_node.__isset.assertion) {
         _assertion = tnode.assert_num_rows_node.assertion;
     } else {
@@ -49,10 +49,10 @@ void AssertNumRowsNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> AssertNumRowsNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories operator_before_assert_num_rows_source = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto operator_before_assert_num_rows_source, _children[0]->decompose_to_pipeline(context));
     operator_before_assert_num_rows_source = context->maybe_interpolate_local_passthrough_exchange(
             runtime_state(), id(), operator_before_assert_num_rows_source);
 

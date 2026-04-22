@@ -1,0 +1,81 @@
+-- name: test_mv_iceberg_agg_join_pushdown_rewrite
+-- Test Point: aggregate-join-pushdown MV rewrite must trigger when the MV base
+--             table is an Iceberg table whose numeric id is unstable across
+--             plan rebuilds.
+-- Method: build an MV over an Iceberg fact, join it with a native dim, then
+--         assert check_hit_materialized_view matches the MV.
+-- Scope: AggregateJoinPushDownRule / MaterializationContext.prune (external
+--        table id-vs-equals comparison).
+-- Catalog: built via create_iceberg_catalog helper; backend type comes from
+--          ${iceberg_sql_test_catalog_type} in sr.conf. CI stays on hive;
+--          local devs can flip it to hadoop without editing the test.
+-- Related: https://github.com/StarRocks/starrocks/issues/71849
+
+function: create_iceberg_catalog("iceberg_mv_${uuid0}", "${iceberg_sql_test_catalog_type}")
+
+create database iceberg_mv_${uuid0}.ice_db_${uuid0};
+
+create table iceberg_mv_${uuid0}.ice_db_${uuid0}.f_driver_online_detail_h (
+    granularity string,
+    business    string,
+    city_id     int,
+    date_id     int,
+    online_seconds bigint,
+    driver_id   bigint
+) partition by (date_id) properties ("format-version" = "2");
+
+insert into iceberg_mv_${uuid0}.ice_db_${uuid0}.f_driver_online_detail_h values
+    ('WHEELS','Transport',1,20260101,3600,1001),
+    ('WHEELS','Transport',1,20260101,3600,1002),
+    ('WHEELS','Transport',2,20260102,3600,1003),
+    ('WHEELS','Transport',2,20260102,3600,1004);
+
+set catalog default_catalog;
+
+create database mv_rewrite_db_${uuid0};
+
+use mv_rewrite_db_${uuid0};
+
+create table d_city (
+    city_id int,
+    city_name string
+) duplicate key(city_id) distributed by hash(city_id) buckets 1
+properties ("replication_num" = "1");
+
+insert into d_city values (1,'Jakarta'), (2,'Bandung'), (3,'Surabaya');
+
+create materialized view mv_online_by_city
+distributed by hash(granularity, business) buckets 4
+refresh deferred manual
+properties (
+    "replication_num" = "1",
+    "query_rewrite_consistency" = "loose"
+) as
+select
+    granularity,
+    business,
+    city_id,
+    date_id,
+    sum(online_seconds) as s_online,
+    hll_union(hll_hash(driver_id)) as hll_driver
+from iceberg_mv_${uuid0}.ice_db_${uuid0}.f_driver_online_detail_h
+group by granularity, business, city_id, date_id;
+
+refresh materialized view mv_online_by_city with sync mode;
+
+-- The target rewrite path: AGGREGATE_JOIN_PUSH_DOWN_RULE rewrites the joined
+-- aggregation against an MV whose only base table is the Iceberg fact table.
+set enable_materialized_view_rewrite = true;
+function: check_hit_materialized_view("select d.city_name, sum(f.online_seconds) from iceberg_mv_${uuid0}.ice_db_${uuid0}.f_driver_online_detail_h f left join d_city d on d.city_id = f.city_id where f.date_id >= 20260101 and f.date_id < 20260103 and f.business = 'Transport' and f.granularity = 'WHEELS' group by d.city_name", "mv_online_by_city")
+
+drop materialized view mv_online_by_city;
+
+drop table d_city;
+
+drop database mv_rewrite_db_${uuid0};
+
+drop table iceberg_mv_${uuid0}.ice_db_${uuid0}.f_driver_online_detail_h;
+
+drop database iceberg_mv_${uuid0}.ice_db_${uuid0};
+
+drop catalog iceberg_mv_${uuid0};

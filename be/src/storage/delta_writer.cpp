@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "column/raw_data_visitor.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_primary_key_fwd.h"
@@ -52,21 +53,19 @@ StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOption
 }
 
 DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
-        : _state(kUninitialized),
-          _opt(std::move(opt)),
+        : _opt(std::move(opt)),
           _mem_tracker(mem_tracker),
           _storage_engine(storage_engine),
           _tablet(nullptr),
           _cur_rowset(nullptr),
           _rowset_writer(nullptr),
-          _schema_initialized(false),
+
           _mem_table(nullptr),
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
           _flush_token(nullptr),
           _replicate_token(nullptr),
-          _segment_flush_token(nullptr),
-          _with_rollback_log(true) {}
+          _segment_flush_token(nullptr) {}
 
 DeltaWriter::~DeltaWriter() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
@@ -406,7 +405,9 @@ Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
         if (_opt.slots != nullptr && _opt.slots->back()->col_name() == "__op") {
             size_t op_column_id = chunk.num_columns() - 1;
             const auto& op_column = chunk.get_column_by_index(op_column_id);
-            auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+            RawDataVisitor visitor;
+            RETURN_IF_ERROR(op_column->accept(&visitor));
+            const auto* ops = visitor.result();
             ok = !std::any_of(ops, ops + chunk.num_rows(), [](auto op) { return op == TOpType::UPSERT; });
         } else {
             ok = false;

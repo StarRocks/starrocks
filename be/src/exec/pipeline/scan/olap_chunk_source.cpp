@@ -31,6 +31,8 @@
 #include "common/util/table_metrics.h"
 #include "exec/olap_scan_node.h"
 #include "exec/olap_scan_prepare.h"
+#include "exec/pipeline/fragment_context.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
@@ -45,6 +47,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/extends_column_utils.h"
@@ -489,7 +492,7 @@ Status prune_field_by_access_paths(Field* field, ColumnAccessPath* path) {
             }
         }
 
-        field->set_sub_fields(std::move(new_fields));
+        field->set_sub_fields(new_fields);
     }
     return Status::OK();
 }
@@ -834,6 +837,13 @@ void OlapChunkSource::_update_counter() {
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
     _table_metrics->scan_read_bytes.increment(_scan_bytes);
     _table_metrics->scan_read_rows.increment(_scan_rows_num);
+
+    // Update catalog scan metrics for internal table
+    auto* catalog_metrics = GlobalMetricsRegistry::instance()->catalog_scan_metrics();
+    if (catalog_metrics != nullptr) {
+        catalog_metrics->update_scan_bytes("default", _scan_bytes);
+        catalog_metrics->update_scan_rows("default", _scan_rows_num);
+    }
 
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", IO_TASK_EXEC_TIMER_NAME);

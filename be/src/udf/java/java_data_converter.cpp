@@ -26,7 +26,7 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
@@ -256,7 +256,7 @@ StatusOr<jvalue> cast_to_jvalue(const TypeDescriptor& type_desc, bool is_boxed, 
             LOCAL_REF_GUARD(local_obj);
             RETURN_IF_ERROR(list_stub.add(local_obj));
         }
-        auto res = jvalue{.l = std::move(object)};
+        auto res = jvalue{.l = object};
         object = nullptr;
         return res;
     }

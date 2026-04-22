@@ -22,12 +22,12 @@
 #include <chrono>
 #include <thread>
 
-#include "agent/master_info.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
+#include "common/system/master_info.h"
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"
 #include "fs/fs.h"
@@ -61,12 +61,7 @@ CompactionTaskCallback::~CompactionTaskCallback() = default;
 
 CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
                                                CompactResponse* response, ::google::protobuf::Closure* done)
-        : _scheduler(scheduler),
-          _mtx(),
-          _request(request),
-          _response(response),
-          _done(done),
-          _last_check_time(INT64_MAX) {
+        : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);
     _timeout_deadline_ms = butil::gettimeofday_ms() + timeout_ms();

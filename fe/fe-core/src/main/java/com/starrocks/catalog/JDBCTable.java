@@ -55,6 +55,10 @@ public class JDBCTable extends Table {
     private String dbName;
     private List<Column> partitionColumns;
 
+    // Transient: original JDBC column types (java.sql.Types) from the external database.
+    // Used for Oracle datetime predicate pushdown to determine TO_DATE/TO_TIMESTAMP wrapping.
+    private transient Map<String, Integer> originalJdbcColumnTypes;
+
     public JDBCTable() {
         super(TableType.JDBC);
     }
@@ -106,6 +110,14 @@ public class JDBCTable extends Table {
         return partitionColumns;
     }
 
+    public Map<String, Integer> getOriginalJdbcColumnTypes() {
+        return originalJdbcColumnTypes;
+    }
+
+    public void setOriginalJdbcColumnTypes(Map<String, Integer> originalJdbcColumnTypes) {
+        this.originalJdbcColumnTypes = originalJdbcColumnTypes;
+    }
+
     public Map<String, String> getConnectInfo() {
         if (connectInfo == null) {
             this.connectInfo = new HashMap<>();
@@ -120,6 +132,20 @@ public class JDBCTable extends Table {
 
     public String getConnectInfo(String connectInfoKey) {
         return connectInfo.get(connectInfoKey);
+    }
+
+    public String getJdbcUri() {
+        if (!Strings.isNullOrEmpty(resourceName)) {
+            JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
+                    .getResource(resourceName);
+            return resource != null ? resource.getProperty(JDBCResource.URI) : null;
+        }
+        return connectInfo != null ? connectInfo.get(JDBCResource.URI) : null;
+    }
+
+    public boolean isMySQLCompatible() {
+        String uri = getJdbcUri();
+        return uri != null && (uri.startsWith("jdbc:mysql") || uri.startsWith("jdbc:mariadb"));
     }
 
     private void validate(Map<String, String> properties) throws DdlException {

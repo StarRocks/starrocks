@@ -117,6 +117,8 @@ Usage: $0 <options>
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --without-java-ext build Backend without java-extensions(default with java-extensions)
+     --with-thin-archive
+                        build Backend with thin static archives to avoid large-archive ranlib failures
      --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
@@ -172,6 +174,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-clang-tidy' \
   -l 'without-gcov' \
   -l 'without-java-ext' \
+  -l 'with-thin-archive' \
   -l 'without-pch' \
   -l 'without-starcache' \
   -l 'with-brpc-keepalive' \
@@ -205,6 +208,7 @@ WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
 WITH_COMPRESS=ON
+THIN_ARCHIVE=OFF
 if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
 else
@@ -264,7 +268,7 @@ fi
 
 if [[ -z ${CCACHE} ]] && [[ -x "$(command -v ccache)" ]]; then
     CCACHE=ccache
-    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros"
+    export CCACHE_SLOPPINESS="pch_defines,include_file_mtime,time_macros,include_file_ctime"
 fi
 
 if [ -e /proc/cpuinfo ] ; then
@@ -332,6 +336,7 @@ else
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
             --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+            --with-thin-archive) THIN_ARCHIVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
@@ -392,6 +397,7 @@ echo "Get params:
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
+    THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
     WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
@@ -497,6 +503,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         rm -rf ${STARROCKS_HOME}/be/output/
     fi
     mkdir -p ${CMAKE_BUILD_DIR}
+    starrocks_reset_stale_darwin_cmake_cache "${CMAKE_BUILD_DIR}"
 
     source ${STARROCKS_HOME}/bin/common.sh
 
@@ -541,6 +548,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
+                  -DTHIN_ARCHIVE=${THIN_ARCHIVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
                   -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
@@ -774,6 +782,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         # note that conf files will not be overwritten when doing upgrade.
         # so we have to preserve directory structure to avoid upgrade incompatibility.
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop/common
+        # https://github.com/StarRocks/starrocks/issues/71898
+        # FIXME: remove the wildfly-openssl jar, ensure it is absent before openssl library in BE thirdparty upgraded to 3.x
+        rm -rf ${STARROCKS_OUTPUT}/be/lib/hadoop/common/wildfly-openssl-2.2.5.Final.jar
         cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages

@@ -27,6 +27,7 @@
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/fs_provider_bootstrap.h"
 #include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -56,6 +57,8 @@ int init_test_env(int argc, char** argv) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
+    auto fs_registry_status = fs::install_builtin_file_system_providers();
+    CHECK(fs_registry_status.ok()) << fs_registry_status;
     butil::FilePath curr_dir(std::filesystem::current_path());
     butil::FilePath storage_root;
     CHECK(butil::CreateNewTempDirectory("tmp_ut_", &storage_root));

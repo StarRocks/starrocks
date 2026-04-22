@@ -23,6 +23,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.MergeTabletClause;
 import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -66,7 +67,7 @@ public class AutomaticTabletReshardTest {
         };
 
         Deencapsulation.invoke(TabletStatMgr.class, "triggerTabletReshard", db, table,
-                Config.tablet_reshard_target_size * 4);
+                Config.tablet_reshard_target_size * 4, Long.MAX_VALUE);
     }
 
     @Test
@@ -80,6 +81,20 @@ public class AutomaticTabletReshardTest {
         };
 
         Deencapsulation.invoke(TabletStatMgr.class, "triggerTabletReshard", db, table,
-                Config.tablet_reshard_target_size * 4);
+                Config.tablet_reshard_target_size * 4, Long.MAX_VALUE);
+    }
+
+    @Test
+    void testTriggerTabletMergeSuccess() {
+        new MockUp<TabletReshardJobMgr>() {
+            @Mock
+            public void createTabletReshardJob(Database db, OlapTable table, MergeTabletClause mergeTabletClause)
+                    throws StarRocksException {
+                return;
+            }
+        };
+
+        Deencapsulation.invoke(TabletStatMgr.class, "triggerTabletReshard", db, table,
+                0L, Config.tablet_reshard_target_size);
     }
 }

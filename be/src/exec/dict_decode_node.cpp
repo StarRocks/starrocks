@@ -81,9 +81,9 @@ void DictDecodeNode::close(RuntimeState* state) {
     ExprExecutor::close(_expr_ctxs, state);
 }
 
-pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto operators, _children[0]->decompose_to_pipeline(context));
     operators.emplace_back(std::make_shared<DictDecodeOperatorFactory>(
             context->next_operator_id(), id(), std::move(_encode_column_cids), std::move(_decode_column_cids),
             std::move(_decode_column_types), std::move(_expr_ctxs), std::move(_string_functions)));

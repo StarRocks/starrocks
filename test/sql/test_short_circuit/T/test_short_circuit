@@ -53,3 +53,24 @@ select * from short_circuit_bool where k1 = 6 and k2=true;
 set enable_short_circuit=false;
 set enable_profile=false;
 set sql_mode='ONLY_FULL_GROUP_BY';
+
+-- name: testShortCircuitPartitionPredicate @no_arrow_flight_sql
+set enable_short_circuit=true;
+
+CREATE TABLE t_short_circuit_part (
+  `k1` date NOT NULL COMMENT "",
+  `k2` int(11) NOT NULL COMMENT "",
+  `k3` int(11) NULL COMMENT ""
+)
+PRIMARY KEY(`k1`, `k2`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p1 VALUES [("0000-01-01"), ("2026-04-02")),
+PARTITION p2 VALUES [("2026-04-02"), ("2026-04-03")))
+DISTRIBUTED BY HASH(`k2`);
+
+insert into t_short_circuit_part values("2026-04-01", 1, 1), ("2026-04-02", 2, 1);
+
+select * from t_short_circuit_part where k1 = "2026-04-01" and k2 = 1;
+select * from t_short_circuit_part where k1 = "2026-04-02" and k2 = 2;
+
+set enable_short_circuit=false;

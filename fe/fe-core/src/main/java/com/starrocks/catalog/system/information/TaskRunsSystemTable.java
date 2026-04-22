@@ -82,6 +82,7 @@ public class TaskRunsSystemTable extends SystemTable {
                         .column("FINISH_TIME", DATETIME)
                         .column("STATE", TypeFactory.createVarcharType(16))
                         .column("CATALOG", TypeFactory.createVarcharType(64))
+                        .column("WAREHOUSE", TypeFactory.createVarcharType(64))
                         .column("DATABASE", TypeFactory.createVarcharType(64))
                         .column("DEFINITION", TypeFactory.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .column("EXPIRE_TIME", DATETIME)
@@ -203,6 +204,7 @@ public class TaskRunsSystemTable extends SystemTable {
             info.setFinish_time(status.getFinishTime() / 1000);
             info.setState(status.getState().toString());
             info.setCatalog(status.getCatalogName());
+            info.setWarehouse(status.getWarehouseName());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
             if (!Strings.isEmpty(status.getDefinition())) {
                 if (Config.enable_task_info_mask_credential) {

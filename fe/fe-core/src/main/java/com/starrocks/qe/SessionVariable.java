@@ -68,6 +68,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.system.BackendResourceStat;
+import com.starrocks.thrift.TBinaryEncodingFormat;
+import com.starrocks.thrift.TBinaryEncodingLevel;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOverflowMode;
@@ -92,10 +94,12 @@ import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.starrocks.qe.SessionVariableConstants.ChooseInstancesMode.LOCALITY;
 import static com.starrocks.qe.SessionVariableConstants.ComputationFragmentSchedulingPolicy.COMPUTE_NODES_ONLY;
@@ -119,6 +123,71 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             }
         }
         SETTER_MAP = builder.build();
+    }
+
+    public enum BinaryEncodingFormat {
+        RAW("raw", TBinaryEncodingFormat.RAW),
+        HEX("hex", TBinaryEncodingFormat.HEX),
+        BASE64("base64", TBinaryEncodingFormat.BASE64);
+
+        private final String sessionValue;
+        private final TBinaryEncodingFormat thriftValue;
+
+        BinaryEncodingFormat(String sessionValue, TBinaryEncodingFormat thriftValue) {
+            this.sessionValue = sessionValue;
+            this.thriftValue = thriftValue;
+        }
+
+        public String sessionValue() {
+            return sessionValue;
+        }
+
+        public TBinaryEncodingFormat thriftValue() {
+            return thriftValue;
+        }
+
+        public static BinaryEncodingFormat fromString(String value) {
+            for (BinaryEncodingFormat format : values()) {
+                if (format.sessionValue.equalsIgnoreCase(value)) {
+                    return format;
+                }
+            }
+            String legalValues = Joiner.on(", ").join(
+                    Arrays.stream(values()).map(BinaryEncodingFormat::sessionValue).collect(Collectors.toList()));
+            throw new IllegalArgumentException("Legal values of binary_encoding_format are " + legalValues);
+        }
+    }
+
+    public enum BinaryEncodingLevel {
+        ALL("all", TBinaryEncodingLevel.ALL),
+        NESTED("nested", TBinaryEncodingLevel.NESTED);
+
+        private final String sessionValue;
+        private final TBinaryEncodingLevel thriftValue;
+
+        BinaryEncodingLevel(String sessionValue, TBinaryEncodingLevel thriftValue) {
+            this.sessionValue = sessionValue;
+            this.thriftValue = thriftValue;
+        }
+
+        public String sessionValue() {
+            return sessionValue;
+        }
+
+        public TBinaryEncodingLevel thriftValue() {
+            return thriftValue;
+        }
+
+        public static BinaryEncodingLevel fromString(String value) {
+            for (BinaryEncodingLevel level : values()) {
+                if (level.sessionValue.equalsIgnoreCase(value)) {
+                    return level;
+                }
+            }
+            String legalValues = Joiner.on(", ").join(
+                    Arrays.stream(values()).map(BinaryEncodingLevel::sessionValue).collect(Collectors.toList()));
+            throw new IllegalArgumentException("Legal values of binary_encoding_level are " + legalValues);
+        }
     }
 
     private static final Logger LOG = LogManager.getLogger(SessionVariable.class);
@@ -170,6 +239,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String IS_REPORT_SUCCESS = "is_report_success";
     public static final String COLOR_EXPLAIN_OUTPUT = "enable_color_explain_output";
     public static final String ENABLE_PROFILE = "enable_profile";
+    public static final String BINARY_ENCODING_FORMAT = "binary_encoding_format";
+    public static final String BINARY_ENCODING_LEVEL = "binary_encoding_level";
 
     public static final String ENABLE_LOAD_PROFILE = "enable_load_profile";
     public static final String PROFILING = "profiling";
@@ -191,8 +262,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SQL_TRANSACTION = "enable_sql_transaction";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
-    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
-    public static final String AUTHENTICATION_POLICY = "authentication_policy"; 
+    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin";
+    public static final String AUTHENTICATION_POLICY = "authentication_policy";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -446,6 +517,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_JSON_V2_REWRITE = "cbo_json_v2_rewrite";
     public static final String CBO_JSON_V2_DICT_OPT = "cbo_json_v2_dict_opt";
+    public static final String CBO_VARIANT_PATH_REWRITE = "cbo_variant_path_rewrite";
 
     public static final String CBO_DISABLED_RULES = "cbo_disabled_rules";
 
@@ -708,6 +780,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
+
+    public static final String ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE =
+            "enable_iceberg_compaction_with_row_lineage";
     public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
     public static final String EXCHANGE_HASH_FUNCTION_VERSION = "exchange_hash_function_version";
 
@@ -1071,6 +1146,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION = "enable_global_late_materialization";
     public static final String GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS = "global_late_materialization_max_fetch_ops";
     public static final String GLOBAL_LATE_MATERIALIZE_MAX_LIMIT = "global_late_materialization_max_limit";
+    public static final String ENABLE_GLOBAL_LATE_MATERIALIZATION_COST_BASED =
+            "enable_global_late_materialization_cost_based";
 
     public static final String ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY = "enable_drop_table_check_mv_dependency";
 
@@ -1092,6 +1169,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TOPN_PUSH_DOWN_AGG_MODE = "topn_push_down_agg_mode";
 
     public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
+
+    public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1177,8 +1256,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     /**
      * used for test
-     * Determines whether to enable gather fragment locality optimization. When enabled, 
-     * gather fragments will be assigned to the same node as other fragments if all 
+     * Determines whether to enable gather fragment locality optimization. When enabled,
+     * gather fragments will be assigned to the same node as other fragments if all
      * other fragments' instances are on the same node.
      */
     @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
@@ -1253,6 +1332,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
     private boolean enableProfile = false;
 
+    @VariableMgr.VarAttr(name = BINARY_ENCODING_FORMAT)
+    private String binaryEncodingFormat = BinaryEncodingFormat.HEX.sessionValue();
+
+    @VariableMgr.VarAttr(name = BINARY_ENCODING_LEVEL)
+    private String binaryEncodingLevel = BinaryEncodingLevel.NESTED.sessionValue();
+
     // Toggle ANSI color in explain output
     @VariableMgr.VarAttr(name = COLOR_EXPLAIN_OUTPUT)
     private boolean colorExplainOutput = true;
@@ -1321,9 +1406,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DEFAULT_TMP_STORAGE_ENGINE)
     private String defaultTmpStorageEngine = "InnoDB";
     @VariableMgr.VarAttr(name = DEFAULT_AUTHENTICATION_PLUGIN)
-    private String defaultAuthenticationPlugin = "mysql_native_password"; 
+    private String defaultAuthenticationPlugin = "mysql_native_password";
     @VariableMgr.VarAttr(name = AUTHENTICATION_POLICY)
-    private String authenticationPolicy = "*,,"; 
+    private String authenticationPolicy = "*,,";
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
@@ -1463,6 +1548,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_JSON_V2_DICT_OPT)
     private boolean cboJSONV2DictOpt = true;
+
+    @VarAttr(name = CBO_VARIANT_PATH_REWRITE)
+    private boolean cboVariantPathRewrite = false;
 
     @VarAttr(name = ENABLE_SPLIT_TOPN_AGG)
     private boolean enableSplitTopNAgg = true;
@@ -2211,12 +2299,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MULTI_CAST_LIMIT_PUSH_DOWN, flag = VariableMgr.INVISIBLE)
     private boolean enableMultiCastLimitPushDown = true;
     @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION)
-    private boolean enableGlobalLateMaterialization = false;
+    private boolean enableGlobalLateMaterialization = true;
 
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_FETCH_OPS)
     private int globalLateMaterializeMaxFetchOps = 4;
     @VarAttr(name = GLOBAL_LATE_MATERIALIZE_MAX_LIMIT)
     private int globalLateMaterializeMaxLimit = 4096;
+    // When enabled, GLM is only applied to a scan if the estimated byte-cost of the
+    // columns that would be deferred exceeds the byte-cost of the row-id locator columns
+    // that GLM adds to the scan output.  This prevents GLM from being applied when the
+    // deferred columns are small (e.g. a single INT) and the row-id overhead would cost
+    // more than simply reading those columns eagerly.
+    @VarAttr(name = ENABLE_GLOBAL_LATE_MATERIALIZATION_COST_BASED)
+    private boolean enableGlobalLateMaterializationCostBased = true;
 
     @VarAttr(name = ENABLE_DROP_TABLE_CHECK_MV_DEPENDENCY)
     public boolean enableDropTableCheckMvDependency = false;
@@ -2298,7 +2393,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
-    
+
     @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
     private boolean enablePredicateColLateMaterialize = true;
 
@@ -2310,6 +2405,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT)
     private boolean enableLabeledColumnStatisticOutput = false;
+
+    @VarAttr(name = DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT)
+    private int dynamicPartitionPruneValuesLimit = 4096;
+
+    public int getDynamicPartitionPruneValuesLimit() {
+        return dynamicPartitionPruneValuesLimit;
+    }
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -3267,6 +3369,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE)
     private boolean enableIcebergIdentityColumnOptimize = true;
+
+    @VarAttr(name = ENABLE_ICEBERG_COMPACTION_WITH_ROW_LINEAGE, flag = VariableMgr.INVISIBLE)
+    private boolean enableIcebergCompactionWithRowLineage = true;
 
     @VarAttr(name = ENABLE_PLAN_SERIALIZE_CONCURRENTLY)
     private boolean enablePlanSerializeConcurrently = true;
@@ -4385,19 +4490,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     public boolean isMVPlanner() {
-        return enableMVPlanner;
+        return false;
     }
 
     public void setMVPlanner(boolean enable) {
-        this.enableMVPlanner = enable;
+        // Deprecated no-op kept for dump/session replay compatibility.
     }
 
     public boolean isEnableIncrementalRefreshMV() {
-        return enableIncrementalRefreshMV;
+        return false;
     }
 
     public void setEnableIncrementalRefreshMv(boolean enable) {
-        this.enableIncrementalRefreshMV = enable;
+        // Deprecated no-op kept for dump/session replay compatibility.
     }
 
     public long getLogRejectedRecordNum() {
@@ -4548,6 +4653,26 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableAsyncProfile() {
         return enableAsyncProfile;
+    }
+
+    public String getBinaryEncodingFormat() {
+        return binaryEncodingFormat;
+    }
+
+    public void setBinaryEncodingFormat(String binaryEncodingFormat) {
+        BinaryEncodingFormat format = binaryEncodingFormat == null ? BinaryEncodingFormat.HEX
+                : BinaryEncodingFormat.fromString(binaryEncodingFormat);
+        this.binaryEncodingFormat = format.sessionValue();
+    }
+
+    public String getBinaryEncodingLevel() {
+        return binaryEncodingLevel;
+    }
+
+    public void setBinaryEncodingLevel(String binaryEncodingLevel) {
+        BinaryEncodingLevel level = binaryEncodingLevel == null ? BinaryEncodingLevel.NESTED
+                : BinaryEncodingLevel.fromString(binaryEncodingLevel);
+        this.binaryEncodingLevel = level.sessionValue();
     }
 
     public void setEnableAsyncProfile(boolean enableAsyncProfile) {
@@ -5563,6 +5688,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableIcebergIdentityColumnOptimize = enableIcebergIdentityColumnOptimize;
     }
 
+    public boolean getEnableIcebergCompactionWithRowLineage() {
+        return enableIcebergCompactionWithRowLineage;
+    }
+
+    public void setEnableIcebergCompactionWithRowLineage(boolean enableIcebergCompactionWithRowLineage) {
+        this.enableIcebergCompactionWithRowLineage = enableIcebergCompactionWithRowLineage;
+    }
+
     public boolean getEnablePlanSerializeConcurrently() {
         return enablePlanSerializeConcurrently;
     }
@@ -5958,6 +6091,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return this.enableGlobalLateMaterialization;
     }
 
+    public boolean isEnableGlobalLateMaterializationCostBased() {
+        return enableGlobalLateMaterializationCostBased;
+    }
+
+    public void setEnableGlobalLateMaterializationCostBased(boolean enableGlobalLateMaterializationCostBased) {
+        this.enableGlobalLateMaterializationCostBased = enableGlobalLateMaterializationCostBased;
+    }
+
     public void setEnableGlobalLateMaterialization(boolean enableGlobalLateMaterialization) {
         this.enableGlobalLateMaterialization = enableGlobalLateMaterialization;
     }
@@ -5982,6 +6123,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJSONV2Rewrite(boolean enableJSONV2Rewrite) {
         this.cboJSONV2Rewrite = enableJSONV2Rewrite;
+    }
+
+    public boolean isEnableVariantPathRewrite() {
+        return cboVariantPathRewrite;
+    }
+
+    public void setEnableVariantPathRewrite(boolean enableVariantPathRewrite) {
+        this.cboVariantPathRewrite = enableVariantPathRewrite;
     }
 
     public boolean isEnableDropTableCheckMvDependency() {
@@ -6015,7 +6164,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
-    
+
     public void setEnablePredicateColLateMaterialize(boolean enablePredicateColLateMaterialize) {
         this.enablePredicateColLateMaterialize = enablePredicateColLateMaterialize;
     }
@@ -6065,6 +6214,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         }
         tResult.setEnable_profile(enableProfile);
+        tResult.setBinary_encoding_format(BinaryEncodingFormat.fromString(binaryEncodingFormat).thriftValue());
+        tResult.setBinary_encoding_level(BinaryEncodingLevel.fromString(binaryEncodingLevel).thriftValue());
         tResult.setBig_query_profile_threshold(TimeValue.parseTimeValue(bigQueryProfileThreshold).getMillis());
         tResult.setBig_query_profile_threshold_unit(TTimeUnit.MILLISECOND);
         tResult.setRuntime_profile_report_interval(runtimeProfileReportInterval);
@@ -6216,6 +6367,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_hash_join_range_direct_mapping_opt(enableHashJoinRangeDirectMappingOpt);
         tResult.setEnable_hash_join_linear_chained_opt(enableHashJoinLinearChainedOpt);
         tResult.setEnable_hash_join_serialize_fixed_size_string(enableHashJoinSerializeFixedSizeString);
+
+        // http_request function SSL verification (admin-enforced setting from Config)
+        tResult.setHttp_request_ssl_verification_required(Config.http_request_ssl_verification_required);
+
+        // http_request function SSRF protection settings (admin-enforced from Config)
+        tResult.setHttp_request_security_level(Config.http_request_security_level);
+        tResult.setHttp_request_ip_allowlist(Config.http_request_ip_allowlist);
+        tResult.setHttp_request_host_allowlist_regexp(Config.http_request_host_allowlist_regexp);
+        tResult.setHttp_request_allow_private_in_allowlist(Config.http_request_allow_private_in_allowlist);
 
         return tResult;
     }

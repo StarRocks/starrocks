@@ -34,6 +34,8 @@ set(STARROCKS_LIBS
     FSCore
     Formats
     Gutil
+    HttpClient
+    HttpCore
     IO
     Serde
     Storage

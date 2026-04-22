@@ -56,15 +56,9 @@ public:
                                    bool done) = 0;
 
     virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
+    virtual void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
 
     virtual void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const = 0;
-
-    virtual size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) = 0;
-
-    virtual void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx,
-                              std::vector<FragmentContext*> fragment_ctxs) = 0;
-
-    virtual size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const = 0;
 
     virtual void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) = 0;
 
@@ -85,13 +79,9 @@ public:
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override;
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
+    void report_audit_statistics_on_failure(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
 
     void iterate_immutable_blocking_driver(const ConstDriverConsumer& call) const override;
-
-    size_t activate_parked_driver(const ConstDriverPredicator& predicate_func) override;
-    size_t calculate_parked_driver(const ConstDriverPredicator& predicate_func) const override;
-
-    void report_epoch(ExecEnv* exec_env, QueryContext* query_ctx, std::vector<FragmentContext*> fragment_ctxs) override;
 
     void bind_cpus(const CpuUtil::CpuIds& cpuids, const std::vector<CpuUtil::CpuIds>& borrowed_cpuids) override;
 
@@ -104,8 +94,6 @@ private:
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx,
                                                    ObjectPool* obj_pool);
-
-    void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
 private:
     // The maximum duration that a driver could stay in local_driver_queue

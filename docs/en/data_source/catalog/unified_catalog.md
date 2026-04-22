@@ -324,6 +324,22 @@ If you choose Data Lake Storage Gen2 as storage, take one of the following actio
   | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
   | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
+- To choose the Workload Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity. |
+
 ###### Azure Data Lake Storage Gen1
 
 If you choose Data Lake Storage Gen1 as storage, take one of the following actions:
@@ -707,6 +723,21 @@ PROPERTIES
   );
   ```
 
+- If you choose the Workload Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG unified_catalog_hms
+  PROPERTIES
+  (
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - If you choose the VM-based authentication method, run a command like below:
@@ -840,7 +871,7 @@ To query data from a unified catalog, follow these steps:
 
 2. [Switch to a Hive Catalog and a database in it](#switch-to-a-unified-catalog-and-a-database-in-it).
 
-3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

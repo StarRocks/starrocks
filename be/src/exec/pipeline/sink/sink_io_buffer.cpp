@@ -14,13 +14,13 @@
 
 #include "exec/pipeline/sink/sink_io_buffer.h"
 
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline {
 
 int SinkIOExecutor::submit(void* (*fn)(void*), void* args) {
-    bool ret = ExecEnv::GetInstance()->pipeline_sink_io_pool()->try_offer([fn, args]() { fn(args); });
+    bool ret = _thread_pool->try_offer([fn, args]() { fn(args); });
     return ret ? 0 : -1;
 }
 
@@ -117,7 +117,9 @@ Status SinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile*) {
     }
 
     bthread::ExecutionQueueOptions options;
-    options.executor = SinkIOExecutor::instance();
+    auto* query_execution_services = state->query_execution_services();
+    _executor = std::make_unique<SinkIOExecutor>(query_execution_services->execution->pipeline_sink_io_pool);
+    options.executor = _executor.get();
     auto queue_id = std::make_unique<bthread::ExecutionQueueId<QueueItemPtr>>();
     int ret = bthread::execution_queue_start<QueueItemPtr>(queue_id.get(), &options, &SinkIOBuffer::execute_io_task,
                                                            this);

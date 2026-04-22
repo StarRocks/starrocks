@@ -27,7 +27,7 @@
 #include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "serde/compress_strategy.h"
@@ -94,10 +94,15 @@ public:
 
     void set_execute_mode(int performance_level) override;
 
+#ifdef BE_TEST
+    // For testing only: inject a custom codec to simulate exceed_max_input_size scenarios.
+    void set_compress_codec_for_testing(const BlockCompressionCodec* codec) { _compress_codec = codec; }
+#endif
+
 private:
     bool _is_large_chunk(size_t sz) const {
         // ref olap_scan_node.cpp release_large_columns
-        return sz > runtime_state()->chunk_size() * 512;
+        return sz > get_factory()->runtime_state()->chunk_size() * 512;
     }
     void _calc_hash_values_and_bucket_ids();
 

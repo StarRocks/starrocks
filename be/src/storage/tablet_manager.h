@@ -306,7 +306,7 @@ private:
     // TODO(cmy): for now, this is a naive implementation
     std::map<int64_t, TTabletStat> _tablet_stat_cache;
     // last update time of tablet stat cache
-    int64_t _last_update_stat_ms;
+    int64_t _last_update_stat_ms{0};
 
     // context for compaction checker
     size_t _cur_shard = 0;

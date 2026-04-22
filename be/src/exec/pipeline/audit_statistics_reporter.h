@@ -22,22 +22,17 @@
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
 
-namespace starrocks {
-class ExecEnv;
-
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class AuditStatisticsReporter {
 public:
     AuditStatisticsReporter();
 
-    static Status report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
-                                          const TNetworkAddress& fe_addr);
+    static Status report_audit_statistics(const TReportAuditStatisticsParams& params, const TNetworkAddress& fe_addr);
 
     Status submit(std::function<void()>&& report_task);
 
 private:
     std::unique_ptr<ThreadPool> _thread_pool;
 };
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

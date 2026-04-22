@@ -1,5 +1,5 @@
 ---
-description: Kafka Routine Load 使用共享数据存储
+description: Kafka Routine Load 使用存算分离存储
 displayed_sidebar: docs
 ---
 

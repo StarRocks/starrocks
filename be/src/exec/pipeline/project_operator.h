@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/operator.h"
+#include "exec/pipeline/operator_factory.h"
 #include "runtime/global_dict/parser.h"
 
 namespace starrocks {

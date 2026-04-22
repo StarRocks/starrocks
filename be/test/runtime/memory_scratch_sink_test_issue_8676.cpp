@@ -167,7 +167,8 @@ public:
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
-        RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+        RuntimeState* state = _obj_pool.add(
+                new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), static_cast<ExecEnv*>(nullptr)));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
 
@@ -232,7 +233,8 @@ void MemoryScratchSinkIssue8676Test::init_runtime_state() {
     TUniqueId query_id;
     query_id.lo = 10;
     query_id.hi = 100;
-    _state = new RuntimeState(query_id, query_options, TQueryGlobals(), _exec_env);
+    _state = new RuntimeState(query_id, query_options, TQueryGlobals(), &_exec_env->query_execution_services(),
+                              _exec_env);
     _state->init_instance_mem_tracker();
     _state->set_desc_tbl(_desc_tbl);
     _state->init_mem_trackers(TUniqueId());

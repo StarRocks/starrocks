@@ -23,7 +23,7 @@
 #include "column/column_helper.h"
 #include "column/const_column.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -585,8 +585,7 @@ class MinMaxRuntimeFilter final : public RuntimeFilter {
 public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
-    using ContainerType =
-            std::conditional_t<lt_is_string_or_binary<Type>, BinaryDataProxyContainer, RunTimeImmContainerType<Type>>;
+    using ContainerType = RunTimeImmContainerType<Type>;
 
     MinMaxRuntimeFilter() { _init_min_max(); }
     MinMaxRuntimeFilter(const MinMaxRuntimeFilter& rhs)
@@ -1205,8 +1204,7 @@ class TRuntimeBloomFilter final : public RuntimeMembershipFilter {
 public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
-    using ContainerType =
-            std::conditional_t<lt_is_string_or_binary<Type>, BinaryDataProxyContainer, RunTimeImmContainerType<Type>>;
+    using ContainerType = RunTimeImmContainerType<Type>;
 
     TRuntimeBloomFilter() = default;
     explicit TRuntimeBloomFilter(const RuntimeMembershipFilter& base) : RuntimeMembershipFilter(base) {}

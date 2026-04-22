@@ -27,6 +27,7 @@
 #include "exec/spill/serde.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
 
@@ -117,7 +118,7 @@ StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(b
     if (shared) {
         return SpillInputStream::as_stream(_chunks, _spiller);
     } else {
-        return SpillInputStream::as_stream(std::move(_chunks), _spiller);
+        return SpillInputStream::as_stream(_chunks, _spiller);
     }
 }
 

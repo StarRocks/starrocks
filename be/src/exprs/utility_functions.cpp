@@ -596,9 +596,13 @@ StatusOr<ColumnPtr> UtilityFunctions::encode_sort_key(FunctionContext* context, 
     }
 
     for (size_t i = 0; i < num_rows; i++) {
-        result.append(std::move(buffs[i]));
+        result.append(buffs[i]);
     }
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> UtilityFunctions::materialize(FunctionContext* context, const Columns& columns) {
+    return Column::mutate(columns[0]);
 }
 
 } // namespace starrocks

@@ -5,6 +5,8 @@
 
 ## Architecture Overview
 
+Start with [`handbook/index.md`](../handbook/index.md) for repo-wide routing and [`handbook/domains/frontend.md`](../handbook/domains/frontend.md) for FE commands, guardrails, and open harness gaps.
+
 The Frontend is responsible for:
 - **SQL Parsing**: ANTLR-based parser for StarRocks SQL dialect
 - **Query Optimization**: Cost-based optimizer with rule-based transformations
@@ -359,6 +361,14 @@ DELETE /api/v2/catalogs/hive/databases/tpch    # Delete database
 - Prefer `ImmutableList/Map` for readonly collections
 - Use appropriate collection types (ArrayList vs LinkedList)
 - Be careful with synchronized blocks
+
+## Optimizer Rule Contract
+
+For optimizer rewrite rules, `transform(...)` must only return a non-empty list when it actually changes the input
+`OptExpression`.
+
+- If this transform don't change the input `OptExpression`, should return the empty list.
+- Do not return a structurally identical plan, or `RewriteTreeTask` may treat it as a change and keep rewriting.
 
 ## Debugging
 

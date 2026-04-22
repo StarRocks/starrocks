@@ -193,6 +193,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 **必需**：否\
 **描述**：要加载的 JSON 格式数据的根元素。StarRocks 通过 `json_root` 提取根节点的元素进行解析。默认情况下，此参数的值为空，表示将加载所有 JSON 格式数据。有关更多信息，请参见本主题中的 [指定要加载的 JSON 格式数据的根元素](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded)。
 
+#### `envelope`
+
+**必需**：否\
+**描述**：指定 JSON 格式数据的 CDC Envelope 格式。有效值：`debezium`。默认不设置（无 Envelope 包装）。设置为 `debezium` 时，StarRocks 将每条 Kafka 消息解析为 Debezium CDC 事件，消息中须包含 `op` 字段（`c`=insert、`u`=update、`d`=delete、`r`=快照读取）以及 `after` 字段（c/u/r 操作）或 `before` 字段（d 操作），用于承载实际行数据。`payload` 为 `null` 的 tombstone 消息将被跳过。只能在 `format` 为 `json` 时指定，不能与 `json_root` 或 `strip_outer_array` 同时使用。
+
 #### `task_consume_second`
 
 **必需**：否\

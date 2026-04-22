@@ -35,7 +35,7 @@ public class RangeDistributionInfoTest {
     @Test
     public void testSupportColocate() {
         RangeDistributionInfo rangeDistributionInfo = new RangeDistributionInfo();
-        Assertions.assertFalse(rangeDistributionInfo.supportColocate());
+        Assertions.assertTrue(rangeDistributionInfo.supportColocate());
     }
 
     @Test

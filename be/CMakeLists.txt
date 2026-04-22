@@ -113,6 +113,22 @@ set(OUTPUT_DIR "${BASE_DIR}/output")
 set(CONTRIB_DIR "${BASE_DIR}/../contrib/")
 set(CMAKE_EXPORT_COMPILECOMMANDS ON)
 
+# Keep the active Thrift package version in the compile command so cached
+# objects built against an older Thrift header ABI cannot be reused after
+# a runtime upgrade.
+set(STARROCKS_THRIFT_CONFIG_H "${THIRDPARTY_DIR}/include/thrift/config.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${STARROCKS_THRIFT_CONFIG_H}")
+if (EXISTS "${STARROCKS_THRIFT_CONFIG_H}")
+    file(STRINGS "${STARROCKS_THRIFT_CONFIG_H}" STARROCKS_THRIFT_VERSION_LINE
+         REGEX "^#define PACKAGE_VERSION \"[^\"]+\"$")
+    if (STARROCKS_THRIFT_VERSION_LINE)
+        string(REGEX REPLACE "^#define PACKAGE_VERSION \"([^\"]+)\"$" "\\1"
+               STARROCKS_THRIFT_PACKAGE_VERSION "${STARROCKS_THRIFT_VERSION_LINE}")
+        add_compile_definitions(STARROCKS_THRIFT_PACKAGE_VERSION="${STARROCKS_THRIFT_PACKAGE_VERSION}")
+        message(STATUS "Thrift package version is ${STARROCKS_THRIFT_PACKAGE_VERSION}")
+    endif()
+endif()
+
 if (APPLE)
     find_library(STARROCKS_LIBEVENT_LIBRARY NAMES libevent.dylib event PATHS ${THIRDPARTY_DIR}/lib
                  ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
@@ -165,6 +181,8 @@ message(STATUS "make test: ${MAKE_TEST}")
 option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
+
+option(THIN_ARCHIVE "Build binary with thin archive" OFF)
 
 set(WITH_STARCACHE_DEFAULT ON)
 if (APPLE)
@@ -525,6 +543,7 @@ set(STARROCKS_LINK_LIBS
     ${WL_WHOLE_ARCHIVE_PREFIX} Exprs ${WL_WHOLE_ARCHIVE_SUFFIX}
     FileSystem
     Formats
+    HttpClient
     IO
     Serde
     Storage
@@ -543,17 +562,18 @@ set(STARROCKS_LINK_LIBS
     Cache
     orc
     ${WL_END_GROUP}
-    ${WL_WHOLE_ARCHIVE_PREFIX} ExprCore ${WL_WHOLE_ARCHIVE_SUFFIX}
+    ${WL_WHOLE_ARCHIVE_PREFIX} $<TARGET_FILE:ExprCore> ${WL_WHOLE_ARCHIVE_SUFFIX}
     RuntimeCore
-    ChunkCore
-    ColumnCore
-    TypesCore
-    FSCore
-    IOCore
-    Common
-    Base
-    Gutil
-    StarRocksGen
+    $<TARGET_FILE:HttpCore>
+    $<TARGET_FILE:ChunkCore>
+    $<TARGET_FILE:ColumnCore>
+    $<TARGET_FILE:TypesCore>
+    $<TARGET_FILE:FSCore>
+    $<TARGET_FILE:IOCore>
+    $<TARGET_FILE:Common>
+    $<TARGET_FILE:Base>
+    $<TARGET_FILE:Gutil>
+    $<TARGET_FILE:StarRocksGen>
 )
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
@@ -708,6 +728,25 @@ if (WITH_PCH)
     endif()
 endif()
 
+if (APPLE)
+    if (CMAKE_CXX_COMPILER_AR)
+        set(CMAKE_AR "${CMAKE_CXX_COMPILER_AR}" CACHE FILEPATH "Archiver" FORCE)
+    endif()
+    if (CMAKE_CXX_COMPILER_RANLIB)
+        set(CMAKE_RANLIB "${CMAKE_CXX_COMPILER_RANLIB}" CACHE FILEPATH "Ranlib" FORCE)
+    endif()
+endif()
+
+if (THIN_ARCHIVE)
+    set(CMAKE_C_ARCHIVE_CREATE   "<CMAKE_AR> qcsT <TARGET> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_CREATE "<CMAKE_AR> qcsT <TARGET> <OBJECTS>")
+    set(CMAKE_C_ARCHIVE_APPEND   "<CMAKE_AR> qsT  <TARGET> <OBJECTS>")
+    set(CMAKE_CXX_ARCHIVE_APPEND "<CMAKE_AR> qsT  <TARGET> <OBJECTS>")
+
+    set(CMAKE_C_ARCHIVE_FINISH   "true")
+    set(CMAKE_CXX_ARCHIVE_FINISH "true")
+endif()
+
 
 # Add all external dependencies. They should come after the starrocks libs.
 
@@ -721,7 +760,9 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
     message("use jemalloc")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} jemalloc)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if (APPLE)
+        # Darwin only supports the dynamic ASan runtime selected by -fsanitize=address.
+    elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
         set(DEP_SANITIZE_LIBS -static-libsan)
     else()
@@ -801,8 +842,11 @@ if (APPLE)
         "-framework ApplicationServices"
         "-framework SystemConfiguration"
     )
-    find_library(MIMALLOC_LIB NAMES mimalloc PATHS ${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64 NO_DEFAULT_PATH)
-    if (MIMALLOC_LIB)
+    find_library(MIMALLOC_LIB
+        NAMES mimalloc
+        HINTS ${THIRDPARTY_DIR}/lib ${THIRDPARTY_DIR}/lib64 /opt/homebrew/lib /usr/local/lib
+    )
+    if (MIMALLOC_LIB AND NOT "${BUILD_FOR_SANITIZE}" STREQUAL "ON")
         list(APPEND STARROCKS_SYSTEM_LINK_LIBS ${MIMALLOC_LIB})
     endif()
 else()
@@ -851,12 +895,13 @@ if (${MAKE_TEST} STREQUAL "ON")
     add_definitions(-DFIU_ENABLE)
 else()
     if (BUILD_FORMAT_LIB)
+        set(THIN_ARCHIVE OFF)
         # output *.a, *.so, *.dylib to output/format-lib-tmp
         set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
         set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/format-lib-tmp/${CMAKE_BUILD_TYPE})
     else()
         # output *.a, *.so, *.dylib to output/tmp
-        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
+        set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tmp/${CMAKE_BUILD_TYPE})
         set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${OUTPUT_DIR}/tmp/${CMAKE_BUILD_TYPE})
     endif ()
     # output *.exe to output/lib

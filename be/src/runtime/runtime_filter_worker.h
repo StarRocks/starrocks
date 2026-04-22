@@ -19,6 +19,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <list>
 #include <map>
 #include <memory>
 #include <thread>
@@ -36,11 +37,11 @@
 namespace starrocks {
 struct TypeDescriptor;
 
-class ExecEnv;
+struct RuntimeServices;
+struct RpcServices;
 class RuntimeState;
 
 class RuntimeFilter;
-class RuntimeFilterProbeDescriptor;
 class RuntimeFilterBuildDescriptor;
 
 using RuntimeFilterRpcClosure = RefCountClosure<PTransmitRuntimeFilterResult>;
@@ -50,10 +51,9 @@ using RuntimeFilterRpcClosures = std::vector<RuntimeFilterRpcClosure*>;
 class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
-    void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
     void publish_runtime_filters(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
 
-    void publish_runtime_filters_for_skew_broadcast_join(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs_list,
+    void publish_runtime_filters_for_skew_broadcast_join(const std::list<RuntimeFilterBuildDescriptor*>& rf_descs,
                                                          const std::vector<Columns>& keyColumns,
                                                          const std::vector<bool>& null_safe,
                                                          const std::vector<TypeDescriptor>& type_descs);
@@ -70,7 +70,6 @@ private:
                                                  bool null_safe, const TypeDescriptor& type_desc);
     void static prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
                                RuntimeFilterBuildDescriptor* rf_desc);
-    std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _listeners;
     RuntimeState* _state;
 };
 
@@ -123,7 +122,8 @@ public:
 // and sent merged RF to consumer nodes.
 class RuntimeFilterMerger {
 public:
-    RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
+    RuntimeFilterMerger(const RuntimeServices* runtime_services, const RpcServices* rpc_services,
+                        const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
     Status init(const TRuntimeFilterParams& params);
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params);
     void store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params);
@@ -133,7 +133,8 @@ private:
     // filter_id -> where this filter should send to
     std::map<int32_t, std::vector<TRuntimeFilterProberParams>> _targets;
     std::map<int32_t, RuntimeFilterMergerStatus> _statuses;
-    ExecEnv* _exec_env;
+    const RuntimeServices* _runtime_services;
+    const RpcServices* _rpc_services;
     UniqueId _query_id;
     TQueryOptions _query_options;
     const bool _is_pipeline;
@@ -220,7 +221,7 @@ struct RuntimeFilterWorkerMetrics {
 
 class RuntimeFilterWorker {
 public:
-    RuntimeFilterWorker(ExecEnv* env);
+    RuntimeFilterWorker(const RuntimeServices* runtime_services, const RpcServices* rpc_services);
     ~RuntimeFilterWorker();
     void close();
     // open query for creating runtime filter merger.
@@ -262,7 +263,8 @@ private:
 
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
-    ExecEnv* _exec_env;
+    const RuntimeServices* _runtime_services;
+    const RpcServices* _rpc_services;
     std::thread _thread;
     RuntimeFilterWorkerMetrics* _metrics = nullptr;
 };

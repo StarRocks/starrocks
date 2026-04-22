@@ -16,6 +16,7 @@
 
 #include <unordered_map>
 
+#include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
 #include "connector/connector.h"
 #include "exec/connector_scan_node.h"
@@ -182,6 +183,11 @@ private:
     std::vector<std::string> _hive_column_names;
     bool _case_sensitive = false;
     bool _use_min_max_opt = false;
+    // Mirrors THdfsScanNode.can_use_any_column: set when PruneHDFSScanColumnRule
+    // injected a placeholder materialized column because every queried column was
+    // a partition column.  Used together with _use_min_max_opt to avoid reading
+    // that placeholder column from the data file.
+    bool _can_use_any_column = false;
     bool _use_count_opt = false;
     const HiveTableDescriptor* _hive_table = nullptr;
 
@@ -189,6 +195,8 @@ private:
     bool _use_partition_column_value_only = false;
     // only used in global late materialization
     int32_t _scan_range_id = -1;
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
+    bool _disable_column_access_path_hints = false;
 
     // ======================================
     // The following are profile metrics

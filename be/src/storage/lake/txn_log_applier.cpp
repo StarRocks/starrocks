@@ -21,18 +21,21 @@
 #include "base/debug/trace.h"
 #include "base/phmap/phmap_fwd_decl.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_storage_fwd.h"
+#include "common/system/master_info.h"
 #include "gutil/strings/join.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/tablet_write_log_manager.h"
 #include "storage/lake/update_manager.h"
 #include "util/dynamic_cache.h"
 
@@ -160,6 +163,75 @@ Status update_metadata_schema(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
     return Status::OK();
 }
 
+// Build rssid_remap for DCG application during replication.
+// Maps source rssid to target rssid based on which op_writes will actually be applied.
+// For PK tables: an op_write is applied when dels_size > 0 || num_rows > 0 || has_delete_predicate.
+// For Non-PK tables: an op_write is applied when has_rowset && (num_rows > 0 || has_delete_predicate).
+std::unordered_map<uint32_t, uint32_t> build_rssid_remap(const TxnLogPB_OpReplication& op_replication,
+                                                         uint32_t start_target_id, bool is_pk) {
+    std::unordered_map<uint32_t, uint32_t> rssid_remap;
+    uint32_t target_id = start_target_id;
+    for (const auto& op_write : op_replication.op_writes()) {
+        if (!op_write.has_rowset()) {
+            continue;
+        }
+        bool included = false;
+        if (is_pk) {
+            included = op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
+                       op_write.rowset().has_delete_predicate();
+        } else {
+            included = op_write.rowset().num_rows() > 0 || op_write.rowset().has_delete_predicate();
+        }
+        if (included) {
+            uint32_t source_id = op_write.rowset().id();
+            uint32_t step = get_rowset_id_step(op_write.rowset());
+            for (uint32_t i = 0; i < step; i++) {
+                rssid_remap[source_id + i] = target_id + i;
+            }
+            target_id += step;
+        }
+    }
+    return rssid_remap;
+}
+
+void apply_replication_dcg_meta(const TxnLogPB_OpReplication& op_replication,
+                                const std::unordered_map<uint32_t, uint32_t>& rssid_remap, TabletMetadataPB* metadata) {
+    if (!op_replication.has_dcg_meta()) return;
+    // Remapping source rssid to target rssid using the provided map.
+    // Keys not found in the map are kept unchanged.
+    for (const auto& [src_rssid, dcg_ver] : op_replication.dcg_meta().dcgs()) {
+        auto it = rssid_remap.find(src_rssid);
+        uint32_t target_rssid = (it != rssid_remap.end()) ? it->second : src_rssid;
+        (*metadata->mutable_dcg_meta()->mutable_dcgs())[target_rssid].CopyFrom(dcg_ver);
+    }
+}
+
+void apply_replication_dcg_meta(const TxnLogPB_OpReplication& op_replication, uint32_t rssid_offset,
+                                TabletMetadataPB* metadata) {
+    if (!op_replication.has_dcg_meta()) return;
+    // Adding a fixed offset to each source rssid.
+    for (const auto& [src_rssid, dcg_ver] : op_replication.dcg_meta().dcgs()) {
+        (*metadata->mutable_dcg_meta()->mutable_dcgs())[src_rssid + rssid_offset].CopyFrom(dcg_ver);
+    }
+}
+
+void collect_dcg_orphan_files(const DeltaColumnGroupMetadataPB& old_dcg_meta,
+                              const std::unordered_set<std::string>& new_referenced_files, TabletMetadataPB* metadata) {
+    // Move old delta column group files to orphan files list for later cleanup.
+    // Files still referenced by new metadata (in new_referenced_files) are skipped.
+    for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
+        for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
+            if (new_referenced_files.count(dcg_ver.column_files(i)) > 0) continue;
+            FileMetaPB file_meta;
+            file_meta.set_name(dcg_ver.column_files(i));
+            if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
+                file_meta.set_shared(dcg_ver.shared_files(i));
+            }
+            metadata->mutable_orphan_files()->Add(std::move(file_meta));
+        }
+    }
+}
+
 } // namespace
 
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -231,8 +303,14 @@ public:
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         _max_txn_id = std::max(_max_txn_id, log.txn_id());
+        if (log.has_partition_id()) {
+            _partition_id = log.partition_id();
+        }
         RETURN_IF_ERROR(check_rebuild_index());
         if (log.has_op_write()) {
+            if (log.op_write().has_schema_key() && log.op_write().schema_key().has_table_id()) {
+                _table_id = log.op_write().schema_key().table_id();
+            }
             RETURN_IF_ERROR(check_and_recover([&]() { return apply_write_log(log.op_write(), log.txn_id()); }));
         }
         if (log.has_op_compaction()) {
@@ -273,6 +351,13 @@ public:
             }
 
             _max_txn_id = std::max(_max_txn_id, log->txn_id());
+            if (log->has_partition_id()) {
+                _partition_id = log->partition_id();
+            }
+            if (log->has_op_write() && log->op_write().has_schema_key() &&
+                log->op_write().schema_key().has_table_id()) {
+                _table_id = log->op_write().schema_key().table_id();
+            }
 
             // Ensure this log has op_write
             if (!log->has_op_write()) {
@@ -303,7 +388,7 @@ public:
                 }
             }
         }
-        _builder.set_final_rowset();
+        RETURN_IF_ERROR(_builder.set_final_rowset());
 
         return Status::OK();
     }
@@ -333,6 +418,17 @@ public:
         if (_index_entry != nullptr) {
             RETURN_IF_ERROR(_index_entry->value().commit(_metadata, &_builder));
             _tablet.update_mgr()->index_cache().update_object_size(_index_entry, _index_entry->value().memory_usage());
+            // Record publish-phase SST flush stats
+            if (config::enable_tablet_write_log) {
+                int32_t sst_count = _index_entry->value().publish_sst_flush_count();
+                int64_t sst_bytes = _index_entry->value().publish_sst_flush_bytes();
+                if (sst_count > 0) {
+                    int64_t finish_time = UnixMillis();
+                    TabletWriteLogManager::instance()->add_publish_log(
+                            get_backend_id().value_or(0), _max_txn_id, _tablet.id(), _table_id, _partition_id,
+                            _publish_begin_time, finish_time, sst_count, sst_bytes);
+                }
+            }
         }
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         RETURN_IF_ERROR(_builder.finalize(_max_txn_id, _skip_write_tablet_metadata));
@@ -383,6 +479,9 @@ private:
         if (_index_entry == nullptr) {
             ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
                                                    _metadata, &_builder, _base_version, _new_version, _guard));
+            // Reset publish SST stats so we only count SSTs flushed during this publish session
+            _index_entry->value().reset_publish_sst_stats();
+            _publish_begin_time = UnixMillis();
         }
         return Status::OK();
     }
@@ -393,7 +492,7 @@ private:
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         if (_skip_write_tablet_metadata) {
-            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+            return _tablet.tablet_mgr()->cache_tablet_metadata(_metadata);
         }
         // Persist the tablet metadata
         RETURN_IF_ERROR(_tablet.put_metadata(_metadata));
@@ -575,9 +674,14 @@ private:
         }
 
         if (txn_meta.incremental_snapshot()) {
+            auto rssid_remap = build_rssid_remap(op_replication, _metadata->next_rowset_id(), /*is_pk=*/true);
+
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
             }
+
+            apply_replication_dcg_meta(op_replication, rssid_remap, _metadata.get());
+
             LOG(INFO) << "Apply pk incremental replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
@@ -624,6 +728,7 @@ private:
                         << ", rowsets size: " << _metadata->rowsets_size();
             } else {
                 // Non-Lake replication (replication from shared-nothing cluster).
+                auto old_next_rowset_id = _metadata->next_rowset_id();
                 auto new_next_rowset_id = _metadata->next_rowset_id();
                 for (const auto& op_write : op_replication.op_writes()) {
                     auto rowset = _metadata->add_rowsets();
@@ -637,8 +742,9 @@ private:
                 for (const auto& [segment_id, delvec_data] : op_replication.delvecs()) {
                     auto delvec = std::make_shared<DelVector>();
                     RETURN_IF_ERROR(delvec->load(_new_version, delvec_data.data().data(), delvec_data.data().size()));
-                    _builder.append_delvec(delvec, segment_id + _metadata->next_rowset_id());
+                    _builder.append_delvec(delvec, segment_id + old_next_rowset_id);
                 }
+                apply_replication_dcg_meta(op_replication, old_next_rowset_id, _metadata.get());
                 _metadata->set_next_rowset_id(new_next_rowset_id);
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
             }
@@ -680,18 +786,7 @@ private:
                 file_meta.set_shared(sstable.shared());
                 _metadata->mutable_orphan_files()->Add(std::move(file_meta));
             }
-            // Clear dcg_meta and add to orphan files.
-            for (const auto& [_, dcg_ver] : old_dcg_meta.dcgs()) {
-                for (int i = 0; i < dcg_ver.column_files_size(); ++i) {
-                    if (new_referenced_files.count(dcg_ver.column_files(i)) > 0) continue;
-                    FileMetaPB file_meta;
-                    file_meta.set_name(dcg_ver.column_files(i));
-                    if (dcg_ver.shared_files_size() > 0 && i < dcg_ver.shared_files_size()) {
-                        file_meta.set_shared(dcg_ver.shared_files(i));
-                    }
-                    _metadata->mutable_orphan_files()->Add(std::move(file_meta));
-                }
-            }
+            collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
 
             _tablet.update_mgr()->unload_primary_index(_tablet.id());
             LOG(INFO) << "Apply pk full replication log finish. tablet_id: " << _tablet.id()
@@ -719,6 +814,11 @@ private:
     bool _rebuild_pindex = false;
     // True when the transaction is a lake replication type (has tablet_metadata in op_replication).
     bool _is_lake_replication = false;
+    // Timestamp when prepare_primary_index was first called (for publish SST logging)
+    int64_t _publish_begin_time{0};
+    // Table/partition IDs extracted from txn_logs during apply (for publish SST logging)
+    int64_t _table_id{0};
+    int64_t _partition_id{0};
 };
 
 class NonPrimaryKeyTxnLogApplier : public TxnLogApplier {
@@ -770,6 +870,9 @@ public:
         std::vector<int64_t> all_segment_sizes;
         std::vector<std::string> all_segment_encryption_metas;
         std::vector<SegmentMetadataPB> all_segment_metas;
+        std::vector<int64_t> all_bundle_file_offsets;
+        bool has_bundle_offsets = false;
+        bool has_segments_without_bundle_offsets = false;
         uint32_t assigned_segment_idx = 0;
 
         // Traverse all transaction logs and collect op_write information
@@ -827,6 +930,26 @@ public:
                         all_segment_metas.back().set_segment_idx(assigned_segment_idx + get_segment_idx(rowset, i));
                     }
                     assigned_segment_idx += get_rowset_id_step(rowset);
+
+                    // Collect bundle file offsets for bundled data files.
+                    // Each TxnLog's rowset either has all offsets (bundled) or none (standalone).
+                    if (rowset.bundle_file_offsets_size() > 0) {
+                        if (rowset.bundle_file_offsets_size() != rowset.segments_size()) {
+                            return Status::InternalError(fmt::format(
+                                    "bundle_file_offsets size mismatch in txn log for tablet {}: "
+                                    "offsets={} segments={}",
+                                    _tablet.id(), rowset.bundle_file_offsets_size(), rowset.segments_size()));
+                        } else {
+                            has_bundle_offsets = true;
+                            all_bundle_file_offsets.reserve(all_bundle_file_offsets.size() +
+                                                            rowset.bundle_file_offsets_size());
+                            for (int i = 0; i < rowset.bundle_file_offsets_size(); i++) {
+                                all_bundle_file_offsets.emplace_back(rowset.bundle_file_offsets(i));
+                            }
+                        }
+                    } else if (rowset.segments_size() > 0) {
+                        has_segments_without_bundle_offsets = true;
+                    }
                 }
             } else {
                 return Status::NotSupported(
@@ -868,6 +991,26 @@ public:
             merged_rowset->add_segment_metas()->CopyFrom(segment_meta);
         }
 
+        // Validate bundle file offsets consistency across all TxnLogs.
+        // All TxnLogs must consistently either have or lack bundle_file_offsets.
+        // Mixing bundled and non-bundled rowsets is an error because downstream readers
+        // require offsets to locate segments within bundle files. Silently dropping offsets
+        // would leave bundled segment paths without positional info, causing data corruption.
+        if (has_bundle_offsets && has_segments_without_bundle_offsets) {
+            return Status::InternalError(
+                    fmt::format("Inconsistent bundle_file_offsets across txn logs for tablet {}: "
+                                "some logs have offsets, some don't. Cannot safely merge rowsets.",
+                                _tablet.id()));
+        }
+
+        // Set bundle file offsets if all TxnLogs consistently have them.
+        if (has_bundle_offsets) {
+            DCHECK_EQ(all_bundle_file_offsets.size(), static_cast<size_t>(merged_rowset->segments_size()));
+            for (int64_t offset : all_bundle_file_offsets) {
+                merged_rowset->add_bundle_file_offsets(offset);
+            }
+        }
+
         // Set rowset ID and update next_rowset_id
         merged_rowset->set_id(_metadata->next_rowset_id());
         merged_rowset->set_version(_new_version);
@@ -895,7 +1038,7 @@ public:
         _metadata->GetReflection()->MutableUnknownFields(_metadata.get())->Clear();
         _metadata->set_version(_new_version);
         if (_skip_write_tablet_metadata) {
-            return ExecEnv::GetInstance()->lake_tablet_manager()->cache_tablet_metadata(_metadata);
+            return _tablet.tablet_mgr()->cache_tablet_metadata(_metadata);
         }
         return _tablet.put_metadata(_metadata);
     }
@@ -994,8 +1137,8 @@ private:
 
         std::vector<uint32_t> input_rowsets_id(op_compaction.input_rowsets().begin(),
                                                op_compaction.input_rowsets().end());
-        ASSIGN_OR_RETURN(auto tablet_schema, ExecEnv::GetInstance()->lake_tablet_manager()->get_output_rowset_schema(
-                                                     input_rowsets_id, _metadata.get()));
+        ASSIGN_OR_RETURN(auto tablet_schema,
+                         _tablet.tablet_mgr()->get_output_rowset_schema(input_rowsets_id, _metadata.get()));
         int64_t output_rowset_schema_id = tablet_schema->id();
 
         auto last_input_pos = pre_input_pos;
@@ -1130,19 +1273,27 @@ private:
 
         int64_t base_version = _metadata->version();
         if (txn_meta.incremental_snapshot()) {
+            auto rssid_remap = build_rssid_remap(op_replication, _metadata->next_rowset_id(), /*is_pk=*/false);
+
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
             }
+
+            apply_replication_dcg_meta(op_replication, rssid_remap, _metadata.get());
+
             LOG(INFO) << "Apply incremental replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_meta.txn_id();
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
+            auto old_dcg_meta = std::move(*_metadata->mutable_dcg_meta());
             _metadata->mutable_rowsets()->Clear();
+            _metadata->mutable_dcg_meta()->Clear();
             if (op_replication.has_tablet_metadata()) {
                 // Lake replication (replication from shared-data cluster) with tablet metadata provided.
                 const auto& copied_tablet_meta = op_replication.tablet_metadata();
                 _metadata->mutable_rowsets()->CopyFrom(copied_tablet_meta.rowsets());
+                _metadata->mutable_dcg_meta()->CopyFrom(copied_tablet_meta.dcg_meta());
 
                 _metadata->set_next_rowset_id(copied_tablet_meta.next_rowset_id());
                 // In lake replication scenario, we need to carefully handle compaction_inputs.
@@ -1160,11 +1311,21 @@ private:
                 }
             } else {
                 // Non-Lake replication (replication from shared-nothing cluster).
+                auto rssid_remap = build_rssid_remap(op_replication, _metadata->next_rowset_id(), /*is_pk=*/false);
                 for (const auto& op_write : op_replication.op_writes()) {
                     RETURN_IF_ERROR(apply_write_log(op_write, txn_meta.txn_id()));
                 }
+                apply_replication_dcg_meta(op_replication, rssid_remap, _metadata.get());
                 old_rowsets.Swap(_metadata->mutable_compaction_inputs());
             }
+            std::unordered_set<std::string> new_referenced_files;
+            for (const auto& [_, dcg] : _metadata->dcg_meta().dcgs()) {
+                for (const auto& cf : dcg.column_files()) {
+                    new_referenced_files.insert(cf);
+                }
+            }
+            // Clear dcg_meta and add to orphan files.
+            collect_dcg_orphan_files(old_dcg_meta, new_referenced_files, _metadata.get());
             _metadata->set_cumulative_point(0);
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << base_version << ", new_version: " << _new_version

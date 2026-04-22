@@ -20,8 +20,8 @@
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/scan/glm_manager.h"
+#include "exec/runtime_filter/runtime_filter_probe.h"
 #include "runtime/global_dict/fragment_dict_state.h"
-#include "runtime/runtime_filter/runtime_filter_probe.h"
 #include "runtime/runtime_state_helper.h"
 #ifdef STARROCKS_JIT_ENABLE
 #include "exprs/jit/expr_jit_pass.h"
@@ -181,7 +181,7 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     opts.enable_column_expr_predicate = enable_column_expr_predicate;
     opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
 
-    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(opts);
     ScanConjunctsManager& cm = *_conjuncts_manager;
 
     // Parse conjuncts via _conjuncts_manager.

@@ -524,6 +524,10 @@ public class OptExpressionDuplicator {
             }
             opBuilder.setWindowCall(newWindowCalls);
 
+            if (windowOperator.getSkewColumn() != null) {
+                opBuilder.setSkewColumn(getNewScalarOp(windowOperator.getSkewColumn()));
+            }
+
             processCommon(opBuilder);
 
             return OptExpression.create(opBuilder.build(), inputs);

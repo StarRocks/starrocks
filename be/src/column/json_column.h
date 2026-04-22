@@ -72,6 +72,7 @@ public:
 
     void assign(size_t n, size_t idx) override;
 
+    using Column::append;
     void append(const JsonValue* object);
 
     void append(JsonValue&& object);

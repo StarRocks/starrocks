@@ -62,7 +62,8 @@ TEST_F(HiveConnectorTest, test_open_no_data) {
     TUniqueId fragment_id;
     TQueryOptions query_options;
     TQueryGlobals query_globals;
-    auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, _exec_env);
+    auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals,
+                                                        &_exec_env->query_execution_services(), _exec_env);
     TUniqueId id;
     runtime_state->init_mem_trackers(id);
 

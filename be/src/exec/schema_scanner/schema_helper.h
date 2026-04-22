@@ -15,7 +15,7 @@
 #pragma once
 
 #include "column/column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "common/status.h"
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService.h"
@@ -146,7 +146,7 @@ public:
 
 private:
     static Status _call_rpc(const SchemaScannerState& state,
-                            std::function<void(ClientConnection<FrontendServiceClient>&)> callback);
+                            const std::function<void(ClientConnection<FrontendServiceClient>&)>& callback);
 };
 
 template <LogicalType SlotType>

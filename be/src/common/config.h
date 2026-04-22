@@ -218,6 +218,9 @@ CONF_mInt64(lake_replication_slow_log_ms, "30000");
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+// Minimum number of files required to enable parallel copy in lake-to-lake replication.
+// Set to 0 to force disable parallel copy.
+CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -261,6 +264,8 @@ CONF_Bool(compress_rowbatches, "true");
 // Compress ratio when shuffle row_batches in network, not in storage engine.
 // If ratio is less than this value, use uncompressed data instead.
 CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
+// If true, skip compression when serialized_size exceeds the codec's max input size limit (instead of returning an error).
+CONF_mBool(enable_rpc_compress_overflow_skip, "true");
 // Acceleration of LZ4 Compression, the larger the acceleration value, the faster the algorithm, but also the lesser the compression.
 // Default 1, MIN=1, MAX=65537
 CONF_mInt32(lz4_acceleration, "1");
@@ -1018,6 +1023,8 @@ CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
 // The number of threads for executing sink io task in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
+// The number of threads for automatic partition thread pool. Queue size is 10x thread count.
+CONF_Int64(automatic_partition_thread_pool_thread_num, "1000");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
@@ -1321,6 +1328,11 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Enable cleanup of orphan delvec entries during compaction.
+// Orphan delvecs are leaked metadata entries from a historical bug that reference
+// non-existent segments and prevent delvec file garbage collection.
+// Turn this on after upgrade to clean up existing orphans, then turn it off once done.
+CONF_mBool(lake_enable_orphan_delvec_cleanup_on_compaction, "false");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
 CONF_mInt32(lake_pk_index_sst_min_compaction_versions, "2");
@@ -1343,6 +1355,8 @@ CONF_mInt64(cloud_native_pk_index_rebuild_rows_threshold, "10000000");
 // if set to true, CACHE SELECT will only read file, save CPU time
 // if set to false, CACHE SELECT will behave like SELECT
 CONF_mBool(lake_cache_select_in_physical_way, "true");
+// The count of threads for lake tablet metadata fetch operations (get_tablet_stats, get_tablet_metadatas).
+CONF_mInt32(lake_metadata_fetch_thread_count, "3");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1618,6 +1632,8 @@ CONF_Int64(rocksdb_max_write_buffer_memory_bytes, "1073741824");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
+// limit local exchange buffer size by dop * local_exchange_buffer_mem_limit_per_driver for union operators.
+CONF_mBool(local_exchange_buffer_mem_limit_by_consumer_dop, "true");
 // only used for test. default: 128M
 CONF_mInt64(streaming_agg_limited_memory_size, "134217728");
 // mem limit for partition hash join probe side buffer
@@ -1851,6 +1867,9 @@ CONF_mInt32(thrift_max_recursion_depth, "64");
 // if turned on, each compaction will use at most `max_cumulative_compaction_num_singleton_deltas` segments,
 // for now, only support non-pk LAKE compaction in size tierd compaction.
 CONF_mBool(enable_lake_compaction_use_partial_segments, "false");
+// If turned on, parallel compaction will split by sort key range instead of segment index.
+// This produces non-overlapping output rowsets, improving subsequent query performance.
+CONF_mBool(enable_lake_compaction_range_split, "false");
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
 

@@ -24,7 +24,7 @@
 namespace starrocks {
 
 EngineCompactionControlTask::EngineCompactionControlTask(const std::map<TTableId, int64_t>& table_to_disable_deadline)
-        : _table_to_disable_deadline(std::move(table_to_disable_deadline)) {}
+        : _table_to_disable_deadline(table_to_disable_deadline) {}
 
 Status EngineCompactionControlTask::execute() {
     CompactionManager* compaction_manager = StorageEngine::instance()->compaction_manager();

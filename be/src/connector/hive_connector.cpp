@@ -34,6 +34,7 @@
 #include "fs/fs_factory.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/global_dict/fragment_dict_state.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks::connector {
@@ -434,6 +435,14 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     if (hdfs_scan_node.__isset.can_use_min_max_opt) {
         _use_min_max_opt = hdfs_scan_node.can_use_min_max_opt;
     }
+    // can_use_any_column is set by PruneHDFSScanColumnRule when every queried column is
+    // a partition column and a placeholder materialized column was injected to satisfy
+    // the "at least one materialized column" requirement.  We propagate this flag so that
+    // the scanner can avoid reading that placeholder column from the data file when
+    // min/max optimization is active.
+    if (hdfs_scan_node.__isset.can_use_any_column) {
+        _can_use_any_column = hdfs_scan_node.can_use_any_column;
+    }
     if (hdfs_scan_node.__isset.can_use_count_opt) {
         _use_count_opt = hdfs_scan_node.can_use_count_opt;
     }
@@ -732,7 +741,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     }
     if (native_file_path.empty()) {
         bool start_with_slash = !scan_range.relative_path.empty() && scan_range.relative_path.at(0) == '/';
-        native_file_path = _hive_table->get_base_path() +
+        native_file_path = std::string(_hive_table->get_base_path()) +
                            (start_with_slash ? scan_range.relative_path : "/" + scan_range.relative_path);
     }
 
@@ -742,6 +751,24 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateUniqueFromString(native_file_path, fsOptions));
     HdfsScannerParams scanner_params;
+    if (hdfs_scan_node.__isset.column_access_paths && !_disable_column_access_path_hints &&
+        _column_access_paths.empty()) {
+        bool failed = false;
+        for (const auto& thrift_path : hdfs_scan_node.column_access_paths) {
+            auto st = ColumnAccessPath::create(thrift_path, state, state->obj_pool());
+            if (LIKELY(st.ok())) {
+                _column_access_paths.emplace_back(std::move(st.value()));
+            } else {
+                LOG(WARNING) << "Failed to create column access path: " << st.status();
+                failed = true;
+                break;
+            }
+        }
+        if (failed) {
+            _column_access_paths.clear();
+            _disable_column_access_path_hints = true;
+        }
+    }
     RETURN_IF_ERROR(_init_global_dicts(&scanner_params));
     scanner_params.runtime_filter_collector = _runtime_filters;
     scanner_params.scan_range = &scan_range;
@@ -809,8 +836,12 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.use_file_pagecache = _use_file_pagecache;
 
     scanner_params.use_min_max_opt = _use_min_max_opt;
+    scanner_params.can_use_any_column = _can_use_any_column;
     scanner_params.use_count_opt = _use_count_opt;
     scanner_params.all_conjunct_ctxs = _all_conjunct_ctxs;
+    if (!_disable_column_access_path_hints && !_column_access_paths.empty()) {
+        scanner_params.column_access_paths = &_column_access_paths;
+    }
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

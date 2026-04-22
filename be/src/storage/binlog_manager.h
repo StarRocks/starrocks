@@ -129,7 +129,7 @@ private:
 // automatically in the destructor
 class BinlogFileReadHolder {
 public:
-    BinlogFileReadHolder(std::shared_ptr<std::atomic<int64_t>> _reader_count, BinlogFileMetaPBPtr file_meta)
+    BinlogFileReadHolder(const std::shared_ptr<std::atomic<int64_t>>& _reader_count, BinlogFileMetaPBPtr file_meta)
             : _reader_count(_reader_count), _file_meta(std::move(file_meta)) {
         _reader_count->fetch_add(1);
     }

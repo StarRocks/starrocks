@@ -38,8 +38,10 @@
 #include <memory>
 
 #include "base/simd/simd.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "column/raw_data_visitor.h"
 #include "common/config_rowset_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
@@ -359,8 +361,7 @@ ScalarColumnWriter::ScalarColumnWriter(const ColumnWriterOptions& opts, TypeInfo
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _opts(opts),
           _wfile(wfile),
-          _curr_page_format(_opts.page_format),
-          _data_size(0) {
+          _curr_page_format(_opts.page_format) {
     // these opts.meta fields should be set by client
     DCHECK(opts.meta->has_column_id());
     DCHECK(opts.meta->has_unique_id());
@@ -703,10 +704,20 @@ Status ScalarColumnWriter::finish_current_page() {
 
 Status ScalarColumnWriter::append(const Column& column) {
     _total_mem_footprint += column.byte_size();
-    const uint8_t* ptr = column.raw_data();
     // Currently, ColumnWriter does not support null-only columns
-    const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+    const uint8_t* null = ColumnHelper::get_null_data_ptr(&column);
+    const Column* data_column = ColumnHelper::get_data_column(&column);
+    const uint8_t* ptr;
+    // TODO: Remove slice cache from column writer
+    if (data_column->is_binary() || data_column->is_large_binary()) {
+        data_column->is_large_binary() ? down_cast<const LargeBinaryColumn*>(data_column)->build_slices(_slice_buf)
+                                       : down_cast<const BinaryColumn*>(data_column)->build_slices(_slice_buf);
+        ptr = reinterpret_cast<const uint8_t*>(_slice_buf.data());
+    } else {
+        RawDataVisitor visitor;
+        RETURN_IF_ERROR(data_column->accept(&visitor));
+        ptr = visitor.result();
+    }
     return _append(ptr, null, column.size(), column.has_null());
 }
 
@@ -942,7 +953,7 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     size_t limit = length();
     auto row_count = column.size();
     const uint8_t* null =
-            is_nullable() ? down_cast<const NullableColumn*>(&column)->null_column()->raw_data() : nullptr;
+            is_nullable() ? down_cast<const NullableColumn*>(&column)->immutable_null_column_data().data() : nullptr;
     const BinaryColumn* bin_col;
 
     if (is_nullable()) {
@@ -953,12 +964,9 @@ Status StringColumnWriter::check_string_lengths(const Column& column) {
     }
     for (size_t i = 0; i < row_count; i++) {
         // skip string length check if it is null
-        if (null != nullptr && null[i] == starrocks::DATUM_NULL) {
+        if (null != nullptr && null[i] == DATUM_NULL) {
             continue;
         }
-        // here we shouldn't use raw_data() api of column to get a vector of slices in advance,
-        // because raw_data() will call _build_slices() api, which will create a vector of slices,
-        // if there are many StringColumnWriter, each of them will have a vector of slices, which will consume many memory.
         Slice slice = bin_col->get_slice(i);
         if (slice.get_size() > limit) {
             return Status::InvalidArgument(fmt::format("string length({}) > limit({}), string: {}", slice.get_size(),

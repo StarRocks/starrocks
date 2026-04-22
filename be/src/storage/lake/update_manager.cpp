@@ -20,6 +20,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/pretty_printer.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
@@ -262,6 +263,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     // Snapshot IO stats before publish to exclude preload IO from trace counters.
     const int64_t io_local_disk_ns_before = state.stats().io_ns_read_local_disk;
     const int64_t io_remote_ns_before = state.stats().io_ns_remote;
+    const int64_t io_count_local_disk_before = state.stats().io_count_local_disk;
+    const int64_t io_count_remote_before = state.stats().io_count_remote;
 
     std::vector<FileMetaPB> orphan_files;
     std::map<int, FileInfo> replace_segments;
@@ -510,6 +513,9 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us",
                             (state.stats().io_ns_read_local_disk - io_local_disk_ns_before) / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", (state.stats().io_ns_remote - io_remote_ns_before) / 1000);
+    TRACE_COUNTER_INCREMENT("segment_io_count_local_disk",
+                            state.stats().io_count_local_disk - io_count_local_disk_before);
+    TRACE_COUNTER_INCREMENT("segment_io_count_remote", state.stats().io_count_remote - io_count_remote_before);
     VLOG(1) << strings::Substitute(
             "[publish_pk_tablet][end] tablet:$0 txn:$1 rowset_id:$2 upsert_segments:$3 dels:$4 new_del:$5 total_del:$6 "
             "upsert_rows:$7 base_version:$8 new_version:$9",
@@ -736,6 +742,13 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     }
     for (int i = 0; i < op_write.del_encryption_metas_size(); i++) {
         new_rows_op.add_del_encryption_metas(op_write.del_encryption_metas(i));
+    }
+    // Carry over the per-del shared flag populated by tablet-split cross-publish.
+    // Without this, apply_opwrite(new_rows_op) would drop the flag and the del file
+    // would be written into rowset.del_files with shared=false, exposing it to
+    // premature deletion by vacuum on sibling split tablets.
+    for (int i = 0; i < op_write.shared_dels_size(); i++) {
+        new_rows_op.add_shared_dels(op_write.shared_dels(i));
     }
     if (new_rows_op.rowset().segments_size() > 0 || new_rows_op.dels_size() > 0) {
         builder->apply_opwrite(new_rows_op, {}, {});
@@ -1195,6 +1208,25 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
     return st;
 }
 
+Status UpdateManager::batch_get_rss_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
+                                                        std::vector<SegmentPKIteratorPtr>& pk_iters,
+                                                        std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                                        bool need_lock) {
+    rss_rowids_per_segment->resize(pk_iters.size());
+    Status st;
+    st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
+        TRACE_COUNTER_INCREMENT("pcu_load_update_state_cnt", pk_iters.size());
+        std::unique_ptr<ThreadPoolToken> token;
+        if (config::enable_pk_index_parallel_execution) {
+            token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                    ThreadPool::ExecutionMode::CONCURRENT);
+        }
+        TRACE_COUNTER_SCOPE_LATENCY_US("pcu_prepare_partial_update_states_us");
+        st.update(index.batch_parallel_get_rss_rowids(token.get(), pk_iters, rss_rowids_per_segment));
+    }));
+    return st;
+}
+
 static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnContext& ctx, uint32_t ucid,
                                                                int32_t* col_index,
                                                                const TabletSchemaCSPtr& read_tablet_schema) {
@@ -1211,7 +1243,7 @@ static StatusOr<std::shared_ptr<Segment>> get_lake_dcg_segment(GetDeltaColumnCon
             return Status::InternalError(
                     fmt::format("DCG file not found for column {}: {}", ucid, column_file_result.status().to_string()));
         }
-        std::string column_file = column_file_result.value();
+        const auto& column_file = column_file_result.value();
 
         if (ctx.dcg_segments.count(column_file) == 0) {
             auto dcg_segment_result = ctx.segment->new_dcg_segment(*dcg, idx.first, read_tablet_schema);
@@ -1240,7 +1272,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_lake_dcg_column_iterator(
         return dcg_segment_result.status();
     }
 
-    auto dcg_segment = dcg_segment_result.value();
+    const auto& dcg_segment = dcg_segment_result.value();
     if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
         RandomAccessFileOptions ropts;
         if (!dcg_segment->file_info().encryption_meta.empty()) {
@@ -1445,7 +1477,7 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
             return Status::OK();
         }
     }
-    (*pdelvec).reset(new DelVector());
+    *pdelvec = std::make_shared<DelVector>();
     // 2. find in delvec file
     return get_del_vec_in_meta(tsid, version, fill_cache, pdelvec->get());
 }
@@ -1523,6 +1555,25 @@ size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version,
             continue;
         }
         num_dels += delvec->cardinality();
+    }
+    return num_dels;
+}
+
+size_t UpdateManager::get_rowset_num_deletes(const TabletMetadata& metadata, const RowsetMetadataPB& rowset_meta) {
+    size_t num_dels = 0;
+    LakeIOOptions lake_io_opts;
+    lake_io_opts.fill_data_cache = false;
+    for (int i = 0; i < rowset_meta.segments_size(); i++) {
+        DelVector delvec;
+        uint32_t segment_id = get_rssid(rowset_meta, i);
+        auto st = lake::get_del_vec(_tablet_mgr, metadata, segment_id, false /*fill_cache*/, lake_io_opts, &delvec);
+        if (!st.ok()) {
+            LOG(WARNING) << "get_rowset_num_deletes: error get del vector"
+                         << " tablet_id=" << metadata.id() << " metadata_version=" << metadata.version()
+                         << " segment_id=" << segment_id << " status=" << st;
+            continue;
+        }
+        num_dels += delvec.cardinality();
     }
     return num_dels;
 }
@@ -1859,6 +1910,10 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(GlobalEnv::GetInstance()->process_mem_tracker(), true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(config::enable_pk_strict_memcheck ? _update_mem_tracker
                                                                                              : nullptr);
+    scoped_refptr<Trace> trace_guard(new Trace);
+    ADOPT_TRACE(trace_guard.get());
+    TRACE("start preload_update_state tablet_id=$0 txn_id=$1", tablet->id(), txnlog.txn_id());
+    auto start_ts = MonotonicMillis();
     // use tabletid-txnid as update state cache's key, so it can retry safe.
     auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
     state_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
@@ -1906,6 +1961,12 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     } else {
         _update_state_cache.remove(state_entry);
     }
+    auto cost_ms = MonotonicMillis() - start_ts;
+    if (cost_ms >= config::lake_publish_version_slow_log_ms) {
+        LOG(INFO) << "Slow preload_update_state tablet_id=" << tablet->id() << " txn_id=" << txnlog.txn_id()
+                  << " segments=" << segments_size << " cost=" << cost_ms
+                  << "ms, trace: " << trace_guard->MetricsAsJSON();
+    }
     TEST_SYNC_POINT("UpdateManager::preload_update_state:return");
 }
 
@@ -1922,6 +1983,10 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
     // no need to preload if output rowset is empty.
     const int segments_size = txnlog.op_compaction().output_rowset().segments_size();
     if (segments_size <= 0) return;
+    scoped_refptr<Trace> trace_guard(new Trace);
+    ADOPT_TRACE(trace_guard.get());
+    TRACE("start preload_compaction_state tablet_id=$0 txn_id=$1", tablet.id(), txnlog.txn_id());
+    auto start_ts = MonotonicMillis();
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &txnlog.op_compaction().output_rowset(), -1 /*unused*/,
                          tablet_schema);
     // use tabletid-txnid as compaction state cache's key, so it can retry safe.
@@ -1945,6 +2010,12 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
     } else {
         // just release it, will use it again in publish
         _compaction_cache.release(compaction_entry);
+    }
+    auto cost_ms = MonotonicMillis() - start_ts;
+    if (cost_ms >= config::lake_publish_version_slow_log_ms) {
+        LOG(INFO) << "Slow preload_compaction_state tablet_id=" << tablet.id() << " txn_id=" << txnlog.txn_id()
+                  << " segments=" << segments_size << " cost=" << cost_ms
+                  << "ms, trace: " << trace_guard->MetricsAsJSON();
     }
     TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
 }

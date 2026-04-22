@@ -28,9 +28,13 @@
 
 namespace starrocks {
 
-class ExecEnv;
+class FragmentMgr;
 
 class TUniqueId;
+
+namespace pipeline {
+class QueryContextManager;
+}
 
 struct NonPipelineReportTask {
     NonPipelineReportTask(int64_t last_report_time, TQueryType::type task_type)
@@ -72,7 +76,7 @@ struct PipeLineReportTaskKeyHasher {
 
 class ProfileReportWorker {
 public:
-    ProfileReportWorker(ExecEnv* env);
+    ProfileReportWorker(FragmentMgr* fragment_mgr, pipeline::QueryContextManager* query_context_manager);
     ~ProfileReportWorker() = default;
     void execute();
     void close();
@@ -93,9 +97,10 @@ private:
     std::unordered_map<TUniqueId, NonPipelineReportTask> _non_pipeline_report_tasks;
     std::mutex _non_pipeline_report_mutex;
 
+    FragmentMgr* _fragment_mgr;
+    pipeline::QueryContextManager* _query_context_manager;
+    std::atomic<bool> _stop{false};
     std::thread _thread;
-
-    std::atomic<bool> _stop;
 };
 
 } // namespace starrocks

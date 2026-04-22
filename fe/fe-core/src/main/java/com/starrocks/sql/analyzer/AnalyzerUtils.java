@@ -145,6 +145,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -813,9 +814,33 @@ public class AnalyzerUtils {
     }
 
     public static Map<TableName, Relation> collectAllTableAndViewRelations(ParseNode parseNode) {
-        Map<TableName, Relation> allTableAndViewRelations = Maps.newHashMap();
+        if (parseNode == null) {
+            return Collections.emptyMap();
+        }
+        Map<TableName, Relation> allTableAndViewRelations = new LinkedHashMap<>();
         new TableAndViewRelationsCollector(allTableAndViewRelations).visit(parseNode);
         return allTableAndViewRelations;
+    }
+
+    public static List<String> collectAllTableAndViewRelationNamesForAudit(ParseNode parseNode) {
+        Map<TableName, Relation> allTableAndViewRelations = collectAllTableAndViewRelations(parseNode);
+        List<String> relationNames = new ArrayList<>(allTableAndViewRelations.size());
+        for (TableName tableName : allTableAndViewRelations.keySet()) {
+            relationNames.add(formatTableNameForAudit(tableName));
+        }
+        return relationNames;
+    }
+
+    static String formatTableNameForAudit(TableName tableName) {
+        StringBuilder stringBuilder = new StringBuilder();
+        if (tableName.getCatalog() != null) {
+            stringBuilder.append(tableName.getCatalog()).append(".");
+        }
+        if (tableName.getDb() != null) {
+            stringBuilder.append(tableName.getDb()).append(".");
+        }
+        stringBuilder.append(tableName.getTbl());
+        return stringBuilder.toString();
     }
 
     public static List<FileTableFunctionRelation> collectFileTableFunctionRelation(StatementBase statementBase) {
@@ -1507,9 +1532,20 @@ public class AnalyzerUtils {
 
             // table partitions for check
             PCellSortedSet tablePartitions = olapTable.getListPartitionItems();
-            Set<String> partitionNameSet = Sets.newHashSet();
+            Set<PListCell> partitionValueSet = Sets.newHashSet();
             List<PartitionDesc> partitionDescs = Lists.newArrayList();
             for (List<String> partitionValue : partitionValues) {
+                List<List<String>> partitionItems = Collections.singletonList(partitionValue);
+                PListCell cell = new PListCell(partitionItems);
+
+                // Deduplicate by partition value, not by partition name.
+                // Different values may produce the same partition name via getFormatPartitionValue()
+                // (e.g., "a-b" and "ab" both format to "ab"), so name-based dedup would incorrectly
+                // skip the second value. Value-based dedup ensures every distinct value gets a partition.
+                if (partitionValueSet.contains(cell)) {
+                    continue;
+                }
+
                 List<String> formattedPartitionValue = Lists.newArrayList();
                 for (String value : partitionValue) {
                     String formatValue = getFormatPartitionValue(value);
@@ -1527,21 +1563,18 @@ public class AnalyzerUtils {
                     }
                     partitionName = partitionNamePrefix + PARTITION_NAME_PREFIX_SPLIT + partitionName;
                 }
-                if (!partitionNameSet.contains(partitionName)) {
-                    List<List<String>> partitionItems = Collections.singletonList(partitionValue);
-                    PListCell cell = new PListCell(partitionItems);
-                    partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
-                    MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
-                            partitionName, partitionItems, partitionProperties);
-                    multiItemListPartitionDesc.setSystem(true);
-                    partitionDescs.add(multiItemListPartitionDesc);
-                    partitionNameSet.add(partitionName);
+                partitionName = calculateUniquePartitionName(partitionName, cell, tablePartitions);
+                MultiItemListPartitionDesc multiItemListPartitionDesc = new MultiItemListPartitionDesc(true,
+                        partitionName, partitionItems, partitionProperties);
+                multiItemListPartitionDesc.setSystem(true);
+                partitionDescs.add(multiItemListPartitionDesc);
+                partitionValueSet.add(cell);
 
-                    // update table partition
-                    tablePartitions.add(partitionName, cell);
-                }
+                // update table partition
+                tablePartitions.add(partitionName, cell);
             }
-            List<String> partitionNames = Lists.newArrayList(partitionNameSet);
+            List<String> partitionNames = partitionDescs.stream()
+                    .map(PartitionDesc::getPartitionName).collect(Collectors.toList());
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(Lists.newArrayList(), partitionDescs);
             listPartitionDesc.setPartitionNames(partitionNames);
             listPartitionDesc.setSystem(true);

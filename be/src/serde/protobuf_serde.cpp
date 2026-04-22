@@ -45,7 +45,7 @@ int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::s
 }
 
 StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context) {
-    StatusOr<ChunkPB> res = serialize_without_meta(chunk, std::move(context));
+    StatusOr<ChunkPB> res = serialize_without_meta(chunk, context);
     if (!res.ok()) return res.status();
 
     const auto& slot_id_to_index = chunk.get_slot_id_to_index_map();

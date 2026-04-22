@@ -54,12 +54,12 @@ struct AutoIncrementPartialUpdateState {
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
     // but not in full tablet schema
-    uint32_t id;
-    uint32_t segment_id;
+    uint32_t id{0};
+    uint32_t segment_id{0};
     std::vector<uint32_t> rowids;
-    bool skip_rewrite;
+    bool skip_rewrite{false};
 
-    AutoIncrementPartialUpdateState() : schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
+    AutoIncrementPartialUpdateState() : schema(nullptr) {}
 
     void init(std::shared_ptr<TabletSchema> modified_schema, uint32_t id, uint32_t segment_id) {
         this->schema = std::move(modified_schema);
@@ -87,8 +87,11 @@ class SegmentPKIterator {
 public:
     SegmentPKIterator() = default;
     ~SegmentPKIterator() { close(); }
+    // If defer_data_load is true, only save parameters without loading the first chunk.
+    // The first chunk will be loaded lazily on the first done()/next() call.
+    // This avoids memory spikes when many iterators are created upfront.
     Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                PrimaryKeyEncodingType encoding_type);
+                PrimaryKeyEncodingType encoding_type, bool defer_data_load = false);
     void next();
     bool done();
     Status status();
@@ -124,6 +127,8 @@ private:
     size_t _current_rows = 0;
     // If true, we will load segment peice by piece when needed.
     bool _lazy_load = false;
+    // If true, first _load() is deferred until done() is first called.
+    bool _defer_data_load = false;
     // If enable lazy load, `_memory_usage` will record first piece of pk column memory usage.
     size_t _memory_usage = 0;
     // For large segment, we need to load segment file piece by piece.

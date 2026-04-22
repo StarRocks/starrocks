@@ -86,7 +86,7 @@ public:
     std::string to_cxx_string(jstring str);
     std::string dumpExceptionString(jthrowable throwable);
     jmethodID getToStringMethod(jclass clazz);
-    jstring to_jstring(const std::string& str);
+    StatusOr<jstring> to_jstring(const std::string& str);
     jmethodID getMethod(jclass clazz, const std::string& method, const std::string& sig);
     jmethodID getStaticMethod(jclass clazz, const std::string& method, const std::string& sig);
     // create a object array
@@ -472,7 +472,9 @@ public:
     // get class
     StatusOr<JVMClass> getClass(const std::string& className);
     // get batch call stub
-    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type);
+    // numActualVarArgs: actual number of varargs input columns; only meaningful when the method uses varargs
+    StatusOr<JVMClass> genCallStub(const std::string& stubClassName, jclass clazz, jobject method, int type,
+                                   int numActualVarArgs = 0);
 
     Status init();
 
@@ -487,7 +489,7 @@ private:
 struct MethodTypeDescriptor {
     LogicalType type;
     bool is_box;
-    bool is_array;
+    bool is_array = false;
 };
 
 struct JavaMethodDescriptor {

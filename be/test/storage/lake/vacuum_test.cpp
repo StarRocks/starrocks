@@ -4226,4 +4226,372 @@ TEST_P(LakeVacuumTest, test_delete_tablets_skip_txnlog_files_for_deleted_tablets
     }
 }
 
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_metadata_data_files) {
+    // Simulate deleting old range distribution tablets after tablet split.
+    // The latest metadata contains data files (segments, delvecs, sstables, del files, dcg files)
+    // that may be shared with new split tablets. All data files should be retained for range
+    // distribution tablets; they will be cleaned up by new tablets' regular vacuum.
+    const std::string segment1 = "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat";
+    const std::string segment2 = "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat";
+    const std::string delvec1 = "0000000000f659e4_66666666-6666-6666-6666-6666666666f2.delvec";
+    const std::string sstable1 = "0000000000f659e4_66666666-6666-6666-6666-6666666666f3.sst";
+    const std::string del_file1 = "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del";
+    const std::string del_file2 = "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del";
+    create_data_file(segment1);
+    create_data_file(segment2);
+    create_data_file(delvec1);
+    create_data_file(sstable1);
+    create_data_file(del_file1);
+    create_data_file(del_file2);
+
+    // Txn log: file is NOT marked as shared (written before split).
+    ASSERT_OK(_tablet_mgr->put_txn_log(*json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 5000,
+            "txn_id": 9900,
+            "partition_id": 111,
+            "op_write": {
+                "rowset": {
+                    "segments": [
+                        "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat",
+                        "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat"
+                    ]
+                },
+                "dels": [
+                    "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del",
+                    "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del"
+                ]
+            }
+        }
+        )DEL")));
+
+    // Metadata v2: range distribution tablet with data files.
+    // Some files are marked shared, some are not. After split, ALL data files should be
+    // retained regardless of shared flag.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 5000,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        },
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000f659e4_66666666-6666-6666-6666-6666666666f1.dat",
+                    "0000000000f759e4_77777777-7777-7777-7777-7777777777g1.dat"
+                ],
+                "data_size": 4096,
+                "shared_segments": [true, false],
+                "del_files": [
+                    {
+                        "name": "0000000000f659e4_66666666-6666-6666-6666-6666666666f4.del",
+                        "shared": true
+                    },
+                    {
+                        "name": "0000000000f759e4_77777777-7777-7777-7777-7777777777g2.del",
+                        "shared": false
+                    }
+                ]
+            }
+        ],
+        "delvec_meta": {
+            "version_to_file": [
+                {
+                    "key": 2,
+                    "value": {
+                        "name": "0000000000f659e4_66666666-6666-6666-6666-6666666666f2.delvec",
+                        "size": 32,
+                        "shared": true
+                    }
+                }
+            ]
+        },
+        "sstable_meta": {
+            "sstables": [
+                {
+                    "filename": "0000000000f659e4_66666666-6666-6666-6666-6666666666f3.sst",
+                    "shared": true
+                }
+            ]
+        }
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(5000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // All data files should be retained for range distribution tablets.
+        // Both shared and private files are kept because after split, even "private"
+        // files in pre-split metadata may be referenced by new tablets.
+        EXPECT_TRUE(file_exist(segment1));
+        EXPECT_TRUE(file_exist(segment2));
+        EXPECT_TRUE(file_exist(delvec1));
+        EXPECT_TRUE(file_exist(sstable1));
+        EXPECT_TRUE(file_exist(del_file1));
+        EXPECT_TRUE(file_exist(del_file2));
+
+        // Txn log and metadata files should be deleted.
+        EXPECT_FALSE(file_exist(txn_log_filename(5000, 9900)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(5000, 2)));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_txnlog_data_files) {
+    // Simulate deleting old range distribution tablets after tablet split.
+    // Txn logs of the old tablet reference data files that have been applied to new split tablets,
+    // so those data files must NOT be deleted.
+    const std::string segment1 = "00000000001259e4_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat";
+    const std::string del_file1 = "00000000001259e4_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.del";
+    const std::string compaction_segment = "00000000002259e4_cccccccc-cccc-cccc-cccc-cccccccccccc.dat";
+    const std::string schema_change_segment = "00000000003259e4_dddddddd-dddd-dddd-dddd-dddddddddddd.dat";
+    create_data_file(segment1);
+    create_data_file(del_file1);
+    create_data_file(compaction_segment);
+    create_data_file(schema_change_segment);
+
+    // Tablet metadata with range field (range distribution tablet)
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6000,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    // Txn log with op_write
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 7000,
+            "op_write": {
+                "rowset": {
+                    "segments": ["00000000001259e4_aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa.dat"]
+                },
+                "dels": [
+                    "00000000001259e4_bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb.del"
+                ]
+            }
+        }
+        )DEL")));
+
+    // Txn log with op_compaction
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 8000,
+            "op_compaction": {
+                "output_rowset": {
+                    "segments": ["00000000002259e4_cccccccc-cccc-cccc-cccc-cccccccccccc.dat"]
+                }
+            }
+        }
+        )DEL")));
+
+    // Txn log with op_schema_change
+    ASSERT_OK(_tablet_mgr->put_txn_log(json_to_pb<TxnLogPB>(R"DEL(
+        {
+            "tablet_id": 6000,
+            "txn_id": 9000,
+            "op_schema_change": {
+                "rowsets": [
+                    {
+                        "segments": ["00000000003259e4_dddddddd-dddd-dddd-dddd-dddddddddddd.dat"]
+                    }
+                ]
+            }
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(6000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Data files referenced by txn logs should be retained (not deleted).
+        EXPECT_TRUE(file_exist(segment1));
+        EXPECT_TRUE(file_exist(del_file1));
+        EXPECT_TRUE(file_exist(compaction_segment));
+        EXPECT_TRUE(file_exist(schema_change_segment));
+
+        // Txn log files themselves should be deleted.
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 7000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 8000)));
+        EXPECT_FALSE(file_exist(txn_log_filename(6000, 9000)));
+
+        // Metadata file should be deleted.
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6000, 2)));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_combined_txnlog_data_files) {
+    // Simulate deleting range distribution tablets with combined txn logs after tablet split.
+    const std::string segment1 = "00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat";
+    create_data_file(segment1);
+
+    // Tablet metadata with range field for both tablets
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6100,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 6101,
+        "version": 2,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        }
+        }
+        )DEL")));
+
+    // Combined txn log referencing data file from both tablets
+    ASSERT_OK(_tablet_mgr->put_combined_txn_log(*json_to_pb<CombinedTxnLogPB>(R"DEL(
+        {
+            "txn_logs": [
+               {
+                    "tablet_id": 6100,
+                    "txn_id": 7100,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat"]
+                        }
+                    }
+                },
+                {
+                    "tablet_id": 6101,
+                    "txn_id": 7100,
+                    "partition_id": 111,
+                    "op_write": {
+                        "rowset": {
+                            "segments": ["00000000001259e4_eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee.dat"]
+                        }
+                    }
+                }
+            ]
+        }
+        )DEL")));
+
+    {
+        // Delete both tablets
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(6100);
+        request.add_tablet_ids(6101);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Data file should be retained.
+        EXPECT_TRUE(file_exist(segment1));
+
+        // Combined txn log file should be deleted.
+        EXPECT_FALSE(file_exist(combined_txn_log_filename(7100)));
+
+        // Metadata files should be deleted.
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6100, 2)));
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(6101, 2)));
+    }
+}
+
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_range_distribution_tablets_skip_shared_orphan_files) {
+    // Verify that shared files in orphan_files and compaction_inputs are NOT deleted
+    // for range distribution tablets, even when can_bundle_meta_file_to_be_deleted
+    // would allow it. This protects files that may still be referenced by new split tablets.
+    const std::string shared_orphan = "0000000000f859e4_88888888-8888-8888-8888-8888888888h1.dat";
+    const std::string private_orphan = "0000000000f859e4_88888888-8888-8888-8888-8888888888h2.dat";
+    const std::string shared_compaction_input = "0000000000f859e4_88888888-8888-8888-8888-8888888888h3.dat";
+    const std::string latest_segment = "0000000000f959e4_99999999-9999-9999-9999-9999999999i1.dat";
+    create_data_file(shared_orphan);
+    create_data_file(private_orphan);
+    create_data_file(shared_compaction_input);
+    create_data_file(latest_segment);
+
+    // Version 3 (latest): range distribution tablet with orphan_files and compaction_inputs
+    // from a previous compaction. One orphan file is shared, one is not.
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 7000,
+        "version": 3,
+        "range": {
+            "lower_bound_included": true,
+            "upper_bound_included": false
+        },
+        "rowsets": [
+            {
+                "segments": [
+                    "0000000000f959e4_99999999-9999-9999-9999-9999999999i1.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "orphan_files": [
+            {
+                "name": "0000000000f859e4_88888888-8888-8888-8888-8888888888h1.dat",
+                "size": 100,
+                "shared": true
+            },
+            {
+                "name": "0000000000f859e4_88888888-8888-8888-8888-8888888888h2.dat",
+                "size": 100,
+                "shared": false
+            }
+        ],
+        "compaction_inputs": [
+            {
+                "segments": [
+                    "0000000000f859e4_88888888-8888-8888-8888-8888888888h3.dat"
+                ],
+                "shared_segments": [true]
+            }
+        ]
+        }
+        )DEL")));
+
+    {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(7000);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+        // Shared orphan file should be retained (protected by range distribution check)
+        EXPECT_TRUE(file_exist(shared_orphan));
+        // Shared compaction input should be retained
+        EXPECT_TRUE(file_exist(shared_compaction_input));
+        // Private orphan file can be deleted (not shared, so safe)
+        EXPECT_FALSE(file_exist(private_orphan));
+        // Latest metadata data files should be retained (existing is_range_distribution protection)
+        EXPECT_TRUE(file_exist(latest_segment));
+
+        // Metadata file should be deleted
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(7000, 3)));
+    }
+}
+
 } // namespace starrocks::lake

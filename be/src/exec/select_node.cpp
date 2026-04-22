@@ -72,10 +72,10 @@ void SelectNode::close(RuntimeState* state) {
     ExecNode::close(state);
 }
 
-pipeline::OpFactories SelectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+StatusOr<pipeline::OpFactories> SelectNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    OpFactories operators = _children[0]->decompose_to_pipeline(context);
+    ASSIGN_OR_RETURN(auto operators, _children[0]->decompose_to_pipeline(context));
 
     operators.emplace_back(std::make_shared<SelectOperatorFactory>(
             context->next_operator_id(), id(), std::move(_conjunct_ctxs), std::move(_common_expr_ctxs)));

@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
+#include <algorithm>
 #include <memory>
 #include <unordered_map>
 
@@ -195,7 +196,7 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
     // it will be overwritten by the next time calling partitioner.partition_chunk().
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -432,12 +433,11 @@ Status ConnectorSinkPassthroughExchanger::accept(const ChunkPtr& chunk, const in
             _data_processed > _writer_count * config::writer_scaling_min_size_mb * 1024 * 1024) {
             _writer_count++;
         }
-        // set to default value in case of _source vector out of bound in multi thread
-        if (_writer_count > sources_num) {
-            _writer_count = sources_num;
-        }
-        _source->get_sources()[(_next_accept_source++) % _writer_count.load()]->add_chunk(chunk);
-        if (_writer_count < sources_num) {
+        // Snapshot and clamp locally so the index computation is immune to concurrent increments
+        // that may push _writer_count transiently above sources_num between the clamp write and use.
+        size_t writer_count = std::min(_writer_count.load(), sources_num);
+        _source->get_sources()[(_next_accept_source++) % writer_count]->add_chunk(chunk);
+        if (writer_count < sources_num) {
             _data_processed += chunk->bytes_usage();
         }
     }
@@ -465,7 +465,7 @@ Status RandomPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t s
     auto& partitioner = _random_partitioners[sink_driver_sequence];
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
     RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     return Status::OK();
 }
 
@@ -501,7 +501,7 @@ Status AdaptivePassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t
         std::shared_ptr<std::vector<uint32_t>> partition_row_indexes =
                 std::make_shared<std::vector<uint32_t>>(num_rows);
         RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
-        RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+        RETURN_IF_ERROR(partitioner->send_chunk(chunk, partition_row_indexes));
     }
     return Status::OK();
 }

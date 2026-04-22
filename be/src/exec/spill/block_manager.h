@@ -16,6 +16,7 @@
 
 #include <memory>
 
+#include "base/metrics.h"
 #include "base/string/slice.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
@@ -76,6 +77,12 @@ struct BlockReaderOptions {
     RuntimeProfile::Counter* read_io_timer = nullptr;
     RuntimeProfile::Counter* read_io_count = nullptr;
     RuntimeProfile::Counter* read_io_bytes = nullptr;
+
+    // Global per-(operator_type, storage_type) counters mirrored for
+    // server-level observability. May be null if the caller has no
+    // global metrics registered.
+    IntCounter* global_read_io_duration_ns = nullptr;
+    IntCounter* global_read_bytes = nullptr;
 };
 
 class BlockReader {

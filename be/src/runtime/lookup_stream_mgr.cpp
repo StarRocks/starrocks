@@ -44,7 +44,7 @@ Status LookUpDispatcher::add_request(const pipeline::LookUpRequestContextPtr& ct
     auto request_tuple_id = ctx->request_tuple_id();
     auto it = _request_queues.lazy_emplace(
             request_tuple_id, [&](const auto& ctor) { ctor(request_tuple_id, std::make_shared<RequestsQueue>()); });
-    it->second->enqueue(std::move(ctx));
+    it->second->enqueue(ctx);
     DLOG(INFO) << "[GLM] add request to LookUpDispatcher, "
                << ", query id: " << print_id(_query_id) << ", target node id: " << _lookup_node_id
                << ", tuple id: " << request_tuple_id << ", dispacher: " << (void*)this;

@@ -26,6 +26,7 @@
 #include "formats/utils.h"
 #include "fs/fs_factory.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "types/datum.h"
 #include "utils.h"
 
@@ -40,7 +41,7 @@ IcebergChunkSink::IcebergChunkSink(std::vector<std::string> partition_columns, s
           _transform_exprs(std::move(transform_exprs)) {}
 
 void IcebergChunkSink::callback_on_commit(const CommitResult& result) {
-    push_rollback_action(std::move(result.rollback_action));
+    push_rollback_action(result.rollback_action);
     if (result.io_status.ok()) {
         _state->update_num_rows_load_sink(result.file_statistics.record_count);
 
@@ -110,11 +111,13 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> IcebergChunkSinkProvider::create_c
 
     std::unique_ptr<PartitionChunkWriterFactory> partition_chunk_writer_factory;
     if (config::enable_connector_sink_spill) {
+        auto* query_execution_services = runtime_state->query_execution_services();
         auto partition_chunk_writer_ctx =
                 std::make_shared<SpillPartitionChunkWriterContext>(SpillPartitionChunkWriterContext{
                         {file_writer_factory, location_provider, ctx->max_file_size, partition_columns.empty()},
                         fs,
                         ctx->fragment_context,
+                        query_execution_services->runtime->connector_sink_spill_executor,
                         runtime_state->desc_tbl().get_tuple_descriptor(ctx->tuple_desc_id),
                         column_evaluators,
                         ctx->sort_ordering});

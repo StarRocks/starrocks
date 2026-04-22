@@ -20,7 +20,6 @@
 #include <string>
 
 #include "common/utils.h"
-#include "http/http_common.h"
 #include "http/http_request.h"
 
 namespace starrocks {

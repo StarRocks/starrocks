@@ -19,6 +19,7 @@
 #include <utility>
 #include <vector>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/append_with_mask.h"
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
@@ -28,6 +29,7 @@
 #include "exprs/expr_context.h"
 #include "glog/logging.h"
 #include "runtime/mem_pool.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -152,6 +154,11 @@ public:
 
     Status do_visit(const MapColumn& column) {
         return Status::NotSupported("Unsupported map column in column wise comparator");
+    }
+
+    Status do_visit(const AdaptiveNullableColumn& column) {
+        // TODO: supported later
+        return Status::NotSupported("Unsupported AdaptiveNullableColumn in column wise comparator");
     }
 
     Status do_visit(const StructColumn& column) {
@@ -473,7 +480,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     _last_state = nullptr;
     _last_columns.clear();
 
-    return _build_output_chunk(std::move(group_by_columns), ColumnHelper::to_columns(std::move(agg_result_columns)),
+    return _build_output_chunk(group_by_columns, ColumnHelper::to_columns(std::move(agg_result_columns)),
                                use_intermediate);
 }
 

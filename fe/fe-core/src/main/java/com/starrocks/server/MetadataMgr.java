@@ -49,8 +49,8 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableVersion;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
@@ -633,6 +633,11 @@ public class MetadataMgr {
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
     public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+        return getBasicTable(context, catalogName, dbName, tblName, false);
+    }
+
+    public BasicTable getBasicTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                                    boolean fetchExternalMetadata) {
         if (catalogName == null) {
             return getTable(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
         }
@@ -641,7 +646,11 @@ public class MetadataMgr {
             return getTable(context, catalogName, dbName, tblName);
         }
 
-        // for external catalog, do not reach external metadata service
+        // for external catalog, optionally reach external metadata service
+        if (fetchExternalMetadata) {
+            return getTable(context, catalogName, dbName, tblName);
+        }
+
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(
                         metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
@@ -649,7 +658,7 @@ public class MetadataMgr {
     }
 
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName,
-                                           ConnectorMetadatRequestContext requestContext) {
+                                           ConnectorMetadataRequestContext requestContext) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
         if (connectorMetadata.isPresent()) {
@@ -796,20 +805,6 @@ public class MetadataMgr {
                 TvrTableSnapshot.empty());
     }
 
-    public List<PartitionInfo> getRemotePartitions(Table table, List<String> partitionNames) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
-        if (connectorMetadata.isPresent()) {
-            try {
-                return connectorMetadata.get().getRemotePartitions(table, partitionNames);
-            } catch (Exception e) {
-                LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",
-                        table.getCatalogName(), table, e);
-                throw e;
-            }
-        }
-        return new ArrayList<>();
-    }
-
     public Set<DeleteFile> getDeleteFiles(IcebergTable table, Long snapshotId, ScalarOperator predicate, FileContent content) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
         if (connectorMetadata.isPresent()) {
@@ -854,6 +849,23 @@ public class MetadataMgr {
         if (connectorMetadata.isPresent()) {
             try {
                 return connectorMetadata.get().getPartitions(table, partitionNames);
+            } catch (Exception e) {
+                LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
+                throw e;
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * Get partition info at a specific snapshot identified by the request context.
+     */
+    public List<PartitionInfo> getPartitions(String catalogName, Table table, List<String> partitionNames,
+                                             ConnectorMetadataRequestContext requestContext) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            try {
+                return connectorMetadata.get().getPartitions(table, partitionNames, requestContext);
             } catch (Exception e) {
                 LOG.error("Failed to get partitions on catalog [{}], table [{}]", catalogName, table, e);
                 throw e;

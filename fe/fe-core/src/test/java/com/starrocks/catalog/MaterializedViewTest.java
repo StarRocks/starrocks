@@ -585,9 +585,14 @@ public class MaterializedViewTest extends StarRocksTestBase {
     public void testShouldRefreshBy() {
         MaterializedView mv = new MaterializedView();
         MaterializedView.MvRefreshScheme mvRefreshScheme = new MaterializedView.MvRefreshScheme();
-        mvRefreshScheme.setType(MaterializedViewRefreshType.ASYNC);
+        mvRefreshScheme.setType(MaterializedViewRefreshType.INCREMENTAL);
         mv.setRefreshScheme(mvRefreshScheme);
         boolean shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
+        Assertions.assertFalse(shouldRefresh);
+
+        mvRefreshScheme.setType(MaterializedViewRefreshType.ASYNC);
+        mv.setRefreshScheme(mvRefreshScheme);
+        shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);
         Assertions.assertTrue(shouldRefresh);
         mv.setTableProperty(new TableProperty(Maps.newConcurrentMap()));
         shouldRefresh = mv.shouldTriggeredRefreshBy(null, null);

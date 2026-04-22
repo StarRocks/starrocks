@@ -15,6 +15,7 @@
 #include "exprs/encryption_functions.h"
 
 #include <optional>
+#include <vector>
 
 #include "base/crypto/aes_util.h"
 #include "base/crypto/md5.h"
@@ -227,10 +228,7 @@ private:
 static StatusOr<ColumnPtr> aes_encrypt_2params(FunctionContext* ctx, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
-    // Check if data or key columns are only_null
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return columns[0]->only_null() ? columns[0] : columns[1];
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -282,10 +280,7 @@ static StatusOr<ColumnPtr> aes_encrypt_2params(FunctionContext* ctx, const Colum
 static StatusOr<ColumnPtr> aes_decrypt_2params(FunctionContext* ctx, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
-    // Check if data or key columns are only_null
-    if (columns[0]->only_null() || columns[1]->only_null()) {
-        return columns[0]->only_null() ? columns[0] : columns[1];
-    }
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
     auto src_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
     auto key_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -514,6 +509,7 @@ StatusOr<ColumnPtr> EncryptionFunctions::to_base64(FunctionContext* ctx, const C
 
     const int size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
+    std::vector<char> encoded_buf;
     for (int row = 0; row < size; ++row) {
         if (src_viewer.is_null(row)) {
             result.append_null();
@@ -525,22 +521,20 @@ StatusOr<ColumnPtr> EncryptionFunctions::to_base64(FunctionContext* ctx, const C
         if (src_value.size == 0) {
             result.append_null();
             continue;
-        } else if (src_value.size > limit) {
+        } else if (limit >= 0 && src_value.size > static_cast<size_t>(limit)) {
             std::stringstream ss;
             ss << "to_base64 not supported length > " << limit;
             throw std::runtime_error(ss.str());
         }
 
-        int cipher_len = (size_t)(4.0 * ceil((double)src_value.size / 3.0)) + 1;
-        char p[cipher_len];
-
-        int len = base64_encode2((unsigned char*)src_value.data, src_value.size, (unsigned char*)p);
-        if (len < 0) {
-            result.append_null();
-            continue;
+        size_t encoded_len = (size_t)(4.0 * ceil((double)src_value.size / 3.0)) + 1;
+        if (encoded_buf.size() < encoded_len) {
+            encoded_buf.resize(encoded_len);
         }
 
-        result.append(Slice(p, len));
+        encoded_len = base64_encode2(reinterpret_cast<const unsigned char*>(src_value.data), src_value.size,
+                                     reinterpret_cast<unsigned char*>(encoded_buf.data()));
+        result.append(Slice(encoded_buf.data(), encoded_len));
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
@@ -830,7 +824,7 @@ struct EncodeColumnToDigest {
         if constexpr (lt_is_string<LT> || lt_is_binary<LT>) {
             // String/Binary types
             auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
-            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            const uint8_t* null_data = null_col ? null_col->immutable_data().data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
                 if (null_data && null_data[row]) {
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
@@ -846,7 +840,7 @@ struct EncodeColumnToDigest {
         } else if constexpr (lt_is_arithmetic<LT> || lt_is_date_or_datetime<LT> || lt_is_decimal<LT> ||
                              lt_is_largeint<LT>) {
             // Fixed-length types: numerics, dates, decimals
-            auto* data = data_col ? reinterpret_cast<const CppType*>(data_col->raw_data()) : nullptr;
+            const auto* data = data_col ? GetContainer<LT>::get_data(data_col).data() : nullptr;
             RowFingerprintValueType marker_type;
 
             if constexpr (sizeof(CppType) == 1) {
@@ -868,7 +862,7 @@ struct EncodeColumnToDigest {
             }
 
             uint8_t marker = static_cast<uint8_t>(marker_type);
-            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            const auto* null_data = null_col ? null_col->immutable_data().data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
                 if (null_data && null_data[row]) {
                     uint8_t null_marker = static_cast<uint8_t>(RowFingerprintValueType::Null);
@@ -888,7 +882,7 @@ struct EncodeColumnToDigest {
             // Fallback for unsupported types (JSON, HLL, OBJECT, STRUCT, ARRAY, MAP, etc.)
             // Cast to string representation and encode
             auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
-            const uint8_t* null_data = null_col ? null_col->raw_data() : nullptr;
+            const auto* null_data = null_col ? null_col->immutable_data().data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
                 if (null_data && null_data[row]) {
                     uint8_t marker = static_cast<uint8_t>(RowFingerprintValueType::Null);

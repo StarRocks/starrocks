@@ -19,7 +19,6 @@
 #include <mutex>
 #include <vector>
 
-#include "agent/master_info.h"
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -27,6 +26,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "common/global_types.h"
 #include "common/runtime_profile.h"
+#include "common/system/master_info.h"
 #include "exec/pipeline/fetch_task.h"
 #include "exec/sorting/sorting.h"
 #include "exec/tablet_info.h"
@@ -37,12 +37,13 @@
 
 namespace starrocks::pipeline {
 
-Status FetchProcessor::prepare(RuntimeState* state, RuntimeProfile* runtime_profile) {
+Status FetchProcessor::prepare(RuntimeState* state, std::shared_ptr<RuntimeProfile>& runtime_profile) {
     if (auto opt = get_backend_id(); opt.has_value()) {
         _local_be_id = opt.value();
     } else {
         return Status::InternalError("can't get local backend id");
     }
+    _runtime_profile = runtime_profile;
 
     runtime_profile->add_info_string("LookUpNode", std::to_string(_target_node_id));
     _build_row_id_chunk_timer = ADD_TIMER(runtime_profile, "BuildRowIdChunkTime");
@@ -212,7 +213,7 @@ StatusOr<FetchTaskPtr> FetchProcessor::_create_fetch_task(TupleId request_tuple_
     task_ctx->unit = std::move(unit);
     task_ctx->request_tuple_id = request_tuple_id;
     task_ctx->source_node_id = source_id;
-    task_ctx->request_chunk = std::move(request_chunk);
+    task_ctx->request_chunk = request_chunk;
     task_ctx->scan_node_id = row_pos_desc->get_scan_node_id();
 
     switch (row_position_type) {

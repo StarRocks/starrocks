@@ -358,6 +358,22 @@ Hive クラスターのストレージとして Data Lake Storage Gen2 を選択
   | azure.adls2.oauth2_client_secret   | Yes          | 作成された新しいクライアント（アプリケーション）シークレットの値です。 |
   | azure.adls2.oauth2_client_endpoint | Yes          | サービスプリンシパルまたはアプリケーションの OAuth 2.0 トークンエンドポイント（v1）です。 |
 
+- ワークロード ID 認証方法を選択する場合、`StorageCredentialParams` を次のように構成します:
+
+  ```SQL
+  "azure.adls2.oauth2_token_file" = "<path_to_token>",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  次の表は、`StorageCredentialParams` で構成する必要があるパラメータを説明しています。
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_token_file           | Yes          | Azure ワークロード ID ウェブフックによってポッドにマッピングされた、OAuth2 トークンファイルへの絶対ファイルパス。 |
+  | azure.adls2.oauth2_tenant_id            | Yes          | アクセスしたいデータのテナント ID です。                    |
+  | azure.adls2.oauth2_client_id            | Yes          | ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。 |
+
 ###### Azure Data Lake Storage Gen1
 
 Hive クラスターのストレージとして Data Lake Storage Gen1 を選択した場合、以下のいずれかの操作を行います：
@@ -735,6 +751,21 @@ PROPERTIES
   );
   ```
 
+- ワークロード ID 認証方法を選択する場合、以下のようなコマンドを実行します：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive",
+      "hive.metastore.type" = "hive",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
 #### Google GCS
 
 - VM ベースの認証方法を選択する場合、以下のようなコマンドを実行します：
@@ -866,7 +897,7 @@ Hive テーブルのスキーマを表示するには、次の構文のいずれ
 
 2. [Hive catalog とその中のデータベースに切り替える](#switch-to-a-hive-catalog-and-a-database-in-it)。
 
-3. [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を使用して、指定されたデータベース内の目的のテーブルをクエリします：
+3. [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT/SELECT.md) を使用して、指定されたデータベース内の目的のテーブルをクエリします：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

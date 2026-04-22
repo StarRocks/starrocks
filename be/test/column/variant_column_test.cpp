@@ -26,7 +26,7 @@
 #include "column/fixed_length_column.h"
 #include "column/mysql_row_buffer.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/variant_encoder.h"
 #include "types/datum.h"
 #include "types/logical_type.h"

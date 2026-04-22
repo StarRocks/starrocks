@@ -41,6 +41,10 @@ public:
     static StatusOr<ColumnReaderPtr> create(ColumnReaderPtr raw_reader, const GlobalDictMap* dict, const SlotId slot_id,
                                             int64_t num_rows);
 
+    static StatusOr<ColumnReaderPtr> create_variant_column_reader(const ColumnReaderOptions& opts,
+                                                                  const ParquetField* variant_field,
+                                                                  const VariantShreddedReadHints& hints = {});
+
 private:
     // for struct type without schema change
     static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
@@ -49,12 +53,8 @@ private:
     // for schema changed
     static void get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
                                                   bool case_sensitive, const TIcebergSchemaField* lake_schema_field,
-                                                  std::vector<int32_t>& pos,
+                                                  bool parquet_has_field_id, std::vector<int32_t>& pos,
                                                   std::vector<const TIcebergSchemaField*>& lake_schema_subfield);
-
-    static StatusOr<ColumnReaderPtr> create_variant_column_reader(const ColumnReaderOptions& opts,
-                                                                  const ParquetField* variant_field,
-                                                                  const VariantShreddedReadHints& hints = {});
 };
 
 } // namespace starrocks::parquet

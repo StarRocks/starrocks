@@ -29,7 +29,7 @@
 #include "column/json_column.h"
 #include "column/json_converter.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
+#include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "common/config_json_flat_fwd.h"
@@ -1867,7 +1867,7 @@ StatusOr<ColumnPtr> JsonFunctions::json_set(FunctionContext* context, const Colu
                 null_arg = true;
                 break;
             }
-            JsonPath json_path = res.value();
+            const JsonPath& json_path = res.value();
 
             JsonValue* new_val = val_viewers[i].value(row);
 

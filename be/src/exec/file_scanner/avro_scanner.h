@@ -60,8 +60,8 @@ public:
     static std::string preprocess_jsonpaths(std::string jsonpath);
 
     struct SlotInfo {
-        SlotInfo() : id(-2) {}
-        SlotId id;
+        SlotInfo() = default;
+        SlotId id{-2};
         TypeDescriptor type;
         std::string key;
     };
@@ -76,7 +76,7 @@ private:
     Status _construct_row(const avro_value_t& avro_value, Chunk* chunk);
     void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
     Status _construct_column(const avro_value_t& input_value, Column* column, const TypeDescriptor& type_desc,
-                             const std::string& col_name);
+                             std::string_view col_name);
     Status _extract_field(const avro_value_t& input_value, const std::vector<AvroPath>& paths,
                           avro_value_t* output_value);
     Status _handle_union(const avro_value_t* input_value, avro_value_t* branch);

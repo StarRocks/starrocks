@@ -306,6 +306,16 @@ public class RemoteFileOperations {
         return HiveUtils.pathExists(path, conf);
     }
 
+    /**
+     * Creates {@code path} as an empty directory (including parents) when it does not exist.
+     * Used when HMS lists a partition but the warehouse path is missing on the filesystem.
+     */
+    public void ensureDirectoryExists(Path path) {
+        if (!pathExists(path)) {
+            createDirectory(path, conf);
+        }
+    }
+
     public boolean deleteIfExists(Path path, boolean recursive) {
         return HiveUtils.deleteIfExists(path, recursive, conf);
     }
@@ -344,33 +354,5 @@ public class RemoteFileOperations {
             LOG.error("Failed to get file status for paths: {}", paths, e);
             throw new StarRocksConnectorException("Failed to get file status for paths: %s. msg: %s", paths, e.getMessage());
         }
-    }
-
-    public List<PartitionInfo> getRemotePartitions(List<Partition> partitions) {
-        List<Path> paths = Lists.newArrayList();
-        for (Partition partition : partitions) {
-            Path partitionPath = new Path(partition.getFullPath());
-            paths.add(partitionPath);
-        }
-        FileStatus[] fileStatuses = getFileStatus(paths.toArray(new Path[0]));
-        List<PartitionInfo> result = Lists.newArrayList();
-        for (int i = 0; i < partitions.size(); i++) {
-            Partition partition = partitions.get(i);
-            FileStatus fileStatus = fileStatuses[i];
-            final String fullPath = partition.getFullPath();
-            final long time = fileStatus.getModificationTime();
-            result.add(new PartitionInfo() {
-                @Override
-                public long getModifiedTime() {
-                    return time;
-                }
-
-                @Override
-                public String getFullPath() {
-                    return fullPath;
-                }
-            });
-        }
-        return result;
     }
 }

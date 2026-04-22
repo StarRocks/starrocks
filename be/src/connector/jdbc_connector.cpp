@@ -132,10 +132,10 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     const auto* jdbc_table = down_cast<const JDBCTableDescriptor*>(_tuple_desc->table_desc());
 
     Status status;
-    std::string driver_name = jdbc_table->jdbc_driver_name();
-    std::string driver_url = jdbc_table->jdbc_driver_url();
-    std::string driver_checksum = jdbc_table->jdbc_driver_checksum();
-    std::string driver_class = jdbc_table->jdbc_driver_class();
+    std::string driver_name(jdbc_table->jdbc_driver_name());
+    std::string driver_url(jdbc_table->jdbc_driver_url());
+    std::string driver_checksum(jdbc_table->jdbc_driver_checksum());
+    std::string driver_class(jdbc_table->jdbc_driver_class());
     std::string driver_location;
 
     status = JDBCDriverManager::getInstance()->get_driver_location(driver_name, driver_url, driver_checksum,

@@ -130,9 +130,9 @@ protected:
 
     // schema scanner state
     SchemaScannerState _ss_state;
-    bool _is_init;
+    bool _is_init{false};
     // this is used for sub class
-    SchemaScannerParam* _param;
+    SchemaScannerParam* _param{nullptr};
     // pointer to schema table's column desc
     ColumnDesc* _columns;
     int _column_num;

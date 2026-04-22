@@ -186,8 +186,8 @@ private:
     ObjectPool _pool;
     uint64_t _read_chunk_size;
     cctz::time_zone _tzinfo;
-    int64_t _tzoffset_in_seconds;
-    bool _drop_nanoseconds_in_datetime;
+    int64_t _tzoffset_in_seconds{0};
+    bool _drop_nanoseconds_in_datetime{false};
 
     // Only used for UT, used after init reader
     const std::vector<bool>& TEST_get_selected_column_id_list();
@@ -195,12 +195,12 @@ private:
     const std::vector<bool>& TEST_get_lazyload_column_id_list();
 
     // fields related to broker load.
-    bool _broker_load_mode;
-    bool _strict_mode;
+    bool _broker_load_mode{true};
+    bool _strict_mode{true};
     std::shared_ptr<Filter> _broker_load_filter;
-    size_t _num_rows_filtered;
+    size_t _num_rows_filtered{0};
     SlotDescriptor* _current_slot = nullptr;
-    int _error_message_counter;
+    int _error_message_counter{0};
 
     // fields related to hive table
     const std::vector<std::string>* _hive_column_names = nullptr;
@@ -210,7 +210,7 @@ private:
     std::unordered_map<std::string, const orc::Type*> _formatted_slot_name_to_orc_type;
     std::unordered_map<SlotId, size_t> _slot_id_to_pos_in_src_slot_descs;
     RuntimeState* _state = nullptr;
-    LazyLoadContext* _lazy_load_ctx;
+    LazyLoadContext* _lazy_load_ctx{nullptr};
 
     std::string _current_file_name;
 };
