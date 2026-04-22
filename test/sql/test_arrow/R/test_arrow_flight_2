@@ -88,9 +88,13 @@ SELECT * FROM flight_demo.test order by id asc;
 5	Eve	30
 -- !result
 
+<<<<<<< HEAD
 SHOW CREATE TABLE flight_demo.test;
 -- result:
 -- !result
+=======
+[UC]SHOW CREATE TABLE test;
+>>>>>>> 2974ba3bc2 ([BugFix] SQLTester strict empty result validation for SQL statements (#71982))
 
 CREATE TABLE flight_demo.test2 (id INT, age INT) ENGINE=OLAP PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES ('replication_num' = '1');
 -- result:
