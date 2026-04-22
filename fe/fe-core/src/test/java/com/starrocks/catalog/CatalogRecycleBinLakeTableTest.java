@@ -161,6 +161,8 @@ public class CatalogRecycleBinLakeTableTest {
         }
     }
 
+    private static final long WAIT_TIMEOUT_MS = 10_000;
+
     protected static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
         // The deletion flow is:
         // 1. eraseTable() adds partitions to idToPartition, lakeTableToPartitions tracks them
@@ -169,6 +171,7 @@ public class CatalogRecycleBinLakeTableTest {
         //
         // This method waits for the current round of deletion attempts to complete (success or failure),
         // NOT for all partitions to be successfully deleted.
+        long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS;
         while (recycleBin.isLakeTablePartitionsDeletionInProgress(id)) {
             recycleBin.erasePartition(time);
             // Check if any partition is still being deleted asynchronously
@@ -180,6 +183,10 @@ public class CatalogRecycleBinLakeTableTest {
                 }
                 break;
             }
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    String.format("waitTableToBeDone timed out for tableId=%d, pendingPartitions=%d, anyDeleting=%s",
+                            id, recycleBin.getLakeTablePendingPartitionCount(id),
+                            recycleBin.isAnyLakeTablePartitionDeleting(id)));
             try {
                 Thread.sleep(100);
             } catch (Exception ignore) {
@@ -196,6 +203,7 @@ public class CatalogRecycleBinLakeTableTest {
         //
         // This method waits for the current round of deletion attempts to complete (success or failure),
         // NOT for all partitions to be successfully deleted.
+        long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS;
         while (true) {
             // Process partitions for Lake Tables
             recycleBin.erasePartition(time);
@@ -212,6 +220,8 @@ public class CatalogRecycleBinLakeTableTest {
                 break;
             }
 
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    String.format("waitAllTablesToBeDone timed out, activeCount=%d, tableIds=%s", activeCount, ids));
             try {
                 Thread.sleep(100);
             } catch (Exception ignore) {
@@ -222,8 +232,11 @@ public class CatalogRecycleBinLakeTableTest {
     }
 
     protected static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS;
         while (recycleBin.isDeletingPartition(id)) {
             recycleBin.erasePartition(time);
+            Assertions.assertTrue(System.currentTimeMillis() < deadline,
+                    String.format("waitPartitionToBeDone timed out for partitionId=%d", id));
             try {
                 Thread.sleep(100);
             } catch (Exception ignore) {

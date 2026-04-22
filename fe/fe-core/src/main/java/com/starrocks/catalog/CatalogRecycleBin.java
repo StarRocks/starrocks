@@ -426,10 +426,16 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     }
 
     private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
-        if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+        if (RunMode.isSharedDataMode()) {
+            // Table-deletion partitions already passed table-level snapshot check
+            if (partitionInfo.isFromTableDeletion()) {
+                return timeExpired(partitionInfo.getPartition().getId(), currentTimeMs);
+            }
+            if  (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .isPartitionInClusterSnapshotInfo(partitionInfo.getDbId(),
                                     partitionInfo.getTableId(), partitionInfo.getPartition().getId())) {
-            return false;
+                return false;
+            }
         }
 
         if (!checkValidDeletionByClusterSnapshot(partitionInfo.getPartition().getId())) {
@@ -654,8 +660,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         long dbId = tableInfo.getDbId();
         long tableId = table.getId();
 
-        // Remove table bindings (storage volume, etc.) at the start of deletion process
-        // This is consistent with the original LakeTableHelper.deleteTableFromRecycleBin behavior
+        // Remove table bindings (storage volume, etc.) at the start of deletion process.
+        // This is consistent with the original LakeTableHelper.deleteTableFromRecycleBin behavior.
+        // Note: removeTableBinds() is idempotent, so it's safe to call again after FE restart.
         table.removeTableBinds(false);
 
         // Inherit the table's recycle time for partitions to preserve ClusterSnapshot safety checks.
@@ -670,6 +677,15 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         Set<Long> partitionIds = Sets.newHashSet();
         for (Partition partition : table.getAllPartitions()) {
             long partitionId = partition.getId();
+
+            // After FE restart, lakeTableToPartitions is lost (in-memory only), so this method
+            // may be called again for the same table. Skip partitions that are already in the
+            // recycle bin (from a previous run before restart or checkpoint recovery) to ensure
+            // idempotency and avoid resetting their async deletion state.
+            if (idToPartition.containsKey(partitionId)) {
+                partitionIds.add(partitionId);
+                continue;
+            }
 
             // Reuse the table's buildRecyclePartitionInfo to avoid code duplication
             RecyclePartitionInfo recyclePartitionInfo = table.buildRecyclePartitionInfo(dbId, partition);
