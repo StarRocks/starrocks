@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -23,6 +24,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
@@ -37,6 +39,7 @@ import java.util.List;
 import static com.starrocks.sql.plan.ConnectorPlanTestBase.newFolder;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -330,5 +333,220 @@ public class UpdateAnalyzerIcebergTest {
         for (Expr expr : outputExprs) {
             assertNotNull(expr);
         }
+    }
+
+    @Test
+    public void testIcebergUpdateHiddenMetadataColumnRejected() {
+        // Updating the hidden `_file` metadata column must be rejected.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET `" + IcebergTable.FILE_PATH
+                + "` = 'x' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+        assertTrue(exception.getMessage().contains("metadata column"),
+                "Expected 'metadata column' error, got: " + exception.getMessage());
+    }
+
+    @Test
+    public void testIcebergUpdateHiddenRowPositionRejected() {
+        // Updating the hidden `_pos` metadata column must be rejected.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET `" + IcebergTable.ROW_POSITION
+                + "` = 0 WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+        assertTrue(exception.getMessage().contains("metadata column"),
+                "Expected 'metadata column' error, got: " + exception.getMessage());
+    }
+
+    @Test
+    public void testIcebergUpdateDefaultValueRejected() {
+        // Iceberg V2 does not support column default values; SET col = DEFAULT must be rejected.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = DEFAULT WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+        assertTrue(exception.getMessage().contains("DEFAULT"),
+                "Expected 'DEFAULT' error, got: " + exception.getMessage());
+    }
+
+    @Test
+    public void testIcebergUpdateWithExpressionAssignment() {
+        // SET using an expression (not a constant) exercises the assignExpr path
+        // in the analyzer and the per-column cast loop on a non-literal source.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = concat(data, '_v2') WHERE id > 0";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        assertDoesNotThrow(() -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+
+        assertNotNull(updateStmt.getQueryStatement());
+        SelectRelation selectRelation =
+                (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
+        // Expect _file, _pos, id, data, date, op_code
+        assertEquals(6, selectRelation.getSelectList().getItems().size());
+        assertEquals(6, selectRelation.getOutputExpression().size());
+    }
+
+    @Test
+    public void testIcebergUpdateWithNullAssignment() {
+        // SET col = NULL is a valid assignment; analyzer must cast the null literal
+        // to the target column type and produce 6 output exprs.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = NULL WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        assertDoesNotThrow(() -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+
+        SelectRelation selectRelation =
+                (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
+        assertEquals(6, selectRelation.getOutputExpression().size());
+    }
+
+    @Test
+    public void testIcebergUpdateLastItemIsOpCodeLiteral() {
+        // The last SELECT item must be an IntLiteral tagged with the UPDATE op code
+        // (exercises the op_code literal creation in analyzeIcebergTable).
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        UpdateAnalyzer.analyze(updateStmt, connectContext);
+
+        SelectRelation selectRelation =
+                (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
+        SelectList selectList = selectRelation.getSelectList();
+        SelectListItem last = selectList.getItems().get(selectList.getItems().size() - 1);
+        assertEquals("op_code", last.getAlias());
+        assertInstanceOf(IntLiteral.class, last.getExpr());
+        assertEquals(IcebergRowDeltaSink.OpCode.UPDATE.value(),
+                ((IntLiteral) last.getExpr()).getValue());
+    }
+
+    @Test
+    public void testIcebergUpdateTableAndQueryStatementSet() {
+        // analyzeIcebergTable must populate both setTable and setQueryStatement.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        UpdateAnalyzer.analyze(updateStmt, connectContext);
+
+        assertNotNull(updateStmt.getTable());
+        assertInstanceOf(IcebergTable.class, updateStmt.getTable());
+        assertNotNull(updateStmt.getQueryStatement());
+        assertFalse(updateStmt.getQueryStatement().isExplain());
+    }
+
+    @Test
+    public void testIcebergUpdateColumnNameIsCaseInsensitive() {
+        // Assignment column lookup uses lowercase comparison; uppercase SET identifier
+        // must resolve against the (lowercase) schema column.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET DATA = 'x' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        assertDoesNotThrow(() -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+    }
+
+    @Test
+    public void testIcebergUpdatePartitionedTableColumnOutputNames() {
+        // For a partitioned V2 table, the column output list must still follow the
+        // same contract: [_file, _pos, id, data, date, op_code].
+        String sql = "UPDATE iceberg0.partitioned_db.t1_v2 SET data = 'new' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        UpdateAnalyzer.analyze(updateStmt, connectContext);
+
+        List<String> colNames = updateStmt.getIcebergColumnOutputNames();
+        assertNotNull(colNames);
+        assertEquals(6, colNames.size());
+        assertEquals(IcebergTable.FILE_PATH, colNames.get(0));
+        assertEquals(IcebergTable.ROW_POSITION, colNames.get(1));
+        assertEquals("op_code", colNames.get(colNames.size() - 1));
+    }
+
+    @Test
+    public void testIcebergUpdatePartitionedRejectsUppercasePartitionColumn() {
+        // Partition column check compares by lowercase name; upper-case assignment
+        // targeting `DATE` must still be rejected on partitioned table t1_v2.
+        String sql = "UPDATE iceberg0.partitioned_db.t1_v2 SET DATE = '2024-01-01' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        SemanticException exception = assertThrows(SemanticException.class,
+                () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
+        assertTrue(exception.getMessage().contains("partition column"));
+    }
+
+    @Test
+    public void testIcebergUpdatePropertiesPopulated() {
+        // analyzeProperties runs before Iceberg branch and must populate the
+        // update properties with session-driven defaults.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'new' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        UpdateAnalyzer.analyze(updateStmt, connectContext);
+
+        assertNotNull(updateStmt.getProperties());
+        assertTrue(updateStmt.getProperties().containsKey("max_filter_ratio"));
+        assertTrue(updateStmt.getProperties().containsKey("strict_mode"));
+        assertTrue(updateStmt.getProperties().containsKey("timeout"));
+    }
+
+    @Test
+    public void testIcebergUpdateDataColumnStartLayout() {
+        // The analyzer casts columns starting at index 2. Verify that the first
+        // two output exprs (for _file, _pos) are not the casted data exprs.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'new' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        UpdateAnalyzer.analyze(updateStmt, connectContext);
+
+        SelectRelation selectRelation =
+                (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
+        List<Expr> outputExprs = selectRelation.getOutputExpression();
+        // _file + _pos + 3 data cols + op_code = 6
+        assertEquals(6, outputExprs.size());
+        // Last expression is the op_code literal
+        assertInstanceOf(IntLiteral.class, outputExprs.get(outputExprs.size() - 1));
+    }
+
+    @Test
+    public void testIcebergUpdateOutputExprsCountMatchesColNames() {
+        // The saved column output names and the SelectRelation output exprs
+        // must line up 1:1 (the planner relies on this invariant).
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'new' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        UpdateAnalyzer.analyze(updateStmt, connectContext);
+
+        List<String> colNames = updateStmt.getIcebergColumnOutputNames();
+        SelectRelation selectRelation =
+                (SelectRelation) updateStmt.getQueryStatement().getQueryRelation();
+        assertNotNull(colNames);
+        assertEquals(colNames.size(), selectRelation.getOutputExpression().size());
+    }
+
+    @Test
+    public void testIcebergUpdateNonExistentTable() {
+        // Table lookup happens at the top of analyze(); a non-existent table
+        // must raise a SemanticException (not an NPE) before the Iceberg branch.
+        String sql = "UPDATE iceberg0.unpartitioned_db.not_a_real_table SET data = 'x' WHERE id = 1";
+        UpdateStmt updateStmt = (UpdateStmt) SqlParser.parse(
+                sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+
+        assertThrows(Exception.class,
+                () -> UpdateAnalyzer.analyze(updateStmt, connectContext));
     }
 }

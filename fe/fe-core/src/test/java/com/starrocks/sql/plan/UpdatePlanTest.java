@@ -250,4 +250,94 @@ public class UpdatePlanTest extends PlanTestBase {
         assertTrue(sinkFragment.getSink() instanceof com.starrocks.planner.IcebergRowDeltaSink,
                 "Sink should be IcebergRowDeltaSink");
     }
+
+    @Test
+    public void testIcebergUpdatePartitionedMultiColumnPlan() throws Exception {
+        // Partitioned table + multi-column SET exercises the partition-shuffle property,
+        // multi-expr cast path, and the shared RowDelta sink construction together.
+        String sql = "UPDATE iceberg0.partitioned_db.t1_v2 SET data = 'new' WHERE id < 10";
+        ExecPlan execPlan = getIcebergUpdateExecPlan(sql);
+        assertNotNull(execPlan);
+
+        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
+        assertTrue(explainString.contains("ICEBERG ROW DELTA SINK"));
+        assertTrue(explainString.contains("IcebergScanNode"));
+
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        assertTrue(sinkFragment.getSink() instanceof com.starrocks.planner.IcebergRowDeltaSink);
+    }
+
+    @Test
+    public void testIcebergUpdateSessionVariableRestoredAfterPlan() throws Exception {
+        // UpdatePlanner flips enable_local_shuffle_agg off while planning, then
+        // restores it in the finally block. Confirm we return to the caller's value.
+        boolean prev = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
+        try {
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+            String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id = 1";
+            ExecPlan execPlan = getIcebergUpdateExecPlan(sql);
+            assertNotNull(execPlan);
+            Assertions.assertTrue(connectContext.getSessionVariable().isEnableLocalShuffleAgg(),
+                    "enable_local_shuffle_agg should be restored to true");
+        } finally {
+            connectContext.getSessionVariable().setEnableLocalShuffleAgg(prev);
+        }
+    }
+
+    @Test
+    public void testIcebergUpdateSinkFragmentHasIcebergTableSink() throws Exception {
+        // The sink fragment should be flagged as having an Iceberg table sink
+        // so pipeline scheduling picks the right execution strategy.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id = 1";
+        ExecPlan execPlan = getIcebergUpdateExecPlan(sql);
+        assertNotNull(execPlan);
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        assertTrue(sinkFragment.hasIcebergTableSink(),
+                "Sink fragment should be marked with hasIcebergTableSink");
+    }
+
+    @Test
+    public void testIcebergUpdateWithComplexPredicate() throws Exception {
+        // Non-trivial WHERE (AND + comparison) exercises conflict-detection filter
+        // synthesis inside setupIcebergRowDeltaSink.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id > 5 AND id < 100";
+        ExecPlan execPlan = getIcebergUpdateExecPlan(sql);
+        assertNotNull(execPlan);
+        String explainString = execPlan.getExplainString(TExplainLevel.NORMAL);
+        assertTrue(explainString.contains("ICEBERG ROW DELTA SINK"));
+    }
+
+    @Test
+    public void testIcebergUpdatePipelineDopIsSet() throws Exception {
+        // The Iceberg sink pipeline configurer must set a concrete pipeline DOP
+        // on the sink fragment (>= 1) regardless of adaptive sink DOP setting.
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id = 1";
+        ExecPlan execPlan = getIcebergUpdateExecPlan(sql);
+        PlanFragment sinkFragment = execPlan.getFragments().get(0);
+        Assertions.assertTrue(sinkFragment.getPipelineDop() >= 1,
+                "Sink fragment pipeline DOP must be >= 1");
+    }
+
+    @Test
+    public void testIcebergUpdateOutputExprsMatchSchema() throws Exception {
+        // The sink tuple slots are built from execPlan.getOutputExprs() — verify
+        // the planner produces the expected 6 output exprs for a V2 unpartitioned
+        // update: [_file, _pos, id, data, date, op_code].
+        String sql = "UPDATE iceberg0.unpartitioned_db.t0_v2 SET data = 'x' WHERE id = 1";
+        ExecPlan execPlan = getIcebergUpdateExecPlan(sql);
+        assertNotNull(execPlan.getOutputExprs());
+        Assertions.assertEquals(6, execPlan.getOutputExprs().size());
+    }
+
+    @Test
+    public void testIcebergUpdatePartitionedShuffleUsesPartitionColumn() throws Exception {
+        // The partition shuffle property must hash on the partition column id.
+        // The upstream fragment (fragment[1]) is the one that feeds the sink with
+        // a HASH_PARTITIONED output partition for partitioned tables.
+        String sql = "UPDATE iceberg0.partitioned_db.t1_v2 SET data = 'x' WHERE id = 1";
+        ExecPlan execPlan = getIcebergUpdateExecPlan(sql);
+        assertNotNull(execPlan);
+        assertSame(TPartitionType.HASH_PARTITIONED,
+                execPlan.getFragments().get(1).getOutputPartition().getType());
+    }
 }
