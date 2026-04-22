@@ -59,15 +59,7 @@ skip_res_cmd = [
     "select current_date\\(\\)",
     "^result=.*",
     "refresh materialized view.*",
-<<<<<<< HEAD
     "REFRESH MATERIALIZED VIEW.*"
-=======
-    "REFRESH MATERIALIZED VIEW.*",
-    "analyze full table.*",
-    "ANALYZE FULL TABLE.*",
-    "analyze table.*",
-    "ANALYZE TABLE.*"
->>>>>>> 2974ba3bc2 ([BugFix] SQLTester strict empty result validation for SQL statements (#71982))
 ]
 
 skip_files = set([
