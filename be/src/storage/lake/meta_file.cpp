@@ -292,11 +292,24 @@ void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
     }
 
     // 2. Remove matching TabletIndexPB from schema (idempotent: FE may have
-    //    done this already via schema publish).
+    //    done this already via schema publish). Before removing, copy the
+    //    entry into `dropped_table_indices` so readers know the footer payload
+    //    of that index (if any — e.g. a legacy NGRAMBF that predates the IDG
+    //    fast path) must not be reinterpreted. Compaction that rewrites the
+    //    segment eventually obsoletes the tombstone.
     auto* schema = _tablet_meta->mutable_schema();
     auto* indices = schema->mutable_table_indices();
+    auto* dropped_indices = schema->mutable_dropped_table_indices();
+    std::unordered_set<int64_t> existing_dropped_ids;
+    for (const auto& d : *dropped_indices) {
+        if (d.has_index_id()) existing_dropped_ids.insert(d.index_id());
+    }
     for (int i = indices->size() - 1; i >= 0; --i) {
-        if (indices->Get(i).has_index_id() && drop_ids.count(indices->Get(i).index_id()) > 0) {
+        const auto& cur = indices->Get(i);
+        if (cur.has_index_id() && drop_ids.count(cur.index_id()) > 0) {
+            if (existing_dropped_ids.insert(cur.index_id()).second) {
+                dropped_indices->Add()->CopyFrom(cur);
+            }
             indices->DeleteSubrange(i, 1);
         }
     }

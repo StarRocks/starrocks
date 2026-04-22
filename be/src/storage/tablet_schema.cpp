@@ -526,6 +526,21 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
         _fill_index_map(index);
     }
 
+    // dropped_table_indices: tombstones for indexes whose TabletIndexPB was
+    // removed from table_indices via the lake IDG fast path, but whose payload
+    // may still exist in legacy segment footers. See proto comment.
+    _dropped_index_map_col_unique_id.clear();
+    for (auto& index_pb : schema.dropped_table_indices()) {
+        auto idx_type = index_pb.index_type();
+        auto& set_ptr = _dropped_index_map_col_unique_id[idx_type];
+        if (!set_ptr) {
+            set_ptr = std::make_shared<std::unordered_set<int32_t>>();
+        }
+        for (int32_t uid : index_pb.col_unique_id()) {
+            set_ptr->insert(uid);
+        }
+    }
+
     // There are three conditions:
     // 1. sort_key_unique_ids is not empty, sort key column should be located by unique id
     // 2. sort_key_unique_ids is empty but sort_key_idxes is not empty. This table maybe create in
@@ -706,6 +721,13 @@ Status TabletSchema::get_indexes_for_column(int32_t col_unique_id, IndexType ind
 
 bool TabletSchema::has_index(int32_t col_unique_id, IndexType index_type) const {
     if (auto it = _index_map_col_unique_id.find(index_type); it != _index_map_col_unique_id.end()) {
+        return it->second->count(col_unique_id) > 0;
+    }
+    return false;
+}
+
+bool TabletSchema::has_dropped_index(int32_t col_unique_id, IndexType index_type) const {
+    if (auto it = _dropped_index_map_col_unique_id.find(index_type); it != _dropped_index_map_col_unique_id.end()) {
         return it->second->count(col_unique_id) > 0;
     }
     return false;
