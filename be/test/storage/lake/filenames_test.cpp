@@ -131,6 +131,13 @@ TEST_F(FilenamesTest, gen_segment_filename_from) {
         ASSERT_EQ("0000000000000004_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.cols", new_file_name);
     }
 
+    // Test valid idx file input (Index Delta Group payload)
+    {
+        std::string old_file_name = "0000000000000003_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.idx";
+        std::string new_file_name = gen_filename_from(new_txn_id, old_file_name);
+        ASSERT_EQ("0000000000000004_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b.idx", new_file_name);
+    }
+
     // Test invalid old file name
     {
         std::string old_file_name = "invalid_filename.txt";

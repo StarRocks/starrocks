@@ -1810,4 +1810,187 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_clears_shared_segments_for_rewrite
     EXPECT_TRUE(rowset.shared_segments(1));
 }
 
+// --- Lake IDG (ADD/DROP INDEX fast path) --------------------------------
+
+namespace {
+void push_segment_entry(TxnLogPB_OpAddIndex* op, uint32_t seg_id, int64_t version, const std::string& idx_file,
+                        int32_t col_uid, IndexType type, bool set_seg_id = true) {
+    auto* se = op->add_segment_entries();
+    if (set_seg_id) {
+        se->set_segment_id(seg_id);
+    }
+    auto* e = se->mutable_entry();
+    e->set_index_file(idx_file);
+    e->set_version(version);
+    auto* k = e->add_keys();
+    k->set_col_unique_id(col_uid);
+    k->set_index_type(type);
+}
+
+void push_dropped(TxnLogPB_OpDropIndex* op, int64_t index_id, int32_t col_uid, IndexType type, bool set_col_uid = true,
+                  bool set_type = true) {
+    auto* d = op->add_dropped();
+    d->set_index_id(index_id);
+    if (set_col_uid) {
+        d->set_col_unique_id(col_uid);
+    }
+    if (set_type) {
+        d->set_index_type(type);
+    }
+}
+} // namespace
+
+TEST_F(MetaFileTest, test_apply_add_index_happy_path) {
+    // Two segments each get one IDG entry; schema gains the corresponding
+    // TabletIndexPB entry (idempotent reconciliation with FE schema publish).
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20001);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20001);
+    metadata->set_version(5);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    op.set_alter_version(6);
+    push_segment_entry(&op, /*seg_id=*/0, /*version=*/6, "idx_seg0.idx", 100, BITMAP);
+    push_segment_entry(&op, /*seg_id=*/1, /*version=*/6, "idx_seg1.idx", 100, BITMAP);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(7001);
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(100);
+
+    builder.apply_add_index(op);
+
+    ASSERT_TRUE(metadata->has_idg_meta());
+    const auto& idgs = metadata->idg_meta().idgs();
+    ASSERT_EQ(2u, idgs.size());
+    EXPECT_EQ("idx_seg0.idx", idgs.at(0).entries(0).index_file());
+    EXPECT_EQ("idx_seg1.idx", idgs.at(1).entries(0).index_file());
+
+    ASSERT_EQ(1, metadata->schema().table_indices_size());
+    EXPECT_EQ(7001, metadata->schema().table_indices(0).index_id());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_missing_segment_id_skipped) {
+    // A segment_entry missing segment_id would index the map at default 0
+    // and corrupt segment 0's IDG — the builder must skip it.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20002);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20002);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    // malformed — no segment_id
+    push_segment_entry(&op, /*seg_id=*/999, /*version=*/1, "bogus.idx", 1, BITMAP, /*set_seg_id=*/false);
+    // well-formed — should land
+    push_segment_entry(&op, /*seg_id=*/3, /*version=*/1, "good.idx", 1, BITMAP);
+
+    builder.apply_add_index(op);
+
+    const auto& idgs = metadata->idg_meta().idgs();
+    ASSERT_EQ(1u, idgs.size());
+    EXPECT_TRUE(idgs.find(0) == idgs.end());
+    ASSERT_NE(idgs.find(3), idgs.end());
+    EXPECT_EQ("good.idx", idgs.at(3).entries(0).index_file());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first) {
+    // Second apply prepends the newer entry; the per-segment entries list
+    // becomes [new, old]. Mirrors DCG reverse-by-version ordering.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20003);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20003);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op1;
+    push_segment_entry(&op1, 5, /*version=*/10, "old.idx", 1, BITMAP);
+    builder.apply_add_index(op1);
+
+    TxnLogPB_OpAddIndex op2;
+    push_segment_entry(&op2, 5, /*version=*/11, "new.idx", 1, BITMAP);
+    builder.apply_add_index(op2);
+
+    const auto& v = metadata->idg_meta().idgs().at(5);
+    ASSERT_EQ(2, v.entries_size());
+    EXPECT_EQ("new.idx", v.entries(0).index_file());
+    EXPECT_EQ("old.idx", v.entries(1).index_file());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_populates_tombstone) {
+    // Dropping an index from schema.table_indices must also copy the
+    // TabletIndexPB into schema.dropped_table_indices so BE readers know
+    // the footer payload (e.g. legacy NGRAMBF bloom) is stale until
+    // compaction rewrites the segment.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20004);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20004);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(3001);
+    idx->set_index_type(NGRAMBF);
+    idx->add_col_unique_id(7);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, /*index_id=*/3001, /*col_uid=*/7, NGRAMBF);
+    builder.apply_drop_index(op);
+
+    EXPECT_EQ(0, schema->table_indices_size());
+    ASSERT_EQ(1, schema->dropped_table_indices_size());
+    EXPECT_EQ(3001, schema->dropped_table_indices(0).index_id());
+    EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_tombstone_dedup) {
+    // Dropping the same index_id twice (replay of a legacy log) must not
+    // duplicate the tombstone entry.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20005);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20005);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(3002);
+    idx->set_index_type(BITMAP);
+    idx->add_col_unique_id(8);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    push_dropped(&op, 3002, 8, BITMAP);
+
+    builder.apply_drop_index(op);
+    // Second apply: schema.table_indices already empty; tombstone stays at one.
+    builder.apply_drop_index(op);
+
+    EXPECT_EQ(0, schema->table_indices_size());
+    EXPECT_EQ(1, schema->dropped_table_indices_size());
+}
+
+TEST_F(MetaFileTest, test_apply_drop_index_skips_malformed_entries) {
+    // Drop entries missing col_unique_id or index_type must not feed the
+    // drop_keys set — default 0 / INDEX_UNKNOWN would fabricate a matching
+    // key for unrelated entries. Index_id-based removal still proceeds.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20006);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20006);
+    auto* schema = metadata->mutable_schema();
+    auto* idx = schema->add_table_indices();
+    idx->set_index_id(3003);
+    idx->set_index_type(BITMAP);
+    idx->add_col_unique_id(9);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpDropIndex op;
+    // malformed — no col_unique_id
+    push_dropped(&op, /*index_id=*/3003, /*col_uid=*/9, BITMAP, /*set_col_uid=*/false, /*set_type=*/true);
+    // malformed — no index_type
+    push_dropped(&op, /*index_id=*/3003, /*col_uid=*/9, BITMAP, /*set_col_uid=*/true, /*set_type=*/false);
+
+    builder.apply_drop_index(op);
+
+    // Index_id 3003 still got removed from active list (index_id-based removal
+    // is independent of the drop_keys set), and tombstone list has exactly one
+    // entry for it — no bogus (0, INDEX_UNKNOWN) key was produced.
+    EXPECT_EQ(0, schema->table_indices_size());
+    EXPECT_EQ(1, schema->dropped_table_indices_size());
+}
+
 } // namespace starrocks::lake

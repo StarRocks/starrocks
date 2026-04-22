@@ -2893,4 +2893,122 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
             << "SortedSchemaChange must not call the FE schema RPC when DeltaWriter is given a preset schema";
 }
 
+// --- do_process_drop_index_only validation ------------------------------
+//
+// The DROP INDEX fast path rejects malformed requests up front to keep
+// publish-time logic simple. These tests do not need a real tablet: the
+// handler validates its input before touching the tablet_manager.
+
+class DropIndexOnlyValidationTest : public ::testing::Test {
+public:
+    DropIndexOnlyValidationTest() {
+        _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
+        _location_provider = std::make_unique<FixedLocationProvider>(_test_dir);
+        _update_manager = std::make_unique<UpdateManager>(_location_provider, _mem_tracker.get());
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+    }
+
+protected:
+    void SetUp() override {
+        (void)fs::remove_all(_test_dir);
+        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kTxnLogDirectoryName)));
+    }
+
+    void TearDown() override { ASSERT_OK(fs::remove_all(_test_dir)); }
+
+    std::string _test_dir = "./test_drop_index_only_validation";
+    std::unique_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<LocationProvider> _location_provider;
+    std::unique_ptr<UpdateManager> _update_manager;
+    std::unique_ptr<TabletManager> _tablet_manager;
+};
+
+TEST_F(DropIndexOnlyValidationTest, empty_drop_indexes_rejected) {
+    // Copilot concern: guard against empty drop_indexes list.
+    TAlterTabletReqV2 request;
+    request.__set_new_tablet_id(4001);
+    request.__set_base_tablet_id(4000);
+    request.__set_txn_id(900001);
+    request.__set_only_drop_index(true);
+    // drop_indexes intentionally unset
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    Status st = handler.process_alter_tablet(request);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_invalid_argument());
+}
+
+TEST_F(DropIndexOnlyValidationTest, missing_txn_id_rejected) {
+    TAlterTabletReqV2 request;
+    request.__set_new_tablet_id(4002);
+    request.__set_base_tablet_id(4000);
+    request.__set_only_drop_index(true);
+    TDropIndexInfo di;
+    di.__set_index_id(100);
+    di.__set_col_unique_id(1);
+    di.__set_index_type(TIndexType::BITMAP);
+    request.__set_drop_indexes({di});
+    // txn_id intentionally unset
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    Status st = handler.process_alter_tablet(request);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_invalid_argument());
+}
+
+TEST_F(DropIndexOnlyValidationTest, missing_col_unique_id_rejected) {
+    TAlterTabletReqV2 request;
+    request.__set_new_tablet_id(4003);
+    request.__set_base_tablet_id(4000);
+    request.__set_txn_id(900003);
+    request.__set_only_drop_index(true);
+    TDropIndexInfo di;
+    di.__set_index_id(100);
+    di.__set_index_type(TIndexType::BITMAP);
+    // col_unique_id intentionally unset
+    request.__set_drop_indexes({di});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    Status st = handler.process_alter_tablet(request);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_invalid_argument());
+}
+
+TEST_F(DropIndexOnlyValidationTest, missing_index_type_rejected) {
+    TAlterTabletReqV2 request;
+    request.__set_new_tablet_id(4004);
+    request.__set_base_tablet_id(4000);
+    request.__set_txn_id(900004);
+    request.__set_only_drop_index(true);
+    TDropIndexInfo di;
+    di.__set_index_id(100);
+    di.__set_col_unique_id(1);
+    // index_type intentionally unset
+    request.__set_drop_indexes({di});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    Status st = handler.process_alter_tablet(request);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_invalid_argument());
+}
+
+TEST_F(DropIndexOnlyValidationTest, missing_index_id_rejected) {
+    TAlterTabletReqV2 request;
+    request.__set_new_tablet_id(4005);
+    request.__set_base_tablet_id(4000);
+    request.__set_txn_id(900005);
+    request.__set_only_drop_index(true);
+    TDropIndexInfo di;
+    // index_id intentionally unset
+    di.__set_col_unique_id(1);
+    di.__set_index_type(TIndexType::BITMAP);
+    request.__set_drop_indexes({di});
+
+    SchemaChangeHandler handler(_tablet_manager.get());
+    Status st = handler.process_alter_tablet(request);
+    ASSERT_FALSE(st.ok());
+    EXPECT_TRUE(st.is_invalid_argument());
+}
+
 } // namespace starrocks::lake
