@@ -478,7 +478,17 @@ CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 // The queue size for pk index memtable flush threadpool in shared-data mode.
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 // The maximum number of memtables for pk index in shared-data mode.
-CONF_mInt32(pk_index_memtable_max_count, "2");
+// Controls the async-flush pipeline depth in LakePersistentIndex::flush_memtable:
+// while (inactive_memtables.size() + 1 < pk_index_memtable_max_count) the new
+// flush is submitted to the pk_index_memtable_flush pool; otherwise the write
+// path falls back to a synchronous flush that blocks the caller. With the prior
+// value of 2, only one inactive memtable could be in flight, so any hot PK
+// tablet that filled two memtables within a flush cycle (~100-200 ms of SST
+// IO) paid a full sync flush on its write path — a primary contributor to the
+// upsert P99 / Max tail on shared-data. 4 allows 3 pending async flushes,
+// giving bursty writers headroom without unbounded memory growth (each memtable
+// is bounded by l0_max_mem_usage / l0_min_mem_usage and the update memtracker).
+CONF_mInt32(pk_index_memtable_max_count, "4");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
 CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
 // The parameters for pk index size-tiered compaction strategy.
