@@ -2128,7 +2128,7 @@ public class PlanFragmentBuilder {
             }
 
             ExchangeNode node = (ExchangeNode) inputFragment.getPlanRoot();
-            if (node.isMerge()) {
+            if (node.isMerge() || node.getOffset() > 0) {
                 return inputFragment;
             }
 
