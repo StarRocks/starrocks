@@ -626,12 +626,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                             tableId, partitionIds.size(), partitionIds);
                 }
                 for (Long partitionId : partitionIds) {
-                    RecyclePartitionInfo partitionInfo = idToPartition.remove(partitionId);
+                    RecyclePartitionInfo partitionInfo = removePartitionFromRecycleBinInternal(partitionId);
                     if (partitionInfo != null) {
                         asyncDeleteForPartitions.remove(partitionInfo);
                     }
-                    idToRecycleTime.remove(partitionId);
-                    enableEraseLater.remove(partitionId);
+                    removeRecycleMarkers(partitionId);
                 }
             }
         }
@@ -679,8 +678,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
             // Mark this partition as coming from table deletion (also forces directory removal)
             recyclePartitionInfo.setFromTableDeletion(true);
 
-            // Add to idToPartition so erasePartition() can process it
-            idToPartition.put(partitionId, recyclePartitionInfo);
+            // Add via helper to keep recycle-bin indexes (physicalPartitionIdToPartitionId) consistent
+            putPartitionToRecycleBin(recyclePartitionInfo);
             // Use the table's recycle time to maintain consistency with ClusterSnapshot safety checks
             idToRecycleTime.put(partitionId, partitionRecycleTime);
             partitionIds.add(partitionId);
