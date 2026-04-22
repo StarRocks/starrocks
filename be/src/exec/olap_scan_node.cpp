@@ -129,6 +129,9 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         for (int i = 0; i < partition_conjuncts.size(); ++i) {
             RETURN_IF_ERROR(ExprFactory::create_expr_tree(_pool, partition_conjuncts[i], &_partition_exprs[i], state));
         }
+
+        RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, state));
+        RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, state));
     }
 
     if (tnode.olap_scan_node.__isset.enable_topn_filter_back_pressure &&
@@ -289,6 +292,8 @@ void OlapScanNode::close(RuntimeState* state) {
         Rowset::release_readers(rowsets_per_tablet);
     }
 
+    ExprExecutor::close(_partition_exprs, state);
+
     ScanNode::close(state);
 }
 
@@ -429,155 +434,19 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> _build_partition_col_values(const SlotDescriptor* slot_desc, const TKeyRange& column_range,
-                                                ObjectPool* obj_pool, RuntimeState* state) {
-    if (column_range.__isset.list_values && !column_range.list_values.empty()) {
-        std::vector<ExprContext*> ctxs;
-        for (const auto& obj : column_range.list_values) {
-            RETURN_IF_ERROR(ExprFactory::create_expr_tree(obj_pool, obj, &ctxs.emplace_back(), state));
-            DCHECK(ctxs.back()->root()->is_constant());
-        }
-        RETURN_IF_ERROR(ExprExecutor::prepare(ctxs, state));
-        RETURN_IF_ERROR(ExprExecutor::open(ctxs, state));
-
-        auto col = ColumnHelper::create_column(slot_desc->type(), true, false, column_range.list_values.size(), false);
-        for (auto* ctx : ctxs) {
-            ASSIGN_OR_RETURN(ColumnPtr v, ctx->root()->evaluate_const(ctx));
-            if (v->only_null()) {
-                col->append_nulls(1);
-                continue;
-            }
-            auto cv = ColumnHelper::unpack_and_duplicate_const_column(1, v);
-            col->append(*cv, 0, 1);
-        }
-        ExprExecutor::close(ctxs, state);
-        return col;
-    } else if (column_range.__isset.begin_key && column_range.__isset.end_key) {
-        if (slot_desc->type().is_date_type()) {
-            auto lower_julian = date::from_date_literal(column_range.begin_key);
-            auto upper_julian = date::from_date_literal(column_range.end_key);
-
-            auto col =
-                    ColumnHelper::create_column(slot_desc->type(), true, false, upper_julian - lower_julian + 1, false);
-            for (JulianDate date = lower_julian; date <= upper_julian; date++) {
-                col->append_datum(Datum(DateValue{date}));
-            }
-            if (column_range.__isset.has_null && column_range.has_null) {
-                col->append_nulls(1);
-            }
-            return col;
-        } else if (slot_desc->type().is_integer_type()) {
-            size_t size = column_range.end_key - column_range.begin_key + 1;
-            auto col = ColumnHelper::create_column(slot_desc->type(), true, false, size, false);
-#define M(TYPE)                                                                    \
-    if (slot_desc->type().type == TYPE) {                                          \
-        for (int64_t v = column_range.begin_key; v <= column_range.end_key; v++) { \
-            col->append_datum(Datum((RunTimeTypeTraits<TYPE>::CppType)v));         \
-        }                                                                          \
-    }
-            APPLY_FOR_ALL_INT_TYPE(M)
-#undef M
-            if (column_range.__isset.has_null && column_range.has_null) {
-                col->append_nulls(1);
-            }
-            return col;
-        } else {
-            DCHECK(false) << "Unsupported partition column range, column name: " << column_range.column_name;
-            return Status::InternalError("Unsupported partition column range");
-        }
-    } else {
-        DCHECK(false) << "Unsupported partition column range, column name: " << column_range.column_name;
-        return Status::InternalError("Unsupported partition column range");
-    }
-}
-
-Status OlapScanNode::_prune_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges,
-                                        std::vector<TScanRangeParams>* pruned_scan_ranges) {
-    if (_partition_exprs.empty()) {
-        *pruned_scan_ranges = scan_ranges;
-        return Status::OK();
-    }
-
-    phmap::flat_hash_map<std::string, SlotDescriptor*> column_name_to_id;
-    auto* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
-
-    for (const auto& slot : tuple_desc->slots()) {
-        column_name_to_id[slot->col_name()] = slot;
-    }
-
-    ObjectPool obj_pool;
-    std::vector<TScanRangeParams> temp;
-    for (const auto& scan_range : scan_ranges) {
-        auto& olap_range = scan_range.scan_range.internal_scan_range;
-        if (!olap_range.__isset.partition_column_ranges || olap_range.partition_column_ranges.empty()) {
-            temp.emplace_back(scan_range);
-            continue;
-        }
-
-        bool is_pruned = false;
-        for (const auto& partition_column_range : olap_range.partition_column_ranges) {
-            if (!column_name_to_id.contains(partition_column_range.column_name)) {
-                continue;
-            }
-            auto* slot = column_name_to_id[partition_column_range.column_name];
-            DCHECK(slot != nullptr) << "Failed to find slot for partition column: "
-                                    << partition_column_range.column_name;
-
-            ASSIGN_OR_RETURN(auto col,
-                             _build_partition_col_values(slot, partition_column_range, &obj_pool, runtime_state()));
-
-            Chunk partition_cols_chunk;
-            Filter filter(col->size(), 1);
-            partition_cols_chunk.append_column(std::move(col), slot->id());
-
-            std::vector<SlotId> slot_ids;
-            for (auto* ctx : _partition_exprs) {
-                slot_ids.clear();
-                if (ctx->root()->get_slot_ids(&slot_ids) != 1 || slot_ids[0] != slot->id()) {
-                    continue;
-                }
-                ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(&partition_cols_chunk, filter.data()));
-                size_t true_count = ColumnHelper::count_true_with_notnull(column);
-                if (true_count == column->size()) {
-                    // all hit, skip
-                    continue;
-                } else if (0 == true_count) {
-                    is_pruned = true;
-                    break;
-                } else {
-                    bool all_zero = false;
-                    ColumnHelper::merge_two_filters(column, &filter, &all_zero);
-                    if (all_zero) {
-                        is_pruned = true;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (!is_pruned) {
-            temp.emplace_back(scan_range);
-        }
-    }
-    pruned_scan_ranges->swap(temp);
-    return Status::OK();
-}
-
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
         bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
         size_t num_total_scan_ranges) {
-    // daynamic partition pruning
+    // Dynamic partition pruning. Partition conjunct contexts were prepared/opened in
+    // OlapScanNode::init and are closed in OlapScanNode::close.
     std::vector<TScanRangeParams> pruned_scan_ranges;
-
-    RETURN_IF_ERROR(ExprExecutor::prepare(_partition_exprs, runtime_state()));
-    RETURN_IF_ERROR(ExprExecutor::open(_partition_exprs, runtime_state()));
-
-    if (!_prune_scan_ranges(scan_ranges, &pruned_scan_ranges).ok()) {
+    auto* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
+    if (!prune_scan_ranges_by_partition_conjuncts(runtime_state(), tuple_desc, _partition_exprs, scan_ranges,
+                                                  &pruned_scan_ranges)
+                 .ok()) {
         pruned_scan_ranges = scan_ranges;
     }
-
-    ExprExecutor::close(_partition_exprs, runtime_state());
 
     pipeline::Morsels morsels;
     [[maybe_unused]] bool has_more_morsel = false;
