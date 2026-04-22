@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "connector/file_connector.h"
 #include "gen_cpp/InternalService_types.h"
