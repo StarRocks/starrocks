@@ -14,10 +14,17 @@
 
 #pragma once
 
+#include <string>
+#include <vector>
+
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+
+namespace starrocks::lake {
+class TabletManager;
+} // namespace starrocks::lake
 
 namespace starrocks::lake::tablet_reshard_helper {
 
@@ -32,5 +39,23 @@ Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range);
 
 void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index);
 void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index);
+
+// Collect full storage paths of output-side files produced by compaction in
+// |txn_log|, resolved under |txn_log.tablet_id()| (the tablet where the
+// compaction writer emitted them).
+//
+// Used by MERGING cross-publish: a compaction txn committed on a source tablet
+// may be published after the merge, and its output files were written under
+// the source tablet's directory. Dropping the compaction leaves those files
+// unreferenced; the caller should pass the returned paths to delete_files_async.
+//
+// Only output-side files are collected. Input rowsets/sstables are deliberately
+// excluded — they have been absorbed into the merged tablet by the preceding
+// merge publish and remain live; deleting them would corrupt data.
+//
+// No dedup is performed — lake file names are UUID-based per tablet/txn, so
+// collisions are not expected in practice. Matches the no-dedup style of
+// transactions.cpp::collect_files_in_log.
+std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log, TabletManager* tablet_manager);
 
 } // namespace starrocks::lake::tablet_reshard_helper
