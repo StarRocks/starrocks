@@ -1137,6 +1137,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Time out in seconds for the tablet to spend on warmup (shared-data only).")
     public static int lake_compute_replica_warmup_timeout_secs = 900;
 
+    @ConfField(mutable = true, comment = "Max retry times for failed create tablet tasks in shared-data mode. " +
+            "Only explicitly failed tasks are retried (not timeouts). Set 0 to disable retry.")
+    public static int lake_create_tablet_max_retries = 1;
+
     /**
      * The thrift server max worker threads
      */

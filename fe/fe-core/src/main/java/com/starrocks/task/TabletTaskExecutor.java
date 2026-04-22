@@ -52,10 +52,13 @@ import org.apache.thrift.TException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -106,18 +109,11 @@ public class TabletTaskExecutor {
             int maxTimeout = partitionCount * indexCountPerPartition * Config.max_create_table_timeout_second;
             int maxWaitTimeSeconds = Math.min(timeout, maxTimeout);
             tasks.forEach(task -> task.setTimeoutMs(maxWaitTimeSeconds * 1000L));
-            try {
-                LOG.info("build partitions sequentially, send task one by one, all tasks timeout {}s",
-                        maxWaitTimeSeconds);
-                sendCreateReplicaTasksAndWaitForFinished(tasks, maxWaitTimeSeconds);
-                LOG.info("build partitions sequentially, all tasks finished, took {}ms",
-                        System.currentTimeMillis() - start);
-                tasks.clear();
-            } finally {
-                for (CreateReplicaTask task : tasks) {
-                    AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
-                }
-            }
+            LOG.info("build partitions sequentially for {}, send task one by one, all tasks timeout {}s",
+                    table.getName(), maxWaitTimeSeconds);
+            sendCreateReplicaTasksAndWaitForFinished(tasks, maxWaitTimeSeconds, computeResource);
+            LOG.info("build partitions sequentially for {}, all tasks finished, took {}ms",
+                    table.getName(), System.currentTimeMillis() - start);
         }
     }
 
@@ -135,8 +131,14 @@ public class TabletTaskExecutor {
         if (option.isEnableTabletCreationOptimization()) {
             numReplicas = numIndexes;
         }
+
+        boolean isLakeTable = table.isCloudNativeTableOrMaterializedView();
+        int maxRetries = isLakeTable ? Config.lake_create_tablet_max_retries : 0;
+
+        // First round: send tasks partition by partition with flow control (original logic)
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(numReplicas);
-        Map<Long, List<Long>> taskSignatures = new HashMap<>();
+        List<CreateReplicaTask> allTasks = new ArrayList<>();
+        List<CreateReplicaTask> failedTasks = Collections.emptyList();
         try {
             int numFinishedTasks;
             int numSendedTasks = 0;
@@ -148,15 +150,13 @@ public class TabletTaskExecutor {
                 List<CreateReplicaTask> tasks = buildCreateReplicaTasks(dbId, table, partition, computeResource,
                         option);
                 for (CreateReplicaTask task : tasks) {
-                    List<Long> signatures =
-                            taskSignatures.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
-                    signatures.add(task.getSignature());
                     // set timeout to 2 * maxWaitTimeSeconds because this for loop can wait for maxWaitTimeSeconds
                     // to limit the number of tasks that can be sent at the same time, and outside the loop it can
                     // wait for maxWaitTimeSeconds again. So the total waiting time is 2 * maxWaitTimeSeconds.
                     task.setTimeoutMs(maxWaitTimeSeconds * 1000 * 2);
                 }
-                sendCreateReplicaTasks(tasks, countDownLatch);
+                allTasks.addAll(tasks);
+                sendCreateReplicaTasks(tasks, countDownLatch, maxRetries > 0);
                 numSendedTasks += tasks.size();
                 numFinishedTasks = numReplicas - (int) countDownLatch.getCount();
                 // Since there is no mechanism to cancel tasks, if we send a lot of tasks at once and some error or timeout
@@ -178,26 +178,36 @@ public class TabletTaskExecutor {
             LOG.info("build partitions concurrently for {}, waiting for all tasks finish with timeout {}s",
                     table.getName(), maxWaitTimeSeconds);
             waitForFinished(countDownLatch, maxWaitTimeSeconds);
-            LOG.info("build partitions concurrently for {}, all tasks finished, took {}ms",
-                    table.getName(), System.currentTimeMillis() - start);
-
+            // Collect explicitly failed tasks before logging
+            failedTasks = allTasks.stream()
+                    .filter(CreateReplicaTask::isSendFailed)
+                    .collect(Collectors.toList());
+            LOG.info("build partitions concurrently for {}, all tasks finished, {} failed, took {}ms",
+                    table.getName(), failedTasks.size(), System.currentTimeMillis() - start);
         } catch (Exception e) {
-            LOG.warn("Failed to execute buildPartitionsConcurrently", e);
+            LOG.warn("Failed to execute buildPartitionsConcurrently for {}", table.getName(), e);
             countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
             throw new DdlException(e.getMessage());
         } finally {
-            if (!countDownLatch.getStatus().ok()) {
-                for (Map.Entry<Long, List<Long>> entry : taskSignatures.entrySet()) {
-                    for (Long signature : entry.getValue()) {
-                        AgentTaskQueue.removeTask(entry.getKey(), TTaskType.CREATE, signature);
-                    }
-                }
+            for (CreateReplicaTask task : allTasks) {
+                AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.CREATE, task.getSignature());
             }
+        }
+        if (!failedTasks.isEmpty()) {
+            if (maxRetries > 0) {
+                failedTasks = retryFailedTasks(failedTasks, maxRetries, maxWaitTimeSeconds, computeResource);
+            }
+            if (!failedTasks.isEmpty()) {
+                throw new DdlException("Failed to create tablets: " + failedTasks.get(0).getErrorMsg());
+            }
+            LOG.info("build partitions concurrently for {}, retry succeeded, total took {}ms",
+                    table.getName(), System.currentTimeMillis() - start);
         }
     }
 
-    private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<PhysicalPartition> partitions,
-                                                                   ComputeResource computeResource, CreateTabletOption option)
+    // Visible for testing
+    static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<PhysicalPartition> partitions,
+                                                           ComputeResource computeResource, CreateTabletOption option)
             throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (PhysicalPartition partition : partitions) {
@@ -207,10 +217,11 @@ public class TabletTaskExecutor {
         return tasks;
     }
 
-    private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
-                                                                   PhysicalPartition physicalPartition,
-                                                                   ComputeResource computeResource,
-                                                                   CreateTabletOption option)
+    // Visible for testing
+    static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
+                                                           PhysicalPartition physicalPartition,
+                                                           ComputeResource computeResource,
+                                                           CreateTabletOption option)
             throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) physicalPartition.storageReplicaCount());
         // TabletCreationOptimization must ensure that the schemas of all tablets under a partition are consistent. 
@@ -259,7 +270,7 @@ public class TabletTaskExecutor {
         for (Tablet tablet : index.getTablets()) {
             List<Long> nodeIdsOfReplicas = new ArrayList<>();
             if (isCloudNativeTable) {
-                long nodeId = warehouseManager.getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
+                long nodeId = getNodeIdForTablet(warehouseManager, computeResource, tablet.getId());
                 nodeIdsOfReplicas.add(nodeId);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -304,45 +315,173 @@ public class TabletTaskExecutor {
         return tasks;
     }
 
-    // NOTE: Unfinished tasks will NOT be removed from the AgentTaskQueue.
-    private static void sendCreateReplicaTasksAndWaitForFinished(List<CreateReplicaTask> tasks, long timeout)
+    /**
+     * Get the compute node id for a tablet. Falls back to a random alive node if the assigned
+     * node is unavailable and retry is enabled.
+     */
+    // Visible for testing
+    static long getNodeIdForTablet(WarehouseManager warehouseManager, ComputeResource computeResource, long tabletId) {
+        try {
+            return warehouseManager.getComputeNodeAssignedToTablet(computeResource, tabletId).getId();
+        } catch (Exception e) {
+            // When retry is disabled, propagate the exception immediately.
+            // When retry is enabled, fallback to a random alive node so that the task can be
+            // created and sent. If this node also fails, the retry mechanism will reassign it.
+            if (Config.lake_create_tablet_max_retries <= 0) {
+                throw e;
+            }
+            List<ComputeNode> aliveNodes = warehouseManager.getAliveComputeNodes(computeResource);
+            if (aliveNodes.isEmpty()) {
+                throw e;
+            }
+            long nodeId = aliveNodes.get(ThreadLocalRandom.current().nextInt(aliveNodes.size())).getId();
+            LOG.debug("failed to get assigned node for tablet {}, fallback to node {}", tabletId, nodeId);
+            return nodeId;
+        }
+    }
+
+    private static void sendCreateReplicaTasksAndWaitForFinished(List<CreateReplicaTask> tasks, long timeout,
+                                                                  ComputeResource computeResource)
             throws DdlException {
+        if (tasks.isEmpty()) {
+            return;
+        }
+        boolean isLakeTable = tasks.get(0).getTabletType() == TTabletType.TABLET_TYPE_LAKE;
+        int maxRetries = isLakeTable ? Config.lake_create_tablet_max_retries : 0;
+
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
-        sendCreateReplicaTasks(tasks, countDownLatch);
-        waitForFinished(countDownLatch, timeout);
+        try {
+            sendCreateReplicaTasks(tasks, countDownLatch, maxRetries > 0);
+            waitForFinished(countDownLatch, timeout);
+        } finally {
+            for (CreateReplicaTask t : tasks) {
+                AgentTaskQueue.removeTask(t.getBackendId(), TTaskType.CREATE, t.getSignature());
+            }
+        }
+
+        List<CreateReplicaTask> failedTasks = tasks.stream()
+                .filter(CreateReplicaTask::isSendFailed)
+                .collect(Collectors.toList());
+
+        if (!failedTasks.isEmpty()) {
+            if (maxRetries > 0) {
+                failedTasks = retryFailedTasks(failedTasks, maxRetries, timeout, computeResource);
+            }
+            if (!failedTasks.isEmpty()) {
+                throw new DdlException("Failed to create tablets: " + failedTasks.get(0).getErrorMsg());
+            }
+        }
+    }
+
+    /**
+     * Retry failed create-tablet tasks on alternative compute nodes.
+     * Only tasks that failed during the send phase (RPC failure, node down) are retried.
+     *
+     * @param failedTasks tasks that failed in the previous round
+     * @param maxRetries  max number of retry attempts
+     * @param timeout     timeout in seconds for each retry round
+     * @param computeResource compute resource for selecting alternative nodes
+     * @return remaining failed tasks after all retries (empty if all succeeded)
+     */
+    private static List<CreateReplicaTask> retryFailedTasks(List<CreateReplicaTask> failedTasks,
+                                                            int maxRetries,
+                                                            long timeout,
+                                                            ComputeResource computeResource)
+            throws DdlException {
+        Set<Long> excludeNodes = new HashSet<>();
+        for (int retry = 0; retry < maxRetries && !failedTasks.isEmpty(); retry++) {
+            for (CreateReplicaTask t : failedTasks) {
+                excludeNodes.add(t.getBackendId());
+            }
+            LOG.info("retry #{} for {} failed create tablet tasks, excludeNodes={}",
+                    retry + 1, failedTasks.size(), excludeNodes);
+
+            final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            List<ComputeNode> aliveNodes = warehouseManager.getAliveComputeNodes(computeResource);
+            List<ComputeNode> candidates = aliveNodes.stream()
+                    .filter(n -> !excludeNodes.contains(n.getId()))
+                    .collect(Collectors.toList());
+            if (candidates.isEmpty()) {
+                throw new DdlException("Failed to create tablets: " + failedTasks.get(0).getErrorMsg()
+                        + ". No available node for retry.");
+            }
+            for (CreateReplicaTask task : failedTasks) {
+                long newNodeId = candidates.get(ThreadLocalRandom.current().nextInt(candidates.size())).getId();
+                task.resetNodeId(newNodeId);
+            }
+
+            MarkedCountDownLatch<Long, Long> retryLatch = new MarkedCountDownLatch<>(failedTasks.size());
+            try {
+                sendCreateReplicaTasks(failedTasks, retryLatch, true);
+                waitForFinished(retryLatch, timeout);
+            } finally {
+                for (CreateReplicaTask t : failedTasks) {
+                    AgentTaskQueue.removeTask(t.getBackendId(), TTaskType.CREATE, t.getSignature());
+                }
+            }
+
+            failedTasks = failedTasks.stream()
+                    .filter(CreateReplicaTask::isSendFailed)
+                    .collect(Collectors.toList());
+        }
+        return failedTasks;
     }
 
     private static void sendCreateReplicaTasks(List<CreateReplicaTask> tasks,
-                                               MarkedCountDownLatch<Long, Long> countDownLatch) {
-        HashMap<Long, List<AgentTask>> backendToBatchTask = new HashMap<>();
+                                               MarkedCountDownLatch<Long, Long> countDownLatch,
+                                               boolean retryEnabled) {
+        HashMap<Long, List<CreateReplicaTask>> nodeToTasks = new HashMap<>();
 
         for (CreateReplicaTask task : tasks) {
             task.setLatch(countDownLatch);
             countDownLatch.addMark(task.getBackendId(), task.getTabletId());
-
-            List<AgentTask> batchTask = backendToBatchTask.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>());
-            batchTask.add(task);
+            nodeToTasks.computeIfAbsent(task.getBackendId(), k -> new ArrayList<>()).add(task);
         }
 
-        try {
-            List<CompletableFuture<Boolean>> futures = new ArrayList<>();
-            for (Map.Entry<Long, List<AgentTask>> entry : backendToBatchTask.entrySet()) {
-                AgentTaskQueue.addTaskList(entry.getValue());
-                futures.add(sendTask(entry.getKey(), entry.getValue()));
-            }
+        HashMap<Long, CompletableFuture<Boolean>> nodeFutures = new HashMap<>();
+        for (Map.Entry<Long, List<CreateReplicaTask>> entry : nodeToTasks.entrySet()) {
+            List<AgentTask> l = new ArrayList<>(entry.getValue());
+            AgentTaskQueue.addTaskList(l);
+            nodeFutures.put(entry.getKey(), sendTask(entry.getKey(), l));
+        }
 
-            for (CompletableFuture<Boolean> future : futures) {
-                if (!future.get()) {
-                    countDownLatch.countDownToZero(Status.internalError("Send Create Replica Task fail"));
+        for (Map.Entry<Long, CompletableFuture<Boolean>> entry : nodeFutures.entrySet()) {
+            try {
+                entry.getValue().get();
+            } catch (InterruptedException e) {
+                // Interruption signals cancellation/shutdown, not a send failure.
+                // Restore the interrupt flag and abort immediately.
+                Thread.currentThread().interrupt();
+                countDownLatch.countDownToZero(Status.internalError(e.getMessage()));
+                throw new RuntimeException(e);
+            } catch (ExecutionException e) {
+                String errMsg = "Send failed to node " + entry.getKey() + ": " + e.getMessage();
+                List<CreateReplicaTask> failedNodeTasks = nodeToTasks.get(entry.getKey());
+                if (retryEnabled) {
+                    // Shared-data mode: mark per-node tasks as failed and count down individually.
+                    // Use markSendFailed (CAS) to resolve the race with the CN success callback
+                    // (LeaderImpl.finishCreateReplica -> markSendSucceeded): if the CN already
+                    // reported success, CAS fails and the task won't be retried.
+                    for (CreateReplicaTask task : failedNodeTasks) {
+                        if (task.markSendFailed()) {
+                            task.setFailed(true);
+                            task.setErrorMsg(errMsg);
+                        }
+                        countDownLatch.markedCountDown(task.getBackendId(), task.getTabletId());
+                    }
+                    LOG.debug("send create tablet tasks failed on node {}, {} tasks marked for retry: {}",
+                            entry.getKey(), failedNodeTasks.size(), e.getMessage());
+                } else {
+                    // Shared-nothing mode: preserve original behavior
+                    countDownLatch.countDownToZero(Status.internalError(e.getMessage()));
+                    throw new RuntimeException(e);
                 }
             }
-        } catch (ExecutionException | InterruptedException e) {
-            countDownLatch.countDownToZero(Status.internalError(e.getMessage()));
-            throw new RuntimeException(e);
         }
     }
 
-    private static CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
+    // Visible for testing
+    static CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
         return CompletableFuture.supplyAsync(() -> {
             try {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentState().getNodeMgr()
@@ -370,7 +509,8 @@ public class TabletTaskExecutor {
     }
 
     // REQUIRE: must set countDownLatch to error stat before throw an exception.
-    private static void waitForFinished(MarkedCountDownLatch<Long, Long> countDownLatch, long timeout) throws DdlException {
+    // Visible for testing
+    static void waitForFinished(MarkedCountDownLatch<Long, Long> countDownLatch, long timeout) throws DdlException {
         try {
             long timeLeft = timeout;
             final long waitInterval = 1;
@@ -427,7 +567,9 @@ public class TabletTaskExecutor {
             }
         } catch (InterruptedException e) {
             LOG.warn("Failed to execute waitForFinished", e);
+            Thread.currentThread().interrupt();
             countDownLatch.countDownToZero(new Status(TStatusCode.CANCELLED, "cancelled"));
+            throw new DdlException("Create tablet interrupted: " + e.getMessage());
         }
     }
 
