@@ -397,15 +397,6 @@ DeltaColumnGroupVerPB make_single_entry_dcg(const DeltaColumnGroupVerPB& source,
     return out;
 }
 
-// basename assertion: merge_dcg_meta joins these strings with a tablet segment
-// root via TabletManager::segment_location. Reject any traversal component.
-Status ensure_path_is_basename(const std::string& name) {
-    if (name.empty() || name.find('/') != std::string::npos || name == "." || name == "..") {
-        return Status::Corruption(fmt::format("DCG metadata contains non-basename filename: '{}'", name));
-    }
-    return Status::OK();
-}
-
 // Pass 1 — walk each child's dcg_meta and rowsets, dedup by filename across
 // children, and accumulate source-rowset refs per target T.
 Status dcg_pass1_collect_entries_and_sources(const std::vector<TabletMergeContext>& merge_contexts,
@@ -454,7 +445,6 @@ Status dcg_pass1_collect_entries_and_sources(const std::vector<TabletMergeContex
 
             for (int entry_index = 0; entry_index < normalized.column_files_size(); ++entry_index) {
                 const std::string& file_name = normalized.column_files(entry_index);
-                RETURN_IF_ERROR(ensure_path_is_basename(file_name));
 
                 auto& target_work = (*work_by_target)[target_rssid];
                 auto& seen_files = seen_files_by_target[target_rssid];
@@ -531,7 +521,6 @@ Status compute_row_windows_for_source_rowsets(TabletManager* tablet_manager, int
                                               const std::vector<DcgSourceRowsetReference>& source_references,
                                               std::vector<DcgRowWindow>* out_windows) {
     // Open base segment for index lookups.
-    RETURN_IF_ERROR(ensure_path_is_basename(target_rowset.segments(target_segment_position)));
     FileInfo base_segment_file_info;
     base_segment_file_info.path =
             tablet_manager->segment_location(new_tablet_id, target_rowset.segments(target_segment_position));
@@ -634,7 +623,6 @@ StatusOr<std::shared_ptr<Segment>> open_source_dcg_segment(TabletManager* tablet
                                                            const std::string& relative_path,
                                                            const std::string& encryption_meta,
                                                            const TabletSchemaCSPtr& entry_schema) {
-    RETURN_IF_ERROR(ensure_path_is_basename(relative_path));
     FileInfo file_info;
     file_info.path = tablet_manager->segment_location(owner_tablet_id, relative_path);
     file_info.encryption_meta = encryption_meta;
