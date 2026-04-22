@@ -1668,14 +1668,16 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for
     fill_rowset(txn_log->mutable_op_compaction()->mutable_output_rowset(), "op_compaction.dat", 12, 25);
     fill_sstable(txn_log->mutable_op_compaction()->mutable_output_sstable(), "op_compaction.sst");
     fill_sstable(txn_log->mutable_op_compaction()->add_output_sstables(), "op_compaction_1.sst");
+    // op_schema_change
+    fill_rowset(txn_log->mutable_op_schema_change()->add_rowsets(), "op_schema_change.dat", 0, 30);
+    // op_replication
+    fill_rowset(txn_log->mutable_op_replication()->add_op_writes()->mutable_rowset(), "op_replication.dat", 18, 30);
     // op_parallel_compaction
     auto* op_parallel_compaction = txn_log->mutable_op_parallel_compaction();
     fill_rowset(op_parallel_compaction->add_subtask_compactions()->mutable_output_rowset(),
                 "op_parallel_compaction.dat", 19, 21);
     fill_sstable(op_parallel_compaction->mutable_output_sstable(), "op_parallel_compaction.sst");
     fill_sstable(op_parallel_compaction->add_output_sstables(), "op_parallel_compaction_1.sst");
-    // op_schema_change / op_replication are rejected by convert_txn_log
-    // regardless of cross-publish type; excluded here.
 
     lake::PublishTabletInfo publish_tablet_info(lake::PublishTabletInfo::SPLITTING_TABLET, txn_log->tablet_id(),
                                                 next_id(), 2, 0);
@@ -1688,6 +1690,8 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for
     EXPECT_TRUE(converted->op_compaction().output_sstable().shared());
     ASSERT_EQ(1, converted->op_compaction().output_sstables_size());
     EXPECT_TRUE(converted->op_compaction().output_sstables(0).shared());
+    expect_shared_and_range(converted->op_schema_change().rowsets(0), 10, 20);
+    expect_shared_and_range(converted->op_replication().op_writes(0).rowset(), 18, 20);
     expect_shared_and_range(converted->op_parallel_compaction().subtask_compactions(0).output_rowset(), 19, 20);
     ASSERT_TRUE(converted->op_parallel_compaction().has_output_sstable());
     EXPECT_TRUE(converted->op_parallel_compaction().output_sstable().shared());
@@ -3853,8 +3857,8 @@ namespace {
 // source and |merged_tablet_id| as the target.
 lake::PublishTabletInfo make_merging_publish_info(int64_t source_tablet_id, int64_t merged_tablet_id) {
     int64_t ids[] = {source_tablet_id};
-    return lake::PublishTabletInfo(lake::PublishTabletInfo::MERGING_TABLET, std::span<const int64_t>(ids, 1),
-                                   merged_tablet_id);
+    return lake::PublishTabletInfo(lake::PublishTabletInfo::MERGING_TABLET,
+                                   std::span<const int64_t>(ids, 1), merged_tablet_id);
 }
 
 TxnLogPtr make_op_write_only_log(int64_t source_tablet_id, const std::string& segment_name) {
@@ -3955,9 +3959,9 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_parallel
     // reproduce the shape produced by the parallel-compaction manager.
 
     auto paths = lake::tablet_reshard_helper::collect_compaction_output_file_paths(log, _tablet_manager.get());
-    EXPECT_THAT(paths,
-                ::testing::UnorderedElementsAre(_tablet_manager->segment_location(tablet_id, "parallel_new_0.dat"),
-                                                _tablet_manager->segment_location(tablet_id, "parallel_new_1.dat")));
+    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(
+                               _tablet_manager->segment_location(tablet_id, "parallel_new_0.dat"),
+                               _tablet_manager->segment_location(tablet_id, "parallel_new_1.dat")));
 }
 
 // Regression: partial compaction's output_rowset.segments() concatenates
@@ -3980,12 +3984,51 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_partial_
     op_compaction->set_new_segment_count(2);
 
     auto paths = lake::tablet_reshard_helper::collect_compaction_output_file_paths(log, _tablet_manager.get());
-    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(_tablet_manager->segment_location(tablet_id, "new_0.dat"),
-                                                       _tablet_manager->segment_location(tablet_id, "new_1.dat")));
-    EXPECT_THAT(paths,
-                ::testing::Not(::testing::Contains(_tablet_manager->segment_location(tablet_id, "reused_0.dat"))));
-    EXPECT_THAT(paths,
-                ::testing::Not(::testing::Contains(_tablet_manager->segment_location(tablet_id, "reused_1.dat"))));
+    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(
+                               _tablet_manager->segment_location(tablet_id, "new_0.dat"),
+                               _tablet_manager->segment_location(tablet_id, "new_1.dat")));
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(
+                               _tablet_manager->segment_location(tablet_id, "reused_0.dat"))));
+    EXPECT_THAT(paths, ::testing::Not(::testing::Contains(
+                               _tablet_manager->segment_location(tablet_id, "reused_1.dat"))));
+}
+
+// Verifies that collect_compaction_output_file_paths() collects files of every
+// kind — segments (via output_rowset), ssts (compaction-ingested), output_sstable,
+// output_sstables, lcrm_file, plus op_parallel_compaction.output_sstable /
+// output_sstables / orphan_lcrm_files — so regressions don't silently reintroduce
+// leaks by dropping any one category.
+TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_covers_all_kinds) {
+    const int64_t tablet_id = next_id();
+    TxnLogPB log;
+    log.set_tablet_id(tablet_id);
+
+    // Top-level op_compaction with every output-file kind populated.
+    auto* op_compaction = log.mutable_op_compaction();
+    op_compaction->mutable_output_rowset()->add_segments("out_seg.dat");
+    op_compaction->set_new_segment_offset(0);
+    op_compaction->set_new_segment_count(1);
+    op_compaction->add_ssts()->set_name("compact_ingest.sst");
+    op_compaction->mutable_output_sstable()->set_filename("compact_out.sst");
+    op_compaction->add_output_sstables()->set_filename("compact_out_multi.sst");
+    op_compaction->mutable_lcrm_file()->set_name("compact.crm");
+
+    // op_parallel_compaction top-level output sstables and orphan lcrms.
+    auto* op_parallel = log.mutable_op_parallel_compaction();
+    op_parallel->mutable_output_sstable()->set_filename("parallel_out.sst");
+    op_parallel->add_output_sstables()->set_filename("parallel_out_multi.sst");
+    op_parallel->add_orphan_lcrm_files()->set_name("parallel_orphan.crm");
+
+    auto paths = lake::tablet_reshard_helper::collect_compaction_output_file_paths(log, _tablet_manager.get());
+    EXPECT_THAT(paths, ::testing::UnorderedElementsAre(
+                               _tablet_manager->segment_location(tablet_id, "out_seg.dat"),
+                               _tablet_manager->sst_location(tablet_id, "compact_ingest.sst"),
+                               _tablet_manager->sst_location(tablet_id, "compact_out.sst"),
+                               _tablet_manager->sst_location(tablet_id, "compact_out_multi.sst"),
+                               _tablet_manager->lcrm_location(tablet_id, "compact.crm"),
+                               _tablet_manager->sst_location(tablet_id, "parallel_out.sst"),
+                               _tablet_manager->sst_location(tablet_id, "parallel_out_multi.sst"),
+                               _tablet_manager->lcrm_location(tablet_id, "parallel_orphan.crm")));
 }
 
 } // namespace starrocks
