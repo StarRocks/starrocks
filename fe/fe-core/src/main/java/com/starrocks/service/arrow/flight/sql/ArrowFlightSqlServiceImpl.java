@@ -28,11 +28,14 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.ArrowUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -194,19 +197,19 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
 
                 String preparedStmtId = ctx.addPreparedStatement(request.getQuery());
 
-                // To prevent the client from mistakenly interpreting an empty Schema as an update statement (instead of a query statement),
-                // we need to ensure that the Schema returned by createPreparedStatement includes the query metadata.
-                // This means we need to correctly set the DatasetSchema and ParameterSchema in ActionCreatePreparedStatementResult.
-                // We generate a minimal Schema. This minimal Schema can include an integer column to ensure the Schema is not empty.
-                try (VectorSchemaRoot schemaRoot = ArrowUtil.createSingleSchemaRoot("r", "0")) {
-                    Schema schema = schemaRoot.getSchema();
-                    FlightSql.ActionCreatePreparedStatementResult result =
-                            FlightSql.ActionCreatePreparedStatementResult.newBuilder()
-                                    .setPreparedStatementHandle(ByteString.copyFromUtf8(preparedStmtId))
-                                    .setDatasetSchema(ByteString.copyFrom(serializeMetadata(schema)))
-                                    .setParameterSchema(ByteString.copyFrom(serializeMetadata(schema))).build();
-                    listener.onNext(new Result(Any.pack(result).toByteArray()));
-                }
+                // Try to plan the query to get the real schema for the prepared statement.
+                // This is important because clients (JDBC, ADBC) use the schema returned here
+                // to determine column names and types. Without this, a placeholder schema with
+                // a single column named "r" would be returned, which is incorrect.
+                Schema schema = buildSchemaFromQuery(ctx, request.getQuery());
+
+                FlightSql.ActionCreatePreparedStatementResult result =
+                        FlightSql.ActionCreatePreparedStatementResult.newBuilder()
+                                .setPreparedStatementHandle(ByteString.copyFromUtf8(preparedStmtId))
+                                .setDatasetSchema(ByteString.copyFrom(serializeMetadata(schema)))
+                                .setParameterSchema(ByteString.copyFrom(serializeMetadata(new Schema(Collections.emptyList()))))
+                                .build();
+                listener.onNext(new Result(Any.pack(result).toByteArray()));
                 listener.onCompleted();
             } catch (Exception e) {
                 listener.onError(
@@ -898,6 +901,52 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
         final Ticket ticket = new Ticket(Any.pack(request).toByteArray());
         final List<FlightEndpoint> endpoints = Collections.singletonList(new FlightEndpoint(ticket, endpoint));
         return new FlightInfo(schema, descriptor, endpoints, -1, -1);
+    }
+
+    /**
+     * Analyze the query to obtain the real output schema (column names and types).
+     * Only performs semantic analysis (not full planning) to avoid side effects that
+     * could interfere with the subsequent query execution in getFlightInfoPreparedStatement.
+     * For non-query statements or if analysis fails, a placeholder schema is returned.
+     */
+    private Schema buildSchemaFromQuery(ArrowFlightSqlConnectContext ctx, String query) {
+        try {
+            try (var scope = ctx.bindScope()) {
+                List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(query, ctx.getSessionVariable());
+                if (stmts.isEmpty()) {
+                    return buildPlaceholderSchema();
+                }
+                StatementBase stmt = stmts.get(0);
+                if (!(stmt instanceof QueryStatement)) {
+                    return buildPlaceholderSchema();
+                }
+                stmt.setOrigStmt(new OriginStatement(query));
+
+                Analyzer.analyze(stmt, ctx);
+
+                QueryStatement queryStmt = (QueryStatement) stmt;
+                List<String> colNames = queryStmt.getQueryRelation().getColumnOutputNames();
+                List<Expr> outputExprs = queryStmt.getQueryRelation().getOutputExpression();
+
+                List<Field> arrowFields = Lists.newArrayList();
+                for (int i = 0; i < colNames.size(); i++) {
+                    Expr expr = outputExprs.get(i);
+                    Field arrowField = ArrowUtils.convertToArrowType(
+                            expr.getOriginType(), colNames.get(i), expr.isNullable());
+                    arrowFields.add(arrowField);
+                }
+                return new Schema(arrowFields);
+            }
+        } catch (Exception e) {
+            LOG.warn("[ARROW] Failed to analyze query for schema in createPreparedStatement, " +
+                    "falling back to placeholder schema. query={}", query, e);
+            return buildPlaceholderSchema();
+        }
+    }
+
+    private static Schema buildPlaceholderSchema() {
+        return new Schema(Lists.newArrayList(
+                ArrowUtils.convertToArrowType(com.starrocks.catalog.Type.INT, "result", true)));
     }
 
     public static Schema buildSchema(ExecPlan execPlan) {
