@@ -29,7 +29,6 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
@@ -1290,7 +1289,6 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(16, exprStats.getAverageRowSize(), 0.001);
         Assertions.assertEquals(5, exprStats.getCollectionSize(), 0.001);
     }
-}
 
     @Test
     public void testIsNotNullPredicateStatisticsWithNulls() {
