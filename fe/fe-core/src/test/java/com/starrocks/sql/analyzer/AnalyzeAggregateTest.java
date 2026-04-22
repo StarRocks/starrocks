@@ -296,6 +296,21 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select percentile_cont(tj, cast(0.5 as double)) from tall group by tb");
         analyzeSuccess("select percentile_cont(1, 0.4);");
         analyzeSuccess("select percentile_cont(1, cast(0.4 as double));");
+
+        // Regression: percentile_disc / percentile_disc_lc on a non-sortable first-arg type
+        // must throw SemanticException rather than NPE. Before the fix, getBuiltinFunction
+        // returned null for these signatures and the following fn.getArgs()[0].isDecimalV3()
+        // dereference crashed with NullPointerException.
+        analyzeFail("select percentile_disc(b1, 0.5) from test_object group by v1",
+                "No matching function with signature: percentile_disc");
+        analyzeFail("select percentile_disc(h1, 0.5) from test_object group by v1",
+                "No matching function with signature: percentile_disc");
+        analyzeFail("select percentile_disc(p1, 0.5) from test_object group by v1",
+                "No matching function with signature: percentile_disc");
+        analyzeFail("select percentile_disc(parse_json('{}'), 0.5)",
+                "No matching function with signature: percentile_disc");
+        analyzeFail("select percentile_disc_lc(bitmap_from_string('1,2,3'), 0.5)",
+                "No matching function with signature: percentile_disc_lc");
     }
 
     @Test
