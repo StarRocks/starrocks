@@ -1,32 +1,75 @@
 -- name: test_applicable_roles
 CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
 USE db_${uuid0};
+-- result:
+-- !result
 
 SELECT * FROM information_schema.applicable_roles ORDER BY ROLE_NAME ASC;
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME = 'root';
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 SELECT * FROM information_schema.applicable_roles WHERE IS_GRANTABLE = 'NO';
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 SELECT * FROM information_schema.applicable_roles WHERE IS_DEFAULT = 'NO';
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 SELECT * FROM information_schema.applicable_roles WHERE IS_MANDATORY = 'NO';
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME LIKE 'r%' ORDER BY ROLE_NAME ASC;
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME IN ('root', 'admin') ORDER BY ROLE_NAME ASC;
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 SELECT * FROM information_schema.applicable_roles ORDER BY IS_DEFAULT DESC, ROLE_NAME ASC;
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME = 'NON_EXISTENT_ROLE';
+-- result:
+-- !result
 
 DROP USER IF EXISTS test_user;
+-- result:
+-- !result
 CREATE USER test_user IDENTIFIED BY 'password';
+-- result:
+-- !result
 
 GRANT SELECT ON information_schema.applicable_roles TO test_user;
+-- result:
+-- !result
 
 SELECT * FROM information_schema.applicable_roles;
+-- result:
+root	%	root	%	root	%	NO	NO	NO
+-- !result
 
 DROP USER test_user;
+-- result:
+-- !result
 
 DROP DATABASE db_${uuid0};
+-- result:
+-- !result
