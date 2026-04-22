@@ -221,4 +221,13 @@ private:
     std::string _current_file_name;
 };
 
+// Free helper extracted from OrcChunkReader::capture_rejected_rows_before_filter
+// for testability. For each row where filter[i] == 0, calls
+// writer->append_from_chunk with per-slot column names derived from
+// src_slot_descriptors. Declared here so unit tests can exercise the
+// per-row emit path without constructing a full OrcChunkReader.
+class RejectedRecordWriter;
+void orc_emit_rejected_rows(RejectedRecordWriter* writer, const Chunk& chunk,
+                            const std::vector<SlotDescriptor*>& src_slot_descriptors, const Filter& filter);
+
 } // namespace starrocks

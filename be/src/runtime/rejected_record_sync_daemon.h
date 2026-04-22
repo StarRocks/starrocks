@@ -113,9 +113,9 @@ protected:
 
     std::future<bool>& stop_future() { return _stop_future; }
 
-private:
-    static void* tick_thread_entry(void* self);
-    void tick_loop();
+protected:
+    // Exposed as protected so tests can invoke one synchronous tick
+    // without running the background thread.
     void run_one_tick();
 
     // Core read-post-delete loop shared by `run_one_tick` (production,
@@ -125,6 +125,10 @@ private:
     // post may contain more rows because a single source file is the
     // atomicity unit and is never split across posts.
     void process_files(const std::vector<std::string>& files, int64_t max_rows);
+
+private:
+    static void* tick_thread_entry(void* self);
+    void tick_loop();
 
     ExecEnv* _env;
     std::promise<bool> _stop;
