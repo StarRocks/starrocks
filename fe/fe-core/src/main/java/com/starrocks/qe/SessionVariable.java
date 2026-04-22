@@ -262,8 +262,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SQL_TRANSACTION = "enable_sql_transaction";
     public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
     public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
-    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin"; 
-    public static final String AUTHENTICATION_POLICY = "authentication_policy"; 
+    public static final String DEFAULT_AUTHENTICATION_PLUGIN = "default_authentication_plugin";
+    public static final String AUTHENTICATION_POLICY = "authentication_policy";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -1153,6 +1153,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_LABELED_COLUMN_STATISTIC_OUTPUT = "enable_labeled_column_statistic_output";
 
+    public static final String DYNAMIC_PARTITION_PRUNE_VALUES_LIMIT = "dynamic_partition_prune_limit";
+    public static final String MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD = "mcv_row_percentage_propagation_threshold";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1237,8 +1240,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     /**
      * used for test
-     * Determines whether to enable gather fragment locality optimization. When enabled, 
-     * gather fragments will be assigned to the same node as other fragments if all 
+     * Determines whether to enable gather fragment locality optimization. When enabled,
+     * gather fragments will be assigned to the same node as other fragments if all
      * other fragments' instances are on the same node.
      */
     @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
@@ -1387,9 +1390,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = DEFAULT_TMP_STORAGE_ENGINE)
     private String defaultTmpStorageEngine = "InnoDB";
     @VariableMgr.VarAttr(name = DEFAULT_AUTHENTICATION_PLUGIN)
-    private String defaultAuthenticationPlugin = "mysql_native_password"; 
+    private String defaultAuthenticationPlugin = "mysql_native_password";
     @VariableMgr.VarAttr(name = AUTHENTICATION_POLICY)
-    private String authenticationPolicy = "*,,"; 
+    private String authenticationPolicy = "*,,";
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
@@ -2342,7 +2345,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_INSERT_SELECT_EXTERNAL_AUTO_REFRESH)
     private boolean enableInsertSelectExternalAutoRefresh = true;
-    
+
     @VarAttr(name = ENABLE_PREDICATE_COL_LATE_MATERIALIZE)
     private boolean enablePredicateColLateMaterialize = true;
 
@@ -3010,6 +3013,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_ENABLE_PARALLEL_PREPARE_METADATA)
     private boolean enableParallelPrepareMetadata = false;
+
+    // The percentage of rows that need to be contained in MCVs so that MCV propagation through operators is enabled
+    // while losing bucket information. Lowering this threshold can lead to worse plans.
+    @VarAttr(name = MCV_ROW_PERCENTAGE_PROPAGATION_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double mcvRowPercentagePropagationThreshold = 0.5;
 
     // To set ANN tuning parameters for user.
     // Since the session variables does not support map variables,
@@ -6000,7 +6008,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableInsertSelectExternalAutoRefresh(boolean enableInsertSelectExternalAutoRefresh) {
         this.enableInsertSelectExternalAutoRefresh = enableInsertSelectExternalAutoRefresh;
     }
-    
+
     public void setEnablePredicateColLateMaterialize(boolean enablePredicateColLateMaterialize) {
         this.enablePredicateColLateMaterialize = enablePredicateColLateMaterialize;
     }
@@ -6031,6 +6039,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableLabeledColumnStatisticOutput() {
         return this.enableLabeledColumnStatisticOutput;
+    }
+
+    public void setMcvRowPercentagePropagationThreshold(double mcvRowPercentagePropagationThreshold) {
+        this.mcvRowPercentagePropagationThreshold = mcvRowPercentagePropagationThreshold;
+    }
+
+    public double getMcvRowPercentagePropagationThreshold() {
+        return mcvRowPercentagePropagationThreshold;
     }
 
     // Serialize to thrift object
