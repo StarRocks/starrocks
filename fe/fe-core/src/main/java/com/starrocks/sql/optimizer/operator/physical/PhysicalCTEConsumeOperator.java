@@ -98,6 +98,7 @@ public class PhysicalCTEConsumeOperator extends PhysicalOperator {
                 "cteId='" + cteId + '\'' +
                 ", limit=" + limit +
                 ", predicate=" + predicate +
+                ", outputColumns='" + getCteOutputColumnRefMap() + '\'' +
                 '}';
     }
 }
