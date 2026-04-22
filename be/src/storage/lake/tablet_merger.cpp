@@ -14,6 +14,8 @@
 
 #include "storage/lake/tablet_merger.h"
 
+#include <bvar/bvar.h>
+
 #include <algorithm>
 #include <limits>
 #include <map>
@@ -24,13 +26,35 @@
 
 #include "base/hash/crc32c.h"
 #include "base/testutil/sync_point.h"
+#include "column/column_helper.h"
+#include "common/config_rowset_fwd.h"
+#include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
+#include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
+#include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/segment_iterator.h"
+#include "storage/rowset/segment_options.h"
+#include "storage/rowset/segment_writer.h"
+#include "storage/tablet_schema.h"
+
+namespace {
+
+bvar::Adder<int64_t> g_tablet_merge_dcg_rebuild_total("tablet_merge_dcg_rebuild_total");
+bvar::Adder<int64_t> g_tablet_merge_dcg_rebuild_fallback_not_supported_total(
+        "tablet_merge_dcg_rebuild_fallback_not_supported_total");
+
+} // namespace
 
 namespace starrocks::lake {
 
@@ -317,63 +341,629 @@ Status verify_dcg_entry_consistency(const DeltaColumnGroupVerPB& existing, int j
     return Status::OK();
 }
 
-Status merge_dcg_meta(const std::vector<TabletMergeContext>& merge_contexts, TabletMetadataPB* new_metadata) {
-    auto* new_dcgs = new_metadata->mutable_dcg_meta()->mutable_dcgs();
+// ---------------------------------------------------------------------------
+// merge_dcg_meta: two-pass entry-level merge with per-target .cols rebuild.
+//
+// Pass 1 collects per-target "surviving" entries (after exact-dedup by .cols
+// filename) and per-target source-rowset references (the child rowsets that
+// reference target rssid T through get_rssid/map_rssid). Ranges are captured
+// from each source-child rowset BEFORE merge_rowsets() has widened shared
+// ranges via union_range, so a coverage gap between child ranges cannot be
+// masked by the merged rowset's convex hull.
+//
+// Pass 2 classifies each target's entries: columns claimed by only one entry
+// are non-conflicting and pass through unchanged; columns claimed by >= 2
+// entries trigger rebuild. Rebuild folds ALL columns of every conflicting
+// entry into a single new .cols file so the reader's first-entry-wins rule
+// never leaks stale values from a leftover entry that shares any column with
+// the rebuilt set.
+//
+// Per-target rebuild (rebuild_dcg_for_target) implements Steps A-F of the
+// design: locate base segment via get_rssid scan, resolve merged schema,
+// compute row windows per source-child rowset using the existing range ->
+// SeekRange -> rowid-range pipeline, validate coverage, assemble rebuilt
+// chunk (donor file per column + updater-child window overrides), write a
+// new .cols file, install one entry into new_dcgs[T].
 
-    for (const auto& ctx : merge_contexts) {
+struct DcgSurvivingEntry {
+    size_t child_index;
+    uint32_t orig_segment_id;
+    int entry_index;
+    // Single-entry normalized copy of the source DCG entry (all 5 fields at
+    // index 0 of the resulting PB). Keeping entries in single-entry form keeps
+    // bookkeeping and downstream emission uniform.
+    DeltaColumnGroupVerPB single_entry;
+};
+
+struct DcgSourceRowsetRef {
+    size_t child_index;
+    const RowsetMetadataPB* rowset = nullptr;
+    int segment_pos = 0;
+    const TabletRangePB* effective_range = nullptr; // rowset.range() else ctx tablet range; null = unbounded
+};
+
+struct DcgTargetWork {
+    std::vector<DcgSurvivingEntry> entries;
+    std::vector<DcgSourceRowsetRef> source_refs;
+};
+
+DeltaColumnGroupVerPB make_single_entry_dcg_from_index(const DeltaColumnGroupVerPB& src, int i) {
+    DeltaColumnGroupVerPB out;
+    out.add_column_files(src.column_files(i));
+    out.add_unique_column_ids()->CopyFrom(src.unique_column_ids(i));
+    out.add_versions(src.versions(i));
+    out.add_encryption_metas(src.encryption_metas(i));
+    out.add_shared_files(src.shared_files(i));
+    return out;
+}
+
+// basename assertion: merge_dcg_meta joins these strings with a tablet segment
+// root via TabletManager::segment_location. Reject any traversal component.
+Status ensure_basename(const std::string& name) {
+    if (name.empty() || name.find('/') != std::string::npos || name == "." || name == "..") {
+        return Status::Corruption(fmt::format("DCG metadata contains non-basename filename: '{}'", name));
+    }
+    return Status::OK();
+}
+
+// Pass 1 — walk each child's dcg_meta and rowsets, dedup by filename across
+// children, and accumulate source-rowset refs per target T.
+Status dcg_pass1_collect(const std::vector<TabletMergeContext>& merge_contexts,
+                         std::map<uint32_t, DcgTargetWork>* work_by_target) {
+    // Track which .cols filenames we have already observed per target so that
+    // subsequent children with the same filename are deduped (and verified).
+    // Store size_t indexes into DcgTargetWork::entries (NOT raw pointers),
+    // since push_back can reallocate the vector and invalidate pointers.
+    std::map<uint32_t, std::unordered_map<std::string, size_t>> seen_files;
+
+    for (size_t ci = 0; ci < merge_contexts.size(); ++ci) {
+        const auto& ctx = merge_contexts[ci];
+
+        // (a) Accumulate source-rowset refs from every rowset that references
+        // any target via get_rssid -> ctx.map_rssid.
+        for (const auto& rowset : ctx.metadata()->rowsets()) {
+            for (int p = 0; p < rowset.segments_size(); ++p) {
+                uint32_t orig_rssid = get_rssid(rowset, p);
+                auto target_or = ctx.map_rssid(orig_rssid);
+                if (!target_or.ok()) continue;
+                uint32_t target = *target_or;
+                DcgSourceRowsetRef ref;
+                ref.child_index = ci;
+                ref.rowset = &rowset;
+                ref.segment_pos = p;
+                if (rowset.has_range()) {
+                    ref.effective_range = &rowset.range();
+                } else if (ctx.metadata()->has_range()) {
+                    ref.effective_range = &ctx.metadata()->range();
+                } else {
+                    ref.effective_range = nullptr; // unbounded: full segment
+                }
+                (*work_by_target)[target].source_refs.push_back(std::move(ref));
+            }
+        }
+
+        // (b) Walk dcg_meta: validate, normalize, split into single-entry
+        // records, dedup by .cols filename.
         if (!ctx.metadata()->has_dcg_meta()) continue;
-
         for (const auto& [segment_id, dcg_value] : ctx.metadata()->dcg_meta().dcgs()) {
             ASSIGN_OR_RETURN(uint32_t target, ctx.map_rssid(segment_id));
 
-            // Validate + normalize incoming (copy because dcg_value is const)
-            DeltaColumnGroupVerPB incoming = dcg_value;
-            RETURN_IF_ERROR(validate_dcg_shape(incoming));
-            normalize_dcg_optional_fields(&incoming);
+            DeltaColumnGroupVerPB normalized = dcg_value;
+            RETURN_IF_ERROR(validate_dcg_shape(normalized));
+            normalize_dcg_optional_fields(&normalized);
 
-            auto it = new_dcgs->find(target);
-            if (it == new_dcgs->end()) {
-                (*new_dcgs)[target] = std::move(incoming);
-                continue;
-            }
+            for (int i = 0; i < normalized.column_files_size(); ++i) {
+                const std::string& file = normalized.column_files(i);
+                RETURN_IF_ERROR(ensure_basename(file));
 
-            // Entry-level merge into existing DCG
-            auto& existing = it->second;
-
-            for (int i = 0; i < incoming.column_files_size(); ++i) {
-                const auto& new_file = incoming.column_files(i);
-
-                // Step 1: exact dedup — same .cols filename
-                bool found_dup = false;
-                for (int j = 0; j < existing.column_files_size(); ++j) {
-                    if (existing.column_files(j) == new_file) {
-                        RETURN_IF_ERROR(verify_dcg_entry_consistency(existing, j, incoming, i));
-                        found_dup = true;
-                        break;
-                    }
-                }
-                if (found_dup) continue;
-
-                // Step 2: column overlap check
-                for (int j = 0; j < existing.unique_column_ids_size(); ++j) {
-                    for (auto e_cid : existing.unique_column_ids(j).column_ids()) {
-                        for (auto n_cid : incoming.unique_column_ids(i).column_ids()) {
-                            if (e_cid == n_cid) {
-                                return Status::NotSupported(
-                                        "DCG conflict: same column updated independently by different split children");
-                            }
-                        }
-                    }
+                auto& target_work = (*work_by_target)[target];
+                auto& file_map = seen_files[target];
+                auto it = file_map.find(file);
+                if (it != file_map.end()) {
+                    // Exact dedup across children: verify entry-level consistency
+                    // against the previously stored entry. Index lookup is safe
+                    // even if the vector reallocated between insertions.
+                    RETURN_IF_ERROR(verify_dcg_entry_consistency(target_work.entries[it->second].single_entry, 0,
+                                                                  normalized, i));
+                    continue;
                 }
 
-                // Step 3: disjoint columns — append entry (all 5 fields)
-                existing.add_column_files(new_file);
-                existing.add_unique_column_ids()->CopyFrom(incoming.unique_column_ids(i));
-                existing.add_versions(incoming.versions(i));
-                existing.add_encryption_metas(incoming.encryption_metas(i));
-                existing.add_shared_files(incoming.shared_files(i));
+                DcgSurvivingEntry entry;
+                entry.child_index = ci;
+                entry.orig_segment_id = segment_id;
+                entry.entry_index = i;
+                entry.single_entry = make_single_entry_dcg_from_index(normalized, i);
+
+                const size_t new_index = target_work.entries.size();
+                target_work.entries.push_back(std::move(entry));
+                file_map[file] = new_index;
             }
         }
+    }
+    return Status::OK();
+}
+
+// For a merged rowset, find the segment position p such that get_rssid(rowset, p) == T.
+// Returns -1 if not found.
+int find_segment_pos_in_rowset(const RowsetMetadataPB& rowset, uint32_t target) {
+    for (int p = 0; p < rowset.segments_size(); ++p) {
+        if (get_rssid(rowset, p) == target) {
+            return p;
+        }
+    }
+    return -1;
+}
+
+// Step A — locate the merged rowset + segment position that owns T.
+StatusOr<std::pair<const RowsetMetadataPB*, int>> locate_target_in_merged(const TabletMetadataPB& new_metadata,
+                                                                          uint32_t target) {
+    for (const auto& rowset : new_metadata.rowsets()) {
+        int p = find_segment_pos_in_rowset(rowset, target);
+        if (p >= 0) return std::make_pair(&rowset, p);
+    }
+    return Status::InternalError(fmt::format("DCG rebuild: target rssid {} not found in merged metadata", target));
+}
+
+// Step B — resolve the merged tablet schema PB for a given rowset.
+const TabletSchemaPB* resolve_rowset_schema_pb(const TabletMetadataPB& new_metadata,
+                                               const RowsetMetadataPB& rowset) {
+    const auto& rowset_to_schema = new_metadata.rowset_to_schema();
+    const auto it = rowset_to_schema.find(rowset.id());
+    if (it != rowset_to_schema.end()) {
+        const auto& hist = new_metadata.historical_schemas();
+        auto sit = hist.find(it->second);
+        if (sit != hist.end()) return &sit->second;
+    }
+    if (new_metadata.has_schema()) return &new_metadata.schema();
+    return nullptr;
+}
+
+struct DcgRowWindow {
+    size_t child_index;
+    Range<rowid_t> range;
+};
+
+// Step C — compute row windows in segment T for every source-child rowset
+// that references T. Coverage over [0, num_rows_of_T) is validated.
+Status compute_row_windows(TabletManager* tablet_mgr, int64_t new_tablet_id, const RowsetMetadataPB& target_rowset,
+                           int target_segment_pos, const TabletSchemaCSPtr& full_tablet_schema,
+                           const std::vector<DcgSourceRowsetRef>& source_refs, std::vector<DcgRowWindow>* out_windows) {
+    // Open base segment for index lookups.
+    RETURN_IF_ERROR(ensure_basename(target_rowset.segments(target_segment_pos)));
+    FileInfo base_info;
+    base_info.path = tablet_mgr->segment_location(new_tablet_id, target_rowset.segments(target_segment_pos));
+    if (target_rowset.segment_size_size() > target_segment_pos) {
+        base_info.size = target_rowset.segment_size(target_segment_pos);
+    }
+    if (target_rowset.bundle_file_offsets_size() > target_segment_pos) {
+        base_info.bundle_file_offset = target_rowset.bundle_file_offsets(target_segment_pos);
+    }
+    if (target_rowset.segment_encryption_metas_size() > target_segment_pos) {
+        base_info.encryption_meta = target_rowset.segment_encryption_metas(target_segment_pos);
+    }
+
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(base_info.path));
+    ASSIGN_OR_RETURN(auto base_segment,
+                     Segment::open(fs, base_info, /*segment_id=*/0, full_tablet_schema,
+                                   /*footer_length_hint=*/nullptr, /*partial_rowset_footer=*/nullptr,
+                                   /*lake_io_opts=*/LakeIOOptions{}, tablet_mgr));
+
+    const rowid_t num_rows = static_cast<rowid_t>(base_segment->num_rows());
+
+    // Dedup source refs that produce identical windows (e.g., a shared rowset
+    // referenced by multiple children with the same effective range).
+    out_windows->clear();
+    out_windows->reserve(source_refs.size());
+
+    for (const auto& ref : source_refs) {
+        Range<rowid_t> window{0, num_rows};
+        if (ref.effective_range != nullptr) {
+            ASSIGN_OR_RETURN(auto seek_range,
+                             TabletRangeHelper::create_seek_range_from(*ref.effective_range, full_tablet_schema,
+                                                                        /*mem_pool=*/nullptr));
+            LakeIOOptions lake_io_opts{.fill_data_cache = false};
+            ASSIGN_OR_RETURN(auto rowid_range_opt,
+                             segment_seek_range_to_rowid_range(base_segment, seek_range, lake_io_opts));
+            if (!rowid_range_opt.has_value()) {
+                continue; // empty window
+            }
+            window = *rowid_range_opt;
+            // Clip to [0, num_rows)
+            window = Range<rowid_t>(std::max<rowid_t>(window.begin(), 0), std::min<rowid_t>(window.end(), num_rows));
+            if (window.begin() >= window.end()) {
+                continue;
+            }
+        }
+        out_windows->push_back({ref.child_index, window});
+    }
+
+    if (out_windows->empty()) {
+        return Status::NotSupported(
+                fmt::format("DCG rebuild: no valid row windows computed for target rssid (num_rows={})", num_rows));
+    }
+
+    // Dedup windows that belong to the SAME child AND have the same range
+    // (e.g., a child's shared rowset surfaced twice through different scans).
+    // Do NOT dedup windows from different children even if the range matches:
+    // those represent distinct authoritative updaters for the same rows and
+    // must surface as an overlap failure, not be silently collapsed.
+    std::sort(out_windows->begin(), out_windows->end(), [](const DcgRowWindow& a, const DcgRowWindow& b) {
+        if (a.range.begin() != b.range.begin()) return a.range.begin() < b.range.begin();
+        if (a.range.end() != b.range.end()) return a.range.end() < b.range.end();
+        return a.child_index < b.child_index;
+    });
+    std::vector<DcgRowWindow> dedup;
+    dedup.reserve(out_windows->size());
+    for (auto& w : *out_windows) {
+        if (!dedup.empty() && dedup.back().range.begin() == w.range.begin() &&
+            dedup.back().range.end() == w.range.end() && dedup.back().child_index == w.child_index) {
+            continue; // same child + same range: safe to collapse
+        }
+        dedup.push_back(w);
+    }
+    *out_windows = std::move(dedup);
+
+    // Coverage validation: windows must be contiguous and cover [0, num_rows).
+    if ((*out_windows)[0].range.begin() != 0) {
+        return Status::NotSupported(
+                fmt::format("DCG rebuild: row window coverage gap at the start (first.begin={}, expect 0)",
+                            (*out_windows)[0].range.begin()));
+    }
+    for (size_t k = 0; k + 1 < out_windows->size(); ++k) {
+        if ((*out_windows)[k].range.end() != (*out_windows)[k + 1].range.begin()) {
+            return Status::NotSupported(fmt::format("DCG rebuild: row window coverage gap or overlap ({}->{} vs {})",
+                                                     (*out_windows)[k].range.begin(), (*out_windows)[k].range.end(),
+                                                     (*out_windows)[k + 1].range.begin()));
+        }
+    }
+    if (out_windows->back().range.end() != num_rows) {
+        return Status::NotSupported(
+                fmt::format("DCG rebuild: row window coverage gap at the end (last.end={}, expect {})",
+                            out_windows->back().range.end(), num_rows));
+    }
+    return Status::OK();
+}
+
+// Helper: open a source .cols file as a Segment (projection = entry's
+// unique_column_ids restricted subset of the merged tablet schema).
+StatusOr<std::shared_ptr<Segment>> open_source_dcg_segment(TabletManager* tablet_mgr, int64_t owner_tablet_id,
+                                                           const std::string& relative_path,
+                                                           const std::string& encryption_meta,
+                                                           const TabletSchemaCSPtr& entry_schema) {
+    RETURN_IF_ERROR(ensure_basename(relative_path));
+    FileInfo info;
+    info.path = tablet_mgr->segment_location(owner_tablet_id, relative_path);
+    info.encryption_meta = encryption_meta;
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(info.path));
+    return Segment::open(fs, info, /*segment_id=*/0, entry_schema, /*footer_length_hint=*/nullptr,
+                         /*partial_rowset_footer=*/nullptr, /*lake_io_opts=*/LakeIOOptions{}, tablet_mgr);
+}
+
+// Helper: read [lo, hi) rows of column UID from |segment| (previously opened
+// with entry_schema that contains UID). The column is appended to |dst|.
+Status read_column_range(const std::shared_ptr<Segment>& segment, const TabletSchemaCSPtr& entry_schema, uint32_t uid,
+                         rowid_t lo, rowid_t hi, Column* dst) {
+    const int32_t col_idx = entry_schema->field_index(static_cast<ColumnUID>(uid));
+    if (col_idx < 0) {
+        return Status::Corruption(fmt::format("DCG rebuild: source segment schema is missing column UID {}", uid));
+    }
+    const auto& tablet_column = entry_schema->column(col_idx);
+    OlapReaderStatistics stats;
+
+    ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(tablet_column, /*path=*/nullptr));
+
+    // Build a RandomAccessFile for the segment's file (needed by ColumnIteratorOptions.read_file).
+    // Use segment's cached file_size / encryption via its own API: reuse segment's new_iterator path is too heavy,
+    // so we build a dedicated RandomAccessFile here.
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(segment->file_info().path));
+    RandomAccessFileOptions raf_opts;
+    if (!segment->file_info().encryption_meta.empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(segment->file_info().encryption_meta));
+        raf_opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto raf, fs->new_random_access_file_with_bundling(raf_opts, segment->file_info()));
+
+    ColumnIteratorOptions iter_opts;
+    iter_opts.read_file = raf.get();
+    iter_opts.stats = &stats;
+    iter_opts.lake_io_opts = LakeIOOptions{.fill_data_cache = false};
+    iter_opts.chunk_size = std::max<int>(1, static_cast<int>(hi - lo));
+    RETURN_IF_ERROR(col_iter->init(iter_opts));
+    RETURN_IF_ERROR(col_iter->seek_to_ordinal(lo));
+
+    size_t remaining = hi - lo;
+    while (remaining > 0) {
+        size_t n = remaining;
+        RETURN_IF_ERROR(col_iter->next_batch(&n, dst));
+        if (n == 0) {
+            return Status::InternalError("DCG rebuild: column iterator returned 0 rows before exhausting range");
+        }
+        remaining -= n;
+    }
+    return Status::OK();
+}
+
+// Per-target rebuild — Steps A-F.
+// Returns the single-entry PB describing the newly written .cols file.
+StatusOr<DeltaColumnGroupVerPB> rebuild_dcg_for_target(TabletManager* tablet_mgr,
+                                                       const std::vector<TabletMergeContext>& merge_contexts,
+                                                       int64_t new_tablet_id, int64_t new_version, int64_t txn_id,
+                                                       const TabletMetadataPB& new_metadata, uint32_t target,
+                                                       const std::vector<uint32_t>& rebuild_columns,
+                                                       const std::vector<const DcgSurvivingEntry*>& conflicting_entries,
+                                                       const std::vector<DcgSourceRowsetRef>& source_refs) {
+    TEST_SYNC_POINT_CALLBACK("merge_dcg_meta:before_rebuild", &target);
+
+    // Step A — locate merged rowset + segment position for T.
+    ASSIGN_OR_RETURN(auto located, locate_target_in_merged(new_metadata, target));
+    const RowsetMetadataPB& target_rowset = *located.first;
+    const int target_segment_pos = located.second;
+
+    // Step B — resolve full tablet schema + rebuild schema.
+    const TabletSchemaPB* pb = resolve_rowset_schema_pb(new_metadata, target_rowset);
+    if (pb == nullptr) {
+        return Status::NotSupported(fmt::format("DCG rebuild: no tablet schema available for rowset {}",
+                                                 target_rowset.id()));
+    }
+    TabletSchemaCSPtr full_tablet_schema = TabletSchema::create(*pb);
+    if (full_tablet_schema->sort_key_idxes().empty()) {
+        return Status::NotSupported("DCG rebuild: tablet schema has no sort key");
+    }
+    std::vector<ColumnUID> rebuild_uids;
+    rebuild_uids.reserve(rebuild_columns.size());
+    for (uint32_t u : rebuild_columns) rebuild_uids.push_back(static_cast<ColumnUID>(u));
+    TabletSchemaCSPtr rebuild_schema = TabletSchema::create_with_uid(full_tablet_schema, rebuild_uids);
+    // create_with_uid silently drops UIDs not found in the base schema. If the
+    // merged historical schema is missing any conflict UID, the rebuilt file
+    // would otherwise omit that column silently. Fail fast instead.
+    if (rebuild_schema->num_columns() != rebuild_columns.size()) {
+        return Status::NotSupported(fmt::format(
+                "DCG rebuild: merged tablet schema is missing one or more rebuild column UIDs (expected {} columns, "
+                "got {}); cannot safely rebuild .cols",
+                rebuild_columns.size(), rebuild_schema->num_columns()));
+    }
+
+    // Step C — compute row windows.
+    std::vector<DcgRowWindow> windows;
+    RETURN_IF_ERROR(compute_row_windows(tablet_mgr, new_tablet_id, target_rowset, target_segment_pos,
+                                        full_tablet_schema, source_refs, &windows));
+    const rowid_t num_rows = windows.back().range.end();
+
+    // For each rebuild column, pick:
+    // - default donor: any conflicting entry that claims the UID (first found).
+    // - per-child overrides: the conflicting entry from child C_i that claims the UID,
+    //   to be used for rows in C_i's owner window.
+    struct ColumnSources {
+        const DcgSurvivingEntry* donor = nullptr;
+        std::unordered_map<size_t, const DcgSurvivingEntry*> by_child; // child_index -> entry
+    };
+    std::unordered_map<uint32_t, ColumnSources> column_sources;
+    for (uint32_t uid : rebuild_columns) {
+        for (const DcgSurvivingEntry* e : conflicting_entries) {
+            bool claims = false;
+            for (auto c : e->single_entry.unique_column_ids(0).column_ids()) {
+                if (c == uid) {
+                    claims = true;
+                    break;
+                }
+            }
+            if (!claims) continue;
+            auto& cs = column_sources[uid];
+            if (cs.donor == nullptr) cs.donor = e;
+            cs.by_child[e->child_index] = e;
+        }
+        if (column_sources[uid].donor == nullptr) {
+            return Status::InternalError(fmt::format("DCG rebuild: no donor found for column UID {}", uid));
+        }
+    }
+
+    // Open each referenced source .cols segment (cached per entry address).
+    std::unordered_map<const DcgSurvivingEntry*, std::shared_ptr<Segment>> opened_sources;
+    std::unordered_map<const DcgSurvivingEntry*, TabletSchemaCSPtr> entry_schemas;
+
+    auto get_source_segment = [&](const DcgSurvivingEntry* e) -> StatusOr<std::shared_ptr<Segment>> {
+        auto it = opened_sources.find(e);
+        if (it != opened_sources.end()) return it->second;
+        std::vector<ColumnUID> uids;
+        for (auto c : e->single_entry.unique_column_ids(0).column_ids()) uids.push_back(static_cast<ColumnUID>(c));
+        TabletSchemaCSPtr entry_schema = TabletSchema::create_with_uid(full_tablet_schema, uids);
+        int64_t owner_tablet_id = merge_contexts[e->child_index].metadata()->id();
+        const std::string& file = e->single_entry.column_files(0);
+        const std::string& enc = e->single_entry.encryption_metas(0);
+        ASSIGN_OR_RETURN(auto seg, open_source_dcg_segment(tablet_mgr, owner_tablet_id, file, enc, entry_schema));
+        entry_schemas[e] = entry_schema;
+        opened_sources[e] = seg;
+        return seg;
+    };
+
+    TEST_SYNC_POINT_CALLBACK("merge_dcg_meta:after_open_sources", &target);
+
+    // Step D — assemble columns IN rebuild_schema ORDER. TabletSchema::create_with_uid
+    // preserves the base schema's column order, which can differ from the
+    // insertion order of `rebuild_columns`. Chunk binds columns positionally,
+    // so we must iterate schema positions, not UID insertion order, to avoid
+    // writing column data into the wrong (UID, type) slot.
+    //
+    // Full-column materialization keeps this code path simple and correct;
+    // DCG files are already at segment size, so the peak is bounded by a
+    // single rebuilt column over the full segment. Row-batch streaming is a
+    // future optimization.
+    const size_t num_cols = rebuild_schema->num_columns();
+    Columns rebuilt_columns(num_cols);
+    std::vector<uint32_t> ordered_uids;
+    ordered_uids.reserve(num_cols);
+    for (size_t col_idx = 0; col_idx < num_cols; ++col_idx) {
+        const auto& tablet_col = rebuild_schema->column(col_idx);
+        const uint32_t uid = static_cast<uint32_t>(tablet_col.unique_id());
+        ordered_uids.push_back(uid);
+
+        auto cs_it = column_sources.find(uid);
+        if (cs_it == column_sources.end()) {
+            return Status::InternalError(
+                    fmt::format("DCG rebuild: rebuild_schema has UID {} with no source", uid));
+        }
+        const auto& cs = cs_it->second;
+
+        auto field = ChunkHelper::convert_field(col_idx, tablet_col);
+        MutableColumnPtr out_col = ChunkHelper::column_from_field(field);
+        out_col->reserve(num_rows);
+
+        for (const auto& w : windows) {
+            const DcgSurvivingEntry* source = nullptr;
+            auto override_it = cs.by_child.find(w.child_index);
+            source = (override_it != cs.by_child.end()) ? override_it->second : cs.donor;
+            ASSIGN_OR_RETURN(auto seg, get_source_segment(source));
+            RETURN_IF_ERROR(read_column_range(seg, entry_schemas[source], uid, w.range.begin(), w.range.end(),
+                                              out_col.get()));
+        }
+
+        if (out_col->size() != static_cast<size_t>(num_rows)) {
+            return Status::InternalError(fmt::format("DCG rebuild: column UID {} size {} != num_rows {}", uid,
+                                                      out_col->size(), num_rows));
+        }
+        rebuilt_columns[col_idx] = std::move(out_col);
+    }
+
+    // Step F — write new .cols file.
+    Schema output_schema = ChunkHelper::convert_schema(rebuild_schema);
+    auto out_chunk = std::make_shared<Chunk>(std::move(rebuilt_columns), std::make_shared<Schema>(output_schema));
+
+    const std::string new_file_basename = gen_cols_filename(txn_id);
+    const std::string new_path = tablet_mgr->segment_location(new_tablet_id, new_file_basename);
+    WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    SegmentWriterOptions writer_opts;
+    if (new_metadata.has_flat_json_config()) {
+        writer_opts.flat_json_config = std::make_shared<FlatJsonConfig>();
+        writer_opts.flat_json_config->update(new_metadata.flat_json_config());
+    }
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        writer_opts.encryption_meta = std::move(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(wopts, new_path));
+    auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), /*segment_id=*/0, rebuild_schema,
+                                                           writer_opts);
+    RETURN_IF_ERROR(segment_writer->init(false));
+    RETURN_IF_ERROR(segment_writer->append_chunk(*out_chunk));
+    uint64_t seg_file_size = 0;
+    uint64_t index_size = 0;
+    uint64_t footer_position = 0;
+    RETURN_IF_ERROR(segment_writer->finalize(&seg_file_size, &index_size, &footer_position));
+
+    TEST_SYNC_POINT_CALLBACK("merge_dcg_meta:after_write_cols", const_cast<std::string*>(&new_file_basename));
+
+    // Step E — build single-entry PB for the rebuilt file. Emit unique_column_ids
+    // in the SAME order as the written chunk's columns (rebuild_schema order).
+    // Mismatched order would cause reader schema binding to mismatch the physical
+    // column positions in the .cols segment.
+    DeltaColumnGroupVerPB rebuilt;
+    rebuilt.add_column_files(new_file_basename);
+    auto* uids_pb = rebuilt.add_unique_column_ids();
+    for (uint32_t uid : ordered_uids) uids_pb->add_column_ids(uid);
+    rebuilt.add_versions(new_version);
+    rebuilt.add_encryption_metas(segment_writer->encryption_meta());
+    rebuilt.add_shared_files(false);
+    return rebuilt;
+}
+
+Status merge_dcg_meta(TabletManager* tablet_mgr, const std::vector<TabletMergeContext>& merge_contexts,
+                      int64_t new_tablet_id, int64_t new_version, int64_t txn_id, TabletMetadataPB* new_metadata) {
+    std::map<uint32_t, DcgTargetWork> work_by_target;
+    RETURN_IF_ERROR(dcg_pass1_collect(merge_contexts, &work_by_target));
+
+    auto* new_dcgs = new_metadata->mutable_dcg_meta()->mutable_dcgs();
+
+    // Track full paths of rebuilt .cols files so we can best-effort clean them
+    // up if a later target's rebuild fails partway through. Downstream failures
+    // (merge_delvecs/merge_sstables/publish) still rely on standard orphan-file
+    // vacuum, which matches the pattern used by merge_delvec_files.
+    std::vector<std::string> rebuilt_paths;
+    auto cleanup_on_failure = [&]() {
+        for (const auto& p : rebuilt_paths) {
+            auto st = fs::delete_file(p);
+            LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                    << "failed to clean up partial DCG rebuild file " << p << ": " << st;
+        }
+        rebuilt_paths.clear();
+    };
+
+    for (auto& [target, work] : work_by_target) {
+        if (work.entries.empty()) continue;
+
+        // Build column UID -> entries index (stable indices, not pointers).
+        std::unordered_map<uint32_t, std::vector<size_t>> uid_to_entry_indices;
+        for (size_t ei = 0; ei < work.entries.size(); ++ei) {
+            for (auto uid : work.entries[ei].single_entry.unique_column_ids(0).column_ids()) {
+                uid_to_entry_indices[uid].push_back(ei);
+            }
+        }
+
+        // Identify conflicting entries: any entry claiming a UID shared with another entry.
+        std::vector<bool> is_conflicting(work.entries.size(), false);
+        for (auto& [uid, indices] : uid_to_entry_indices) {
+            if (indices.size() > 1) {
+                for (size_t ei : indices) is_conflicting[ei] = true;
+            }
+        }
+
+        DeltaColumnGroupVerPB final_dcg;
+
+        // Emit non-conflicting entries unchanged.
+        for (size_t ei = 0; ei < work.entries.size(); ++ei) {
+            if (is_conflicting[ei]) continue;
+            const auto& e = work.entries[ei];
+            final_dcg.add_column_files(e.single_entry.column_files(0));
+            final_dcg.add_unique_column_ids()->CopyFrom(e.single_entry.unique_column_ids(0));
+            final_dcg.add_versions(e.single_entry.versions(0));
+            final_dcg.add_encryption_metas(e.single_entry.encryption_metas(0));
+            final_dcg.add_shared_files(e.single_entry.shared_files(0));
+        }
+
+        bool has_conflict = false;
+        for (bool b : is_conflicting) has_conflict |= b;
+
+        if (has_conflict) {
+            // Fold ALL columns of every conflicting entry into rebuild_columns
+            // so the reader's first-entry-wins rule can't leak stale values.
+            std::vector<uint32_t> rebuild_columns;
+            std::unordered_set<uint32_t> seen;
+            std::vector<const DcgSurvivingEntry*> conflicting_entries;
+            for (size_t ei = 0; ei < work.entries.size(); ++ei) {
+                if (!is_conflicting[ei]) continue;
+                conflicting_entries.push_back(&work.entries[ei]);
+                for (auto uid : work.entries[ei].single_entry.unique_column_ids(0).column_ids()) {
+                    if (seen.insert(uid).second) rebuild_columns.push_back(uid);
+                }
+            }
+
+            StatusOr<DeltaColumnGroupVerPB> rebuilt_or = rebuild_dcg_for_target(
+                    tablet_mgr, merge_contexts, new_tablet_id, new_version, txn_id, *new_metadata, target,
+                    rebuild_columns, conflicting_entries, work.source_refs);
+            if (!rebuilt_or.ok()) {
+                if (rebuilt_or.status().is_not_supported()) {
+                    g_tablet_merge_dcg_rebuild_fallback_not_supported_total << 1;
+                }
+                cleanup_on_failure();
+                return rebuilt_or.status();
+            }
+            const auto& rb = *rebuilt_or;
+            rebuilt_paths.push_back(tablet_mgr->segment_location(new_tablet_id, rb.column_files(0)));
+            final_dcg.add_column_files(rb.column_files(0));
+            final_dcg.add_unique_column_ids()->CopyFrom(rb.unique_column_ids(0));
+            final_dcg.add_versions(rb.versions(0));
+            final_dcg.add_encryption_metas(rb.encryption_metas(0));
+            final_dcg.add_shared_files(rb.shared_files(0));
+            g_tablet_merge_dcg_rebuild_total << 1;
+        }
+
+        if (final_dcg.column_files_size() == 0) continue;
+        auto shape_st = validate_dcg_shape(final_dcg);
+        if (!shape_st.ok()) {
+            cleanup_on_failure();
+            return shape_st;
+        }
+        (*new_dcgs)[target] = std::move(final_dcg);
     }
 
     return Status::OK();
@@ -738,8 +1328,13 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     // Phase 2: Merge rowsets (version-driven k-way merge with dedup)
     RETURN_IF_ERROR(merge_rowsets(merge_contexts, new_tablet_metadata.get()));
 
+    // Phase 2.5: Merge schemas (must run before merge_dcg_meta, which needs
+    // historical_schemas to locate rebuild schemas for shared-segment rebuild).
+    merge_schemas(merge_contexts, new_tablet_metadata.get());
+
     // Phase 3: Projections (map_rssid uses shared_rssid_map + rssid_offset)
-    RETURN_IF_ERROR(merge_dcg_meta(merge_contexts, new_tablet_metadata.get()));
+    RETURN_IF_ERROR(merge_dcg_meta(tablet_manager, merge_contexts, merging_tablet.new_tablet_id(), new_version,
+                                   txn_info.txn_id(), new_tablet_metadata.get()));
 
     if (is_primary_key(*new_tablet_metadata)) {
         RETURN_IF_ERROR(merge_delvecs(tablet_manager, merge_contexts, new_version, txn_info.txn_id(),
@@ -749,7 +1344,6 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     RETURN_IF_ERROR(merge_sstables(merge_contexts, new_tablet_metadata.get()));
 
     // Phase 4: Finalize
-    merge_schemas(merge_contexts, new_tablet_metadata.get());
     update_next_rowset_id(new_tablet_metadata.get());
 
     return new_tablet_metadata;

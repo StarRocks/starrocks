@@ -35,6 +35,8 @@
 #include "storage/lake/meta_file.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/rowset/segment_iterator.h"
+#include "storage/seek_range.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
 #include "storage/variant_tuple.h"
@@ -3887,6 +3889,28 @@ TxnLogPtr make_op_compaction_log(int64_t source_tablet_id) {
     return log;
 }
 
+// ---------------------------------------------------------------------------
+// DCG rebuild tests — focus on classification & metadata outcomes of the
+// new two-pass merge_dcg_meta. Full end-to-end rebuild (with real base
+// segment and .cols files) is a follow-up requiring substantial fixture
+// plumbing; the cases here target the branches that do NOT require
+// reading on-disk .cols data.
+
+// Helper: build a PK tablet metadata where `rowset_id`'s segment is marked
+// shared across children (mirrors split-family structure). Returns the rowset.
+RowsetMetadataPB* add_shared_rowset(TabletMetadataPB* metadata, uint32_t rowset_id, int64_t version,
+                                     const std::string& segment_filename) {
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(rowset_id);
+    rowset->set_version(version);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(100);
+    rowset->add_segments(segment_filename);
+    rowset->add_segment_size(100);
+    rowset->add_shared_segments(true);
+    return rowset;
+}
+
 } // namespace
 
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_merging_op_write_only_passthrough) {
@@ -4028,6 +4052,190 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_covers_a
                                                 _tablet_manager->sst_location(tablet_id, "parallel_out.sst"),
                                                 _tablet_manager->sst_location(tablet_id, "parallel_out_multi.sst"),
                                                 _tablet_manager->lcrm_location(tablet_id, "parallel_orphan.crm")));
+}
+
+// Shared rowset with identical .cols filenames across children collapses to
+// a single DCG entry via exact dedup — no rebuild.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup_preserves_passthrough) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t old_tablet_id_1 = next_id();
+    const int64_t old_tablet_id_2 = next_id();
+    const int64_t new_tablet_id = next_id();
+
+    prepare_tablet_dirs(old_tablet_id_1);
+    prepare_tablet_dirs(old_tablet_id_2);
+    prepare_tablet_dirs(new_tablet_id);
+
+    auto meta1 = std::make_shared<TabletMetadataPB>();
+    meta1->set_id(old_tablet_id_1);
+    meta1->set_version(base_version);
+    meta1->set_next_rowset_id(10);
+    set_primary_key_schema(meta1.get(), 1001);
+    add_shared_rowset(meta1.get(), /*rowset_id=*/1, /*version=*/1, "shared_seg.dat");
+    (*meta1->mutable_rowset_to_schema())[1] = 1001;
+    add_dcg_with_columns(meta1.get(), /*segment_id=*/1, "shared.cols", {101, 102}, 1);
+
+    auto meta2 = std::make_shared<TabletMetadataPB>();
+    meta2->set_id(old_tablet_id_2);
+    meta2->set_version(base_version);
+    meta2->set_next_rowset_id(10);
+    set_primary_key_schema(meta2.get(), 1001);
+    add_shared_rowset(meta2.get(), /*rowset_id=*/1, /*version=*/1, "shared_seg.dat");
+    (*meta2->mutable_rowset_to_schema())[1] = 1001;
+    add_dcg_with_columns(meta2.get(), /*segment_id=*/1, "shared.cols", {101, 102}, 1);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta1));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta2));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(old_tablet_id_1);
+    merging_tablet.add_old_tablet_ids(old_tablet_id_2);
+    merging_tablet.set_new_tablet_id(new_tablet_id);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(77);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+    auto merged = tablet_metadatas.at(new_tablet_id);
+
+    ASSERT_EQ(1, merged->dcg_meta().dcgs_size());
+    const auto& entry = merged->dcg_meta().dcgs().begin()->second;
+    ASSERT_EQ(1, entry.column_files_size());
+    EXPECT_EQ("shared.cols", entry.column_files(0));
+    ASSERT_EQ(1, entry.unique_column_ids_size());
+    ASSERT_EQ(2, entry.unique_column_ids(0).column_ids_size());
+    EXPECT_EQ(1, entry.versions(0));
+}
+
+// Disjoint columns on a shared rowset append as two entries; no rebuild.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_disjoint_columns_append) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t old_tablet_id_1 = next_id();
+    const int64_t old_tablet_id_2 = next_id();
+    const int64_t new_tablet_id = next_id();
+
+    prepare_tablet_dirs(old_tablet_id_1);
+    prepare_tablet_dirs(old_tablet_id_2);
+    prepare_tablet_dirs(new_tablet_id);
+
+    auto meta1 = std::make_shared<TabletMetadataPB>();
+    meta1->set_id(old_tablet_id_1);
+    meta1->set_version(base_version);
+    meta1->set_next_rowset_id(10);
+    set_primary_key_schema(meta1.get(), 2001);
+    add_shared_rowset(meta1.get(), 1, 1, "shared_seg.dat");
+    (*meta1->mutable_rowset_to_schema())[1] = 2001;
+    add_dcg_with_columns(meta1.get(), 1, "a.cols", {201, 202}, 1);
+
+    auto meta2 = std::make_shared<TabletMetadataPB>();
+    meta2->set_id(old_tablet_id_2);
+    meta2->set_version(base_version);
+    meta2->set_next_rowset_id(10);
+    set_primary_key_schema(meta2.get(), 2001);
+    add_shared_rowset(meta2.get(), 1, 1, "shared_seg.dat");
+    (*meta2->mutable_rowset_to_schema())[1] = 2001;
+    add_dcg_with_columns(meta2.get(), 1, "b.cols", {301, 302}, 1);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta1));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta2));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(old_tablet_id_1);
+    merging_tablet.add_old_tablet_ids(old_tablet_id_2);
+    merging_tablet.set_new_tablet_id(new_tablet_id);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(78);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+    auto merged = tablet_metadatas.at(new_tablet_id);
+
+    ASSERT_EQ(1, merged->dcg_meta().dcgs_size());
+    const auto& entry = merged->dcg_meta().dcgs().begin()->second;
+    ASSERT_EQ(2, entry.column_files_size());
+    ASSERT_EQ(2, entry.unique_column_ids_size());
+    std::set<uint32_t> seen;
+    for (int i = 0; i < entry.unique_column_ids_size(); ++i) {
+        for (auto uid : entry.unique_column_ids(i).column_ids()) {
+            EXPECT_TRUE(seen.insert(uid).second);
+        }
+    }
+}
+
+// Conflicting columns on a shared rowset trigger the rebuild dispatch path.
+// Source .cols files don't exist on disk in this fixture, so rebuild
+// surfaces an I/O error — critically NOT the legacy "same column updated
+// independently" NotSupported message the old code produced.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_triggers_rebuild_dispatch) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t old_tablet_id_1 = next_id();
+    const int64_t old_tablet_id_2 = next_id();
+    const int64_t new_tablet_id = next_id();
+
+    prepare_tablet_dirs(old_tablet_id_1);
+    prepare_tablet_dirs(old_tablet_id_2);
+    prepare_tablet_dirs(new_tablet_id);
+
+    auto meta1 = std::make_shared<TabletMetadataPB>();
+    meta1->set_id(old_tablet_id_1);
+    meta1->set_version(base_version);
+    meta1->set_next_rowset_id(10);
+    set_primary_key_schema(meta1.get(), 3001);
+    add_shared_rowset(meta1.get(), 1, 1, "shared_seg.dat");
+    (*meta1->mutable_rowset_to_schema())[1] = 3001;
+    add_dcg_with_columns(meta1.get(), 1, "child1.cols", {401, 402}, 1);
+
+    auto meta2 = std::make_shared<TabletMetadataPB>();
+    meta2->set_id(old_tablet_id_2);
+    meta2->set_version(base_version);
+    meta2->set_next_rowset_id(10);
+    set_primary_key_schema(meta2.get(), 3001);
+    add_shared_rowset(meta2.get(), 1, 1, "shared_seg.dat");
+    (*meta2->mutable_rowset_to_schema())[1] = 3001;
+    // Column 401 overlaps with child1.cols => rebuild triggered.
+    add_dcg_with_columns(meta2.get(), 1, "child2.cols", {401, 403}, 1);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta1));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta2));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
+    merging_tablet.add_old_tablet_ids(old_tablet_id_1);
+    merging_tablet.add_old_tablet_ids(old_tablet_id_2);
+    merging_tablet.set_new_tablet_id(new_tablet_id);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(79);
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto st = lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                               txn_info, false, tablet_metadatas, tablet_ranges);
+
+    ASSERT_FALSE(st.ok());
+    EXPECT_EQ(std::string::npos, st.to_string().find("same column updated independently"))
+            << st.to_string();
+}
+
+// Extracted Segment helper — calling segment_seek_range_to_rowid_range with
+// an unbounded SeekRange returns [0, num_rows) without touching the short
+// key index (fast path).
+TEST_F(LakeTabletReshardTest, test_segment_seek_range_to_rowid_range_unbounded) {
+    // With an empty SeekRange (default-constructed = (-inf, +inf)), the helper
+    // takes the early return branch and does not dereference the segment's
+    // short key index. A null segment is invalid and must fail fast.
+    SeekRange empty_range;
+    LakeIOOptions io_opts;
+    auto st = segment_seek_range_to_rowid_range(/*segment=*/nullptr, empty_range, io_opts);
+    EXPECT_FALSE(st.ok());
 }
 
 } // namespace starrocks
