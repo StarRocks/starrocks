@@ -25,11 +25,15 @@ skip
 skip_res_cmd = [
     "show backends",
     "show backends;",
-    "select connection_id()",
-    "select connection_id();",
+    "select connection_id\\(\\)",
+    "select connection_id\\(\\);",
     ".*explain costs select.*",
+<<<<<<< HEAD
     "rand()",
     "show stats meta",
+=======
+    "rand\\(\\)",
+>>>>>>> 2974ba3bc2 ([BugFix] SQLTester strict empty result validation for SQL statements (#71982))
     "SHOW RESOURCES",
     "show alter table column",
     "select db_id, table_id, column_name,.* from _statistics_.column_statistics.*",
@@ -46,7 +50,7 @@ skip_res_cmd = [
     "SELECT DISTINCT k1 FROM aggregate_par_tbl LIMIT 1",
     "select.* db_id.*",
     "select.* table_id.*",
-    "SELECT * FROM unnest_es_external_table limit 1",
+    "SELECT \\* FROM unnest_es_external_table limit 1",
     "select last_query_id",
     "select uuid",
     "select unix_timestamp",
@@ -58,8 +62,17 @@ skip_res_cmd = [
     "select current_time\\(\\)",
     "select curdate\\(\\)",
     "select current_date\\(\\)",
+    "^result=.*",
     "refresh materialized view.*",
+<<<<<<< HEAD
     "REFRESH MATERIALIZED VIEW.*"
+=======
+    "REFRESH MATERIALIZED VIEW.*",
+    "analyze full table.*",
+    "ANALYZE FULL TABLE.*",
+    "analyze table.*",
+    "ANALYZE TABLE.*"
+>>>>>>> 2974ba3bc2 ([BugFix] SQLTester strict empty result validation for SQL statements (#71982))
 ]
 
 skip_files = set([
