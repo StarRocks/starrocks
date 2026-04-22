@@ -91,4 +91,73 @@ public class DeltaLakeConnectorTest {
         DeltaRemoteFileInfo deltaRemoteFileInfo = new DeltaRemoteFileInfo(fileScanTask);
         Assertions.assertNull(deltaRemoteFileInfo.getFileScanTask());
     }
+
+    @Test
+    public void testCreateDeltaLakeConnectorWithUnityCatalog() {
+        Map<String, String> properties = ImmutableMap.<String, String>builder()
+                .put("type", "deltalake")
+                .put("hive.metastore.type", "unity")
+                .put("unity.catalog.host", "https://example.cloud.databricks.com")
+                .put("unity.catalog.token", "dapiTEST")
+                .put("unity.catalog.name", "main")
+                .build();
+        DeltaLakeConnector connector = new DeltaLakeConnector(new ConnectorContext("uc_delta", "deltalake",
+                properties));
+        ConnectorMetadata metadata = connector.getMetadata();
+        Assertions.assertTrue(metadata instanceof DeltaLakeMetadata);
+        DeltaLakeMetadata deltaLakeMetadata = (DeltaLakeMetadata) metadata;
+        Assertions.assertEquals("uc_delta", deltaLakeMetadata.getCatalogName());
+        Assertions.assertEquals(MetastoreType.UNITY, deltaLakeMetadata.getMetastoreType());
+    }
+
+    @Test
+    public void testCreateDeltaLakeConnectorWithUnityCatalogMissingHost() {
+        Map<String, String> properties = ImmutableMap.of(
+                "type", "deltalake",
+                "hive.metastore.type", "unity",
+                "unity.catalog.token", "dapiTEST",
+                "unity.catalog.name", "main");
+        try {
+            ConnectorFactory.createConnector(new ConnectorContext("uc_delta", "deltalake", properties), false);
+            Assertions.fail("Should throw exception when unity.catalog.host is missing");
+        } catch (Exception e) {
+            Assertions.assertTrue(e instanceof StarRocksConnectorException);
+            Assertions.assertTrue(e.getMessage().contains("unity.catalog.host"),
+                    "Expected error about unity.catalog.host, got: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testCreateDeltaLakeConnectorWithUnityCatalogMissingToken() {
+        Map<String, String> properties = ImmutableMap.of(
+                "type", "deltalake",
+                "hive.metastore.type", "unity",
+                "unity.catalog.host", "https://example.cloud.databricks.com",
+                "unity.catalog.name", "main");
+        try {
+            ConnectorFactory.createConnector(new ConnectorContext("uc_delta", "deltalake", properties), false);
+            Assertions.fail("Should throw exception when unity.catalog.token is missing");
+        } catch (Exception e) {
+            Assertions.assertTrue(e instanceof StarRocksConnectorException);
+            Assertions.assertTrue(e.getMessage().contains("unity.catalog.token"),
+                    "Expected error about unity.catalog.token, got: " + e.getMessage());
+        }
+    }
+
+    @Test
+    public void testCreateDeltaLakeConnectorWithUnityCatalogMissingCatalogName() {
+        Map<String, String> properties = ImmutableMap.of(
+                "type", "deltalake",
+                "hive.metastore.type", "unity",
+                "unity.catalog.host", "https://example.cloud.databricks.com",
+                "unity.catalog.token", "dapiTEST");
+        try {
+            ConnectorFactory.createConnector(new ConnectorContext("uc_delta", "deltalake", properties), false);
+            Assertions.fail("Should throw exception when unity.catalog.name is missing");
+        } catch (Exception e) {
+            Assertions.assertTrue(e instanceof StarRocksConnectorException);
+            Assertions.assertTrue(e.getMessage().contains("unity.catalog.name"),
+                    "Expected error about unity.catalog.name, got: " + e.getMessage());
+        }
+    }
 }

@@ -28,6 +28,7 @@ import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -85,7 +86,18 @@ public class DeltaLakeScanNode extends ScanNode {
         CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalog));
-        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+
+        // Prefer a per-table CloudConfiguration when one is available (e.g. Unity Catalog vended
+        // credentials). These are populated on the MetastoreTable by UnityMetastore and carry
+        // the short-lived AWS/Azure credentials scoped to this specific table. Without this the
+        // BE would only see the catalog-level CloudConfiguration, which for a vended-credentials
+        // catalog has no keys at all and causes 403s on S3 reads.
+        CloudConfiguration tableCloudConfiguration = deltaLakeTable.getCloudConfiguration();
+        if (tableCloudConfiguration != null && tableCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            cloudConfiguration = tableCloudConfiguration;
+        } else {
+            cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        }
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }

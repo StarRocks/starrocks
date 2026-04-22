@@ -1,0 +1,61 @@
+##### Databricks Unity Catalog
+
+:::note
+
+Unity Catalog support is available from v3.5 onwards and currently covers read-only access to Delta tables. Iceberg (Uniform), views, managed-without-external-location tables, and writes to UC are not yet supported.
+
+:::
+
+If you choose [Databricks Unity Catalog](https://docs.databricks.com/data-governance/unity-catalog/index.html) as the metastore of your data source, configure `MetastoreParams` as follows:
+
+```SQL
+"hive.metastore.type" = "unity",
+"unity.catalog.host" = "https://<workspace>.cloud.databricks.com",
+"unity.catalog.token" = "<databricks_personal_access_token>",
+"unity.catalog.name" = "<uc_catalog_name>"
+```
+
+The following table describes the parameters you need to configure in `MetastoreParams` for Unity Catalog.
+
+| Parameter                                   | Required | Description                                                  |
+| ------------------------------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.type                         | Yes      | The metastore type. Set the value to `unity`.                |
+| unity.catalog.host                          | Yes      | The Databricks workspace URL, for example `https://dbc-xxxx.cloud.databricks.com`. |
+| unity.catalog.token                         | Yes      | A Databricks [Personal Access Token](https://docs.databricks.com/dev-tools/auth/pat.html) with at least the `USE CATALOG`, `USE SCHEMA`, and `SELECT` privileges on the catalog, schemas, and tables you want to query. In v1, PAT is the only supported authentication method. |
+| unity.catalog.name                          | Yes      | The name of the Unity Catalog you want to expose. One StarRocks external catalog maps 1:1 to a single UC catalog; UC schemas appear as StarRocks databases and UC tables appear as StarRocks tables. |
+| unity.catalog.vended-credentials-enabled    | No       | Whether to request short-lived, per-table cloud storage credentials from Unity Catalog when the query runs. Defaults to `true`. When `true`, StarRocks calls UC's `temporary-table-credentials` endpoint for every table and uses the returned AWS session credentials or Azure SAS token to read the underlying Delta log and data files, so you don't have to grant the FE any direct IAM/Azure credentials. When `false`, StarRocks falls back to the catalog-level `StorageCredentialParams`. |
+| unity.catalog.request-timeout-ms            | No       | Per-request timeout (in milliseconds) for Unity Catalog REST calls. Defaults to `30000`. |
+| unity.catalog.max-retries                   | No       | Maximum number of retries on `429`/`5xx` responses from Unity Catalog, using exponential backoff. Defaults to `3`. |
+| unity.catalog.aws.region                    | No       | AWS region of the S3 bucket(s) backing your UC tables, for example `eu-central-1`. Unity Catalog's `temporary-table-credentials` endpoint does not return a region, so when vended credentials are enabled set this to ensure the BE's AWS SDK uses the correct region rather than defaulting to `us-east-1` (which causes `301 PermanentRedirect` errors on buckets in other regions). |
+
+###### Prerequisites
+
+- Your Databricks workspace must be Unity Catalog-enabled.
+- The PAT must belong to a user or service principal with, at minimum:
+  - `USE CATALOG` on the UC catalog named by `unity.catalog.name`
+  - `USE SCHEMA` on each schema you want to expose
+  - `SELECT` on each table you want to query
+- For each Delta table you plan to query, Unity Catalog must be configured with an **external location** and a **storage credential** that is allowed to generate temporary credentials. Without this, UC returns a 403 from `temporary-table-credentials` and StarRocks falls back to the catalog-level storage credentials (if any).
+
+###### Namespace mapping
+
+Unity Catalog exposes a three-level namespace `catalog.schema.table`. StarRocks external catalogs are two-level (`database.table`). The mapping is:
+
+- One StarRocks external catalog corresponds to one UC catalog (identified by `unity.catalog.name`).
+- UC schema → StarRocks database.
+- UC table → StarRocks table.
+- Tables whose `data_source_format` is not `DELTA` (for example, `ICEBERG` managed Uniform tables, `CSV`/`PARQUET` external tables, or views) are filtered out and will not appear in `SHOW TABLES`.
+
+###### Cloud data-plane support
+
+v1 supports credential vending for:
+
+- **AWS S3** — UC returns AWS STS session credentials (`access_key_id`, `secret_access_key`, `session_token`).
+- **Azure Data Lake Storage Gen2** — UC returns a user-delegation SAS token (`abfss://...dfs.core.windows.net/...`).
+
+GCP Cloud Storage and Azure Blob (legacy) are not yet supported via vended credentials; for those, disable vending and supply standard catalog-level `StorageCredentialParams`.
+
+###### Caching considerations
+
+Because Unity Catalog vends short-lived credentials (default lifetime ~1 hour), StarRocks bypasses the catalog-level Delta Lake snapshot cache for Unity-backed catalogs. Every query resolves a fresh snapshot so that newly-vended credentials are applied. Long-running scans that outlive a credential's `expiration_time` may fail mid-query — this is the same constraint that applies to Iceberg REST catalogs with vended credentials.
+

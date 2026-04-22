@@ -124,11 +124,21 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
 
     @Override
     public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+        if (delegate.isVendedCredentialsEnabled()) {
+            // Short-lived per-table credentials would expire before the catalog-level cache TTL;
+            // always resolve a fresh snapshot so the newly-vended CloudConfiguration is applied.
+            return delegate.getLatestSnapshot(dbName, tableName);
+        }
         if (delegate instanceof CachingDeltaLakeMetastore) {
             return ((CachingDeltaLakeMetastore) delegate).getCachedSnapshot(DatabaseTableName.of(dbName, tableName));
         } else {
             return delegate.getLatestSnapshot(dbName, tableName);
         }
+    }
+
+    @Override
+    public boolean isVendedCredentialsEnabled() {
+        return delegate.isVendedCredentialsEnabled();
     }
 
     @Override

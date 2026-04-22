@@ -1,0 +1,9 @@
+##### Databricks Unity Catalog
+
+When `unity.catalog.vended-credentials-enabled` is `true` (the default), Unity Catalog provides short-lived cloud storage credentials for each table it returns, and you do **not** need to configure `StorageCredentialParams` for those tables. StarRocks passes UC's AWS session credentials or Azure SAS token directly to the Delta Kernel when reading `_delta_log` and data files.
+
+`StorageCredentialParams` only needs to be configured when:
+
+- You set `unity.catalog.vended-credentials-enabled` to `false`; or
+- Unity Catalog fails to return vended credentials for a particular table (for example, because the external location does not allow credential generation for your principal), and you want StarRocks to fall back to catalog-level credentials.
+

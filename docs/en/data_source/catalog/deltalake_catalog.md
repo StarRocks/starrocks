@@ -785,6 +785,40 @@ PROPERTIES
     );
     ```
 
+#### Databricks Unity Catalog
+
+- When vended credentials are enabled (default), you do not need to supply cloud-level authentication — Unity Catalog mints short-lived credentials per query:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG uc_delta
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "unity",
+      "unity.catalog.host" = "https://<workspace>.cloud.databricks.com",
+      "unity.catalog.token" = "dapi...",
+      "unity.catalog.name" = "main"
+  );
+  ```
+
+- To use your own credentials instead of UC's vended ones (for example, when your principal does not have permission to request temporary credentials, or when running against ADLS Gen2 with a pre-existing service principal), disable vending and configure the relevant `StorageCredentialParams`:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG uc_delta_static
+  PROPERTIES
+  (
+      "type" = "deltalake",
+      "hive.metastore.type" = "unity",
+      "unity.catalog.host" = "https://<workspace>.cloud.databricks.com",
+      "unity.catalog.token" = "dapi...",
+      "unity.catalog.name" = "main",
+      "unity.catalog.vended-credentials-enabled" = "false",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>",
+      "aws.s3.region" = "<aws_s3_region>"
+  );
+  ```
+
 ## View Delta Lake catalogs
 
 You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:

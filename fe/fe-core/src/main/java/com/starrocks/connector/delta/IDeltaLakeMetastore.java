@@ -28,4 +28,13 @@ public interface IDeltaLakeMetastore extends IMetastore, MemoryTrackable {
     List<String> getPartitionKeys(String dbName, String tableName);
 
     DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName);
+
+    /**
+     * Indicates that this metastore produces short-lived, per-table cloud credentials (e.g.
+     * Databricks Unity Catalog temporary table credentials). When true, callers should bypass
+     * any catalog-level snapshot caches whose TTL can outlive the credential lifetime.
+     */
+    default boolean isVendedCredentialsEnabled() {
+        return false;
+    }
 }

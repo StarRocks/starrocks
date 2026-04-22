@@ -23,6 +23,9 @@ import com.starrocks.connector.delta.DeltaConnectorScanRangeSource;
 import com.starrocks.connector.delta.DeltaLakeEngine;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aws.AwsCloudConfiguration;
+import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.ScanOptimizeOption;
 import com.starrocks.thrift.TExplainLevel;
@@ -55,6 +58,9 @@ public class DeltaLakeScanNodeTest {
                 result = cc;
                 table.getCatalogName();
                 result = catalog;
+                // Explicit null so DeltaLakeScanNode does not prefer a cascading per-table mock.
+                table.getCloudConfiguration();
+                result = null;
             }
         };
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
@@ -85,6 +91,10 @@ public class DeltaLakeScanNodeTest {
 
                 table.getName();
                 result = "table0";
+                minTimes = 0;
+
+                table.getCloudConfiguration();
+                result = null;
                 minTimes = 0;
             }
         };
@@ -131,12 +141,101 @@ public class DeltaLakeScanNodeTest {
                 snapshot.getVersion(engine);
                 result = 123L;
                 minTimes = 0;
+
+                table.getCloudConfiguration();
+                result = null;
+                minTimes = 0;
             }};
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
         String explainString = scanNode.getNodeExplainString("", TExplainLevel.NORMAL);
         assertThat(explainString, containsString("TABLE VERSION: 123"));
+    }
+
+    @Test
+    public void testPerTableCloudConfigurationPreferredOverCatalog(@Mocked GlobalStateMgr globalStateMgr,
+                                                                   @Mocked CatalogConnector connector,
+                                                                   @Mocked DeltaLakeTable table,
+                                                                   @Mocked AwsCloudConfiguration perTableCC,
+                                                                   @Mocked AwsCloudCredential perTableCred) {
+        String catalog = "unity_cat";
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+                result = connector;
+                table.getCatalogName();
+                result = catalog;
+                table.getCloudConfiguration();
+                result = perTableCC;
+                perTableCC.getCloudType();
+                result = CloudType.AWS;
+                // getMetadata() must NOT be invoked when the per-table CC is non-DEFAULT.
+            }
+        };
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
+
+        Assertions.assertSame(perTableCC, Deencapsulation.getField(scanNode, "cloudConfiguration"),
+                "When the table exposes a non-DEFAULT CloudConfiguration (e.g. UC vended creds) the " +
+                        "scan node must use it instead of the catalog-level one, so the BE receives the " +
+                        "short-lived credentials needed to read S3 data files.");
+    }
+
+    @Test
+    public void testCatalogCloudConfigurationUsedWhenTableHasNone(@Mocked GlobalStateMgr globalStateMgr,
+                                                                  @Mocked CatalogConnector connector,
+                                                                  @Mocked DeltaLakeTable table) {
+        String catalog = "plain_cat";
+        CloudConfiguration catalogLevelCC = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+                result = connector;
+                table.getCatalogName();
+                result = catalog;
+                table.getCloudConfiguration();
+                result = null;
+                connector.getMetadata().getCloudConfiguration();
+                result = catalogLevelCC;
+            }
+        };
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
+
+        Assertions.assertSame(catalogLevelCC, Deencapsulation.getField(scanNode, "cloudConfiguration"));
+    }
+
+    @Test
+    public void testCatalogCloudConfigurationUsedWhenTableConfigIsDefault(@Mocked GlobalStateMgr globalStateMgr,
+                                                                          @Mocked CatalogConnector connector,
+                                                                          @Mocked DeltaLakeTable table,
+                                                                          @Mocked CloudConfiguration tableCC) {
+        String catalog = "fallback_cat";
+        CloudConfiguration catalogLevelCC = CloudConfigurationFactory.buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+                result = connector;
+                table.getCatalogName();
+                result = catalog;
+                table.getCloudConfiguration();
+                result = tableCC;
+                tableCC.getCloudType();
+                result = CloudType.DEFAULT;
+                connector.getMetadata().getCloudConfiguration();
+                result = catalogLevelCC;
+            }
+        };
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node", null, null, null);
+
+        Assertions.assertSame(catalogLevelCC, Deencapsulation.getField(scanNode, "cloudConfiguration"),
+                "A DEFAULT (empty) table-level CloudConfiguration is not useful and the catalog-level " +
+                        "one should win.");
     }
 
     @Test
@@ -153,6 +252,8 @@ public class DeltaLakeScanNodeTest {
             result = cc;
             table.getCatalogName();
             result = catalog;
+            table.getCloudConfiguration();
+            result = null;
         }};
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
