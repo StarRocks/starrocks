@@ -24,7 +24,7 @@ fixed_poms = [
     ("com.google.guava:guava", "32.0.1-jre"),
     ("org.eclipse.jetty:jetty-webapp", "10.0.24"),
     ("org.eclipse.jetty:jetty-server", "10.0.24"),
-    ("org.eclipse.jetty:jetty-http", "10.0.24"),
+    ("org.eclipse.jetty:jetty-http", "10.0.28-celerdata-b20260421"),
     ("org.eclipse.jetty:jetty-xml", "10.0.24"),
     ("org.eclipse.jetty:jetty-io", "10.0.24"),
     ("commons-beanutils:commons-beanutils", "1.11.0"),
@@ -53,6 +53,7 @@ fixed_jars = [
     "parquet-jackson-1.16.0.jar",
     # extra scan from docker scout
     "spark-network-common_2.12-3.5.5.jar",
+    "spark-core_2.12-3.5.7.jar",
 ]
 
 
