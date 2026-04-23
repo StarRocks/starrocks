@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage/lake/rowset.h"
+
 #include <gtest/gtest.h>
 
 #include <optional>
@@ -33,7 +35,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate.h"
 #include "storage/lake/metacache.h"
-#include "storage/lake/rowset.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/transactions.h"
@@ -1075,8 +1076,8 @@ TEST_F(LakeRowsetSegmentMetadataFilterTest, test_prepare_static_pruned_scan_rang
 
     OlapReaderStatistics stats;
     SegmentReadOptions seg_options;
-    ASSIGN_OR_ABORT(seg_options.fs, FileSystemFactory::CreateSharedFromString(_tablet_mgr->tablet_root_location(
-                                          _tablet_metadata->id())));
+    ASSIGN_OR_ABORT(seg_options.fs, FileSystemFactory::CreateSharedFromString(
+                                            _tablet_mgr->tablet_root_location(_tablet_metadata->id())));
     seg_options.lake_io_opts.fs = seg_options.fs;
     seg_options.stats = &stats;
     seg_options.tablet_schema = _tablet_schema;
