@@ -328,7 +328,19 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
         }
         std::string line;
         while (std::getline(in, line)) {
-            if (line.empty()) {
+            // Skip lines that are empty OR contain only whitespace. A
+            // truncated file or a record writer that crashed mid-write
+            // can leave behind a blank-ish trailing line; shipping it as
+            // its own record would make the FE parse it as invalid JSON
+            // and could force the entire merge-commit batch to fail.
+            bool all_whitespace = true;
+            for (char c : line) {
+                if (c != ' ' && c != '\t' && c != '\r') {
+                    all_whitespace = false;
+                    break;
+                }
+            }
+            if (all_whitespace) {
                 continue;
             }
             const int64_t line_bytes = static_cast<int64_t>(line.size()) + 1; // +1 for '\n'
