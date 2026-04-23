@@ -73,6 +73,8 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -759,7 +761,7 @@ public class OlapTableSinkTest {
         partInfo.setReplicationNum(2, (short) 3);
         MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
-                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+                2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
         Partition partition = new Partition(2, 22, "p1", index, distInfo);
 
         new Expectations() {
