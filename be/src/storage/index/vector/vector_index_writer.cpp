@@ -150,6 +150,7 @@ uint64_t VectorIndexWriter::estimate_buffer_size() const {
 Status VectorIndexWriter::_prepare_index_builder() {
     ASSIGN_OR_RETURN(auto index_builder_type,
                      VectorIndexBuilderFactory::get_index_builder_type_from_config(_tablet_index))
+    const int omp_threads = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
 #ifdef WITH_TENANN
     // Create VectorIndexFileWriter to support remote FS (S3/HDFS) in shared-data mode.
     // TenANN doesn't understand staros:// scheme, so we create a WritableFile through
@@ -158,12 +159,12 @@ Status VectorIndexWriter::_prepare_index_builder() {
     auto file_writer = std::make_unique<VectorIndexFileWriter>(std::move(wfile));
     ASSIGN_OR_RETURN(_index_builder, VectorIndexBuilderFactory::create_index_builder(
                                              _tablet_index, _vector_index_file_path, index_builder_type,
-                                             _is_element_nullable, file_writer.get()));
+                                             _is_element_nullable, omp_threads, file_writer.get()));
     _file_writer_holder = std::move(file_writer);
 #else
-    ASSIGN_OR_RETURN(_index_builder,
-                     VectorIndexBuilderFactory::create_index_builder(_tablet_index, _vector_index_file_path,
-                                                                     index_builder_type, _is_element_nullable));
+    ASSIGN_OR_RETURN(_index_builder, VectorIndexBuilderFactory::create_index_builder(
+                                             _tablet_index, _vector_index_file_path, index_builder_type,
+                                             _is_element_nullable, omp_threads));
 #endif
     RETURN_IF_ERROR(_index_builder->init());
 

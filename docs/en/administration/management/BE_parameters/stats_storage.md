@@ -1263,6 +1263,15 @@ This topic introduces the following types of FE configurations:
 - Description: The count of threads for shared-data table tablet metadata fetch operations (e.g., `get_tablet_stats`, `get_tablet_metadatas`).
 - Introduced in: v3.5.16, v4.0.9
 
+### lake_vector_index_build_thread_count
+
+- Default: 16
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The count of threads for async vector index build tasks on shared-data tables. Each task builds one segment's vector index file (`.vi`). Tune based on CN CPU/IO capacity and the workload's index build frequency.
+- Introduced in: -
+
 ### tablet_writer_open_rpc_timeout_sec
 
 - Default: 300

@@ -29,15 +29,17 @@ namespace starrocks {
 class TenAnnIndexBuilderProxy final : public VectorIndexBuilder {
 public:
     TenAnnIndexBuilderProxy(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path,
-                            bool is_element_nullable)
+                            bool is_element_nullable, int omp_threads)
             : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)),
               _is_element_nullable(is_element_nullable),
+              _omp_threads(omp_threads),
               _file_writer(nullptr) {}
 
     TenAnnIndexBuilderProxy(std::shared_ptr<TabletIndex> tablet_index, std::string segment_index_path,
-                            bool is_element_nullable, class tenann::IndexFileWriter* file_writer)
+                            bool is_element_nullable, int omp_threads, class tenann::IndexFileWriter* file_writer)
             : VectorIndexBuilder(std::move(tablet_index), std::move(segment_index_path)),
               _is_element_nullable(is_element_nullable),
+              _omp_threads(omp_threads),
               _file_writer(file_writer) {}
 
     // proxy should not clean index builder resource
@@ -52,7 +54,6 @@ public:
     void close() const override;
 
 private:
-    OnceFlag _init_once;
     std::shared_ptr<tenann::IndexBuilder> _index_builder = nullptr;
     uint32_t _dim = 0;
     // This will be true when `metric_type` is cosine_similarity and `is_vector_normed` is true.
@@ -61,6 +62,7 @@ private:
     bool _is_input_normalized = false;
 
     const bool _is_element_nullable;
+    const int _omp_threads;
     tenann::IndexFileWriter* _file_writer = nullptr;
 };
 

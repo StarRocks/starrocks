@@ -92,7 +92,9 @@ struct SegmentWriterOptions {
     std::string encryption_meta;
     bool is_compaction = false;
     bool skip_vector_index = false;
+    bool defer_vector_index_build = false; // async mode: skip .vi file generation, keep metadata
     std::shared_ptr<FlatJsonConfig> flat_json_config = nullptr;
+    uint32_t vector_index_build_threshold = 0;
 };
 
 // SegmentWriter is responsible for writing data into single segment by all or partital columns.
@@ -165,6 +167,10 @@ public:
     const std::map<int64_t, std::string>& vector_index_file_paths() const { return _opts.vector_index_file_paths; }
 
     bool has_vector_index_written() const { return _has_vector_index_written; }
+
+    bool defer_vector_index_build() const { return _opts.defer_vector_index_build; }
+
+    uint32_t vector_index_build_threshold() const { return _opts.vector_index_build_threshold; }
 
     int64_t bundle_file_offset() const;
 

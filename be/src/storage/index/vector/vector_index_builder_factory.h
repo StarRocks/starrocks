@@ -27,12 +27,15 @@ class VectorIndexFileWriter;
 
 class VectorIndexBuilderFactory {
 public:
-    // file_writer: optional, for remote FS (S3/HDFS) in shared-data mode. In non-TenANN
-    // builds VectorIndexFileWriter is a stub and the argument is ignored.
+    // omp_threads: number of OpenMP threads passed down to the TenANN builder.
+    //   Caller owns the policy (e.g. a CPU-budget split for lake builds, or the raw config value
+    //   for local writes); the builder itself does not reach into ExecEnv or config.
+    // file_writer: optional, for remote FS (S3/HDFS) in shared-data mode. Pass VectorIndexFileWriter* when
+    //   WITH_TENANN, else nullptr.
     static StatusOr<std::unique_ptr<VectorIndexBuilder>> create_index_builder(
             const std::shared_ptr<TabletIndex>& tablet_index, const std::string& segment_index_path,
-            const IndexBuilderType index_builder_type, const bool is_element_nullable,
-            [[maybe_unused]] VectorIndexFileWriter* file_writer = nullptr);
+            const IndexBuilderType index_builder_type, const bool is_element_nullable, int omp_threads,
+            [[maybe_unused]] void* file_writer = nullptr);
 
     static StatusOr<IndexBuilderType> get_index_builder_type_from_config(
             const std::shared_ptr<TabletIndex>& _tablet_index) {

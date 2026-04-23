@@ -32,10 +32,7 @@ namespace starrocks {
 Status TenAnnIndexBuilderProxy::init() {
     ASSIGN_OR_RETURN(auto meta, get_vector_meta(_tablet_index, std::map<std::string, std::string>{}))
 
-    RETURN_IF_ERROR(success_once(_init_once, []() {
-                        tenann::OmpSetNumThreads(config::config_vector_index_build_concurrency);
-                        return Status::OK();
-                    }).status());
+    tenann::OmpSetNumThreads(std::max(1, _omp_threads));
 
     const auto& params = meta.common_params();
 

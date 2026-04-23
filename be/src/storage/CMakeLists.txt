@@ -199,6 +199,7 @@ set(STORAGE_FILES
     lake/delta_writer.cpp
     lake/vacuum.cpp
     lake/vacuum_full.cpp
+    lake/vector_index_build_task.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
     lake/pk_tablet_sst_writer.cpp

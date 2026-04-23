@@ -44,6 +44,7 @@
 #include "base/utility/pretty_printer.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/config_vector_index_fwd.h"
 #include "common/logging.h"
 #include "common/mem_chunk.h"
 #include "common/process_exit.h"
@@ -773,6 +774,23 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_lake_metadata_fetch_thread_pool));
     REGISTER_THREAD_POOL_METRICS(lake_metadata_fetch, _lake_metadata_fetch_thread_pool);
 
+    {
+        // Adaptive pool sizing: pool = budget / omp_threads,
+        // where budget = nproc * cpu_ratio.
+        int nproc = CpuInfo::num_cores();
+        int budget = std::max(2, static_cast<int>(nproc * config::vector_index_build_max_cpu_ratio));
+        int configured_omp = std::max(1, static_cast<int>(config::config_vector_index_build_concurrency));
+        int effective_pool = std::max(1, budget / configured_omp);
+        LOG(INFO) << "Vector index build adaptive sizing: nproc=" << nproc << " budget=" << budget
+                  << " pool=" << effective_pool << " omp=" << configured_omp;
+        RETURN_IF_ERROR(ThreadPoolBuilder("lake_vi_build")
+                                .set_min_threads(0)
+                                .set_max_threads(effective_pool)
+                                .set_max_queue_size(std::numeric_limits<int>::max())
+                                .build(&_lake_vector_index_build_thread_pool));
+    }
+    REGISTER_THREAD_POOL_METRICS(lake_vi_build, _lake_vector_index_build_thread_pool);
+
     _agent_server = new AgentServer(this, false);
     RETURN_IF_ERROR(_agent_server->init());
 
@@ -877,6 +895,12 @@ void ExecEnv::stop() {
         start = MonotonicMillis();
         _lake_metadata_fetch_thread_pool->shutdown();
         component_times.emplace_back("lake_metadata_fetch_thread_pool", MonotonicMillis() - start);
+    }
+
+    if (_lake_vector_index_build_thread_pool) {
+        start = MonotonicMillis();
+        _lake_vector_index_build_thread_pool->shutdown();
+        component_times.emplace_back("lake_vector_index_build_thread_pool", MonotonicMillis() - start);
     }
 
     if (_parallel_compact_mgr) {
@@ -1095,6 +1119,7 @@ void ExecEnv::destroy() {
     _automatic_partition_pool.reset();
     _put_aggregate_metadata_thread_pool.reset();
     _lake_metadata_fetch_thread_pool.reset();
+    _lake_vector_index_build_thread_pool.reset();
     _parallel_compact_mgr.reset();
     _pk_index_execution_thread_pool.reset();
     _pk_index_memtable_flush_thread_pool.reset();

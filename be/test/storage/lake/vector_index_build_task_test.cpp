@@ -1,0 +1,370 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/vector_index_build_task.h"
+
+#include <gtest/gtest.h>
+
+#include "base/testutil/assert.h"
+#include "column/array_column.h"
+#include "column/chunk.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
+#include "fs/fs_util.h"
+#include "gutil/casts.h"
+#include "storage/chunk_helper.h"
+#include "storage/lake/filenames.h"
+#include "storage/lake/join_path.h"
+#include "storage/lake/test_util.h"
+#include "storage/rowset/segment_writer.h"
+
+namespace starrocks::lake {
+
+class VectorIndexBuildTaskTest : public TestBase {
+public:
+    VectorIndexBuildTaskTest() : TestBase("vector_index_build_task_test_" + std::to_string(GetCurrentTimeMicros())) {
+        clear_and_init_test_dir();
+    }
+
+protected:
+    static constexpr int64_t kTabletId = 10001;
+    static constexpr int64_t kIndexId = 100;
+    static constexpr int32_t kVectorColUniqueId = 2;
+    uint32_t _next_rowset_id = 1;
+
+    TabletSchemaPB create_schema_pb() {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_num_short_key_columns(1);
+
+        // key column: int32
+        auto c0 = schema_pb.add_column();
+        c0->set_unique_id(1);
+        c0->set_name("pk");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+
+        // value column: array<float> (vector column)
+        auto c1 = schema_pb.add_column();
+        c1->set_unique_id(kVectorColUniqueId);
+        c1->set_name("vector");
+        c1->set_type("ARRAY");
+        c1->set_is_key(false);
+        c1->set_is_nullable(true);
+
+        auto* child = c1->add_children_columns();
+        child->set_unique_id(3);
+        child->set_name("element");
+        child->set_type("FLOAT");
+        child->set_is_nullable(true);
+
+        // Add vector index
+        auto* idx = schema_pb.add_table_indices();
+        idx->set_index_id(kIndexId);
+        idx->set_index_name("vec_idx");
+        idx->set_index_type(IndexType::VECTOR);
+        idx->add_col_unique_id(kVectorColUniqueId);
+        // Properties are stored as a nested JSON string in index_properties
+        std::string props_json = R"({
+            "common_properties": {
+                "index_type": "hnsw",
+                "dim": "3",
+                "is_vector_normed": "false",
+                "metric_type": "l2_distance",
+                "index_build_mode": "async"
+            },
+            "index_properties": {
+                "efconstruction": "40",
+                "M": "16"
+            }
+        })";
+        idx->set_index_properties(props_json);
+
+        return schema_pb;
+    }
+
+    // Write a segment file with pk + array<float> columns, return segment filename
+    StatusOr<std::string> write_segment(const TabletSchemaCSPtr& tablet_schema, int64_t txn_id, int num_rows) {
+        auto seg_name = gen_segment_filename(txn_id);
+        auto seg_path = _tablet_mgr->segment_location(kTabletId, seg_name);
+
+        SegmentWriterOptions opts;
+        opts.is_compaction = false;
+        // defer_vector_index_build = true: we simulate async mode (no .vi generation)
+        opts.defer_vector_index_build = true;
+
+        // Fill vector_index_file_paths so metadata is populated
+        std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+        std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
+        opts.vector_index_file_paths[kIndexId] = vi_path;
+
+        ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(seg_path));
+        auto writer = std::make_unique<SegmentWriter>(std::move(wfile), 0, tablet_schema, opts);
+        RETURN_IF_ERROR(writer->init());
+
+        // Build chunk with schema attached (required by SegmentWriter)
+        auto schema = ChunkHelper::convert_schema(tablet_schema);
+        auto chunk = ChunkHelper::new_chunk(schema, num_rows);
+
+        for (int i = 0; i < num_rows; ++i) {
+            // pk column
+            chunk->get_column_raw_ptr_by_index(0)->append_datum(Datum(static_cast<int32_t>(i)));
+            // array<float> column: build a DatumArray with 3 floats
+            DatumArray arr;
+            arr.emplace_back(static_cast<float>(i) + 0.1f);
+            arr.emplace_back(static_cast<float>(i) + 0.2f);
+            arr.emplace_back(static_cast<float>(i) + 0.3f);
+            chunk->get_column_raw_ptr_by_index(1)->append_datum(Datum(arr));
+        }
+
+        RETURN_IF_ERROR(writer->append_chunk(*chunk));
+
+        uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
+        RETURN_IF_ERROR(writer->finalize(&seg_size, &idx_size, &footer_pos));
+        return seg_name;
+    }
+
+    // Create tablet metadata with rowsets referencing written segments
+    void create_metadata(const TabletSchemaPB& schema_pb, int64_t version,
+                         const std::vector<std::pair<int64_t, std::string>>& rowset_infos, // {version, seg_name}
+                         int64_t built_version = 0) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(kTabletId);
+        metadata->set_version(version);
+        *metadata->mutable_schema() = schema_pb;
+
+        for (const auto& [rv, seg_name] : rowset_infos) {
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(_next_rowset_id++);
+            rowset->add_segments(seg_name);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(1024);
+            rowset->set_overlapped(false);
+            rowset->set_version(rv);
+
+            // Populate vector_index_ids in segment_metas
+            auto* seg_meta = rowset->add_segment_metas();
+            seg_meta->add_vector_index_ids(kIndexId);
+        }
+
+        if (built_version > 0) {
+            metadata->set_vector_index_built_version(built_version);
+        }
+
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
+    }
+};
+
+// Test basic build: one rowset with one segment, no built_version set
+TEST_F(VectorIndexBuildTaskTest, test_basic_build) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
+
+    // Create metadata at version 2 with one rowset at version 2
+    create_metadata(schema_pb, 2, {{2, seg_name}});
+
+    // Verify .vi does NOT exist before build
+    std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
+    ASSERT_FALSE(fs::path_exist(vi_path));
+
+    // Execute build
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_EQ(response.new_built_version(), 2);
+
+    // Verify .vi file now exists
+    ASSERT_TRUE(fs::path_exist(vi_path));
+}
+
+// Test that already-built rowsets are skipped based on built_version watermark
+TEST_F(VectorIndexBuildTaskTest, test_skip_built_rowsets) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg1, write_segment(tablet_schema, 1001, 10));
+    ASSIGN_OR_ABORT(auto seg2, write_segment(tablet_schema, 1002, 10));
+
+    // built_version=2 means rowset at version 2 is already built
+    create_metadata(schema_pb, 3, {{2, seg1}, {3, seg2}}, /*built_version=*/2);
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(3);
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_EQ(response.new_built_version(), 3);
+
+    // Only seg2's .vi should be built, seg1 was skipped
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
+    ASSERT_FALSE(fs::path_exist(vi1));
+    ASSERT_TRUE(fs::path_exist(vi2));
+}
+
+// Test batch limiting: only max_rowsets_per_batch rowsets are processed
+TEST_F(VectorIndexBuildTaskTest, test_batch_limit) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg1, write_segment(tablet_schema, 1001, 10));
+    ASSIGN_OR_ABORT(auto seg2, write_segment(tablet_schema, 1002, 10));
+    ASSIGN_OR_ABORT(auto seg3, write_segment(tablet_schema, 1003, 10));
+
+    create_metadata(schema_pb, 4, {{2, seg1}, {3, seg2}, {4, seg3}});
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(4);
+    request.set_max_rowsets_per_batch(2); // Only process 2 of 3 rowsets
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+
+    // Should have processed rowsets at version 2 and 3 (sorted by version, first 2)
+    ASSERT_EQ(response.new_built_version(), 3);
+
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
+    std::string vi3 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg3, kIndexId));
+    ASSERT_TRUE(fs::path_exist(vi1));
+    ASSERT_TRUE(fs::path_exist(vi2));
+    ASSERT_FALSE(fs::path_exist(vi3)); // Not processed yet
+}
+
+// Test that FE-provided built_version in request skips already-built rowsets
+TEST_F(VectorIndexBuildTaskTest, test_request_built_version) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg1, write_segment(tablet_schema, 1001, 10));
+    ASSIGN_OR_ABORT(auto seg2, write_segment(tablet_schema, 1002, 10));
+
+    // Metadata has built_version=0, but FE knows built_version=2 from previous build
+    create_metadata(schema_pb, 3, {{2, seg1}, {3, seg2}}, /*built_version=*/0);
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(3);
+    request.set_built_version(2); // FE passes its in-memory built_version
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_EQ(response.new_built_version(), 3);
+
+    // Only seg2 should be built; seg1 skipped via request built_version
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
+    ASSERT_FALSE(fs::path_exist(vi1));
+    ASSERT_TRUE(fs::path_exist(vi2));
+}
+
+// Test that existing .vi files are skipped on partial retry
+TEST_F(VectorIndexBuildTaskTest, test_skip_existing_vi_files) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
+
+    create_metadata(schema_pb, 2, {{2, seg_name}});
+
+    // Pre-create .vi file to simulate a previous partial build success
+    std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+    std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
+    ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(vi_path));
+    ASSERT_OK(wf->append("dummy"));
+    ASSERT_OK(wf->close());
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_EQ(response.new_built_version(), 2);
+
+    // File should still contain "dummy" (skipped, not overwritten)
+    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(vi_path));
+    ASSIGN_OR_ABORT(auto content, rf->read_all());
+    ASSERT_EQ(content, "dummy");
+}
+
+// Test with no rowsets needing build (all below watermark)
+TEST_F(VectorIndexBuildTaskTest, test_nothing_to_build) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
+
+    // built_version=5, rowset version=2 -> nothing to build
+    create_metadata(schema_pb, 5, {{2, seg_name}}, /*built_version=*/5);
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(5);
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+    ASSERT_EQ(response.new_built_version(), 5);
+}
+
+// Test with rowsets that have no vector_index_ids in segment_metas (should be skipped)
+TEST_F(VectorIndexBuildTaskTest, test_skip_rowsets_without_vector_indexes) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto seg_name, write_segment(tablet_schema, 1001, 10));
+
+    // Create metadata with a rowset that has NO vector_index_ids in segment_metas
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(kTabletId);
+    metadata->set_version(2);
+    *metadata->mutable_schema() = schema_pb;
+
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(_next_rowset_id++);
+    rowset->add_segments(seg_name);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(1024);
+    rowset->set_version(2);
+    // Note: NOT setting vector_index_ids in segment_metas
+
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+    // No vi rowsets to build, watermark advances through the no-vi rowset
+    ASSERT_EQ(response.new_built_version(), 2);
+}
+
+} // namespace starrocks::lake
