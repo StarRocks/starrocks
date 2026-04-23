@@ -17,7 +17,9 @@
 #include <bthread/mutex.h>
 #include <fmt/format.h>
 
+#include <limits>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "column/chunk.h"
@@ -682,12 +684,16 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
         bool per_partition_mode;
         std::unordered_set<int64_t> my_partitions;
+        std::unordered_set<int64_t> all_claimed_partitions;
+        int32_t min_coord_sender_id = std::numeric_limits<int32_t>::max();
         {
             std::lock_guard l(_partition_coordinator_mtx);
             per_partition_mode = _enable_per_partition_coordinator;
             if (per_partition_mode) {
                 for (auto& [pid, sid] : _partition_coordinator) {
+                    all_claimed_partitions.insert(pid);
                     if (sid == sender_id) my_partitions.insert(pid);
+                    min_coord_sender_id = std::min(min_coord_sender_id, sid);
                 }
             }
         }
@@ -712,12 +718,33 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                 if (per_partition_mode) {
                     // Filter: collect only the partitions this sender coordinates.
                     // Other partitions are returned by their coordinators' eos.
+                    // Any log whose partition is entirely unclaimed (orphan) is
+                    // dropped AND loudly reported — this points to an open /
+                    // data-arrival race or missing open RPC. The minimum elected
+                    // coordinator reports the orphan to avoid duplicate counts
+                    // across coordinators. Invariant in healthy clusters:
+                    // orphan_count == 0.
                     std::vector<TxnLogPtr> my_logs;
                     my_logs.reserve(all_logs.size());
+                    int64_t orphan_count = 0;
                     for (auto& log : all_logs) {
-                        if (my_partitions.count(log->partition_id()) > 0) {
+                        const int64_t pid = log->partition_id();
+                        if (my_partitions.count(pid) > 0) {
                             my_logs.emplace_back(std::move(log));
+                        } else if (all_claimed_partitions.count(pid) == 0 &&
+                                   sender_id == min_coord_sender_id) {
+                            ++orphan_count;
+                            LOG(ERROR) << "combined_txn_log: orphan log for partition " << pid
+                                       << " on txn " << _txn_id
+                                       << " — no sender claimed this partition via "
+                                          "(incremental_)open. Log dropped; "
+                                          "points to a missing open RPC or an "
+                                          "open/data-arrival race.";
                         }
+                    }
+                    if (orphan_count > 0) {
+                        StarRocksMetrics::instance()
+                                ->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
                     }
                     context->add_txn_logs(my_logs);
                 } else {

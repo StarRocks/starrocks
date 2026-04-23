@@ -64,6 +64,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
 
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_legacy_total);
     REGISTER_STARROCKS_METRIC(lake_txn_log_collect_per_partition_total);
+    REGISTER_STARROCKS_METRIC(lake_txn_log_collect_orphan_partition_total);
 
     REGISTER_STARROCKS_METRIC(async_delta_writer_execute_total);
     REGISTER_STARROCKS_METRIC(async_delta_writer_task_total);
