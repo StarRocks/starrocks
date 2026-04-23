@@ -382,6 +382,13 @@ Status ColumnReader::new_bitmap_index_iterator(const IndexReadOptions& opts, Bit
         }
     }
 
+    // No IDG entry; fall back to the segment-footer-embedded bitmap. If the
+    // footer does not carry a bitmap either (e.g. the column simply has no
+    // bitmap index at all), leave `*iterator` null and return OK so the
+    // caller treats this column as "no bitmap filter".
+    if (_bitmap_index == nullptr) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_load_bitmap_index(opts));
     RETURN_IF_ERROR(_bitmap_index->new_iterator(opts, iterator));
     return Status::OK();

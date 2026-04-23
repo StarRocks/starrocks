@@ -198,6 +198,16 @@ private:
     int64_t _element_ordinal = 0;
 
     UInt32Column _array_size;
+
+    // Cached IDG probe result from init(). `_reader` alone only sees the
+    // segment-footer-embedded bloom filter, so for NGRAMBF built by the Lake
+    // ADD INDEX fast path (sidecar .idx file, no footer payload) we need
+    // a supplemental bit to surface via has_ngram_bloom_filter_index() to
+    // BloomFilterSupportChecker and to the short-circuit in
+    // get_row_ranges_by_bloom_filter. Original (non-ngram) bloom filter is
+    // driven by the table-level `bloom_filter_columns` property and never
+    // lives in IDG, so no cache bit for it.
+    bool _has_idg_ngram_bf = false;
 };
 
 } // namespace starrocks

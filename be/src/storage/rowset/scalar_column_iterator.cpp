@@ -40,6 +40,9 @@
 #include "common/config_storage_fwd.h"
 #include "common/status.h"
 #include "storage/column_predicate.h"
+#include "storage/lake/index_delta_group.h"
+#include "storage/lake/index_delta_group_loader.h"
+#include "storage/olap_common.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/column_reader.h"
@@ -65,6 +68,33 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     index_opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
+
+    // One-shot IDG probe (lake only). If the fast path has published a
+    // sidecar .idx file covering this (segment, col_unique_id, NGRAMBF),
+    // remember it so that has_ngram_bloom_filter_index() and
+    // get_row_ranges_by_bloom_filter() surface it to the pruning gates
+    // above. Without this bit both would short-circuit on the footer-only
+    // `_reader->has_bloom_filter_index()` and the .idx file would never
+    // participate in read-side filtering until compaction materialized the
+    // payload back into the segment footer.
+    if (_opts.idg_loader != nullptr && _opts.col_unique_id >= 0) {
+        TabletSegmentId tsid(_opts.tablet_id, _opts.segment_id);
+        lake::IndexDeltaGroupList list;
+        Status st = _opts.idg_loader->load(tsid, _opts.query_version, &list);
+        if (st.ok()) {
+            for (const auto& e : list) {
+                for (const auto& k : e.keys) {
+                    if (k.col_unique_id == _opts.col_unique_id && k.index_type == IndexType::NGRAMBF) {
+                        _has_idg_ngram_bf = true;
+                        break;
+                    }
+                }
+                if (_has_idg_ngram_bf) {
+                    break;
+                }
+            }
+        }
+    }
 
     if (_reader->encoding_info()->encoding() != DICT_ENCODING) {
         return Status::OK();
@@ -466,16 +496,27 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
 }
 
 bool ScalarColumnIterator::has_original_bloom_filter_index() const {
+    // Original (non-ngram) bloom filter is driven by the table property
+    // `bloom_filter_columns`, which rewrites the segment footer directly —
+    // it never lives in IDG. So the footer-only check is correct.
     return _reader->has_original_bloom_filter_index();
 }
 
 bool ScalarColumnIterator::has_ngram_bloom_filter_index() const {
-    return _reader->has_ngram_bloom_filter_index();
+    // Footer-embedded NGRAMBF (legacy segment rewrite) OR IDG-backed
+    // NGRAMBF (lake ADD INDEX fast path). Without the `_has_idg_ngram_bf`
+    // branch, upper read-side pruning would skip fast-path-built NGRAMBF
+    // entirely until a compaction merges the sidecar back into the footer.
+    return _reader->has_ngram_bloom_filter_index() || _has_idg_ngram_bf;
 }
 
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                             SparseRange<>* row_ranges) {
-    RETURN_IF(!_reader->has_bloom_filter_index(), Status::OK());
+    // The gate must include IDG-backed NGRAMBF, otherwise the standalone
+    // .idx file published by the lake fast path never reaches the bloom
+    // filter evaluation. `_reader->has_bloom_filter_index()` only reports
+    // the footer pointer, which is always null for IDG-only indexes.
+    RETURN_IF(!_reader->has_bloom_filter_index() && !_has_idg_ngram_bf, Status::OK());
 
     bool support_original_bloom_filter = false;
     bool support_ngram_bloom_filter = false;
@@ -483,7 +524,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     if (_reader->has_original_bloom_filter_index()) {
         support_original_bloom_filter =
                 std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_original_bloom_filter(); });
-    } else if (_reader->has_ngram_bloom_filter_index()) {
+    } else if (_reader->has_ngram_bloom_filter_index() || _has_idg_ngram_bf) {
         support_ngram_bloom_filter =
                 std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_ngram_bloom_filter(); });
     }
@@ -497,6 +538,15 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
+    // Thread IDG context into IndexReadOptions so ColumnReader::ngram_bloom_filter
+    // can pick up the sidecar .idx file when the footer does not carry the
+    // NGRAMBF payload. Leaving these at their defaults (nullptr loader) keeps
+    // the legacy footer path.
+    opts.idg_loader = _opts.idg_loader;
+    opts.tablet_id = _opts.tablet_id;
+    opts.segment_id = _opts.segment_id;
+    opts.query_version = _opts.query_version;
+    opts.col_unique_id = _opts.col_unique_id;
     // filter data using bloom filter or ngram bloom filter
     if (support_original_bloom_filter) {
         RETURN_IF_ERROR(_reader->original_bloom_filter(predicates, row_ranges, opts));
