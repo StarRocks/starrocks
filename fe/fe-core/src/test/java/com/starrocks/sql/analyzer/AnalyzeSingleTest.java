@@ -102,6 +102,21 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+    public void testTimeTravelClauseOnViewRelation() throws Exception {
+        AnalyzeTestUtil.getStarRocksAssert()
+                .withView("create view test.view_time_travel_base as select v1, v2 from test.t0", () ->
+                        analyzeFail("select v1, v2 from test.view_time_travel_base for version as of 1",
+                                "Unsupported relation type for temporal clauses, relation type: VIEW"));
+    }
+
+    @Test
+    public void testTimeTravelClauseOnCteRelation() {
+        analyzeFail("with cte_time_travel_base as (select v1, v2 from test.t0) " +
+                        "select v1, v2 from cte_time_travel_base for version as of 1",
+                "Unsupported relation type for temporal clauses, relation type: CTE");
+    }
+
+    @Test
     public void testIdentifierStartWithDigit() {
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select * from a.11b", 0).get(0);
         Assertions.assertEquals("SELECT * FROM a.11b", AstToStringBuilder.toString(statementBase));
