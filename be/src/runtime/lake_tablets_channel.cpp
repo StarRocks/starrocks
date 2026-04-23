@@ -709,8 +709,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         //     the elected coordinator of at least one partition.
         //   - Legacy path (map empty, old FE): only sender 0 collects, same
         //     as the pre-fix behavior.
-        const bool should_collect =
-                coordinator_map_populated ? !my_partitions.empty() : (sender_id == 0);
+        const bool should_collect = coordinator_map_populated ? !my_partitions.empty() : (sender_id == 0);
 
         if (should_collect) {
             rolk.unlock();
