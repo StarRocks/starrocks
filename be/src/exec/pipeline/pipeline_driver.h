@@ -218,26 +218,9 @@ public:
 
 public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                   Pipeline* pipeline, int32_t driver_id)
-            : _observer(this),
-              _operator_mem_resource_managers(operators.size()),
-              _operators(operators),
-              _query_ctx(query_ctx),
-              _fragment_ctx(fragment_ctx),
-              _pipeline(pipeline),
-              _source_node_id(operators[0]->get_plan_node_id()),
-              _driver_id(driver_id) {
-        _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
-        for (auto& op : _operators) {
-            _operator_stages[op->get_id()] = OperatorStage::INIT;
-        }
+                   Pipeline* pipeline, int32_t driver_id);
 
-        _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
-    }
-
-    PipelineDriver(const PipelineDriver& driver)
-            : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
-                             driver._driver_id) {}
+    PipelineDriver(const PipelineDriver& driver);
 
     virtual ~PipelineDriver() noexcept;
     void check_operator_close_states(const std::string& func_name);
@@ -547,15 +530,7 @@ public:
     bool local_prepare_is_done() const { return _local_prepare_is_done; }
 
 protected:
-    PipelineDriver()
-            : _observer(this),
-              _operator_mem_resource_managers(),
-              _operators(),
-              _query_ctx(nullptr),
-              _fragment_ctx(nullptr),
-              _pipeline(nullptr),
-              _source_node_id(0),
-              _driver_id(0) {}
+    PipelineDriver();
 
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT_NS = 100'000'000L;

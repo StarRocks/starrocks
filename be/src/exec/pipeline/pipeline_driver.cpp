@@ -53,6 +53,38 @@ namespace starrocks::pipeline {
 DEFINE_FAIL_POINT(operator_return_large_column);
 DEFINE_FAIL_POINT(global_runtime_filter_sync_A);
 
+PipelineDriver::PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
+                               Pipeline* pipeline, int32_t driver_id)
+        : _observer(this),
+          _operator_mem_resource_managers(operators.size()),
+          _operators(operators),
+          _query_ctx(query_ctx),
+          _fragment_ctx(fragment_ctx),
+          _pipeline(pipeline),
+          _source_node_id(operators[0]->get_plan_node_id()),
+          _driver_id(driver_id) {
+    _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("PipelineDriver (id=$0)", _driver_id));
+    for (auto& op : _operators) {
+        _operator_stages[op->get_id()] = OperatorStage::INIT;
+    }
+
+    _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
+}
+
+PipelineDriver::PipelineDriver(const PipelineDriver& driver)
+        : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._pipeline,
+                         driver._driver_id) {}
+
+PipelineDriver::PipelineDriver()
+        : _observer(this),
+          _operator_mem_resource_managers(),
+          _operators(),
+          _query_ctx(nullptr),
+          _fragment_ctx(nullptr),
+          _pipeline(nullptr),
+          _source_node_id(0),
+          _driver_id(0) {}
+
 PipelineDriver::~PipelineDriver() noexcept {
     if (_workgroup != nullptr) {
         _workgroup->decr_num_running_drivers();
