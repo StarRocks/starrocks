@@ -200,6 +200,15 @@ public:
     // coordinator per partition (smallest sender_id among those that claimed
     // the partition via (incremental_)open).
     METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_per_partition_total, MetricUnit::OPERATIONS);
+    // Diagnostic: number of txn logs produced for a partition that *no*
+    // sender on this channel ever claimed via its (incremental_)open tablet
+    // list. Such a log is dropped (no coordinator covers it), which would
+    // silently re-introduce the publish-time loss this fix targets. Counted
+    // only once per orphan log (by the minimum elected coordinator). A
+    // healthy cluster must hold this at 0; any non-zero value points to a
+    // missing open RPC or an open/data-arrival race and warrants
+    // investigation. Each orphan is also logged at ERROR on the CN.
+    METRIC_DEFINE_INT_COUNTER(lake_txn_log_collect_orphan_partition_total, MetricUnit::NOUNIT);
 
     // Metrics for async delta writer
     // The number of AsyncDeltaWriter::_execute is accessed. Each execution may run multiple tasks
