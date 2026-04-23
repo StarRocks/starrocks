@@ -24,6 +24,7 @@
 #include "fs/fs_util.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/load_channel.h"
+#include "runtime/starrocks_metrics.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
 #include "serde/protobuf_serde.h"
