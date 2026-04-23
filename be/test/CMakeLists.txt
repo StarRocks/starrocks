@@ -437,6 +437,7 @@ SET(DW_TEST_FILES
     ./storage/lake/delta_writer_test.cpp
     ./storage/lake/filenames_test.cpp
     ./storage/lake/lake_data_source_test.cpp
+    ./storage/lake/shared_data_vector_index_test.cpp
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp

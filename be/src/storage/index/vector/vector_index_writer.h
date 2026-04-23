@@ -29,6 +29,7 @@
 namespace starrocks {
 
 class ArrayColumn;
+class VectorIndexFileWriter;
 
 class VectorIndexWriter {
 public:
@@ -37,6 +38,8 @@ public:
 
     VectorIndexWriter(std::shared_ptr<TabletIndex> tablet_index, std::string vector_index_file_path,
                       bool is_element_nullable);
+
+    ~VectorIndexWriter();
 
     Status init();
 
@@ -53,6 +56,11 @@ public:
 private:
     std::shared_ptr<TabletIndex> _tablet_index;
     std::string _vector_index_file_path;
+    // Declared before _index_builder: TenAnnIndexBuilderProxy stores a raw pointer to this
+    // VectorIndexFileWriter. Members are destroyed in reverse declaration order, so the
+    // proxy's destructor (which calls close() -> _file_writer->Close()) must run BEFORE
+    // _file_writer_holder is freed, otherwise we get a use-after-free on teardown.
+    std::unique_ptr<VectorIndexFileWriter> _file_writer_holder;
     std::unique_ptr<VectorIndexBuilder> _index_builder;
 
     uint32_t _start_vector_index_build_threshold;

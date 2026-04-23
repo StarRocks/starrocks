@@ -151,6 +151,19 @@ inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
 }
 
+// Generate vector index filename from segment filename.
+// e.g. "0123_abcd.dat" + index_id 123 -> "0123_abcd_123.vi"
+inline std::string gen_vector_index_filename(std::string_view segment_filename, int64_t index_id) {
+    if (segment_filename.ends_with(".dat")) {
+        return fmt::format("{}_{}.vi", segment_filename.substr(0, segment_filename.size() - 4), index_id);
+    }
+    return fmt::format("{}_{}.vi", segment_filename, index_id);
+}
+
+inline bool is_vector_index(std::string_view file_name) {
+    return HasSuffixString(file_name, ".vi");
+}
+
 // Helper function to extract uuid from filename, which is used in shared-data cross cluster migration
 inline std::string extract_uuid_from(std::string_view file_name) {
     if (file_name.empty()) {

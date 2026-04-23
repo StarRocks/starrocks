@@ -23,6 +23,7 @@ struct SegmentFileInfo : public FileInfo {
     VariantTuple sort_key_min;
     VariantTuple sort_key_max;
     int64_t num_rows = 0;
+    std::vector<int64_t> vector_index_ids; // IDs of vector indexes that actually generated .vi files
 };
 
 } // namespace starrocks
