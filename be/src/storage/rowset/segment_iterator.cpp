@@ -327,6 +327,7 @@ private:
     Status _init();
     Status _init_internal();
     Status _reset_for_reuse();
+    Status _apply_runtime_range_pruner(bool force, bool sync_range_iter);
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
@@ -1038,6 +1039,10 @@ Status SegmentIterator::_reset_for_reuse() {
         RETURN_IF_ERROR(_apply_data_sampling());
     }
 
+    // Apply late-arrived runtime filters before initializing the range iterator so
+    // the iterator and IO ranges start from the narrowed scan range.
+    RETURN_IF_ERROR(_apply_runtime_range_pruner(true, false));
+
     _init_column_predicates();
     RETURN_IF_ERROR(_init_context());
 
@@ -1262,10 +1267,10 @@ Status SegmentIterator::_get_row_ranges_by_row_ids(std::vector<int64_t>* result_
     return Status::OK();
 }
 
-Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
+Status SegmentIterator::_apply_runtime_range_pruner(bool force, bool sync_range_iter) {
     return _opts.runtime_range_pruner.update_range_if_arrived(
             _opts.global_dictmaps,
-            [this](auto cid, const PredicateList& predicates) {
+            [this, sync_range_iter](auto cid, const PredicateList& predicates) {
                 const ColumnPredicate* del_pred;
                 auto iter = _del_predicates.find(cid);
                 del_pred = iter != _del_predicates.end() ? &(iter->second) : nullptr;
@@ -1273,16 +1278,24 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
 
                 RETURN_IF_ERROR(_column_iterators[cid]->get_row_ranges_by_zone_map(predicates, del_pred, &r,
                                                                                    CompoundNodeType::AND));
-                size_t prev_size = _range_iter.remaining_rows();
-                SparseRange<> res;
-                res.set_sorted(_scan_range.is_sorted());
-                _range_iter = _range_iter.intersection(r, &res);
-                std::swap(res, _scan_range);
-                _range_iter.set_range(&_scan_range);
-                _opts.stats->runtime_stats_filtered += (prev_size - _range_iter.remaining_rows());
+                size_t prev_size = _scan_range.span_size();
+                if (sync_range_iter) {
+                    SparseRange<> res;
+                    res.set_sorted(_scan_range.is_sorted());
+                    _range_iter = _range_iter.intersection(r, &res);
+                    std::swap(res, _scan_range);
+                    _range_iter.set_range(&_scan_range);
+                } else {
+                    _scan_range &= r;
+                }
+                _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
                 return Status::OK();
             },
-            false, _opts.stats->raw_rows_read);
+            force, _opts.stats->raw_rows_read);
+}
+
+Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
+    return _apply_runtime_range_pruner(false, true);
 }
 
 StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
