@@ -641,7 +641,13 @@ Status SchemaChangeHandler::do_process_add_index_only(const TAlterTabletReqV2& r
 
     const int64_t alter_version = request.alter_version;
     ASSIGN_OR_RETURN(auto base_tablet, _tablet_manager->get_tablet(request.base_tablet_id, alter_version));
-    ASSIGN_OR_RETURN(auto new_tablet, _tablet_manager->get_tablet(request.new_tablet_id, 1));
+    // Fast path: shadow tablet == origin tablet (FE sends tabletId for both
+    // base_tablet_id and new_tablet_id). Reuse base_tablet; do NOT read the
+    // initial metadata at version 1 — on a long-running partition that file
+    // has been vacuumed and lookups will 404 on object storage. The schema
+    // used below resolves column names → unique_ids; since ADD INDEX does
+    // not change the column set, base_tablet's schema is authoritative.
+    auto& new_tablet = base_tablet;
 
     auto new_schema = new_tablet.get_schema();
     if (new_schema == nullptr) {
