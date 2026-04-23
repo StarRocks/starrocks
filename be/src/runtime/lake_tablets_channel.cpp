@@ -669,57 +669,64 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     // Per-partition coordinator dispatch for combined txn log mode.
     //
-    // Each partition has exactly one coordinator sender that collects and returns its
-    // txn logs to FE. The coordinator is declared via `coordinated_partition_ids` in
-    // the sender's (incremental_)open RPC (see `_record_coordinator_claims`).
+    // Each partition has exactly one coordinator sender that collects and returns
+    // its txn logs to FE. The coordinator is elected by picking the smallest
+    // sender_id among those that declared `coordinated_partition_ids` covering
+    // that partition in their (incremental_)open RPC (see
+    // `_record_coordinator_claims`). The claim is sent to every owner CN of the
+    // partition's tablets, so every CN elects the same coordinator for a given
+    // partition -> exactly one writer downstream, no cross-CN races.
     //
-    // A given sender therefore returns logs for:
-    //   1. Partitions it coordinates (recorded in _partition_coordinator), AND
-    //   2. (Sender 0 only) Partitions that were never claimed by anyone — the legacy
-    //      fallback that preserves existing behavior for non-incremental channels and
-    //      handles RPCs from older, pre-fix FE/driver versions.
-    //
-    // Different partitions are assigned to (potentially) different senders, but each
-    // partition still has exactly one writer downstream (the coordinator's FE sink).
-    // Since different partitions map to different S3 paths for combined_log, there is
-    // no write collision. Same partition -> same physical path is still safe because
-    // only one sender will be its coordinator.
+    // Legacy compatibility: if `_partition_coordinator` is empty (happens when
+    // the upstream FE is older and doesn't populate `coordinated_partition_ids`),
+    // fall back to the legacy "sender_id == 0 collects all" rule. This preserves
+    // the exact pre-fix behavior during rolling upgrades where BE may be upgraded
+    // before FE.
     if (_finish_mode == lake::kDontWriteTxnLog && request.eos() &&
         response->status().status_code() == TStatusCode::OK) {
         const int32_t sender_id = request.sender_id();
-        const bool is_fallback_sender_0 = (sender_id == 0);
 
+        bool coordinator_map_populated;
         std::unordered_set<int64_t> my_partitions;
-        std::unordered_set<int64_t> claimed_partitions;
         {
             std::lock_guard l(_partition_coordinator_mtx);
+            coordinator_map_populated = !_partition_coordinator.empty();
             for (auto& [pid, sid] : _partition_coordinator) {
-                claimed_partitions.insert(pid);
                 if (sid == sender_id) my_partitions.insert(pid);
             }
         }
 
-        if (!my_partitions.empty() || is_fallback_sender_0) {
+        // Determine whether this sender should collect anything in this RPC:
+        //   - New path (coordinator map populated): only if this sender is
+        //     the elected coordinator of at least one partition.
+        //   - Legacy path (map empty, old FE): only sender 0 collects, same
+        //     as the pre-fix behavior.
+        const bool should_collect =
+                coordinator_map_populated ? !my_partitions.empty() : (sender_id == 0);
+
+        if (should_collect) {
             rolk.unlock();
             auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
             auto ok = _txn_log_collector.wait(t);
             auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
             if (st.ok()) {
                 auto all_logs = _txn_log_collector.logs();
-                std::vector<TxnLogPtr> my_logs;
-                my_logs.reserve(all_logs.size());
-                for (auto& log : all_logs) {
-                    int64_t pid = log->partition_id();
-                    if (my_partitions.count(pid) > 0) {
-                        // I coordinate this partition.
-                        my_logs.emplace_back(std::move(log));
-                    } else if (is_fallback_sender_0 && claimed_partitions.count(pid) == 0) {
-                        // Sender 0 fallback: pick up partitions no one claimed.
-                        my_logs.emplace_back(std::move(log));
+                if (coordinator_map_populated) {
+                    // Filter: collect only the partitions this sender coordinates.
+                    // Other partitions will be returned by their respective
+                    // coordinators' eos responses.
+                    std::vector<TxnLogPtr> my_logs;
+                    my_logs.reserve(all_logs.size());
+                    for (auto& log : all_logs) {
+                        if (my_partitions.count(log->partition_id()) > 0) {
+                            my_logs.emplace_back(std::move(log));
+                        }
                     }
-                    // else: someone else coordinates this partition; they'll return it.
+                    context->add_txn_logs(my_logs);
+                } else {
+                    // Legacy path: sender 0 takes every log.
+                    context->add_txn_logs(all_logs);
                 }
-                context->add_txn_logs(my_logs);
             } else {
                 context->update_status(st);
             }
