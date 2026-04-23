@@ -42,9 +42,9 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
@@ -72,7 +72,7 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
  * based on partition changes in the base tables.
  * MVPCTBasedRefreshProcessor is not thread safe for concurrent runs of the same materialized view
  */
-public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
+public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
 
     // One-shot callback invoked after syncAndCheckPCTPartitions and before plan building. Used by
     // Hybrid fallback to freeze TVR so the pinned state is visible to the plan builder and differ.
@@ -101,11 +101,11 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         return false;
     }
 
-    public MVPCTBasedRefreshProcessor(Database db, MaterializedView mv,
-                                      MvTaskRunContext mvContext,
-                                      IMaterializedViewMetricsEntity mvEntity,
-                                      MaterializedView.RefreshMode refreshMode) {
-        super(db, mv, mvContext, mvEntity, refreshMode, MVPCTBasedRefreshProcessor.class);
+    public MVPCTRefreshProcessor(Database db, MaterializedView mv,
+                                 MvTaskRunContext mvContext,
+                                 IMaterializedViewMetricsEntity mvEntity,
+                                 MaterializedView.RefreshMode refreshMode) {
+        super(db, mv, mvContext, mvEntity, refreshMode, MVPCTRefreshProcessor.class);
     }
 
     public void setAfterSyncHook(Runnable afterSyncHook) {

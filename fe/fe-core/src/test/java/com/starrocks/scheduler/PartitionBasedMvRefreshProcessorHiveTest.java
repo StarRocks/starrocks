@@ -26,7 +26,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.connector.hive.MockedHiveMetadata;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.SyncPartitionUtils;
@@ -201,7 +201,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -236,7 +236,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -284,7 +284,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -333,7 +333,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -381,7 +381,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -425,7 +425,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -480,7 +480,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -526,7 +526,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -572,7 +572,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -627,7 +627,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -683,7 +683,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -733,7 +733,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Assertions.assertEquals(2, materializedView.getPartition("p19980102").getDefaultPhysicalPartition()
                 .getVisibleVersion());
 
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -754,7 +754,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(mvProperties).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -776,7 +776,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(mvProperties).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -812,7 +812,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         // run 1
         {
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -835,7 +835,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.addPartition("partitioned_db", "part_tbl1", "par_date=2020-01-05");
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -855,7 +855,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.addPartition("partitioned_db", "part_tbl2", "par_date=2020-01-05");
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -877,7 +877,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.dropPartition("partitioned_db", "part_tbl1", "par_date=2020-01-05");
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -892,7 +892,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.dropPartition("partitioned_db", "part_tbl2", "par_date=2020-01-05");
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -929,7 +929,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         // run 1
         {
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -951,7 +951,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.addPartition("partitioned_db", "t1_par", "par_col=4/par_date=2020-01-05");
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -974,7 +974,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.addPartition("partitioned_db", "t2_par", "par_col=4/par_date=2020-01-05");
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -999,7 +999,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.dropPartition("partitioned_db", "t2_par", "par_col=3/par_date=2020-01-05");
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -1058,7 +1058,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             executeInsertSql(connectContext, insertSql);
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -1077,7 +1077,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             executeInsertSql(connectContext, insertSql);
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -1098,7 +1098,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             executeInsertSql(connectContext, insertSql);
 
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -1255,7 +1255,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         // run 1
         {
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -1272,7 +1272,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.addPartition("partitioned_db", "t1_par",
                     "par_col=4/par_date=2020-01-05");
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
@@ -1289,7 +1289,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.dropPartition("partitioned_db", "t1_par",
                     "par_col=4/par_date=2020-01-05");
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             Assertions.assertTrue(execPlan == null);
@@ -1320,7 +1320,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         // run 1
         {
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -1334,7 +1334,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.addPartition("partitioned_db", "t1_par",
                     "par_col=4/par_date=2020-01-05");
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
@@ -1350,7 +1350,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             mockedHiveMetadata.dropPartition("partitioned_db", "t1_par",
                     "par_col=4/par_date=2020-01-05");
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             Assertions.assertTrue(execPlan == null);
