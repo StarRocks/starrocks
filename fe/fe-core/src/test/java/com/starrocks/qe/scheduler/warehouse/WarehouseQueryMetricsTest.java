@@ -26,6 +26,7 @@ import com.starrocks.thrift.TGetWarehouseQueriesResponseItem;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -60,16 +61,11 @@ public class WarehouseQueryMetricsTest {
         assertThat(thrift.getQuery()).isEqualTo("select 1");
     }
 
-    // Regression: see issues/2026-04-21-bug1-warehouse-queries-crash.md
-    // toConstantOperators() feeds rows into BE UnionConstSourceOperator, which expects
-    // each ConstantOperator's type to match the system table column's declared type.
-    // When they diverge (e.g. schema=BIGINT but op=VARCHAR), BE crashes with SIGABRT in
-    // down_cast<FixedLengthColumnBase<long>>. This test pins the type alignment.
     @Test
     public void testToConstantOperatorsTypesMatchSchema() {
         WarehouseQueryMetrics metrics = new WarehouseQueryMetrics(42L, "wh",
                 null, LogicalSlot.State.ALLOCATED, 1, 1, 1.5,
-                "select 1", null);
+                "select 1", Optional.empty());
         List<ScalarOperator> ops = metrics.toConstantOperators();
         List<Column> schema = new WarehouseQueriesSystemTable().getFullSchema();
         assertThat(ops).hasSize(schema.size());

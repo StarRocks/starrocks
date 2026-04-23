@@ -86,9 +86,7 @@ Status WarehouseMetricsScanner::get_next(ChunkPtr* chunk, bool* eos) {
 Status WarehouseMetricsScanner::fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TGetWarehouseMetricsResponeItem& item = _response.metrics[_idx++];
-    // Parse WAREHOUSE_ID from thrift string to int64. Thrift carries it as a
-    // string for backward compatibility with older clients, but the system
-    // table schema is BIGINT, so convert here.
+    // Parse WAREHOUSE_ID from thrift string to int64.
     int64_t warehouse_id = 0;
     try {
         warehouse_id = std::stoll(item.warehouse_id);

@@ -65,10 +65,6 @@ public class WarehouseMetricsTest {
         assertThat(thrift.getMax_slots()).isEqualTo("1");
     }
 
-    // Regression: see issues/2026-04-21-bug1-warehouse-queries-crash.md
-    // Same schema-mismatch hazard as WarehouseQueryMetrics: if toConstantOperators()
-    // produces a column whose type differs from the system table schema, BE
-    // UnionConstSourceOperator SIGABRTs on append. This test pins the alignment.
     @Test
     public void testToConstantOperatorsTypesMatchSchema() {
         WarehouseMetrics metrics = new WarehouseMetrics(42L, "wh", 1, 1, 1, 1, 1, 1, 1, 1, 1,
