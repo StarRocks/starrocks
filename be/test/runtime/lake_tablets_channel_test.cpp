@@ -1467,8 +1467,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_flag_disagreement_fal
 // fix exists for — sender 1 (non-zero) is the minimum claimant of partition
 // 11 and therefore the elected coordinator for it. Each sender's eos should
 // return ONLY the logs for partitions it coordinates.
-TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest,
-       test_two_senders_split_partitions_each_collects_own) {
+TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest, test_two_senders_split_partitions_each_collects_own) {
     auto* m = StarRocksMetrics::instance();
     int64_t per_partition_before = m->lake_txn_log_collect_per_partition_total.value();
     int64_t orphan_before = m->lake_txn_log_collect_orphan_partition_total.value();
@@ -1501,11 +1500,10 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest,
     };
 
     PTabletWriterOpenResult open_resp;
-    ASSERT_OK(_tablets_channel->open(
-            make_open(0, 2, {{10, 10086}, {10, 10087}}), &open_resp, _schema_param, false));
+    ASSERT_OK(_tablets_channel->open(make_open(0, 2, {{10, 10086}, {10, 10087}}), &open_resp, _schema_param, false));
     PTabletWriterOpenResult inc_resp;
-    ASSERT_OK(_tablets_channel->incremental_open(
-            make_open(1, 2, {{11, 10088}, {11, 10089}}), &inc_resp, _schema_param));
+    ASSERT_OK(
+            _tablets_channel->incremental_open(make_open(1, 2, {{11, 10088}, {11, 10089}}), &inc_resp, _schema_param));
 
     std::atomic<int> close_channel_count{0};
     std::atomic<int> sender_0_logs{-1};
@@ -1528,8 +1526,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest,
         add_req.mutable_chunk()->Swap(&chunk_pb);
         bool close_channel = false;
         _tablets_channel->add_chunk(&chunk, add_req, &add_resp, &close_channel);
-        ASSERT_TRUE(add_resp.status().status_code() == TStatusCode::OK)
-                << add_resp.status().error_msgs(0);
+        ASSERT_TRUE(add_resp.status().status_code() == TStatusCode::OK) << add_resp.status().error_msgs(0);
 
         PTabletWriterAddChunkRequest fin_req;
         PTabletWriterAddBatchResult fin_resp;
@@ -1540,8 +1537,7 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest,
         fin_req.add_partition_ids(partition_id);
         fin_req.set_timeout_ms(30 * 1000);
         _tablets_channel->add_chunk(nullptr, fin_req, &fin_resp, &close_channel);
-        ASSERT_TRUE(fin_resp.status().status_code() == TStatusCode::OK)
-                << fin_resp.status().error_msgs(0);
+        ASSERT_TRUE(fin_resp.status().status_code() == TStatusCode::OK) << fin_resp.status().error_msgs(0);
         if (close_channel) {
             close_channel_count.fetch_add(1);
         }
@@ -1561,13 +1557,9 @@ TEST_F(LakeTabletsChannelPerPartitionCoordinatorTest,
     };
 
     auto bids = std::vector<bthread_t>{};
-    ASSIGN_OR_ABORT(auto b0, bthreads::start_bthread([&] {
-                        sender_task(0, {10086, 10087}, 10);
-                    }));
+    ASSIGN_OR_ABORT(auto b0, bthreads::start_bthread([&] { sender_task(0, {10086, 10087}, 10); }));
     bids.push_back(b0);
-    ASSIGN_OR_ABORT(auto b1, bthreads::start_bthread([&] {
-                        sender_task(1, {10088, 10089}, 11);
-                    }));
+    ASSIGN_OR_ABORT(auto b1, bthreads::start_bthread([&] { sender_task(1, {10088, 10089}, 11); }));
     bids.push_back(b1);
     for (auto b : bids) (void)bthread_join(b, nullptr);
 
