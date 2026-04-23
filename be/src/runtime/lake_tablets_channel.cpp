@@ -310,8 +310,11 @@ private:
     // opens agree because FE is the single source of truth per transaction.
     mutable StackTraceMutex<bthread::Mutex> _partition_coordinator_mtx;
     std::unordered_map<int64_t, int32_t> _partition_coordinator;
+    // Default true, ANDed with every open's flag. First open therefore adopts;
+    // subsequent opens must agree or the whole channel falls back to legacy.
+    // Only read on the close path, which runs after at least one open, so the
+    // default never leaks to callers.
     bool _enable_per_partition_coordinator{true};
-    bool _per_partition_coordinator_initialized{false};
 
     std::map<string, string> _column_to_expr_value;
 
@@ -1006,22 +1009,16 @@ Status LakeTabletsChannel::log_and_error_tablet_not_found(int64_t tablet_id, con
 
 void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenRequest& params) {
     // Latch the FE-dispatched per-partition-coordinator switch. AND across opens
-    // defensively: if any open disagrees (e.g. should never happen because FE is
-    // the single source of truth, but an old BE sink wouldn't populate the field
-    // at all), fall back to the legacy `sender_id == 0` rule for the whole channel.
+    // defensively: if any open disagrees (shouldn't happen under a single FE per
+    // transaction, but an old BE sink wouldn't populate the field at all), fall
+    // back to the legacy `sender_id == 0` rule for the whole channel.
     const bool flag_enabled = params.has_lake_tablet_params() &&
                               params.lake_tablet_params().has_enable_per_partition_coordinator() &&
                               params.lake_tablet_params().enable_per_partition_coordinator();
 
     int32_t sender_id = params.sender_id();
     std::lock_guard l(_partition_coordinator_mtx);
-    if (!_per_partition_coordinator_initialized) {
-        _enable_per_partition_coordinator = flag_enabled;
-        _per_partition_coordinator_initialized = true;
-    } else {
-        _enable_per_partition_coordinator = _enable_per_partition_coordinator && flag_enabled;
-    }
-
+    _enable_per_partition_coordinator = _enable_per_partition_coordinator && flag_enabled;
     if (!_enable_per_partition_coordinator) {
         // Legacy path: coordinator map unused.
         return;
