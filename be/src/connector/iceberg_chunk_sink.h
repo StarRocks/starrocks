@@ -67,6 +67,15 @@ struct IcebergChunkSinkContext : public ConnectorChunkSinkContext {
     pipeline::FragmentContext* fragment_context = nullptr;
     int tuple_desc_id = -1;
     std::shared_ptr<SortOrdering> sort_ordering;
+
+    // Override tuple descriptor for the spill writer. When set (non-null), used instead of
+    // looking up tuple_desc_id from runtime_state->desc_tbl(). Needed by RowDelta data
+    // sub-sink whose data-only tuple is not registered in the global descriptor table.
+    TupleDescriptor* override_tuple_desc = nullptr;
+
+    // Optional tag inserted into file name prefix to distinguish writers.
+    // Empty by default (standalone INSERT). Set to "data" for RowDelta composite sinks.
+    std::string writer_tag;
 };
 
 class IcebergChunkSinkProvider : public ConnectorChunkSinkProvider {
