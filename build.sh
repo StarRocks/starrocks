@@ -770,6 +770,29 @@ fi
 if [ ${FIX_CVE} == "ON" ]; then
     echo "Fix CVE"
     python3 fix-cve/fix-cve.py --jar-exec-path ${JAVA_HOME}/bin/jar --output-dir ${STARROCKS_OUTPUT}
+    # FIXME: remove this temp workaround after jetty upgraded to 12.x
+    echo "Fix jetty-http CVE-2026-2332 ..."
+    DOWNLOAD_LINK=https://cdn-thirdparty.starrocks.com/jetty-http/9.4.60-celerdata-b20260421/jetty-http-9.4.60-celerdata-b20260421.jar
+    download_jar=jetty-http-9.4.60-celerdata-b20260421.jar
+    expected_sha256=891a8cf5031808307ef4fd8abfe4ae257231e9ece1b92d3f11e6d48bdf26577a
+    if [[ ! -f $download_jar ]] ; then
+        curl --progress-bar --fail --retry 3 --location --output $download_jar $DOWNLOAD_LINK
+    fi
+    SHA256CMD=
+    if command -v sha256sum >/dev/null 2>&1; then
+        SHA256CMD=sha256sum
+    else
+        # compatible on macOS
+        SHA256CMD="shasum -a 256"
+    fi
+    echo "$expected_sha256  $download_jar" | $SHA256CMD -c -
+    for jetty_http_jar in `find ${STARROCKS_OUTPUT} -name 'jetty-http-9.4.58*.jar'`
+    do
+        subdir=`dirname $jetty_http_jar`
+        cp $download_jar $subdir/
+        rm -f $jetty_http_jar
+    done
+    rm $download_jar
 fi
 
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
