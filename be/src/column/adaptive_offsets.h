@@ -77,7 +77,8 @@ public:
         return _u64.empty();
     }
 
-    // Counts both buffers to be safe — shrink_to_fit is non-binding.
+    // Dynamic buffer capacity bytes for container memory accounting. The inline object
+    // size is intentionally excluded; count both buffers because shrink_to_fit is non-binding.
     size_t memory_usage() const { return _u32.capacity() * sizeof(uint32_t) + _u64.capacity() * sizeof(uint64_t); }
 
     // Width of each stored element in bytes (4 or 8).
