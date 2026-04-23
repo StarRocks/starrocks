@@ -35,6 +35,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.mv.refresh.pct.MVPCTRefreshSynchronizer;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -450,7 +451,8 @@ public abstract class MVTestBase extends StarRocksTestBase {
 
     protected Map<Table, Set<String>> getRefTableRefreshedPartitions(MVPCTRefreshProcessor processor) {
         PCellSortedSet set = PCellSortedSet.of(Set.of(PCellWithName.of("p20220101", new PCellNone())));
-        Map<BaseTableSnapshotInfo, PCellSortedSet> baseTables = processor.getPCTRefTableRefreshPartitions(set);
+        Map<BaseTableSnapshotInfo, PCellSortedSet> baseTables =
+                new MVPCTRefreshSynchronizer(processor).getPCTRefTableRefreshPartitions(set);
         Assertions.assertEquals(2, baseTables.size());
         return baseTables.entrySet()
                 .stream()

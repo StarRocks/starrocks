@@ -101,7 +101,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
         // Reset per-call buffer to prevent accumulation across retries within the same task run
         // (processor instance is reused by retryProcessTaskRun).
         this.stagedTvrDeltaMap.clear();
-        syncAndCheckPCTPartitions(taskRunContext);
+        mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
 
         // collect change snapshots
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckChangedVersionRanges")) {
@@ -139,7 +139,7 @@ public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
             try {
                 // IVM refreshes all changed partitions via TVR delta (not limited by partition_refresh_number),
                 // so pass skipBatchFilter=true to record complete PCT metadata without truncation.
-                updatePCTToRefreshMetas(taskRunContext, /* skipBatchFilter */ true);
+                mvPctRefreshSynchronizer.updatePCTToRefreshMetas(/* skipBatchFilter */ true);
             } catch (Exception e) {
                 // if the check failed, we should not throw exception here
                 // because this check only affects pct-based refresh rather than ivm-based mv refresh.
