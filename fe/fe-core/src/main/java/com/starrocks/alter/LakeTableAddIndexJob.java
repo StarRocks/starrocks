@@ -15,13 +15,18 @@
 package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.FeConstants;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.thrift.TOlapTableIndex;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Lake-only fast-path Job for {@code ALTER TABLE ... ADD INDEX ... USING
@@ -51,6 +56,17 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
     @SerializedName(value = "indexesToAdd")
     private List<TOlapTableIndex> indexesToAdd = new ArrayList<>();
 
+    /**
+     * Columns newly enabled for plain bloom filter (is_bf_column=true) by
+     * this fast-path job. Empty for the USING-clause path (BITMAP / NGRAMBF
+     * / GIN). Populated when the alter originated from a
+     * {@code bloom_filter_columns} property change; applyCatalogMutation
+     * merges these into the table's bf set (and the corresponding synthetic
+     * BLOOM_FILTER entries in {@code indexesToAdd} drive the BE-side build).
+     */
+    @SerializedName(value = "addBfColumns")
+    private List<String> addBfColumns = new ArrayList<>();
+
     /** For deserialization / GSON. */
     public LakeTableAddIndexJob() {
         super(JobType.SCHEMA_CHANGE);
@@ -58,15 +74,23 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
 
     public LakeTableAddIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                                 List<Index> newIndexes, List<TOlapTableIndex> indexesToAdd) {
+        this(jobId, dbId, tableId, tableName, timeoutMs, newIndexes, indexesToAdd, new ArrayList<>());
+    }
+
+    public LakeTableAddIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
+                                List<Index> newIndexes, List<TOlapTableIndex> indexesToAdd,
+                                List<String> addBfColumns) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.newIndexes = new ArrayList<>(newIndexes);
         this.indexesToAdd = new ArrayList<>(indexesToAdd);
+        this.addBfColumns = new ArrayList<>(addBfColumns);
     }
 
     protected LakeTableAddIndexJob(LakeTableAddIndexJob other) {
         super(other);
         this.newIndexes = other.newIndexes == null ? null : new ArrayList<>(other.newIndexes);
         this.indexesToAdd = other.indexesToAdd == null ? null : new ArrayList<>(other.indexesToAdd);
+        this.addBfColumns = other.addBfColumns == null ? null : new ArrayList<>(other.addBfColumns);
     }
 
     @Override
@@ -97,6 +121,31 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
             // property stays out of band and is set via ALTER TABLE ...
             // SET PROPERTIES.)
         }
+        // Plain bloom filter add (BF IDG fast path): merge addBfColumns into
+        // the table's bf set. `Column.is_bf_column` is not a first-class
+        // Column attribute — TColumn.is_bloom_filter_column is derived by
+        // Column.setIndexFlag from OlapTable.bfColumns at schema publish
+        // time, so updating the table-level set is sufficient. BE already
+        // holds the IDG .idx payloads; this call publishes the "column is
+        // a bf column" fact to future writers and the query path.
+        if (addBfColumns != null && !addBfColumns.isEmpty()) {
+            Set<ColumnId> merged = new TreeSet<>(ColumnId.CASE_INSENSITIVE_ORDER);
+            if (table.getBfColumnIds() != null) {
+                merged.addAll(table.getBfColumnIds());
+            }
+            for (String name : addBfColumns) {
+                Column col = table.getColumn(name);
+                if (col == null) {
+                    continue;
+                }
+                merged.add(ColumnId.create(col.getName()));
+            }
+            double fpp = table.getBfFpp();
+            if (fpp <= 0) {
+                fpp = FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+            }
+            table.setBloomFilterInfo(merged, fpp);
+        }
     }
 
     private static boolean sameIndex(Index a, Index b) {
@@ -123,6 +172,7 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
         LakeTableAddIndexJob c = (LakeTableAddIndexJob) copy;
         c.newIndexes = this.newIndexes == null ? null : new ArrayList<>(this.newIndexes);
         c.indexesToAdd = this.indexesToAdd == null ? null : new ArrayList<>(this.indexesToAdd);
+        c.addBfColumns = this.addBfColumns == null ? null : new ArrayList<>(this.addBfColumns);
     }
 
     // Accessors for tests / tooling.
@@ -132,5 +182,9 @@ public class LakeTableAddIndexJob extends LakeTableIndexFastPathJobBase {
 
     public List<TOlapTableIndex> getIndexesToAdd() {
         return indexesToAdd;
+    }
+
+    public List<String> getAddBfColumns() {
+        return addBfColumns;
     }
 }

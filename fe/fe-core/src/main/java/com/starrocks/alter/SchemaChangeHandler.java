@@ -2115,6 +2115,28 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             LOG.info("DROP INDEX fast path eligible but build failed; falling through to regular path "
                     + "for table {}", olapTable.getName());
+        } else {
+            // Plain bloom filter fast path — triggered by ALTER TABLE SET
+            // ("bloom_filter_columns" = ...). Only pure-add and pure-drop
+            // cases are accepted; mixed / fpp-change cases fall through to
+            // the legacy segment-rewrite SchemaChangeJobV2.
+            SchemaChangeIndexFastPathClassifier.BloomFilterDelta bfDelta =
+                    SchemaChangeIndexFastPathClassifier.classifyBloomFilterChange(olapTable, alterClauses);
+            if (bfDelta != null) {
+                AlterJobV2 fastPathJob = null;
+                if (bfDelta.isPureAdd()) {
+                    fastPathJob = tryBuildLakeAddBloomFilterJob(db, olapTable, bfDelta.added);
+                } else if (bfDelta.isPureDrop()) {
+                    fastPathJob = tryBuildLakeDropBloomFilterJob(db, olapTable, bfDelta.dropped);
+                }
+                if (fastPathJob != null) {
+                    LOG.info("BF fast path selected for table {} (added={}, dropped={})",
+                            olapTable.getName(), bfDelta.added, bfDelta.dropped);
+                    return fastPathJob;
+                }
+                LOG.info("BF fast path eligible but build failed; falling through to regular path "
+                        + "for table {}", olapTable.getName());
+            }
         }
         boolean fastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
         //for multi add colmuns clauses
@@ -3111,6 +3133,103 @@ public class SchemaChangeHandler extends AlterHandler {
             return job;
         } catch (Exception e) {
             LOG.warn("failed to build LakeTableDropIndexJob for table {}: {}",
+                    olapTable.getName(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Build a {@link LakeTableAddIndexJob} whose payload is a batch of
+     * "enable plain bloom filter on these columns" requests. Each added
+     * column is encoded as a synthetic {@link com.starrocks.thrift.TOlapTableIndex}
+     * with {@code index_type=BLOOM_FILTER}; BE's
+     * {@code do_process_add_index_only} routes these through the IDG
+     * builder the same way as NGRAMBF (use_ngram=false).
+     *
+     * <p>The catalog side ({@code applyCatalogMutation}) merges the column
+     * names into {@code OlapTable.bfColumns}; no new {@link Index} object
+     * is appended because plain BF is not an index entry.
+     */
+    private AlterJobV2 tryBuildLakeAddBloomFilterJob(Database db, OlapTable olapTable, Set<String> addedColumns) {
+        try {
+            List<com.starrocks.thrift.TOlapTableIndex> thriftIndexes = new ArrayList<>();
+            List<String> addBfColumnNames = new ArrayList<>();
+            for (String name : addedColumns) {
+                Column col = olapTable.getColumn(name);
+                if (col == null) {
+                    LOG.warn("BF fast path ADD: column {} not found on table {}",
+                            name, olapTable.getName());
+                    return null;
+                }
+                com.starrocks.thrift.TOlapTableIndex t = new com.starrocks.thrift.TOlapTableIndex();
+                t.setIndex_id(-1);
+                t.setIndex_name("");
+                t.setIndex_type(com.starrocks.thrift.TIndexType.BLOOM_FILTER);
+                t.setColumns(com.google.common.collect.Lists.newArrayList(col.getName()));
+                // Carry the fpp through index_properties so BE's
+                // BloomFilterOptions picks up the right false-positive rate.
+                java.util.Map<String, String> props = new java.util.HashMap<>();
+                double fpp = olapTable.getBfFpp();
+                if (fpp <= 0) {
+                    fpp = com.starrocks.common.FeConstants.DEFAULT_BLOOM_FILTER_FPP;
+                }
+                props.put("bloom_filter_fpp", Double.toString(fpp));
+                t.setIndex_properties(props);
+                thriftIndexes.add(t);
+                addBfColumnNames.add(col.getName());
+            }
+            long jobId = GlobalStateMgr.getCurrentState().getNextId();
+            long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
+            LakeTableAddIndexJob job = new LakeTableAddIndexJob(jobId, db.getId(), olapTable.getId(),
+                    olapTable.getName(), timeoutMs, new ArrayList<>(), thriftIndexes, addBfColumnNames);
+            job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
+            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            return job;
+        } catch (Exception e) {
+            LOG.warn("failed to build LakeTableAddIndexJob (BF) for table {}: {}",
+                    olapTable.getName(), e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Build a {@link LakeTableDropIndexJob} whose payload is a batch of
+     * "disable plain bloom filter on these columns" requests. Each dropped
+     * column is encoded as a synthetic {@link com.starrocks.thrift.TDropIndexInfo}
+     * with {@code index_type=BLOOM_FILTER}; BE's
+     * {@code do_process_drop_index_only} writes a metadata-only tombstone
+     * into IDG and the physical .idx payloads are reclaimed by compaction.
+     */
+    private AlterJobV2 tryBuildLakeDropBloomFilterJob(Database db, OlapTable olapTable, Set<String> droppedColumns) {
+        try {
+            List<com.starrocks.thrift.TDropIndexInfo> drops = new ArrayList<>();
+            List<String> dropBfColumnNames = new ArrayList<>();
+            for (String name : droppedColumns) {
+                Column col = olapTable.getColumn(name);
+                if (col == null) {
+                    LOG.warn("BF fast path DROP: column {} not found on table {}",
+                            name, olapTable.getName());
+                    return null;
+                }
+                com.starrocks.thrift.TDropIndexInfo info = new com.starrocks.thrift.TDropIndexInfo();
+                // No per-column index_id exists for plain BF; use -1 as a
+                // "no Index object" sentinel. BE's apply_drop_index keys on
+                // (col_unique_id, index_type) for BF flavors so this is OK.
+                info.setIndex_id(-1);
+                info.setCol_unique_id(col.getUniqueId());
+                info.setIndex_type(com.starrocks.thrift.TIndexType.BLOOM_FILTER);
+                drops.add(info);
+                dropBfColumnNames.add(col.getName());
+            }
+            long jobId = GlobalStateMgr.getCurrentState().getNextId();
+            long timeoutMs = TimeUnit.SECONDS.toMillis(Config.alter_table_timeout_second);
+            LakeTableDropIndexJob job = new LakeTableDropIndexJob(jobId, db.getId(), olapTable.getId(),
+                    olapTable.getName(), timeoutMs, new ArrayList<>(), drops, dropBfColumnNames);
+            job.setComputeResource(WarehouseManager.DEFAULT_RESOURCE);
+            olapTable.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+            return job;
+        } catch (Exception e) {
+            LOG.warn("failed to build LakeTableDropIndexJob (BF) for table {}: {}",
                     olapTable.getName(), e.getMessage(), e);
             return null;
         }

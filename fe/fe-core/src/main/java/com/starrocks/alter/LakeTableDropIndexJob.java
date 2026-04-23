@@ -15,6 +15,8 @@
 package com.starrocks.alter;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.task.AlterReplicaTask;
@@ -25,6 +27,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Lake-only fast-path Job for {@code ALTER TABLE ... DROP INDEX}. Pure
@@ -45,6 +48,16 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
     @SerializedName(value = "dropInfos")
     private List<TDropIndexInfo> dropInfos = new ArrayList<>();
 
+    /**
+     * Columns whose plain bloom filter (is_bf_column) should be cleared by
+     * this fast-path job. Empty for the USING-clause path. Populated when
+     * the alter originated from a {@code bloom_filter_columns} property
+     * change that drops columns; applyCatalogMutation removes these from
+     * the table's bf set and flips is_bf_column=false on each.
+     */
+    @SerializedName(value = "dropBfColumns")
+    private List<String> dropBfColumns = new ArrayList<>();
+
     /** For deserialization / GSON. */
     public LakeTableDropIndexJob() {
         super(JobType.SCHEMA_CHANGE);
@@ -52,15 +65,23 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
 
     public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
                                  List<Long> dropIndexIds, List<TDropIndexInfo> dropInfos) {
+        this(jobId, dbId, tableId, tableName, timeoutMs, dropIndexIds, dropInfos, new ArrayList<>());
+    }
+
+    public LakeTableDropIndexJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
+                                 List<Long> dropIndexIds, List<TDropIndexInfo> dropInfos,
+                                 List<String> dropBfColumns) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         this.dropIndexIds = new ArrayList<>(dropIndexIds);
         this.dropInfos = new ArrayList<>(dropInfos);
+        this.dropBfColumns = new ArrayList<>(dropBfColumns);
     }
 
     protected LakeTableDropIndexJob(LakeTableDropIndexJob other) {
         super(other);
         this.dropIndexIds = other.dropIndexIds == null ? null : new ArrayList<>(other.dropIndexIds);
         this.dropInfos = other.dropInfos == null ? null : new ArrayList<>(other.dropInfos);
+        this.dropBfColumns = other.dropBfColumns == null ? null : new ArrayList<>(other.dropBfColumns);
     }
 
     @Override
@@ -84,6 +105,33 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
                 it.remove();
             }
         }
+        // Plain bloom filter drop (BF IDG fast path): remove these columns
+        // from the table's bf set. `Column.is_bf_column` is derived by
+        // Column.setIndexFlag from OlapTable.bfColumns at schema publish,
+        // so updating the table-level set is sufficient. BE IDG tombstone
+        // is already written; this publishes catalog state for future
+        // writers and readers. Idempotent on replay.
+        if (dropBfColumns != null && !dropBfColumns.isEmpty()) {
+            Set<ColumnId> remaining = new TreeSet<>(ColumnId.CASE_INSENSITIVE_ORDER);
+            if (table.getBfColumnIds() != null) {
+                remaining.addAll(table.getBfColumnIds());
+            }
+            for (String name : dropBfColumns) {
+                Column col = table.getColumn(name);
+                if (col == null) {
+                    continue;
+                }
+                remaining.remove(ColumnId.create(col.getName()));
+            }
+            if (remaining.isEmpty()) {
+                // Dropping the last BF column clears the table-level fpp too
+                // so subsequent legacy-style property queries see a clean
+                // "no bloom filter" state.
+                table.setBloomFilterInfo(null, 0);
+            } else {
+                table.setBloomFilterInfo(remaining, table.getBfFpp());
+            }
+        }
     }
 
     @Override
@@ -103,6 +151,7 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
         LakeTableDropIndexJob c = (LakeTableDropIndexJob) copy;
         c.dropIndexIds = this.dropIndexIds == null ? null : new ArrayList<>(this.dropIndexIds);
         c.dropInfos = this.dropInfos == null ? null : new ArrayList<>(this.dropInfos);
+        c.dropBfColumns = this.dropBfColumns == null ? null : new ArrayList<>(this.dropBfColumns);
     }
 
     // Accessors for tests / tooling.
@@ -112,5 +161,9 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
 
     public List<TDropIndexInfo> getDropInfos() {
         return dropInfos;
+    }
+
+    public List<String> getDropBfColumns() {
+        return dropBfColumns;
     }
 }

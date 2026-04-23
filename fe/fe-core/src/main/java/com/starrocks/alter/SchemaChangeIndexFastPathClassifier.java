@@ -17,14 +17,20 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * Coarse classifier that decides whether an ADD INDEX or DROP INDEX alter
@@ -112,6 +118,139 @@ public final class SchemaChangeIndexFastPathClassifier {
             }
         }
         return true;
+    }
+
+    /**
+     * Result of classifying a {@code bloom_filter_columns} property alter.
+     * Carries the delta (columns added / dropped relative to the current
+     * table state) so the caller can route the job without re-parsing the
+     * property map.
+     */
+    public static final class BloomFilterDelta {
+        public final Set<String> added;
+        public final Set<String> dropped;
+        private BloomFilterDelta(Set<String> added, Set<String> dropped) {
+            this.added = added;
+            this.dropped = dropped;
+        }
+        public boolean isPureAdd() {
+            return !added.isEmpty() && dropped.isEmpty();
+        }
+        public boolean isPureDrop() {
+            return added.isEmpty() && !dropped.isEmpty();
+        }
+    }
+
+    /**
+     * Classify a {@link ModifyTablePropertiesClause} that touches
+     * {@code bloom_filter_columns}. Returns a {@link BloomFilterDelta} if
+     * the alter is a pure add or pure drop on a lake table — and therefore
+     * eligible for the IDG fast path — or null otherwise.
+     *
+     * <p>Rules:
+     * <ul>
+     *   <li>Must be a single clause (no mixed alter).</li>
+     *   <li>Lake table, classifier config enabled.</li>
+     *   <li>Only {@code bloom_filter_columns} (and optionally
+     *       {@code bloom_filter_fpp} left unchanged) in the property map.
+     *       An fpp change forces the legacy path because existing segments
+     *       were built with the old fpp and must be rewritten to stay
+     *       consistent — the fast path only appends new payloads.</li>
+     *   <li>The new set of bf columns differs from the old set in exactly
+     *       one direction — either strictly adds or strictly drops. Mixed
+     *       changes fall back.</li>
+     * </ul>
+     */
+    public static BloomFilterDelta classifyBloomFilterChange(OlapTable table, List<AlterClause> alterClauses) {
+        if (!Config.enable_lake_add_index_fast_path) {
+            return null;
+        }
+        if (table == null || !table.isCloudNativeTableOrMaterializedView()) {
+            return null;
+        }
+        if (alterClauses == null || alterClauses.size() != 1) {
+            return null;
+        }
+        AlterClause clause = alterClauses.get(0);
+        if (!(clause instanceof ModifyTablePropertiesClause)) {
+            return null;
+        }
+        Map<String, String> props = ((ModifyTablePropertiesClause) clause).getProperties();
+        if (props == null || props.isEmpty()) {
+            return null;
+        }
+        // Reject the clause when it carries properties other than the two
+        // bloom-filter ones. Keeps the fast-path contract narrow and safe.
+        for (String key : props.keySet()) {
+            if (!PropertyAnalyzer.PROPERTIES_BF_COLUMNS.equalsIgnoreCase(key)
+                    && !PropertyAnalyzer.PROPERTIES_BF_FPP.equalsIgnoreCase(key)) {
+                return null;
+            }
+        }
+        // If fpp is present, require it to match the current fpp — an fpp
+        // change demands rebuilding all existing BFs, which the fast path
+        // is not designed for.
+        String fppStr = null;
+        for (Map.Entry<String, String> e : props.entrySet()) {
+            if (PropertyAnalyzer.PROPERTIES_BF_FPP.equalsIgnoreCase(e.getKey())) {
+                fppStr = e.getValue();
+                break;
+            }
+        }
+        if (fppStr != null && !fppStr.isEmpty()) {
+            try {
+                double newFpp = Double.parseDouble(fppStr);
+                if (Math.abs(newFpp - table.getBfFpp()) > 1e-9) {
+                    return null;
+                }
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        String bfColsStr = null;
+        for (Map.Entry<String, String> e : props.entrySet()) {
+            if (PropertyAnalyzer.PROPERTIES_BF_COLUMNS.equalsIgnoreCase(e.getKey())) {
+                bfColsStr = e.getValue();
+                break;
+            }
+        }
+        // The bf-columns property is required for this classifier (pure fpp
+        // changes are not eligible — see above).
+        if (bfColsStr == null) {
+            return null;
+        }
+        Set<String> newSet = new HashSet<>();
+        if (!bfColsStr.isEmpty()) {
+            for (String col : bfColsStr.split(",")) {
+                String trimmed = col.trim();
+                if (!trimmed.isEmpty()) {
+                    newSet.add(trimmed.toLowerCase());
+                }
+            }
+        }
+        Set<String> oldSet = new HashSet<>();
+        if (table.getBfColumnNames() != null) {
+            for (String c : table.getBfColumnNames()) {
+                oldSet.add(c.toLowerCase());
+            }
+        }
+        Set<String> added = new HashSet<>(newSet);
+        added.removeAll(oldSet);
+        Set<String> dropped = new HashSet<>(oldSet);
+        dropped.removeAll(newSet);
+        if (added.isEmpty() && dropped.isEmpty()) {
+            // Redundant no-op alter — let the legacy path raise the usual
+            // "no change" error message rather than silently accept here.
+            return null;
+        }
+        if (!added.isEmpty() && !dropped.isEmpty()) {
+            // Mixed alter: fall back to legacy so the rewrite sees the whole
+            // new set atomically.
+            LOG.debug("BF fast-path rejected: mixed add+drop");
+            return null;
+        }
+        return new BloomFilterDelta(
+                Collections.unmodifiableSet(added), Collections.unmodifiableSet(dropped));
     }
 
     public static boolean isSupportedIndexType(IndexDef.IndexType type) {
