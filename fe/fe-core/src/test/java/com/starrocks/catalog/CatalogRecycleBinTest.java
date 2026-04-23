@@ -1191,7 +1191,7 @@ public class CatalogRecycleBinTest {
         Assertions.assertNull(recycleBin.getRecyclePartitionInfo(partitionId));
         Assertions.assertFalse(recycleBin.isContainedInidToRecycleTime(partitionId));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(partitionId));
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(tableId));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(tableId));
         Assertions.assertFalse(recycleBin.isDeletingPartition(partitionId));
     }
 

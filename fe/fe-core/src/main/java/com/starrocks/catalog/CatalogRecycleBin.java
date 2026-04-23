@@ -426,16 +426,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     }
 
     private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
-        if (RunMode.isSharedDataMode()) {
-            // Table-deletion partitions already passed table-level snapshot check
-            if (partitionInfo.isFromTableDeletion()) {
-                return timeExpired(partitionInfo.getPartition().getId(), currentTimeMs);
-            }
-            if  (GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+        if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .isPartitionInClusterSnapshotInfo(partitionInfo.getDbId(),
                                     partitionInfo.getTableId(), partitionInfo.getPartition().getId())) {
-                return false;
-            }
+            return false;
         }
 
         if (!checkValidDeletionByClusterSnapshot(partitionInfo.getPartition().getId())) {
@@ -618,15 +612,16 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                 removedTableInfos.add(tableInfo);
                 nameToTableInfo.remove(dbId, tableInfo.table.getName());
             }
-            idToRecycleTime.remove(tableId);
-            enableEraseLater.remove(tableId);
-            // Clean up Lake Table partition tracking if exists
+            removeRecycleMarkers(tableId);
+            // Clean up Lake Table partition tracking if exists.
+            // On the leader this is normally a no-op because cleanupLakeTableAfterPartitionsDeletion()
+            // already removed the entry before logAddApplyEraseTables() invokes this method.
+            // On a node that was previously the leader and then switched to follower, the stale
+            // in-memory lakeTableToPartitions entries from the old leader role still exist and
+            // need to be cleaned up here during edit log replay.
             Set<Long> partitionIds = lakeTableToPartitions.remove(tableId);
             if (partitionIds != null) {
                 if (!partitionIds.isEmpty()) {
-                    // This is expected in follower replay scenario: leader has already deleted
-                    // partitions physically, follower just replays the table erase edit log
-                    // and cleans up the in-memory tracking data.
                     LOG.debug("Cleaning up lakeTableToPartitions for tableId {} during table erase. "
                                     + "pendingPartitionCount={}, partitionIds={}",
                             tableId, partitionIds.size(), partitionIds);
@@ -1366,7 +1361,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     }
 
     @VisibleForTesting
-    synchronized boolean isLakeTablePartitionsDeletionInProgress(long tableId) {
+    synchronized boolean isLakeTableDeletingInProgress(long tableId) {
         return lakeTableToPartitions.containsKey(tableId);
     }
 

@@ -4102,6 +4102,14 @@ public class Config extends ConfigBase {
     public static int lake_remove_partition_thread_num = 8;
 
     /**
+     * The remove process of lake table has been unified with partition erase process.
+     * So this config is not needed, will be removed in the future.
+     */
+    @Deprecated
+    @ConfField(mutable = false)
+    public static int lake_remove_table_thread_num = 4;
+
+    /**
      * Enable dropping tablet data cache before removing a table or partition in shared-data mode.
      * This helps to free up cache space proactively when data is being deleted.
      * Default: true

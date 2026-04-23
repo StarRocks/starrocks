@@ -122,7 +122,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         // Table should be erased
         Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
         // No partition tracking should exist
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         // Tablet meta should be removed
         checkTableTablet(table, false);
     }
@@ -189,7 +189,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         recycleBin.eraseTable(futureTime);
 
         // Verify tracking data exists
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertEquals(2, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p1.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p2.getId()));
@@ -202,7 +202,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         // Verify table is removed
         Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
         // Verify all tracking data is cleaned up
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(p1.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(p2.getId()));
         // Verify partitions are removed from idToPartition
@@ -277,7 +277,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // First eraseTable call: adds partitions to tracking
         recycleBin.eraseTable(futureTime);
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertEquals(2, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
 
         // Second eraseTable call: partitions are still in idToPartition (not processed yet)
@@ -285,7 +285,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         recycleBin.eraseTable(futureTime);
         // Table should still exist
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table.getId()));
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertEquals(2, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
 
         // Now process the partitions, waiting for async deletion to complete
@@ -297,7 +297,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         // Third eraseTable call: all partitions deleted, should clean up and finish
         recycleBin.eraseTable(futureTime);
         Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
     }
 
     /**
@@ -365,7 +365,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // First eraseTable call: adds partitions to tracking
         recycleBin.eraseTable(futureTime);
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p1.getId()));
 
         // Submit async task; wait for it to fail (exception path)
@@ -452,7 +452,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // eraseTable: adds the single partition to tracking
         recycleBin.eraseTable(futureTime);
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertEquals(1, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(defaultPartition.getId()));
 
@@ -465,7 +465,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         // Clean up table
         recycleBin.eraseTable(futureTime);
         Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         checkTableTablet(table, false);
     }
 
@@ -538,7 +538,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // eraseTable: adds list partitions to tracking
         recycleBin.eraseTable(futureTime);
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertEquals(2, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p1.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p2.getId()));
@@ -552,7 +552,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         // Clean up table
         recycleBin.eraseTable(futureTime);
         Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         checkTableTablet(table, false);
     }
 
@@ -680,7 +680,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // eraseTable: adds partitions to tracking
         recycleBin.eraseTable(futureTime);
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
 
         // erasePartition: submits async tasks (futures are created)
         new Expectations() {
@@ -702,7 +702,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // Verify all tracking is cleaned up
         Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(p1.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(p2.getId()));
         Assertions.assertNull(recycleBin.getRecyclePartitionInfo(p1.getId()));
@@ -801,7 +801,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         recycleBin.eraseTable(futureTime);
 
         // Verify partitions are tracked and have forceRemoveDirectory set
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertEquals(3, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p1.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p2.getId()));
@@ -822,7 +822,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // Table should be fully erased
         Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         checkTableTablet(table, false);
     }
 
@@ -841,8 +841,8 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         // isAnyLakeTablePartitionDeleting with non-existent tableId should return false
         Assertions.assertFalse(recycleBin.isAnyLakeTablePartitionDeleting(nonExistentTableId));
 
-        // isLakeTablePartitionsDeletionInProgress with non-existent tableId should return false
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(nonExistentTableId));
+        // isLakeTableDeletingInProgress with non-existent tableId should return false
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(nonExistentTableId));
 
         // isPartitionFromTableDeletion with non-existent partitionId should return false
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(nonExistentPartitionId));
@@ -905,7 +905,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         recycleBin.eraseTable(futureTime);
 
         // Verify tracking data is populated BEFORE clear
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p1.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p2.getId()));
         Assertions.assertNotNull(recycleBin.getRecyclePartitionInfo(p1.getId()));
@@ -915,7 +915,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         recycleBin.clear();
 
         // Verify all tracking data is cleaned up by clear()
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(p1.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(p2.getId()));
         Assertions.assertNull(recycleBin.getRecyclePartitionInfo(p1.getId()));
@@ -1058,7 +1058,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // eraseTable: adds partitions to tracking
         recycleBin.eraseTable(futureTime);
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertEquals(2, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
 
         // Process partitions, waiting for async deletion to complete (don't call eraseTable yet)
@@ -1068,7 +1068,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         Assertions.assertNull(recycleBin.getRecyclePartitionInfo(p1.getId()));
         Assertions.assertNull(recycleBin.getRecyclePartitionInfo(p2.getId()));
         // But table is still in lakeTableToPartitions (hasn't been cleaned up by eraseTable yet)
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
 
         // Now simulate a follower replay: replayEraseTable calls removeTableFromRecycleBin.
         // At this point, partitions are already removed from idToPartition,
@@ -1078,7 +1078,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         // Verify table is removed
         Assertions.assertNull(recycleBin.getTable(db.getId(), table.getId()));
         // Verify all tracking data is cleaned up
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(p1.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(p2.getId()));
     }
@@ -1149,7 +1149,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // eraseTable: adds partition to tracking
         recycleBin.eraseTable(futureTime);
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         Assertions.assertTrue(recycleBin.isPartitionFromTableDeletion(p1.getId()));
 
         // Submit async task and wait for it to fail (dropTable returns error, future.get() returns false)
@@ -1240,7 +1240,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
 
         // eraseTable: adds partition to tracking
         recycleBin.eraseTable(futureTime);
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         // Before any async task, no partition should be "deleting"
         Assertions.assertFalse(recycleBin.isAnyLakeTablePartitionDeleting(table.getId()));
 
@@ -1257,7 +1257,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         Assertions.assertFalse(recycleBin.isAnyLakeTablePartitionDeleting(table.getId()));
 
         // But table is still tracked (partitions still in lakeTableToPartitions set)
-        Assertions.assertTrue(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertTrue(recycleBin.isLakeTableDeletingInProgress(table.getId()));
         // getPendingPartitionCount should be 0 (partitions removed from idToPartition)
         Assertions.assertEquals(0, recycleBin.getLakeTablePendingPartitionCount(table.getId()));
 
@@ -1327,7 +1327,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         long futureTime = System.currentTimeMillis() + delay;
         waitTableClearFinished(recycleBin, table1.getId(), futureTime);
         Assertions.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table1.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table1.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(table1p1.getId()));
 
         // Re-create and force drop the same-named table
@@ -1340,7 +1340,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         futureTime = System.currentTimeMillis() + delay;
         waitTableClearFinished(recycleBin, table2.getId(), futureTime);
         Assertions.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table2.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table2.getId()));
         Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(table2p1.getId()));
     }
 
@@ -1383,7 +1383,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         Assertions.assertNotNull(recycleBin.getTable(db.getId(), table.getId()));
 
         // Do NOT call eraseTable, so lakeTableToPartitions does NOT contain this table
-        Assertions.assertFalse(recycleBin.isLakeTablePartitionsDeletionInProgress(table.getId()));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(table.getId()));
 
         // Directly call removeTableFromRecycleBin (simulating a replay before eraseTable was called)
         // This should handle the case where lakeTableToPartitions.remove(tableId) returns null
