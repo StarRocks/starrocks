@@ -19,7 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -532,7 +532,7 @@ public interface IcebergCatalog extends MemoryTrackable {
     }
 
     default List<String> listPartitionNames(IcebergTable icebergTable,
-                                            ConnectorMetadatRequestContext requestContext,
+                                            ConnectorMetadataRequestContext requestContext,
                                             ExecutorService executorService) {
         Table nativeTable = icebergTable.getNativeTable();
 

@@ -21,7 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.type.ScalarType;
@@ -344,7 +344,7 @@ public class OracleSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
-                    ConnectorMetadatRequestContext.DEFAULT);
+                    ConnectorMetadataRequestContext.DEFAULT);
             Assertions.assertFalse(partitionNames.isEmpty());
         } catch (Exception e) {
             Assertions.fail(e.getMessage());
@@ -429,7 +429,7 @@ public class OracleSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
-                    ConnectorMetadatRequestContext.DEFAULT);
+                    ConnectorMetadataRequestContext.DEFAULT);
             // Assert that setQueryTimeout was called and the operation completed successfully
             Assertions.assertNotNull(partitionNames);
             Assertions.assertFalse(partitionNames.isEmpty());
@@ -455,7 +455,7 @@ public class OracleSchemaResolverTest {
                 }
             };
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
-                    ConnectorMetadatRequestContext.DEFAULT);
+                    ConnectorMetadataRequestContext.DEFAULT);
             Assertions.assertNotNull(partitionNames);
             Assertions.assertEquals(1, expectedTimeout1, "100ms should round up to 1 second");
 
@@ -469,7 +469,7 @@ public class OracleSchemaResolverTest {
                 }
             };
             partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
-                    ConnectorMetadatRequestContext.DEFAULT);
+                    ConnectorMetadataRequestContext.DEFAULT);
             Assertions.assertNotNull(partitionNames);
             Assertions.assertEquals(0, expectedTimeout2, "0ms should remain 0 (no limit)");
         } finally {

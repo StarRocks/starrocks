@@ -21,7 +21,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.paimon.Partition;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,7 +54,7 @@ public class PaimonTablePartitionsProcDir extends PartitionsProcDir {
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         List<String> listPartitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .listPartitionNames(table.getCatalogName(), paimonTable.getCatalogDBName(),
-                        paimonTable.getCatalogTableName(), ConnectorMetadatRequestContext.DEFAULT);
+                        paimonTable.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
 
         List<PartitionInfo> tblPartitionInfo = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getPartitions(table.getCatalogName(), table, listPartitionNames);

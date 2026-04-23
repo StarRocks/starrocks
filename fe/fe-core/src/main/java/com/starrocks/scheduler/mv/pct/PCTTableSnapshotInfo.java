@@ -26,7 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrVersionRange;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
@@ -216,7 +216,7 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
         // When pinnedRange is set, read partition info at the frozen snapshot.
         List<com.starrocks.connector.PartitionInfo> partitions;
         if (pinnedRange != null) {
-            ConnectorMetadatRequestContext rc = new ConnectorMetadatRequestContext();
+            ConnectorMetadataRequestContext rc = new ConnectorMetadataRequestContext();
             rc.setTableVersionRange(pinnedRange);
             partitions = GlobalStateMgr.getCurrentState()
                     .getMetadataMgr()

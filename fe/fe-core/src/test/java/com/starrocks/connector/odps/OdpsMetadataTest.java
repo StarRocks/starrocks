@@ -22,8 +22,8 @@ import com.starrocks.catalog.OdpsTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -114,7 +114,7 @@ public class OdpsMetadataTest extends MockedBase {
     @Test
     public void testListPartitionNames() {
         List<String> partitionNames =
-                odpsMetadata.listPartitionNames("project", "tableName", ConnectorMetadatRequestContext.DEFAULT);
+                odpsMetadata.listPartitionNames("project", "tableName", ConnectorMetadataRequestContext.DEFAULT);
         Assertions.assertEquals(Collections.singletonList("p1=a/p2=b"), partitionNames);
     }
 
@@ -132,7 +132,7 @@ public class OdpsMetadataTest extends MockedBase {
     @Test
     public void testGetPartitions() {
         Table table = odpsMetadata.getTable(new ConnectContext(), "db", "tbl");
-        List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl", ConnectorMetadatRequestContext.DEFAULT);
+        List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl", ConnectorMetadataRequestContext.DEFAULT);
         List<PartitionInfo> partitions = odpsMetadata.getPartitions(table, partitionNames);
         Assertions.assertEquals(1, partitions.size());
         PartitionInfo partitionInfo = partitions.get(0);
