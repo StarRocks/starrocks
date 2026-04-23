@@ -99,6 +99,8 @@ struct TabletReaderParams {
     int64_t scan_dop = 0;
     TScanRange* scan_range = nullptr;
     int32_t plan_node_id;
+    int64_t prepared_target_rowset_index = -1;
+    int64_t prepared_target_segment_index = -1;
 
     bool prune_column_after_index_filter = false;
     bool enable_gin_filter = false;

@@ -112,6 +112,17 @@ Status ScanOperator::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+void ScanOperator::_init_lake_child_reuse_profile_counters() {
+    if (_lake_child_reuse_candidate_counter != nullptr) {
+        return;
+    }
+    _lake_child_reuse_candidate_counter = ADD_COUNTER(_unique_metrics, "LakeScanChildReuseCandidates", TUnit::UNIT);
+    _lake_child_reuse_no_source_counter = ADD_COUNTER(_unique_metrics, "LakeScanChildReuseNoSource", TUnit::UNIT);
+    _lake_child_reuse_attempt_counter = ADD_COUNTER(_unique_metrics, "LakeScanChildReuseAttempts", TUnit::UNIT);
+    _lake_child_reuse_hit_counter = ADD_COUNTER(_unique_metrics, "LakeScanChildReuseHits", TUnit::UNIT);
+    _lake_child_reuse_miss_counter = ADD_COUNTER(_unique_metrics, "LakeScanChildReuseMisses", TUnit::UNIT);
+}
+
 void ScanOperator::close(RuntimeState* state) {
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
@@ -366,13 +377,26 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
             }
         }
 
-        // now skip vector includes already started chunk source
-        // we are going to pick up `total_cnt` new chunk source to start.
+        int ranked_to_sched[2][_io_tasks_per_scan_operator];
+        int ranked_size[2] = {0, 0};
+
+        // now skip vector includes already started chunk source.
+        // Stable-bucketize idle slots by rank while preserving the round-robin order
+        // within each bucket. Lake scans use this to prefer truly empty slots before
+        // those that already hold reusable state.
         for (int i = 0; i < _io_tasks_per_scan_operator && size < total_cnt; i++) {
             _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
             int idx = _chunk_source_idx;
             if (skip[idx]) continue;
-            to_sched[size++] = idx;
+            const auto rank = static_cast<int>(_rank_new_morsel_pickup_slot(idx));
+            DCHECK(rank >= 0 && rank < 2);
+            ranked_to_sched[rank][ranked_size[rank]++] = idx;
+        }
+
+        for (int rank = 0; rank < 2 && size < total_cnt; ++rank) {
+            for (int i = 0; i < ranked_size[rank] && size < total_cnt; ++i) {
+                to_sched[size++] = ranked_to_sched[rank][i];
+            }
         }
     }
 
@@ -418,7 +442,14 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
         std::lock_guard guard(_task_mutex);
         if (!_chunk_sources[chunk_source_index]->has_next_chunk() || _is_finished) {
             _chunk_sources[chunk_source_index]->update_chunk_exec_stats(state);
-            _close_chunk_source_unlocked(state, chunk_source_index);
+            if (!_is_finished && _chunk_sources[chunk_source_index]->can_reuse_after_finish()) {
+                auto reusable_chunk_source = std::move(_chunk_sources[chunk_source_index]);
+                reusable_chunk_source->release_for_reuse(state);
+                detach_chunk_source(chunk_source_index);
+                _stash_reusable_chunk_source(state, chunk_source_index, std::move(reusable_chunk_source));
+            } else {
+                _close_chunk_source_unlocked(state, chunk_source_index);
+            }
         }
         _is_io_task_running[chunk_source_index] = false;
     }
@@ -602,15 +633,72 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
+        const bool lake_child_reuse_candidate = _is_lake_child_reuse_candidate(*morsel);
+        if (lake_child_reuse_candidate && _lake_child_reuse_candidate_counter != nullptr) {
+            COUNTER_UPDATE(_lake_child_reuse_candidate_counter, 1);
+        }
 
         {
             SCOPED_TIMER(_prepare_chunk_source_timer);
-            _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
-            auto status = _chunk_sources[chunk_source_index]->prepare(state);
-            if (!status.ok()) {
-                _chunk_sources[chunk_source_index] = nullptr;
-                static_cast<void>(set_finishing(state));
-                return status;
+            ReusableChunkSourceLookupResult reusable_lookup;
+            if (lake_child_reuse_candidate) {
+                {
+                    std::lock_guard guard(_task_mutex);
+                    reusable_lookup = _take_reusable_chunk_source_for_morsel(state, chunk_source_index, *morsel);
+                }
+                if (reusable_lookup.stale_chunk_source != nullptr) {
+                    reusable_lookup.stale_chunk_source->close(state);
+                }
+                if (reusable_lookup.found_candidate && _lake_child_reuse_attempt_counter != nullptr) {
+                    COUNTER_UPDATE(_lake_child_reuse_attempt_counter, 1);
+                }
+            }
+            if (reusable_lookup.reusable_chunk_source != nullptr) {
+                const bool can_reuse = [&]() {
+                    return reusable_lookup.reusable_chunk_source->can_reuse_with(*morsel);
+                }();
+                if (can_reuse) {
+                    Status status;
+                    { status = reusable_lookup.reusable_chunk_source->reset_morsel(state, std::move(morsel)); }
+                    if (!status.ok()) {
+                        if (lake_child_reuse_candidate && _lake_child_reuse_miss_counter != nullptr) {
+                            COUNTER_UPDATE(_lake_child_reuse_miss_counter, 1);
+                        }
+                        { reusable_lookup.reusable_chunk_source->close(state); }
+                        static_cast<void>(set_finishing(state));
+                        return status;
+                    }
+                    if (lake_child_reuse_candidate && _lake_child_reuse_hit_counter != nullptr) {
+                        COUNTER_UPDATE(_lake_child_reuse_hit_counter, 1);
+                    }
+                    _chunk_sources[chunk_source_index] = std::move(reusable_lookup.reusable_chunk_source);
+                } else {
+                    if (lake_child_reuse_candidate && _lake_child_reuse_miss_counter != nullptr) {
+                        COUNTER_UPDATE(_lake_child_reuse_miss_counter, 1);
+                    }
+                    { reusable_lookup.reusable_chunk_source->close(state); }
+                }
+            } else if (lake_child_reuse_candidate) {
+                if (reusable_lookup.found_candidate) {
+                    if (_lake_child_reuse_miss_counter != nullptr) {
+                        COUNTER_UPDATE(_lake_child_reuse_miss_counter, 1);
+                    }
+                } else if (_lake_child_reuse_no_source_counter != nullptr) {
+                    COUNTER_UPDATE(_lake_child_reuse_no_source_counter, 1);
+                }
+            }
+
+            if (_chunk_sources[chunk_source_index] == nullptr) {
+                {
+                    _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
+                }
+                Status status;
+                { status = _chunk_sources[chunk_source_index]->prepare(state); }
+                if (!status.ok()) {
+                    _chunk_sources[chunk_source_index] = nullptr;
+                    static_cast<void>(set_finishing(state));
+                    return status;
+                }
             }
         }
 

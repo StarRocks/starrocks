@@ -14,24 +14,62 @@
 
 #pragma once
 
+#include <atomic>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <unordered_set>
+#include <vector>
 
+#include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/chunk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/range.h"
 #include "storage/rowset/base_rowset.h"
+#include "storage/rowset/segment.h"
+#include "storage/rowset/segment_options.h"
 #include "storage/seek_range.h"
 
-namespace starrocks::lake {
+namespace starrocks {
+class Schema;
+namespace lake {
 
 class MetaFileBuilder;
 class TabletManager;
 class TabletWriter;
+
+struct PreparedSegmentReadState {
+    enum class Lifecycle : uint32_t {
+        UNPREPARED = 0,
+        PREPARING = 1,
+        PREPARED = 2,
+        FAILED = 3,
+    };
+
+    std::atomic<uint32_t> lifecycle{static_cast<uint32_t>(Lifecycle::UNPREPARED)};
+    Status prepare_status;
+
+    SparseRangePtr execution_pruned_range;
+
+    std::vector<std::optional<Range<rowid_t>>> seek_range_rowid_bounds;
+    std::optional<Range<rowid_t>> tablet_range_rowid_range;
+
+    size_t final_pruned_rows = 0;
+    size_t estimated_fanout = 0;
+};
+using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
+
+struct PreparedTabletReadState {
+    std::vector<RowsetPtr> rowsets;
+    std::vector<std::vector<std::shared_ptr<Segment>>> rowset_segments;
+    std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
+};
+using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
 
 class Rowset : public BaseRowset {
 public:
@@ -69,6 +107,15 @@ public:
     DISALLOW_COPY_AND_MOVE(Rowset);
 
     StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options,
+                                                 const std::vector<SegmentPtr>& prepared_segments);
+    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options,
+                                                 const std::vector<SegmentPtr>& prepared_segments,
+                                                 std::vector<ChunkIteratorPtr>* reusable_segment_iterators);
+    StatusOr<std::vector<ChunkIteratorPtr>> read(
+            const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
+            std::vector<ChunkIteratorPtr>* reusable_segment_iterators,
+            std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states = nullptr);
 
     StatusOr<size_t> get_read_iterator_num();
 
@@ -159,6 +206,8 @@ public:
 
     TabletSchemaPtr tablet_schema() const { return _tablet_schema; }
 
+    StatusOr<std::optional<SeekRange>> get_shared_segment_seek_range() const { return get_seek_range(); }
+
     bool has_data_files() const override { return num_segments() > 0 || num_dels() > 0; }
 
     // no practical significance, just compatible interface
@@ -166,6 +215,10 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
+    StatusOr<std::vector<ChunkIteratorPtr>> do_read(
+            const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>* prepared_segments,
+            std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr,
+            std::vector<PreparedSegmentReadStatePtr>* prepared_segment_read_states = nullptr);
     StatusOr<std::optional<SeekRange>> get_seek_range() const;
 
     TabletManager* _tablet_mgr;
@@ -197,4 +250,5 @@ inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, con
     return rowsets;
 }
 
-} // namespace starrocks::lake
+} // namespace lake
+} // namespace starrocks

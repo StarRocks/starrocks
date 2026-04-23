@@ -88,6 +88,8 @@ public:
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
 
     uint32_t dynamic_rss_id_base = 0;
+    int64_t prepared_target_rowset_index = -1;
+    int64_t prepared_target_segment_index = -1;
 
     bool asc_hint = true;
 

@@ -71,6 +71,19 @@ CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
 CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
+// Whether to build exact key-range-pruned physical split tasks for lake scans before generating split morsels.
+// Disable this to fall back to the generic physical split path for A/B comparison.
+CONF_mBool(enable_lake_index_pruned_physical_split, "true");
+
+// Whether physical split siblings on the same slot reuse the same Lake chunk source and reader shell after the
+// top-level prepared split path has already been chosen. This is a secondary implementation-detail switch and does
+// not participate in the planner's prepared-vs-baseline path selection.
+CONF_mBool(enable_lake_scan_child_morsel_reuse, "false");
+
+// Whether reused Lake physical child morsels on the same slot bypass the full reader reopen shell and only refresh
+// child-specific scan parameters before reopening the existing TabletReader.
+CONF_mBool(enable_lake_scan_child_morsel_fast_reopen, "false");
+
 // The max hdfs file handle.
 CONF_mInt32(max_hdfs_file_handle, "1000");
 

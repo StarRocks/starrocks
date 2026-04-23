@@ -14,6 +14,10 @@
 
 #pragma once
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "connector/connector.h"
 #include "exec/olap_scan_prepare.h"
 #include "storage/conjunctive_predicates.h"
@@ -61,15 +65,16 @@ public:
     Status open(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
+    bool can_reuse_with(const pipeline::ScanMorsel& morsel) const override;
+    Status reuse(RuntimeState* state, pipeline::ScanMorsel* morsel) override;
+    void release_for_reuse(RuntimeState* state) override;
 
     int64_t raw_rows_read() const override { return _raw_rows_read; }
     int64_t num_rows_read() const override { return _num_rows_read; }
     int64_t num_bytes_read() const override { return _bytes_read; }
     int64_t cpu_time_spent() const override { return _cpu_time_spent_ns; }
 
-    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override {
-        _reader->get_split_tasks(split_tasks);
-    }
+    void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) override;
 
     // parse_runtime_filters is used to generate min-max predicates from runtime filters, while LakeDataSource already
     // generates predicates by ScanConjunctsManager, so skip parse_runtime_filters to make the parse logic is consistent
@@ -90,6 +95,17 @@ private:
     void init_counter(RuntimeState* state);
     void update_realtime_counter(Chunk* chunk);
     void update_counter(RuntimeState* state);
+    void update_counter(RuntimeState* state, const OlapReaderStatistics& stats);
+    bool enable_local_child_morsel_reuse() const;
+    bool should_attach_prepared_read_state() const;
+    bool can_reuse_current_morsel(const pipeline::ScanMorsel& morsel) const;
+    bool can_reuse_with_signature(const pipeline::ScanMorsel& morsel) const;
+    bool has_reuse_blocker() const;
+    bool can_fast_reopen_current_morsel() const;
+    Status open_reader_for_current_morsel();
+    Status fast_reopen_reader_for_current_morsel();
+    void release_reader(RuntimeState* state);
+    void refresh_reuse_signature();
 
     Status _extend_schema_by_access_paths();
     void _inherit_default_value_from_json(TabletColumn* column, const TabletColumn& root_column,
@@ -119,8 +135,22 @@ private:
     TabletSchemaCSPtr _tablet_schema;
     TabletReaderParams _params{};
     std::shared_ptr<lake::TabletReader> _reader;
+    lake::TabletReader::PreparedReadStatePtr _prepared_read_state;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<ChunkIterator> _prj_iter;
+    Schema _reader_schema;
+    Schema _output_schema;
+    bool _reader_schema_inited = false;
+    bool _use_projection_iterator = false;
+    bool _prepare_only_mode = false;
+    bool _reuse_pending = false;
+    struct ReuseSignature {
+        bool valid = false;
+        int64_t tablet_id = 0;
+        std::string version;
+        const void* rowsets_identity = nullptr;
+    };
+    ReuseSignature _reuse_signature;
 
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
@@ -137,6 +167,10 @@ private:
     int64_t _raw_rows_read = 0;
     int64_t _bytes_read = 0;
     int64_t _cpu_time_spent_ns = 0;
+    int64_t _released_raw_rows_read = 0;
+    int64_t _released_bytes_read = 0;
+    int64_t _released_cpu_time_spent_ns = 0;
+    int64_t _reported_num_rows_read = 0;
 
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;

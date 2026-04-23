@@ -1066,6 +1066,19 @@ CONF_mInt64(tablet_internal_parallel_max_splitted_scan_bytes, "536870912");
 // where scan_dop = estimated_scan_rows / splitted_scan_rows.
 CONF_mInt64(tablet_internal_parallel_min_scan_dop, "4");
 
+// Whether to build exact key-range-pruned physical split tasks for lake scans before generating split morsels.
+// Disable this to fall back to the generic physical split path for A/B comparison.
+CONF_mBool(enable_lake_index_pruned_physical_split, "true");
+
+// Whether physical split siblings on the same slot reuse the same Lake chunk source and reader shell after the
+// top-level prepared split path has already been chosen. This is a secondary implementation-detail switch and does
+// not participate in the planner's prepared-vs-baseline path selection.
+CONF_mBool(enable_lake_scan_child_morsel_reuse, "false");
+
+// Whether reused Lake physical child morsels on the same slot bypass the full reader reopen shell and only refresh
+// child-specific scan parameters before reopening the existing TabletReader.
+CONF_mBool(enable_lake_scan_child_morsel_fast_reopen, "false");
+
 // Only the num rows of lake tablet less than lake_tablet_rows_splitted_ratio * splitted_scan_rows, than the lake tablet can be splitted.
 CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 
@@ -1683,6 +1696,10 @@ CONF_mBool(enable_short_key_for_one_column_filter, "false");
 
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");
+// Whether to pass the current SparseRange down to page-level zonemap filtering, so child morsels only inspect the
+// pages overlapping their exact split ranges. Disable this to A/B compare against the historical coarse begin/end
+// envelope behavior.
+CONF_mBool(enable_index_page_level_zonemap_filter_scan_range_pushdown, "true");
 CONF_mBool(enable_index_bloom_filter, "true");
 CONF_mBool(enable_index_bitmap_filter, "true");
 

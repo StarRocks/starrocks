@@ -103,6 +103,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否为 Ordinal index 开启 Memory Cache。Ordinal index 是行号到数据 page position 的映射，可以加速 Scan。
 - 引入版本：-
 
+### enable_index_page_level_zonemap_filter_scan_range_pushdown
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：是否将当前扫描 `SparseRange` 下推到 page-level Zonemap 过滤中。开启后，child morsel 只会评估与自身精确 split range 重叠的 page 的 Zonemap。关闭后可用于与历史上的 begin/end 包络行为做 A/B 对比。
+- 引入版本：v4.1.0
+
 ### enable_string_prefix_zonemap
 
 - 默认值：true
@@ -273,6 +282,33 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制是否忽略 tablet rowset 元数据中可能由逻辑删除在列名重命名后引入到重复键（duplicate key）表中的无效 delete predicates 的布尔值。
 - 引入版本：v4.0
+
+### enable_lake_index_pruned_physical_split
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 Lake 表在生成 physical split 时，是否先根据 key predicate 精确物化 rowid range，再创建 split morsel。开启后，`TabletReader` 会优先尝试 index-pruned split 路径（`_build_index_pruned_physical_split_tasks`）；如果准备失败，则自动回退到原有的 generic physical split 路径。将该参数设置为 `false` 可在不更换二进制的前提下关闭这次优化，便于与原始 physical split 行为做 A/B 对比。
+- 引入版本：v4.1
+
+### enable_lake_scan_child_morsel_reuse
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 Lake shared-data physical split 的兄弟 child morsel，在顶层 prepared split 路径已经选中的前提下，是否在同一个 slot 内继续复用 chunk source 和 reader 壳层。这只是 slot-local 的次级实现细节开关，不参与 prepared path 与 baseline path 的架构选路。对于 query cache 的 delta-rowsets 读取、logical split morsel、GLM、CACHE SELECT/SST warmup 等暂未支持的场景，会自动回退到原有的按 morsel 重建 reader 路径。
+- 引入版本：v4.1
+
+### enable_lake_scan_child_morsel_fast_reopen
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制复用中的 Lake physical split child morsel，是否绕过完整的 `LakeDataSource::open_reader_for_current_morsel()` 壳层，只刷新 child 自己的 rowid range 后直接重开已有 `TabletReader`。该开关只有在同时开启 `enable_lake_scan_child_morsel_reuse` 时才生效，并且只作用于同一 slot 内的 physical child morsel 复用场景。
+- 引入版本：v4.1
 
 ### max_hdfs_file_handle
 

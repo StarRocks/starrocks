@@ -115,6 +115,15 @@ This topic introduces the following types of FE configurations:
 - Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
 - Introduced in: -
 
+### enable_index_page_level_zonemap_filter_scan_range_pushdown
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to push the current scan `SparseRange` down into page-level Zonemap filtering. When enabled, child morsels only evaluate Zonemap entries for pages overlapping their exact split ranges. Disable this parameter for A/B comparison against the historical begin/end envelope behavior.
+- Introduced in: v4.1.0
+
 ### enable_string_prefix_zonemap
 
 - Default: true
@@ -285,6 +294,33 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: A boolean value to control whether ignore invalid delete predicates in tablet rowset metadata which may be introduced by logic deletion to a duplicate key table after the column name renamed.
 - Introduced in: v4.0
+
+### enable_lake_index_pruned_physical_split
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether Lake table physical split generation first materializes exact rowid ranges from key predicates before creating split morsels. When enabled, `TabletReader` tries the index-pruned split path (`_build_index_pruned_physical_split_tasks`) and falls back to the generic physical split path if that preparation fails. Set this to `false` to disable the optimization and compare against the original physical split behavior under the same binary.
+- Introduced in: v4.1
+
+### enable_lake_scan_child_morsel_reuse
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether Lake shared-data physical split sibling morsels reuse the same chunk source and reader shell within one slot after the top-level prepared split path has already been chosen. This is a secondary implementation-detail switch for slot-local reuse only; it does not participate in the prepared-vs-baseline path selection. Unsupported cases such as query cache delta-rowset reads, logical split morsels, GLM, or CACHE SELECT warmup paths automatically fall back to the original per-morsel reader construction path.
+- Introduced in: v4.1
+
+### enable_lake_scan_child_morsel_fast_reopen
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether a reused Lake physical split child morsel bypasses the full `LakeDataSource::open_reader_for_current_morsel()` shell and directly reopens the existing `TabletReader` with only the child-specific rowid range refreshed. This switch only takes effect when `enable_lake_scan_child_morsel_reuse` is also enabled and only for same-slot physical child morsel reuse.
+- Introduced in: v4.1
 
 ### late_materialization_ratio
 

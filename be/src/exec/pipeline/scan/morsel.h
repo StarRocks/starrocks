@@ -15,8 +15,12 @@
 #pragma once
 
 #include <atomic>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <tuple>
+#include <unordered_map>
+#include <vector>
 
 #include "exec/query_cache/ticket_checker.h"
 #include "gen_cpp/InternalService_types.h"
@@ -49,6 +53,13 @@ struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
 class Schema;
 using SchemaPtr = std::shared_ptr<Schema>;
+
+namespace lake {
+struct PreparedSegmentReadState;
+using PreparedSegmentReadStatePtr = std::shared_ptr<PreparedSegmentReadState>;
+struct PreparedTabletReadState;
+using PreparedTabletReadStatePtr = std::shared_ptr<PreparedTabletReadState>;
+} // namespace lake
 
 namespace pipeline {
 
@@ -85,6 +96,7 @@ public:
     // should be read out and merged with the cache result, here from_version is cached version.
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
+    int64_t from_version() const { return _from_version; }
 
     void set_rowsets(const std::vector<BaseRowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
     void set_delta_rowsets(std::vector<BaseRowsetSharedPtr>&& delta_rowsets) {
@@ -124,11 +136,21 @@ private:
 };
 
 struct LakeSplitContext : public ScanSplitContext {
+    enum class TaskType : uint8_t {
+        PHYSICAL_SPLIT,
+        LOGICAL_SPLIT,
+        SEGMENT_PREPARE,
+    };
+
+    TaskType task_type = TaskType::PHYSICAL_SPLIT;
     // physical split
     RowidRangeOptionPtr rowid_range;
     // logical split
     ShortKeyRangesOptionPtr short_key_range;
-    std::shared_ptr<SplitMorselQueue> split_morsel_queue = nullptr;
+    lake::PreparedTabletReadStatePtr prepared_read_state = nullptr;
+    lake::PreparedSegmentReadStatePtr prepared_segment_state = nullptr;
+    size_t rowset_index = 0;
+    size_t segment_index = 0;
 };
 
 using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
@@ -159,6 +181,7 @@ public:
     ~ScanMorsel() override = default;
 
     TScanRange* get_scan_range() { return _scan_range.get(); }
+    const TScanRange* get_scan_range() const { return _scan_range.get(); }
 
     TInternalScanRange* get_olap_scan_range() { return &(_scan_range->internal_scan_range); }
 
@@ -172,6 +195,7 @@ public:
         _is_last_split = _split_context->is_last_split();
     }
     ScanSplitContext* get_split_context() { return _split_context.get(); }
+    const ScanSplitContext* get_split_context() const { return _split_context.get(); }
 
     bool has_owner_id() const { return _has_owner_id; }
     int32_t owner_id() const { return _owner_id; }
