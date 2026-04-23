@@ -1131,6 +1131,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
 
+    @ConfField(mutable = true, comment = "Shared-data only. When true, FE tells each BE " +
+            "to elect a per-partition coordinator for combined_txn_log collection, " +
+            "fixing silent txn log loss on incremental-only channels where sender 0 " +
+            "is absent. Leave false during a mixed-version rolling upgrade; enable " +
+            "after all BE/CN nodes have been upgraded to a version that supports it.")
+    public static boolean lake_enable_per_partition_coordinator_txn_log = true;
+
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
 

@@ -172,20 +172,23 @@ message PTabletWriterOpenRequest {
         optional bool write_txn_log = 1;
         optional bool enable_data_file_bundling = 2;
         optional bool is_multi_statements_txn = 3;
-        // Partitions for which this sender is declaring coordination responsibility.
-        // Used by shared-data combined_txn_log mode: the CN elects one coordinator per
-        // partition (the smallest sender_id among those that claimed it via incremental
-        // open) to collect that partition's txn logs at close time.
+        // FE-controlled, transaction-level switch for combined_txn_log collection.
         //
-        // Without this, the hard-coded "sender_id == 0 collects all logs" rule silently
-        // drops logs on incremental-only channels where sender 0 is not present (which
-        // happens when the sink driver with sender_id==0 never routed a row that
-        // triggered `_incremental_open_node_channel` onto this CN).
+        // When true, the CN elects one coordinator per partition (the smallest
+        // sender_id among those that declared tablets of that partition via
+        // (incremental_)open) and routes that partition's txn logs to the elected
+        // coordinator at close time. The claim set is derived from the per-tablet
+        // partition_id already carried by PTabletWithPartition — no extra payload.
         //
-        // Senders that did not call `_incremental_open_node_channel` for any partition
-        // leave this field empty; their channels fall back to the sender_id==0 rule
-        // (preserves legacy behavior for non-incremental channels).
-        repeated int64 coordinated_partition_ids = 4;
+        // When false or unset, the legacy "sender_id == 0 collects all logs" rule
+        // applies. FE only sets this to true when it can be sure every target CN
+        // supports the mode (rolling-upgrade interlock: FE is always upgraded
+        // after BE, so by the time FE emits `true`, all BEs have the fix).
+        //
+        // This avoids the silent txn log loss on incremental-only channels where
+        // sender 0 is not present (the driver with _sender_id==0 never routed a
+        // row that triggered `_incremental_open_node_channel` onto this CN).
+        optional bool enable_per_partition_coordinator = 4;
     };
 
     required PUniqueId id = 1;

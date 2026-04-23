@@ -200,26 +200,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.mutable_lake_tablet_params()->set_write_txn_log(!_parent->_write_txn_log);
         request.mutable_lake_tablet_params()->set_enable_data_file_bundling(_parent->_enable_data_file_bundling);
         request.mutable_lake_tablet_params()->set_is_multi_statements_txn(_parent->_is_multi_statements_txn);
-        // Declare this sender as a coordinator candidate for every partition present
-        // in the tablet list. Populated on BOTH initial open and incremental_open so
-        // that the CN can elect one coordinator per partition uniformly, without the
-        // asymmetric "sender_id==0 fallback for unclaimed partitions" special case.
-        //
-        // The CN picks the smallest sender_id among candidates as the coordinator
-        // for each partition and routes that partition's txn logs to it at close
-        // time. For an initial-distribution partition, every sender declares it and
-        // min == 0, reproducing the legacy "sender 0 collects all" behavior. For
-        // incremental-only partitions, only the auto-partition trigger declares it,
-        // so the correct non-zero sender becomes coordinator.
-        std::set<int64_t> claimed;
-        for (const auto& t : tablets) {
-            if (t.has_partition_id()) {
-                claimed.insert(t.partition_id());
-            }
-        }
-        for (int64_t pid : claimed) {
-            request.mutable_lake_tablet_params()->add_coordinated_partition_ids(pid);
-        }
+        // Transaction-level switch, controlled by FE. When true, the target CN
+        // elects one coordinator per partition for combined_txn_log collection
+        // (claim set derived from per-tablet partition_id in this request). When
+        // false/unset, the legacy "sender_id == 0 collects all" rule is used.
+        request.mutable_lake_tablet_params()->set_enable_per_partition_coordinator(
+                _parent->_enable_lake_per_partition_coordinator_txn_log);
     }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);

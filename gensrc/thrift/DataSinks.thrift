@@ -242,6 +242,11 @@ struct TOlapTableSink {
     32: optional bool dynamic_overwrite
     33: optional bool enable_data_file_bundling
     34: optional bool is_multi_statements_txn
+    // Shared-data only: FE-controlled switch that tells each target CN to elect
+    // a per-partition coordinator for combined_txn_log collection instead of the
+    // legacy "sender_id == 0 collects all" rule. FE only sets this to true once
+    // it knows every target CN supports the mode (rolling-upgrade interlock).
+    35: optional bool enable_lake_per_partition_coordinator_txn_log
 }
 
 struct TSchemaTableSink {
