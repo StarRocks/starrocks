@@ -34,6 +34,7 @@ import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -887,6 +888,36 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                     PlanTestBase.assertContains(planStr, "state_union");
                     // Verify MV scan still present
                     PlanTestBase.assertContains(planStr, "TABLE: test_mv1");
+                }
+        );
+    }
+
+    /**
+     * End-to-end refresh of a non-aggregate incremental MV.
+     *
+     * <p>Non-aggregate incremental MVs are PK tables with an AUTO_INCREMENT
+     * {@code __ROW_ID__}. Refresh must run successfully through multiple runs
+     * (no INSERT positional-column mismatch from the AUTO_INCREMENT column) and
+     * the created MV must have {@link KeysType#PRIMARY_KEYS}.
+     */
+    @Test
+    public void testIVMWithScanNonAggregateIsPkTable() throws Exception {
+        doTestWith3Runs(
+                "SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0` as a;",
+                plan -> {
+                    // First refresh: verify the MV is a PK table with AUTO_INCREMENT __ROW_ID__.
+                    MaterializedView mv = getMv("test_mv1");
+                    Assertions.assertEquals(KeysType.PRIMARY_KEYS, mv.getKeysType(),
+                            "non-aggregate incremental MV must be a PRIMARY_KEYS table");
+                    Assertions.assertNotNull(mv.getColumn("__ROW_ID__"),
+                            "__ROW_ID__ column must exist on the non-aggregate PK MV");
+                    Assertions.assertTrue(mv.getColumn("__ROW_ID__").isAutoIncrement(),
+                            "__ROW_ID__ must be AUTO_INCREMENT for a non-aggregate incremental MV");
+                },
+                plan -> {
+                    // Second refresh (delta[1,2]): refresh must still complete successfully.
+                    MaterializedView mv = getMv("test_mv1");
+                    Assertions.assertEquals(KeysType.PRIMARY_KEYS, mv.getKeysType());
                 }
         );
     }
