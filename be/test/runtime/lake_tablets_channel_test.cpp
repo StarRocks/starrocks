@@ -1311,8 +1311,7 @@ protected:
         open_request.set_num_senders(1);
         open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
         if (flag_enabled_or_unset >= 0) {
-            open_request.mutable_lake_tablet_params()->set_enable_per_partition_coordinator(
-                    flag_enabled_or_unset != 0);
+            open_request.mutable_lake_tablet_params()->set_enable_per_partition_coordinator(flag_enabled_or_unset != 0);
         }
 
         PTabletWriterOpenResult open_response;
