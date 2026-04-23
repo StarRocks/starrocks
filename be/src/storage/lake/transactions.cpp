@@ -22,6 +22,7 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/join.h"
 #include "runtime/exec_env.h"
+#include "storage/lake/filenames.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/tablet.h"
@@ -543,6 +544,17 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, std::sp
 
 void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std::vector<std::string>* files_to_delete) {
     auto tablet_id = txn_log.tablet_id();
+
+    // Helper to collect .vi files tracked in a rowset's segment_metas
+    auto collect_vi_files = [&](const RowsetMetadataPB& rowset) {
+        for (int i = 0; i < rowset.segments_size() && i < rowset.segment_metas_size(); i++) {
+            for (int64_t vi_id : rowset.segment_metas(i).vector_index_ids()) {
+                auto vi_name = gen_vector_index_filename(rowset.segments(i), vi_id);
+                files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
+            }
+        }
+    };
+
     if (txn_log.has_op_write()) {
         for (const auto& segment : txn_log.op_write().rowset().segments()) {
             files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
@@ -550,14 +562,23 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         for (const auto& del_file : txn_log.op_write().dels()) {
             files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
         }
+        collect_vi_files(txn_log.op_write().rowset());
     }
     if (txn_log.has_op_compaction()) {
         // only delete actual new segments
         size_t new_segment_offset = txn_log.op_compaction().new_segment_offset();
         size_t new_segment_count = txn_log.op_compaction().new_segment_count();
-        const auto& segments = txn_log.op_compaction().output_rowset().segments();
+        const auto& output_rowset = txn_log.op_compaction().output_rowset();
+        const auto& segments = output_rowset.segments();
         for (size_t idx = new_segment_offset, cnt = 0; idx < segments.size() && cnt < new_segment_count; ++idx, ++cnt) {
             files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segments[idx]));
+            // Delete .vi files for this new segment
+            if (idx < output_rowset.segment_metas_size()) {
+                for (int64_t vi_id : output_rowset.segment_metas(idx).vector_index_ids()) {
+                    auto vi_name = gen_vector_index_filename(segments[idx], vi_id);
+                    files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, vi_name));
+                }
+            }
         }
     }
     if (txn_log.has_op_schema_change() && !txn_log.op_schema_change().linked_segment()) {
@@ -565,6 +586,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             for (const auto& segment : rowset.segments()) {
                 files_to_delete->emplace_back(tablet_mgr->segment_location(tablet_id, segment));
             }
+            collect_vi_files(rowset);
         }
     }
     if (txn_log.has_op_replication()) {
@@ -575,6 +597,7 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             for (const auto& del_file : op_write.dels()) {
                 files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_file));
             }
+            collect_vi_files(op_write.rowset());
         }
     }
 

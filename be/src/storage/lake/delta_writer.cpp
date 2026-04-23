@@ -807,6 +807,9 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
         f.write_sort_key_fields_to(segment_meta);
         segment_meta->set_num_rows(f.num_rows);
         segment_meta->set_segment_idx(segment_idx);
+        for (int64_t vi_id : f.vector_index_ids) {
+            segment_meta->add_vector_index_ids(vi_id);
+        }
     }
     for (const auto& f : _tablet_writer->dels()) {
         op_write->add_dels(f.path);

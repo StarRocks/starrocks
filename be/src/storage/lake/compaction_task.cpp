@@ -88,6 +88,9 @@ Status CompactionTask::fill_compaction_segment_info(TxnLogPB_OpCompaction* op_co
             file.write_sort_key_fields_to(segment_meta);
             segment_meta->set_num_rows(file.num_rows);
             segment_meta->set_segment_idx(segment_idx);
+            for (int64_t vi_id : file.vector_index_ids) {
+                segment_meta->add_vector_index_ids(vi_id);
+            }
         }
         op_compaction->set_new_segment_count(writer->segments().size());
         op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());

@@ -91,6 +91,7 @@ struct SegmentWriterOptions {
     std::map<int64_t, std::string> vector_index_file_paths;
     std::string encryption_meta;
     bool is_compaction = false;
+    bool skip_vector_index = false;
     std::shared_ptr<FlatJsonConfig> flat_json_config = nullptr;
 };
 
@@ -161,6 +162,10 @@ public:
 
     const std::string& encryption_meta() const { return _opts.encryption_meta; }
 
+    const std::map<int64_t, std::string>& vector_index_file_paths() const { return _opts.vector_index_file_paths; }
+
+    bool has_vector_index_written() const { return _has_vector_index_written; }
+
     int64_t bundle_file_offset() const;
 
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics();
@@ -183,8 +188,6 @@ public:
     // Accessors for sort-key samples (used in unit tests).
     int64_t get_sort_key_sample_row_interval() const { return _sort_key_sample_row_interval; }
     const std::vector<VariantTuple>& get_sort_key_samples() const { return _sort_key_samples; }
-
-    const std::map<int64_t, std::string>& vector_index_file_paths() const { return _opts.vector_index_file_paths; }
 
 private:
     Status _write_short_key_index();
@@ -225,6 +228,8 @@ private:
     uint32_t _num_rows = 0;
 
     DictColumnsValidMap _global_dict_columns_valid_info;
+
+    bool _has_vector_index_written = false;
 };
 
 } // namespace starrocks

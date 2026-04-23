@@ -210,16 +210,22 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
             return fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name));
         }
     };
-    if (_bundle_file_context != nullptr && _segments.empty() && eos) {
+    bool is_bundle = _bundle_file_context != nullptr && _segments.empty() && eos;
+    if (is_bundle) {
         // If this is the first data file writer and it is the end of stream,
         // then we will create a shared file for this segment writer.
         RETURN_IF_ERROR(_bundle_file_context->try_create_bundle_file(create_file_fn));
         of = std::make_unique<BundleWritableFile>(_bundle_file_context, wopts.encryption_info);
+        // Bundle segments skip vector index: the segment filename in metadata is the
+        // shared bundle filename, which differs from the independent segment name used
+        // to generate .vi file paths. Vector indexes will be built after compaction.
+        opts.skip_vector_index = true;
     } else {
         ASSIGN_OR_RETURN(of, create_file_fn());
+        RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                     _fs.get(), opts));
     }
-    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
-                                                 _fs.get(), opts));
+
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -243,11 +249,9 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         }
         _seg_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = _seg_writer->num_rows();
-        // Record the vector index IDs configured for this segment. For non-empty segments
-        // VectorIndexWriter::finish() always produces a .vi file (real index or empty-mark)
-        // for every configured VI column; a zero-row segment short-circuits and produces
-        // no .vi file, so we must not advertise non-existent files downstream.
-        if (segment_file_info.num_rows > 0) {
+        // Record vector index IDs only when .vi files were actually produced.
+        // VectorIndexWriter::finish skips file creation when the build threshold is not reached.
+        if (_seg_writer->has_vector_index_written()) {
             for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
                 segment_file_info.vector_index_ids.push_back(index_id);
             }
@@ -392,10 +396,9 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         segment_file_info.encryption_meta = segment_writer->encryption_meta();
         segment_writer->write_sort_key_fields_to(segment_file_info);
         segment_file_info.num_rows = segment_writer->num_rows();
-        // Record the vector index IDs configured for this segment. See the matching
-        // comment in HorizontalGeneralTabletWriter: a zero-row segment writes no .vi
-        // file, so we must not advertise non-existent files downstream.
-        if (segment_file_info.num_rows > 0) {
+        // Record vector index IDs only when .vi files were actually produced.
+        // VectorIndexWriter::finish skips file creation when the build threshold is not reached.
+        if (segment_writer->has_vector_index_written()) {
             for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
                 segment_file_info.vector_index_ids.push_back(index_id);
             }

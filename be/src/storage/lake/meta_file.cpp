@@ -317,9 +317,14 @@ void trim_partial_compaction_last_input_rowset(const MutableTabletMetadataPtr& m
                                    op_compaction.output_rowset().segments().end(),
                                    [iter](const std::string& segment) { return *iter == segment; });
             if (it != op_compaction.output_rowset().segments().end()) {
+                auto pos = iter - last_input_rowset.segments().begin();
                 if (last_input_rowset.shared_segments_size() > 0) {
-                    last_input_rowset.mutable_shared_segments()->erase(iter - last_input_rowset.segments().begin() +
+                    last_input_rowset.mutable_shared_segments()->erase(pos +
                                                                        last_input_rowset.shared_segments().begin());
+                }
+                if (pos < last_input_rowset.segment_metas_size()) {
+                    last_input_rowset.mutable_segment_metas()->erase(
+                            last_input_rowset.mutable_segment_metas()->begin() + pos);
                 }
 
                 iter = last_input_rowset.mutable_segments()->erase(iter);
