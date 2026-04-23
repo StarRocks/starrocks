@@ -26,28 +26,28 @@ import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRunContext;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
 import com.starrocks.scheduler.mv.MVRefreshParams;
-import com.starrocks.scheduler.mv.ivm.MVIVMBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.ivm.MVIVMRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 
 import java.util.Map;
 
-public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor {
-    private final MVPCTBasedRefreshProcessor pctProcessor;
-    private final MVIVMBasedRefreshProcessor ivmProcessor;
+public final class MVHybridRefreshProcessor extends MVRefreshProcessor {
+    private final MVPCTRefreshProcessor pctProcessor;
+    private final MVIVMRefreshProcessor ivmProcessor;
 
-    public MVHybridBasedRefreshProcessor(Database db,
-                                         MaterializedView mv,
-                                         MvTaskRunContext mvContext,
-                                         IMaterializedViewMetricsEntity mvEntity,
-                                         MaterializedView.RefreshMode refreshMode) {
-        super(db, mv, mvContext, mvEntity, refreshMode, MVHybridBasedRefreshProcessor.class);
-        this.ivmProcessor = new MVIVMBasedRefreshProcessor(db, mv, mvContext, mvEntity,
+    public MVHybridRefreshProcessor(Database db,
+                                    MaterializedView mv,
+                                    MvTaskRunContext mvContext,
+                                    IMaterializedViewMetricsEntity mvEntity,
+                                    MaterializedView.RefreshMode refreshMode) {
+        super(db, mv, mvContext, mvEntity, refreshMode, MVHybridRefreshProcessor.class);
+        this.ivmProcessor = new MVIVMRefreshProcessor(db, mv, mvContext, mvEntity,
                 MaterializedView.RefreshMode.INCREMENTAL);
-        this.pctProcessor = new MVPCTBasedRefreshProcessor(db, mv, mvContext, mvEntity,
+        this.pctProcessor = new MVPCTRefreshProcessor(db, mv, mvContext, mvEntity,
                 MaterializedView.RefreshMode.AUTO);
     }
 
@@ -125,7 +125,7 @@ public final class MVHybridBasedRefreshProcessor extends BaseMVRefreshProcessor 
     }
 
     @VisibleForTesting
-    public BaseMVRefreshProcessor getCurrentProcessor() {
+    public MVRefreshProcessor getCurrentProcessor() {
         if (this.currentRefreshMode == MaterializedView.RefreshMode.AUTO) {
             return pctProcessor;
         } else {

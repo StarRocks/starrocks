@@ -93,7 +93,7 @@ import java.util.stream.Collectors;
 /**
  * Base class for materialized view refresh processor.
  */
-public abstract class BaseMVRefreshProcessor {
+public abstract class MVRefreshProcessor {
     // session.enable_spill
     protected static final String MV_SESSION_ENABLE_SPILL =
             PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX + SessionVariable.ENABLE_SPILL;
@@ -141,11 +141,11 @@ public abstract class BaseMVRefreshProcessor {
                                   InsertStmt insertStmt) {
     }
 
-    public BaseMVRefreshProcessor(Database db, MaterializedView mv,
-                                  MvTaskRunContext mvContext,
-                                  IMaterializedViewMetricsEntity mvEntity,
-                                  MaterializedView.RefreshMode refreshMode,
-                                  Class<?> clazz) {
+    public MVRefreshProcessor(Database db, MaterializedView mv,
+                              MvTaskRunContext mvContext,
+                              IMaterializedViewMetricsEntity mvEntity,
+                              MaterializedView.RefreshMode refreshMode,
+                              Class<?> clazz) {
         this.db = db;
         this.mv = mv;
         this.mvContext = mvContext;
