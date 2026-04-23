@@ -260,9 +260,27 @@ class ReflectedPartitionInfo:
     partition_method: str  # includes the type and expressions
     pre_created_partitions: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        # Normalize eagerly so that __hash__ and __eq__ see stable values
+        # and __str__ never needs to mutate fields.
+        if self.type:
+            self.type = self.type.upper()
+        if self.partition_method:
+            self.partition_method = self.partition_method.strip()
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ReflectedPartitionInfo):
+            return NotImplemented
+        return (
+            self.type == other.type
+            and self.partition_method == other.partition_method
+            and self.pre_created_partitions == other.pre_created_partitions
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.type, self.partition_method, self.pre_created_partitions))
+
     def __str__(self) -> str:
-        self.type = self.type.upper() if self.type else self.type
-        self.partition_method = self.partition_method.strip() if self.partition_method else self.partition_method
         if self.pre_created_partitions:
             return f"{self.partition_method} {self.pre_created_partitions}"
         return f"{self.partition_method}"
