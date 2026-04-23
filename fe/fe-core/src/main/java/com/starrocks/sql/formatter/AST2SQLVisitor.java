@@ -394,6 +394,11 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append(node.getName().toSql());
 
+        if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
+            sqlBuilder.append(" ");
+            sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
+        }
+
         if (node.getPartitionNames() != null) {
             List<String> partitionNames = node.getPartitionNames().getPartitionNames();
             if (partitionNames != null && !partitionNames.isEmpty()) {

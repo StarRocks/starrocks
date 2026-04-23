@@ -198,4 +198,26 @@ public class AstToSQLBuilderTest {
                 "WHERE `cte02`.`priority` IS NOT NULL";
         Assertions.assertEquals(expected, toPrettySQL(stmt));
     }
+
+    @Test
+    public void testTimeTravelRoundTrip() {
+        {
+            String sql = "SELECT * FROM t0 FOR VERSION AS OF 1";
+            StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+            String serializedSql = AstToSQLBuilder.toSQL(stmt);
+            Assertions.assertEquals("SELECT *\nFROM `t0` FOR VERSION AS OF 1", serializedSql);
+            Assertions.assertEquals("SELECT *\nFROM `t0` FOR VERSION AS OF 1", AstToSQLBuilder.buildSimple(stmt));
+            Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT));
+        }
+
+        {
+            String sql = "SELECT * FROM t0 FOR SYSTEM_TIME AS OF '2016-10-09 08:07:06'";
+            StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+            String serializedSql = AstToSQLBuilder.toSQL(stmt);
+            Assertions.assertEquals("SELECT *\nFROM `t0` FOR SYSTEM_TIME AS OF '2016-10-09 08:07:06'", serializedSql);
+            Assertions.assertEquals("SELECT *\nFROM `t0` FOR SYSTEM_TIME AS OF '2016-10-09 08:07:06'",
+                    AstToSQLBuilder.buildSimple(stmt));
+            Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(serializedSql, SqlModeHelper.MODE_DEFAULT));
+        }
+    }
 }
