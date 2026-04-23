@@ -81,17 +81,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class GlobalStateMgrTest {
+    private String testMetaDir;
+    private String testPluginDir;
 
     @BeforeEach
     public void setUp() {
-        Config.meta_dir = UUID.randomUUID().toString();
-        Config.plugin_dir = UUID.randomUUID().toString();
+        testMetaDir = UUID.randomUUID().toString();
+        testPluginDir = UUID.randomUUID().toString();
+        Config.meta_dir = testMetaDir;
+        Config.plugin_dir = testPluginDir;
     }
 
     @AfterEach
     public void tearDown() throws Exception {
-        FileUtils.deleteQuietly(new File(Config.meta_dir));
-        FileUtils.deleteQuietly(new File(Config.plugin_dir));
+        FileUtils.deleteQuietly(new File(testMetaDir));
+        FileUtils.deleteQuietly(new File(testPluginDir));
     }
 
     @Test
