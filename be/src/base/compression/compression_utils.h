@@ -14,16 +14,31 @@
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 
 #include "base/statusor.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/types.pb.h"
+#include "util/compression/block_compression.h"
 
 namespace starrocks {
 
 class CompressionUtils {
 public:
+    // This is a network/RPC compression policy threshold, not a codec capability limit.
+    // TODO: make it configurable.
+    static constexpr size_t RPC_COMPRESSION_MAX_INPUT_SIZE = 1ULL << 31;
+
+    static bool exceed_rpc_compression_max_input_size(size_t input_size) {
+        return input_size >= RPC_COMPRESSION_MAX_INPUT_SIZE;
+    }
+
+    static bool can_compress_rpc_payload(const BlockCompressionCodec* codec, size_t input_size) {
+        return codec != nullptr && input_size > 0 && !exceed_rpc_compression_max_input_size(input_size) &&
+               !codec->exceed_max_input_size(input_size);
+    }
+
     // Convert compression thrift type to proto type.
     // Return ComressionTypePB::UNKNOWN_COMPRESSION if input type is not recognized
     static CompressionTypePB to_compression_pb(TCompressionType::type t_type) {

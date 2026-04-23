@@ -414,15 +414,8 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
 
     size_t uncompressed_size = dst->uncompressed_size();
 
-    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(uncompressed_size)) {
-        _cancelled = true;
-        _err_st = Status::InternalError(fmt::format("The input size for compression should be less than {}",
-                                                    _compress_codec->max_input_size()));
-        return _err_st;
-    }
-
     // try compress the ChunkPB data
-    if (_compress_codec != nullptr && uncompressed_size > 0) {
+    if (CompressionUtils::can_compress_rpc_payload(_compress_codec, uncompressed_size)) {
         SCOPED_TIMER(_ts_profile->compress_timer);
         BlockCompressionOptions compression_options;
         compression_options.lz4_acceleration = config::lz4_acceleration;
@@ -433,7 +426,7 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
                                                       &_compression_scratch, compression_options));
         } else {
-            int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
+            size_t max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
             if (_compression_scratch.size() < max_compressed_size) {
                 _compression_scratch.resize(max_compressed_size);
@@ -453,6 +446,10 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
         }
 
         VLOG_ROW << "uncompressed size: " << uncompressed_size << ", compressed size: " << _compression_scratch.size();
+    } else if (_compress_codec != nullptr && uncompressed_size > 0) {
+        VLOG_ROW << "Uncompressed size " << uncompressed_size << " exceeds rpc compression max input size "
+                 << CompressionUtils::RPC_COMPRESSION_MAX_INPUT_SIZE << " or codec max input size "
+                 << _compress_codec->max_input_size() << ", skipping compression";
     }
 
     return Status::OK();

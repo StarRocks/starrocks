@@ -751,15 +751,18 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
     COUNTER_UPDATE(_serialized_bytes_counter, serialized_size * num_receivers);
 
     bool use_compression = true;
-    // TODO: Better split the large chunk to smaller size and then compress.
-    if (_compress_codec != nullptr && _compress_codec->exceed_max_input_size(serialized_size)) {
+    if (_compress_codec != nullptr && serialized_size > 0 &&
+        !CompressionUtils::can_compress_rpc_payload(_compress_codec, serialized_size)) {
         if (config::enable_rpc_compress_overflow_skip) {
-            LOG(WARNING) << "Serialized size " << serialized_size << " exceeds compression codec max input size "
+            LOG(WARNING) << "Serialized size " << serialized_size << " exceeds rpc compression max input size "
+                         << CompressionUtils::RPC_COMPRESSION_MAX_INPUT_SIZE << " or codec max input size "
                          << _compress_codec->max_input_size() << ", skipping compression";
             use_compression = false;
         } else {
-            return Status::InternalError(strings::Substitute("The input size for compression should be less than $0",
-                                                             _compress_codec->max_input_size()));
+            return Status::InternalError(strings::Substitute(
+                    "The input size for compression should be less than rpc compression max input size $0 and codec "
+                    "max input size $1",
+                    CompressionUtils::RPC_COMPRESSION_MAX_INPUT_SIZE, _compress_codec->max_input_size()));
         }
     } else if (_compress_strategy) {
         // try compress the ChunkPB data
@@ -777,7 +780,7 @@ Status ExchangeSinkOperator::serialize_chunk(const Chunk* src, ChunkPB* dst, boo
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, serialized_size, nullptr,
                                                       &_compression_scratch, compression_options));
         } else {
-            int max_compressed_size = _compress_codec->max_compressed_len(serialized_size);
+            size_t max_compressed_size = _compress_codec->max_compressed_len(serialized_size);
 
             if (_compression_scratch.size() < max_compressed_size) {
                 _compression_scratch.resize(max_compressed_size);
