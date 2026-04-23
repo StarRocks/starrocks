@@ -218,6 +218,7 @@ void RejectedRecordSyncDaemon::tick_loop() {
 }
 
 void RejectedRecordSyncDaemon::run_one_tick() {
+    const auto tick_start = std::chrono::steady_clock::now();
     // scan_once now atomically renames `.jsonl` files to
     // `.jsonl.syncing.<tick-uuid>`. Any writer still holding the
     // `.jsonl` path will implicitly create a fresh inode on its next
@@ -228,12 +229,19 @@ void RejectedRecordSyncDaemon::run_one_tick() {
     _files_scanned.fetch_add(static_cast<int64_t>(files.size()), std::memory_order_relaxed);
     if (files.empty()) {
         garbage_collect_stale_files();
+        _last_tick_duration_us.store(
+                std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - tick_start)
+                        .count(),
+                std::memory_order_relaxed);
         return;
     }
     const int max_rows = std::max(1, config::rejected_record_sync_max_batch_rows);
     const int64_t max_bytes = std::max<int64_t>(1024 * 1024, config::rejected_record_sync_max_batch_bytes);
     process_files(files, max_rows, max_bytes);
     garbage_collect_stale_files();
+    _last_tick_duration_us.store(
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - tick_start).count(),
+            std::memory_order_relaxed);
 }
 
 // Shared read-post-delete loop used by both `run_one_tick` (the
@@ -290,6 +298,10 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
                 // in flight). Don't count it as a failure and don't spam
                 // the log at WARN; a VLOG trace is enough for operators
                 // who are debugging the startup sequence.
+                // Surface -1 as the "no HTTP exchange happened" sentinel so
+                // dashboards can distinguish "FE not reachable yet" from a
+                // real 4xx/5xx response.
+                _last_http_status.store(-1, std::memory_order_relaxed);
                 VLOG(1) << "RejectedRecordSyncDaemon: skipping tick because master FE is not yet reachable; "
                         << batch.size() << " files left on disk for retry";
             } else {
@@ -300,6 +312,7 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
             }
         } else {
             _records_flushed.fetch_add(batch_rows, std::memory_order_relaxed);
+            _bytes_flushed.fetch_add(batch_bytes, std::memory_order_relaxed);
             // Only fully-drained files get removed; any file that triggered a
             // mid-file commit is still being read by the outer for-loop and
             // will be pushed into `batch` when its while(getline) exits.
@@ -531,6 +544,7 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     RETURN_IF_ERROR(client.execute(&response));
 
     long http_status = client.get_http_status();
+    _last_http_status.store(http_status, std::memory_order_relaxed);
     if (http_status < 200 || http_status >= 300) {
         return Status::InternalError(fmt::format("Stream Load HTTP {} from FE: {}", http_status, response));
     }

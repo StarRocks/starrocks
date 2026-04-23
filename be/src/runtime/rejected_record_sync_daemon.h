@@ -86,6 +86,18 @@ public:
     // Per-file transient open failures. These files are kept on disk so
     // the next tick can retry, rather than deleted outright.
     int64_t open_failures() const { return _open_failures.load(std::memory_order_relaxed); }
+    // Running total of bytes pushed to the FE via successful posts.
+    // Useful for dashboards that need to size up the volume of
+    // rejected-row traffic a cluster produces.
+    int64_t bytes_flushed() const { return _bytes_flushed.load(std::memory_order_relaxed); }
+    // Duration (in microseconds) of the most recent run_one_tick call,
+    // inclusive of scan + post + GC. A growing value usually means the
+    // FE Stream Load is slow, not that the daemon itself is.
+    int64_t last_tick_duration_us() const { return _last_tick_duration_us.load(std::memory_order_relaxed); }
+    // HTTP status code returned by the most recent post. Negative when
+    // the request didn't even complete (network error, DNS failure,
+    // master not yet known). Surfaces common outages in a single glance.
+    int64_t last_http_status() const { return _last_http_status.load(std::memory_order_relaxed); }
 
 protected:
     // Returns the list of store-path root directories that scan_once() should
@@ -161,6 +173,9 @@ private:
     std::atomic<int64_t> _sync_failures{0};
     std::atomic<int64_t> _files_dropped_by_gc{0};
     std::atomic<int64_t> _open_failures{0};
+    std::atomic<int64_t> _bytes_flushed{0};
+    std::atomic<int64_t> _last_tick_duration_us{0};
+    std::atomic<int64_t> _last_http_status{0};
 
     // Consecutive failed ticks; drives exponential backoff in the tick
     // loop. Reset to 0 by the first successful tick. Not counted as
