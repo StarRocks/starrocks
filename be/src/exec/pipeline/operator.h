@@ -22,7 +22,6 @@
 #include "exec/pipeline/primitives/operator_runtime_access.h"
 #include "exec/pipeline/runtime_filter_core_types.h"
 #include "exec/runtime_filter/runtime_filter_probe.h"
-#include "exec/spill/operator_mem_resource_manager.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
@@ -209,7 +208,6 @@ public:
     // Operator can free memory/buffer early
     virtual bool releaseable() const { return false; }
     virtual void enter_release_memory_mode() {}
-    spill::OperatorMemoryResourceManager& mem_resource_manager() { return _mem_resource_manager; }
 
     // the memory that can be freed by the current operator
     size_t revocable_mem_bytes() { return _revocable_mem_bytes; }
@@ -271,8 +269,6 @@ protected:
     std::vector<ExprContext*> _cached_conjuncts_and_in_filters;
 
     RuntimeMembershipFilterEvalContext _bloom_filter_eval_context;
-
-    spill::OperatorMemoryResourceManager _mem_resource_manager;
 
     // the memory that can be released by this operator
     size_t _revocable_mem_bytes = 0;

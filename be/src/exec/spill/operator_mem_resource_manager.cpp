@@ -52,6 +52,10 @@ size_t OperatorMemoryResourceManager::compute_available_memory_bytes(const Runti
 
 void OperatorMemoryResourceManager::close() {
     _res_guard.reset();
+    _performance_level = MEM_RESOURCE_DEFAULE_MEMORY;
+    _spillable = false;
+    _releaseable = false;
+    _query_spill_manager = nullptr;
 }
 
 void OperatorMemoryResourceManager::ResGuard::reset() noexcept {

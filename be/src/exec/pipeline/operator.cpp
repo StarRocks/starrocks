@@ -19,7 +19,6 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
-#include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "exec/pipeline/operator_factory.h"
@@ -72,17 +71,6 @@ Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32
 
 Status Operator::prepare(RuntimeState* state) {
     FAIL_POINT_TRIGGER_RETURN_ERROR(random_error);
-
-    if (state->query_ctx() && state->query_ctx()->spill_manager()) {
-        size_t reserved_bytes = 0;
-        if (spillable()) {
-            reserved_bytes = spill::OperatorMemoryResourceManager::compute_available_memory_bytes(*state);
-        } else if (releaseable()) {
-            reserved_bytes = config::local_exchange_buffer_mem_limit_per_driver;
-        }
-        _mem_resource_manager.prepare(state->query_ctx()->spill_manager(), spillable(), releaseable(), reserved_bytes);
-    }
-
     return Status::OK();
 }
 
@@ -132,7 +120,6 @@ void Operator::set_precondition_ready(RuntimeState* state) {
 }
 
 void Operator::close(RuntimeState* state) {
-    _mem_resource_manager.close();
     if (auto* rf_bloom_filters = _runtime_access->get_runtime_bloom_filters()) {
         _init_rf_counters(false);
         COUNTER_SET(_runtime_in_filter_num_counter, (int64_t)runtime_in_filters().size());

@@ -47,6 +47,10 @@ using MultilaneOperatorRawPtr = MultilaneOperator*;
 using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
 } // namespace query_cache
 
+namespace spill {
+class OperatorMemoryResourceManager;
+} // namespace spill
+
 namespace pipeline {
 
 class PipelineDriver;
@@ -216,6 +220,7 @@ public:
     PipelineDriver(const Operators& operators, QueryContext* query_ctx, FragmentContext* fragment_ctx,
                    Pipeline* pipeline, int32_t driver_id)
             : _observer(this),
+              _operator_mem_resource_managers(operators.size()),
               _operators(operators),
               _query_ctx(query_ctx),
               _fragment_ctx(fragment_ctx),
@@ -544,6 +549,7 @@ public:
 protected:
     PipelineDriver()
             : _observer(this),
+              _operator_mem_resource_managers(),
               _operators(),
               _query_ctx(nullptr),
               _fragment_ctx(nullptr),
@@ -564,11 +570,15 @@ protected:
     Status _mark_operator_finishing(OperatorPtr& op, RuntimeState* runtime_state);
     Status _mark_operator_finished(OperatorPtr& op, RuntimeState* runtime_state);
     Status _mark_operator_cancelled(OperatorPtr& op, RuntimeState* runtime_state);
-    Status _mark_operator_closed(OperatorPtr& op, RuntimeState* runtime_state);
+    Status _mark_operator_closed(size_t operator_idx, OperatorPtr& op, RuntimeState* runtime_state);
     void _close_operators(RuntimeState* runtime_state);
 
-    void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, OperatorPtr& op, const ChunkPtr& chunk);
-    void _try_to_release_buffer(RuntimeState* state, OperatorPtr& op);
+    Status _prepare_operator_mem_resource_manager(size_t operator_idx, RuntimeState* state);
+    spill::OperatorMemoryResourceManager* _operator_mem_resource_manager(size_t operator_idx);
+
+    void _adjust_memory_usage(RuntimeState* state, MemTracker* tracker, size_t operator_idx, OperatorPtr& op,
+                              const ChunkPtr& chunk);
+    void _try_to_release_buffer(RuntimeState* state, size_t operator_idx, OperatorPtr& op);
 
     // Update metrics when the driver yields.
     void _update_driver_acct(size_t total_chunks_moved, size_t total_rows_moved, size_t time_spent);
@@ -584,6 +594,8 @@ protected:
 
     RuntimeState* _runtime_state = nullptr;
     PipelineObserver _observer;
+    // Keep this before _operators so driver teardown destroys operators first, then their managers.
+    std::vector<std::unique_ptr<spill::OperatorMemoryResourceManager>> _operator_mem_resource_managers;
     Operators _operators;
     DriverDependencies _dependencies;
     bool _all_dependencies_ready = false;
