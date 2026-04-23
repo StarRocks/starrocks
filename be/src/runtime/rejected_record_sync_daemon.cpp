@@ -264,10 +264,19 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
         }
         auto st = post_to_stream_load(payload.str());
         if (!st.ok()) {
-            _sync_failures.fetch_add(1, std::memory_order_relaxed);
-            LOG(WARNING) << "RejectedRecordSyncDaemon: post_to_stream_load failed (" << batch.size() << " full files, "
-                         << batch_rows << " rows, " << batch_bytes
-                         << " bytes): " << st.message() << "; leaving files on disk for retry.";
+            if (st.is_uninitialized()) {
+                // Master FE not yet known (early boot, master re-election
+                // in flight). Don't count it as a failure and don't spam
+                // the log at WARN; a VLOG trace is enough for operators
+                // who are debugging the startup sequence.
+                VLOG(1) << "RejectedRecordSyncDaemon: skipping tick because master FE is not yet reachable; "
+                        << batch.size() << " files left on disk for retry";
+            } else {
+                _sync_failures.fetch_add(1, std::memory_order_relaxed);
+                LOG(WARNING) << "RejectedRecordSyncDaemon: post_to_stream_load failed (" << batch.size()
+                             << " full files, " << batch_rows << " rows, " << batch_bytes
+                             << " bytes): " << st.message() << "; leaving files on disk for retry.";
+            }
         } else {
             _records_flushed.fetch_add(batch_rows, std::memory_order_relaxed);
             // Only fully-drained files get removed; any file that triggered a
@@ -430,7 +439,14 @@ Status RejectedRecordSyncDaemon::flush_batch(const std::vector<std::string>& fil
 Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload) {
     TMasterInfo master_info = get_master_info();
     if (master_info.network_address.hostname.empty() || master_info.http_port <= 0) {
-        return Status::InternalError(
+        // Master FE not yet known is a transient startup condition, not a
+        // sync failure. Returning a dedicated NotReady-shaped status lets
+        // process_files() skip the failure counter and retry-log for this
+        // case -- otherwise early BE boot (before the first heartbeat) and
+        // any master-elected transition generate a steady stream of
+        // "post failed" log lines and metric spikes that don't reflect
+        // real errors.
+        return Status::Uninitialized(
                 "RejectedRecordSyncDaemon: master FE address not yet known (no heartbeat received?)");
     }
 

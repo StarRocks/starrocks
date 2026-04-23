@@ -823,6 +823,36 @@ TEST(RejectedRecordSyncDaemonProcessFilesTest, UnreadableFileIsKeptForRetry) {
     // the next tick to retry.
 }
 
+TEST(RejectedRecordSyncDaemonProcessFilesTest, MasterNotReadyDoesNotCountAsFailure) {
+    // post_to_stream_load returning Status::Uninitialized means the master
+    // FE address isn't known yet (early BE boot or mid re-election). The
+    // files stay on disk for a later retry but we must NOT advance the
+    // sync_failures counter: that counter is surfaced as a metric operators
+    // alert on, and early-boot bounce would fire the alert spuriously.
+    struct NotReadyDaemon : public RejectedRecordSyncDaemon {
+        NotReadyDaemon() : RejectedRecordSyncDaemon(/*env=*/nullptr) {}
+        using RejectedRecordSyncDaemon::flush_batch;
+
+    protected:
+        Status post_to_stream_load(const std::string&) override {
+            return Status::Uninitialized("master FE address not yet known");
+        }
+    };
+
+    TempDir dir;
+    std::string f = dir.write_file("a.jsonl", "{\"id\":\"x\"}\n");
+    NotReadyDaemon daemon;
+    auto st = daemon.flush_batch({f});
+    // flush_batch uses `sync_failures` delta to decide OK vs non-OK, so a
+    // skipped-because-master-not-ready tick surfaces as OK up to the
+    // caller -- exactly because it isn't an error. The key invariants:
+    //   (a) sync_failures didn't advance
+    //   (b) file stayed on disk for the next tick to retry
+    EXPECT_TRUE(st.ok()) << "master-not-ready must not propagate as a flush_batch failure";
+    EXPECT_EQ(0, daemon.sync_failures()) << "master-not-ready should not count as a sync failure";
+    EXPECT_TRUE(std::filesystem::exists(f));
+}
+
 TEST(RejectedRecordSyncDaemonProcessFilesTest, ReadableFilePresentButInsideUnreadablePath) {
     // Simulate a transient failure: parent directory has no read/execute
     // permission so ifstream open fails. With CAP_DAC_OVERRIDE (root) the
