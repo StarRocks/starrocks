@@ -324,8 +324,8 @@ TEST_F(IcebergRowDeltaSinkTest, init_wires_sub_sink_mem_managers) {
 TEST_F(IcebergRowDeltaSinkTest, add_fast_path_all_delete_skips_copy) {
     auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
 
-    auto chunk = build_chunk({"file1.parquet", "file1.parquet", "file2.parquet"}, {0, 1, 2},
-                             {"val0", "val1", "val2"}, {1, 1, 1});  // all OP_DELETE
+    auto chunk = build_chunk({"file1.parquet", "file1.parquet", "file2.parquet"}, {0, 1, 2}, {"val0", "val1", "val2"},
+                             {1, 1, 1}); // all OP_DELETE
 
     ASSERT_OK(sink->add(chunk));
 
@@ -338,7 +338,7 @@ TEST_F(IcebergRowDeltaSinkTest, add_fast_path_all_delete_skips_copy) {
 TEST_F(IcebergRowDeltaSinkTest, add_fast_path_all_insert_skips_copy) {
     auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
 
-    auto chunk = build_chunk({"", "", ""}, {0, 0, 0}, {"val0", "val1", "val2"}, {3, 3, 3});  // all OP_INSERT
+    auto chunk = build_chunk({"", "", ""}, {0, 0, 0}, {"val0", "val1", "val2"}, {3, 3, 3}); // all OP_INSERT
 
     ASSERT_OK(sink->add(chunk));
 
