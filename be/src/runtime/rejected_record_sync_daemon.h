@@ -77,6 +77,15 @@ public:
     int64_t files_scanned() const { return _files_scanned.load(std::memory_order_relaxed); }
     int64_t records_flushed() const { return _records_flushed.load(std::memory_order_relaxed); }
     int64_t sync_failures() const { return _sync_failures.load(std::memory_order_relaxed); }
+    // Files deleted by `garbage_collect_stale_files` because their mtime
+    // is older than `rejected_record_local_retention_hours`. These
+    // represent rejected rows that never successfully shipped to the FE
+    // (because the FE was down for longer than the retention window), so
+    // the counter measures silent data loss due to prolonged outages.
+    int64_t files_dropped_by_gc() const { return _files_dropped_by_gc.load(std::memory_order_relaxed); }
+    // Per-file transient open failures. These files are kept on disk so
+    // the next tick can retry, rather than deleted outright.
+    int64_t open_failures() const { return _open_failures.load(std::memory_order_relaxed); }
 
 protected:
     // Returns the list of store-path root directories that scan_once() should
@@ -150,6 +159,8 @@ private:
     std::atomic<int64_t> _files_scanned{0};
     std::atomic<int64_t> _records_flushed{0};
     std::atomic<int64_t> _sync_failures{0};
+    std::atomic<int64_t> _files_dropped_by_gc{0};
+    std::atomic<int64_t> _open_failures{0};
 };
 
 } // namespace starrocks

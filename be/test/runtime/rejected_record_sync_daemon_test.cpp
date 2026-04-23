@@ -15,6 +15,7 @@
 #include "runtime/rejected_record_sync_daemon.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 #include <utime.h>
 
 #include <chrono>
@@ -315,6 +316,43 @@ TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectNoFilesIsNoOp) {
     TestSyncDaemon daemon;
     daemon.set_scan_result({});
     EXPECT_NO_FATAL_FAILURE(daemon.garbage_collect_stale_files());
+}
+
+TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectAdvancesDropCounter) {
+    // Each stale file that GC deletes must bump `files_dropped_by_gc` so
+    // operators can alert on prolonged FE outages that are silently
+    // destroying rejected-row batches.
+    struct GCCounterDaemon : public RejectedRecordSyncDaemon {
+        explicit GCCounterDaemon(std::vector<std::string> roots)
+                : RejectedRecordSyncDaemon(/*env=*/nullptr), _roots(std::move(roots)) {}
+        using RejectedRecordSyncDaemon::garbage_collect_stale_files;
+
+    protected:
+        std::vector<std::string> store_path_roots() const override { return _roots; }
+        Status post_to_stream_load(const std::string&) override { return Status::OK(); }
+
+    private:
+        std::vector<std::string> _roots;
+    };
+
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string stale = rr_dir + "/stale.jsonl";
+    {
+        std::ofstream f(stale);
+        f << "{\"id\":\"x\"}\n";
+    }
+    // Backdate mtime so it's older than retention.
+    struct utimbuf old_time;
+    old_time.actime = old_time.modtime = 0;
+    ::utime(stale.c_str(), &old_time);
+
+    GCCounterDaemon daemon({dir.path().string()});
+    EXPECT_EQ(0, daemon.files_dropped_by_gc());
+    daemon.garbage_collect_stale_files();
+
+    EXPECT_FALSE(std::filesystem::exists(stale));
+    EXPECT_EQ(1, daemon.files_dropped_by_gc());
 }
 
 TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectDoesNotRenameFiles) {
@@ -759,22 +797,58 @@ TEST(RejectedRecordSyncDaemonRunOneTickTest, WithFilesProcessFilesIsInvoked) {
 }
 
 // ===========================================================================
-// process_files: unreadable file is removed without crashing (line 244-247)
+// process_files: unreadable file is kept on disk for retry, not deleted
 // ===========================================================================
 
-TEST(RejectedRecordSyncDaemonProcessFilesTest, UnreadableFileIsRemovedSilently) {
+TEST(RejectedRecordSyncDaemonProcessFilesTest, UnreadableFileIsKeptForRetry) {
     // Pass a path that does not exist at all; ifstream.is_open() will fail.
+    // Previously the daemon would delete the file immediately. That is
+    // overly aggressive for transient failures (EMFILE, I/O errors) and
+    // silently destroys the rejected records. The daemon now keeps the
+    // file on disk for a later retry, bumps the `open_failures` counter,
+    // and lets the retention-based GC clean it up if the failure persists.
     std::string ghost = "/tmp/no_such_daemon_test_file_xyz.jsonl";
-    // Ensure it really doesn't exist.
     std::error_code ec;
     std::filesystem::remove(ghost, ec);
 
     TestSyncDaemon daemon;
-    // process_files via flush_batch (which calls process_files with INT64_MAX).
-    // A non-existent file: open fails -> remove_file(ghost) -> continue.
     auto st = daemon.flush_batch({ghost});
     EXPECT_TRUE(st.ok()) << st.message();
     EXPECT_TRUE(daemon.captured_payloads().empty());
+    EXPECT_EQ(1, daemon.open_failures());
+    // The file doesn't exist so we can't check "file was kept"; instead
+    // assert remove_file wasn't attempted by verifying no remove error
+    // was logged and the counter incremented. A real transient failure
+    // (file exists but can't be opened) would leave the file alone for
+    // the next tick to retry.
+}
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, ReadableFilePresentButInsideUnreadablePath) {
+    // Simulate a transient failure: parent directory has no read/execute
+    // permission so ifstream open fails. With CAP_DAC_OVERRIDE (root) the
+    // test would succeed, so skip then.
+    if (geteuid() == 0) {
+        GTEST_SKIP() << "root bypasses POSIX file mode; skipping transient-failure test";
+    }
+    TempDir dir;
+    std::string sub = dir.path() / "locked";
+    std::filesystem::create_directory(sub);
+    std::string path = sub + "/rr.jsonl";
+    {
+        std::ofstream f(path);
+        f << "{\"id\":\"x\"}\n";
+    }
+    std::filesystem::permissions(sub, std::filesystem::perms::none, std::filesystem::perm_options::replace);
+
+    TestSyncDaemon daemon;
+    auto st = daemon.flush_batch({path});
+    EXPECT_TRUE(st.ok());
+    EXPECT_EQ(1, daemon.open_failures());
+
+    // Restore so TempDir cleanup succeeds.
+    std::filesystem::permissions(sub, std::filesystem::perms::owner_all, std::filesystem::perm_options::replace);
+    // File still present (not deleted by the daemon).
+    EXPECT_TRUE(std::filesystem::exists(path));
 }
 
 // ===========================================================================

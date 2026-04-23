@@ -287,8 +287,13 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
     for (const auto& f : files) {
         std::ifstream in(f);
         if (!in.is_open()) {
-            LOG(WARNING) << "RejectedRecordSyncDaemon: cannot open " << f << " for reading; skipping.";
-            remove_file(f); // unreadable file would otherwise be re-claimed forever
+            _open_failures.fetch_add(1, std::memory_order_relaxed);
+            LOG(WARNING) << "RejectedRecordSyncDaemon: cannot open " << f
+                         << " for reading; keeping on disk for retry. If the file is truly unrecoverable"
+                         << " it will eventually be garbage-collected by the retention policy.";
+            // Don't remove: a transient EMFILE / I/O error shouldn't
+            // silently destroy the rejected records. The retention-based
+            // GC will clear it out if the failure is permanent.
             continue;
         }
         std::string line;
@@ -503,14 +508,26 @@ void RejectedRecordSyncDaemon::garbage_collect_stale_files() {
     // nested suffix -- the filename-balloon bug. A pure read also
     // halves the directory-walk cost.
     const std::vector<std::string> files = list_once();
+    int64_t dropped_this_cycle = 0;
     for (const auto& f : files) {
         std::error_code ec;
         auto mtime = std::filesystem::last_write_time(f, ec);
         if (ec) continue;
         if (mtime < cutoff) {
-            LOG(INFO) << "RejectedRecordSyncDaemon: dropping stale rejected-record file " << f;
+            // WARN rather than INFO: each dropped file is a batch of
+            // rejected rows that never made it to the FE, i.e. data loss
+            // visible to operators. The counter below feeds metrics so
+            // dashboards can alert on it.
+            LOG(WARNING) << "RejectedRecordSyncDaemon: dropping stale rejected-record file " << f
+                         << " (retention " << retention_hours << "h exceeded); rejected rows in this file"
+                         << " are lost. Check FE availability and rejected_record_sync_user / "
+                            "rejected_record_sync_password if this repeats.";
             remove_file(f);
+            ++dropped_this_cycle;
         }
+    }
+    if (dropped_this_cycle > 0) {
+        _files_dropped_by_gc.fetch_add(dropped_this_cycle, std::memory_order_relaxed);
     }
 }
 
