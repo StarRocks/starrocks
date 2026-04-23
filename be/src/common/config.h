@@ -557,8 +557,17 @@ CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_mInt32(rejected_record_sync_interval_sec, "30");
 // Upper bound on rows included in one merge-commit Stream Load batch. The
 // daemon splits larger backlogs across consecutive ticks rather than
-// attempting a single oversized transaction.
+// attempting a single oversized transaction. The row cap is enforced
+// line-by-line inside a file, so a single giant file won't blow past
+// the limit.
 CONF_mInt32(rejected_record_sync_max_batch_rows, "10000");
+// Byte cap on the accumulated Stream Load payload. When the read-and-
+// concat loop crosses this threshold it commits the current batch and
+// starts a fresh payload, which prevents a load with very wide rows or
+// very long error messages from producing an HTTP PUT body big enough
+// to OOM the BE / FE / intermediate proxies. 32 MiB matches the FE's
+// default streaming_load_max_mb.
+CONF_mInt64(rejected_record_sync_max_batch_bytes, "33554432");
 // How long the daemon keeps unsyncable local files around before garbage
 // collecting them. Sync failures (FE down, auth error, table missing) keep
 // the files for re-sync; anything older than this is discarded so a

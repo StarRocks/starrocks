@@ -130,12 +130,11 @@ protected:
     void run_one_tick();
 
     // Core read-post-delete loop shared by `run_one_tick` (production,
-    // caps each commit at the configured per-batch row limit) and
-    // `flush_batch` (tests, unbounded so the call ships in one post).
-    // `max_rows` is the soft cap that triggers a commit; the actual
-    // post may contain more rows because a single source file is the
-    // atomicity unit and is never split across posts.
-    void process_files(const std::vector<std::string>& files, int64_t max_rows);
+    // caps each commit at the configured per-batch row / byte limit)
+    // and `flush_batch` (tests, unbounded so the call ships in one
+    // post). Both `max_rows` and `max_bytes` are enforced per-line
+    // inside a file, so a single giant file won't exceed either cap.
+    void process_files(const std::vector<std::string>& files, int64_t max_rows, int64_t max_bytes);
 
 private:
     static void* tick_thread_entry(void* self);

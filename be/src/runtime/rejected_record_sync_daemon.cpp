@@ -210,7 +210,8 @@ void RejectedRecordSyncDaemon::run_one_tick() {
         return;
     }
     const int max_rows = std::max(1, config::rejected_record_sync_max_batch_rows);
-    process_files(files, max_rows);
+    const int64_t max_bytes = std::max<int64_t>(1024 * 1024, config::rejected_record_sync_max_batch_bytes);
+    process_files(files, max_rows, max_bytes);
     garbage_collect_stale_files();
 }
 
@@ -234,14 +235,20 @@ void RejectedRecordSyncDaemon::run_one_tick() {
 //   * On a failed post, source files are LEFT on disk. They retain
 //     their `.syncing.<tick>` suffix so scan_once's adopt-stale path
 //     reclaims them on a subsequent tick.
-void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& files, int64_t max_rows) {
+void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& files, int64_t max_rows,
+                                              int64_t max_bytes) {
     std::ostringstream payload;
+    // Files fully read into the current payload. Only these get deleted
+    // on a successful commit. A file that triggers a mid-file commit
+    // stays out of `batch` until its `while(getline)` loop completes,
+    // so partial files are never deleted prematurely.
     std::vector<std::string> batch;
     int64_t batch_rows = 0;
+    int64_t batch_bytes = 0;
 
     auto commit = [&]() {
-        if (batch.empty()) {
-            return;
+        if (batch_rows == 0 && batch.empty()) {
+            return; // nothing accumulated
         }
         if (batch_rows == 0) {
             // Empty files in the batch -- nothing to post, but do
@@ -250,15 +257,22 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
                 remove_file(f);
             }
             batch.clear();
+            payload.str("");
+            payload.clear();
+            batch_bytes = 0;
             return;
         }
         auto st = post_to_stream_load(payload.str());
         if (!st.ok()) {
             _sync_failures.fetch_add(1, std::memory_order_relaxed);
-            LOG(WARNING) << "RejectedRecordSyncDaemon: post_to_stream_load failed (" << batch.size() << " files, "
-                         << batch_rows << " rows): " << st.message() << "; leaving files on disk for retry.";
+            LOG(WARNING) << "RejectedRecordSyncDaemon: post_to_stream_load failed (" << batch.size() << " full files, "
+                         << batch_rows << " rows, " << batch_bytes
+                         << " bytes): " << st.message() << "; leaving files on disk for retry.";
         } else {
             _records_flushed.fetch_add(batch_rows, std::memory_order_relaxed);
+            // Only fully-drained files get removed; any file that triggered a
+            // mid-file commit is still being read by the outer for-loop and
+            // will be pushed into `batch` when its while(getline) exits.
             for (const auto& f : batch) {
                 remove_file(f);
             }
@@ -267,6 +281,7 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
         payload.clear();
         batch.clear();
         batch_rows = 0;
+        batch_bytes = 0;
     };
 
     for (const auto& f : files) {
@@ -276,20 +291,31 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
             remove_file(f); // unreadable file would otherwise be re-claimed forever
             continue;
         }
-        int64_t file_rows = 0;
         std::string line;
         while (std::getline(in, line)) {
             if (line.empty()) {
                 continue;
             }
+            const int64_t line_bytes = static_cast<int64_t>(line.size()) + 1; // +1 for '\n'
+            // Enforce the cap BEFORE appending. A fresh line that would push
+            // the accumulator past max_rows or max_bytes commits the current
+            // batch first, then joins the new one. This matters for two
+            // scenarios the old "check after append" logic handled badly:
+            //   1. A single file with many rows - the loop used to append the
+            //      whole file before checking, so one 1M-row file became one
+            //      1M-row PUT regardless of max_rows.
+            //   2. A row whose raw_record / error_message is unusually large -
+            //      no byte budget at all, so a giant line could blow FE's
+            //      streaming_load_max_mb regardless of the row count.
+            if (batch_rows > 0 && (batch_rows + 1 > max_rows || batch_bytes + line_bytes > max_bytes)) {
+                commit();
+            }
             payload << line << '\n';
-            ++file_rows;
+            batch_bytes += line_bytes;
+            ++batch_rows;
         }
+        // File fully read: safe to enroll for deletion on the next commit.
         batch.push_back(f);
-        batch_rows += file_rows;
-        if (batch_rows >= max_rows) {
-            commit();
-        }
     }
     commit();
 }
@@ -385,7 +411,7 @@ Status RejectedRecordSyncDaemon::flush_batch(const std::vector<std::string>& fil
         return Status::OK();
     }
     const int64_t prior_failures = _sync_failures.load(std::memory_order_relaxed);
-    process_files(files, std::numeric_limits<int64_t>::max());
+    process_files(files, std::numeric_limits<int64_t>::max(), std::numeric_limits<int64_t>::max());
     // process_files updates _sync_failures / _records_flushed directly.
     // Surface the outcome via this entry point's Status return so the
     // existing tests that assert on "post failed => non-OK" keep

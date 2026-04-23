@@ -20,6 +20,7 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -788,8 +789,9 @@ TEST(RejectedRecordSyncDaemonProcessFilesTest, RowCapSplitsIntoMultipleCommits) 
     std::string f2 = dir.write_file("b.jsonl", "{\"id\":\"r2\"}\n");
 
     TestSyncDaemon daemon;
-    // process_files with max_rows=1: each file triggers its own commit.
-    daemon.process_files({f1, f2}, 1);
+    // process_files with max_rows=1: the second file's first row trips the
+    // cap and commits f1 alone, then f2 is posted on the final commit.
+    daemon.process_files({f1, f2}, 1, std::numeric_limits<int64_t>::max());
 
     // With max_rows=1, two separate commits are issued.
     EXPECT_EQ(2u, daemon.captured_payloads().size());
@@ -809,12 +811,65 @@ TEST(RejectedRecordSyncDaemonProcessFilesTest, AllEmptyFilesInBatchAreDeletedWit
     std::string e2 = dir.write_file("e2.jsonl", "");
 
     TestSyncDaemon daemon;
-    daemon.process_files({e1, e2}, 100);
+    daemon.process_files({e1, e2}, 100, std::numeric_limits<int64_t>::max());
 
     // No post was made (batch_rows == 0 -> skip post, just delete).
     EXPECT_TRUE(daemon.captured_payloads().empty());
     EXPECT_FALSE(std::filesystem::exists(e1));
     EXPECT_FALSE(std::filesystem::exists(e2));
+}
+
+// ===========================================================================
+// process_files: a single giant file must not bypass the row cap (regression)
+// ===========================================================================
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, SingleLargeFileSplitsOnRowCap) {
+    // Previously the row cap was only checked at end-of-file, so a 1M-row
+    // file with max_rows=2 produced one 1M-row PUT. Now the cap is enforced
+    // per-line and a mid-file commit splits the post into chunks.
+    TempDir dir;
+    std::string path = dir.path() / "big.jsonl";
+    {
+        std::ofstream f(path);
+        for (int i = 0; i < 10; ++i) {
+            f << "{\"id\":\"r" << i << "\"}\n";
+        }
+    }
+    TestSyncDaemon daemon;
+    daemon.process_files({path}, /*max_rows=*/3, std::numeric_limits<int64_t>::max());
+
+    // 10 rows / 3 per commit = 4 commits.
+    ASSERT_EQ(4u, daemon.captured_payloads().size());
+    // All 10 rows present across the four commits.
+    int total_newlines = 0;
+    for (const auto& p : daemon.captured_payloads()) {
+        for (char c : p) {
+            if (c == '\n') ++total_newlines;
+        }
+    }
+    EXPECT_EQ(10, total_newlines);
+    // File is deleted exactly once (the final commit, which receives it in `batch`).
+    EXPECT_FALSE(std::filesystem::exists(path));
+}
+
+TEST(RejectedRecordSyncDaemonProcessFilesTest, ByteCapSplitsLongLines) {
+    // A single very-long line must not bypass the byte cap. With 3 lines of
+    // ~50 bytes each and max_bytes=120, the second line's arrival commits
+    // line 1, and the third line's arrival commits line 2.
+    TempDir dir;
+    std::string path = dir.path() / "wide.jsonl";
+    {
+        std::ofstream f(path);
+        f << std::string(49, 'a') << "\n";
+        f << std::string(49, 'b') << "\n";
+        f << std::string(49, 'c') << "\n";
+    }
+    TestSyncDaemon daemon;
+    daemon.process_files({path}, std::numeric_limits<int64_t>::max(), /*max_bytes=*/120);
+
+    // Three lines, byte cap splits into separate commits.
+    EXPECT_GE(daemon.captured_payloads().size(), 2u);
+    EXPECT_FALSE(std::filesystem::exists(path));
 }
 
 // ===========================================================================
