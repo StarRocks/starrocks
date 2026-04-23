@@ -406,10 +406,6 @@ public class ConnectContextTest {
     public void testOnQueryFinished_listenerThrowsException() {
         ConnectContext ctx = new ConnectContext(connection);
 
-<<<<<<< HEAD
-=======
-        // Mock listener that throws exception
->>>>>>> 5c97ea4fe7 ([BugFix] Fix query queue allocation time and pending timeout (#65802))
         ConnectContext.Listener listener1 = Mockito.mock(ConnectContext.Listener.class);
         ConnectContext.Listener listener2 = Mockito.mock(ConnectContext.Listener.class);
 
@@ -426,8 +422,6 @@ public class ConnectContextTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testOnQueryFinished_clearsListeners() {
         ConnectContext ctx = new ConnectContext(connection);
 
@@ -461,7 +455,6 @@ public class ConnectContextTest {
     }
 
     @Test
->>>>>>> 5c97ea4fe7 ([BugFix] Fix query queue allocation time and pending timeout (#65802))
     public void testOnQueryFinished_withoutListeners() {
         ConnectContext ctx = new ConnectContext(connection);
 
@@ -469,7 +462,6 @@ public class ConnectContextTest {
         Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
     }
 
-<<<<<<< HEAD
     // -----------------------------------------------------------------------
     // Tests for changeCatalogDb() journal-replay wait on follower FE
     // -----------------------------------------------------------------------
@@ -712,7 +704,7 @@ public class ConnectContextTest {
         ctx.setGlobalStateMgr(globalStateMgr);
 
         Assertions.assertThrows(DdlException.class, () -> ctx.changeCatalogDb("nonexistent"));
-=======
+    }
     @Test
     public void testOnQueryFinished_getCNGroupNameFails(@Mocked WarehouseManager warehouseManager) {
         ConnectContext ctx = new ConnectContext(connection);
@@ -721,6 +713,5 @@ public class ConnectContextTest {
 
         // Should not throw exception even if getting CN group name fails
         Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
->>>>>>> 5c97ea4fe7 ([BugFix] Fix query queue allocation time and pending timeout (#65802))
     }
 }
