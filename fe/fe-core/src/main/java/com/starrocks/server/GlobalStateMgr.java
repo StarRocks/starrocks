@@ -144,6 +144,7 @@ import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.lake.vacuum.FullVacuumDaemon;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.leader.CheckpointController;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.leader.TabletCollector;
@@ -480,6 +481,9 @@ public class GlobalStateMgr {
     // For LakeTable
     private final CompactionMgr compactionMgr;
 
+    // For async vector index build
+    private VectorIndexBuildScheduler vectorIndexBuildScheduler;
+
     // For compaction forbidden policy
     private final CompactionControlScheduler compactionControlScheduler;
 
@@ -641,6 +645,10 @@ public class GlobalStateMgr {
 
     public CompactionMgr getCompactionMgr() {
         return compactionMgr;
+    }
+
+    public VectorIndexBuildScheduler getVectorIndexBuildScheduler() {
+        return vectorIndexBuildScheduler;
     }
 
     public CompactionControlScheduler getCompactionControlScheduler() {
@@ -1605,6 +1613,9 @@ public class GlobalStateMgr {
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
             fullVacuumDaemon.start();
+
+            vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
+            vectorIndexBuildScheduler.start();
         }
 
         if (Config.enable_safe_mode) {

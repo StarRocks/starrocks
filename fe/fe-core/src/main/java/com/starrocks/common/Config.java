@@ -3353,6 +3353,9 @@ public class Config extends ConfigBase {
     public static String lake_background_warehouse = "default_warehouse";
 
     @ConfField(mutable = true)
+    public static String lake_vector_index_build_warehouse = "default_warehouse";
+
+    @ConfField(mutable = true)
     public static int lake_warehouse_max_compute_replica = 3;
 
     @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")

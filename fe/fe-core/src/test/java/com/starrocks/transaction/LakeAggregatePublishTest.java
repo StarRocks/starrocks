@@ -146,7 +146,7 @@ public class LakeAggregatePublishTest {
             warehouseMgrField.set(GlobalStateMgr.getCurrentState(), mockManager);
 
             Assertions.assertThrows(NoAliveBackendException.class, () -> Utils.aggregatePublishVersion(tablets, null, 1, 2, null,
-                        null, WarehouseManager.DEFAULT_RESOURCE, null));
+                        null, WarehouseManager.DEFAULT_RESOURCE, null, null));
 
             when(mockManager.getAliveComputeNodes(any())).thenReturn(null);
             LakeAggregator lakeAggregator = new LakeAggregator();

@@ -39,6 +39,7 @@ import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -433,7 +434,8 @@ public class MergeTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
                                        Map<Long, Long> tabletRowNums,
-                                       boolean useAggregatePublish) throws Exception {
+                                       boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) throws Exception {
                 throw new RuntimeException("mock");
             }
         };
@@ -465,7 +467,8 @@ public class MergeTabletJobTest {
                                        Map<Long, TabletRange> tabletRanges,
                                        ComputeResource computeResource,
                                        Map<Long, Long> tabletRowNums,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish,
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
                 actualResource.set(computeResource);
             }
         };
