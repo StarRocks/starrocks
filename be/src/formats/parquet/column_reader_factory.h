@@ -16,15 +16,25 @@
 #include <string>
 #include <vector>
 
+#include "column/variant_path_parser.h"
 #include "formats/parquet/column_reader.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks::parquet {
 
 struct VariantShreddedReadHints {
-    // Exact shredded paths to materialize as typed_columns.
-    // Empty means auto-discover from file shredded schema.
+    // String form of the paths, kept in sync with parsed_shredded_paths via add_path().
+    // Used for string-level deduplication during hint collection (see _get_variant_shredded_hints).
+    // Not forwarded to column readers; only parsed_shredded_paths is passed downstream.
     std::vector<std::string> shredded_paths;
+    // Parsed form of shredded_paths, kept in the same order.
+    // This is what column readers consume for segment-level path pruning.
+    // Empty means no restriction: the reader auto-discovers paths from the shredded schema.
+    std::vector<VariantPath> parsed_shredded_paths;
+
+    // Appends a path in both string and parsed form, keeping the two vectors in sync.
+    Status add_path(std::string path);
+    void clear();
 };
 
 class ColumnReaderFactory {

@@ -199,8 +199,24 @@ private:
     // result once after Phase 4 (in get_next).
     // An empty filter means there were no deferred conjuncts (all rows pass).
     // A non-empty all-zero filter means every row was filtered out.
-    StatusOr<Filter> _apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count);
-    Status _fill_dst_chunk(ChunkPtr& active_chunk, ChunkPtr* chunk);
+    // Evaluates deferred variant virtual conjuncts and optionally returns the projected
+    // virtual columns used by those conjuncts.
+    //
+    // projected_chunk:
+    //   - Output chunk keyed by virtual slot id, containing only slots that have deferred
+    //     conjuncts and were projected in this phase.
+    //   - Row order/row count matches `active_chunk` BEFORE Phase-4 combined filter is applied.
+    //     Caller must apply the exact same filter to projected_chunk before passing it to
+    //     _fill_dst_chunk.
+    StatusOr<Filter> _apply_deferred_variant_conjuncts(ChunkPtr& active_chunk, size_t raw_count,
+                                                       ChunkPtr* projected_chunk);
+    Status _align_deferred_projected_chunk_after_filter(const ChunkPtr& active_chunk,
+                                                        const ChunkPtr& deferred_projected_chunk,
+                                                        const Filter& chunk_filter, size_t pre_filter_rows);
+    // Fills output chunk and computes virtual projections. For slots present in
+    // `projected_chunk`, reuse precomputed columns (from deferred conjunct evaluation) to
+    // avoid re-projecting and re-seeking variant paths.
+    Status _fill_dst_chunk(ChunkPtr& active_chunk, const ChunkPtr& projected_chunk, ChunkPtr* chunk);
     const cctz::time_zone& _get_variant_projection_timezone();
 
     Status _create_column_readers();

@@ -50,6 +50,7 @@ public class IcebergVariantShreddingTest {
 
     private static final Namespace NAMESPACE = Namespace.of("zya");
     private static final String SHREDDING_TABLE = "test_shredding_variant";
+    private static final String SPARSE_SHREDDING_TABLE = "test_shredding_variant_sparse";
     private static final String NO_SHREDDING_TABLE = "test_noshredding_variant";
     // Schema includes top-level physical columns (id, age, city) alongside the variant
     // column so that predicates on them trigger Phase 2 (has_filter=true) while
@@ -83,6 +84,7 @@ public class IcebergVariantShreddingTest {
         Catalog catalog = new HadoopCatalog(conf, warehousePath);
 
         runWithShredding(catalog, warehousePath);
+        runWithSparseShredding(catalog, warehousePath);
         runWithoutShredding(catalog, warehousePath);
     }
 
@@ -315,7 +317,7 @@ public class IcebergVariantShreddingTest {
         System.out.println("Created table with shredding: " + identifier);
 
         List<Record> records = buildRecords(true);
-        long recordCount = writeDataFile(table, spec, records, true);
+        long recordCount = writeDataFile(table, spec, records, true, "data_shredding.parquet");
         System.out.println("Wrote " + recordCount + " records with variant shredding.");
 
         Table refreshed = catalog.loadTable(identifier);
@@ -325,6 +327,33 @@ public class IcebergVariantShreddingTest {
             readAndPrint(refreshed, "shredding");
         } catch (RuntimeException re) {
             System.err.println("Read failed for shredded table (mixed-type fields may be the cause): " + re.getMessage());
+            re.printStackTrace(System.err);
+        }
+    }
+
+    private static void runWithSparseShredding(Catalog catalog, String warehousePath) throws IOException {
+        TableIdentifier identifier = TableIdentifier.of(NAMESPACE, SPARSE_SHREDDING_TABLE);
+        dropTableIfExists(catalog, identifier, warehousePath);
+
+        PartitionSpec spec = PartitionSpec.unpartitioned();
+        Map<String, String> tableProperties = new HashMap<>();
+        tableProperties.put("format-version", "3");
+        tableProperties.put("iceberg.enableVariantShredding", "true");
+
+        Table table = catalog.createTable(identifier, SCHEMA, spec, tableProperties);
+        System.out.println("Created table with sparse shredding: " + identifier);
+
+        List<Record> records = buildSparseRecords(true);
+        long recordCount = writeDataFile(table, spec, records, true, "data_shredding_sparse.parquet");
+        System.out.println("Wrote " + recordCount + " records with sparse variant shredding.");
+
+        Table refreshed = catalog.loadTable(identifier);
+        System.out.println("Table location: " + refreshed.location());
+        System.out.println("Current snapshot id: " + refreshed.currentSnapshot().snapshotId());
+        try {
+            readAndPrint(refreshed, "sparse shredding");
+        } catch (RuntimeException re) {
+            System.err.println("Read failed for sparse shredded table: " + re.getMessage());
             re.printStackTrace(System.err);
         }
     }
@@ -341,7 +370,7 @@ public class IcebergVariantShreddingTest {
         System.out.println("Created table without shredding: " + identifier);
 
         List<Record> records = buildRecords(true);
-        long recordCount = writeDataFile(table, spec, records, false);
+        long recordCount = writeDataFile(table, spec, records, false, "data_noshredding.parquet");
         System.out.println("Wrote " + recordCount + " records without variant shredding.");
 
         Table refreshed = catalog.loadTable(identifier);
@@ -448,16 +477,115 @@ public class IcebergVariantShreddingTest {
         return records;
     }
 
+    private static List<Record> buildSparseRecords(boolean multiTypes) {
+        List<Record> records = new ArrayList<>();
+        VariantMetadata metadata = Variants.metadata("id", "age", "city", "score", "status", "name", "email", "profile",
+                "salary", "price", "amount", "balance", "department", "rank", "metrics", "views", "ratio", "events",
+                "type", "count", "numbers", "groups", "scores", "detail", "note", "created_at", "updated_at");
+        final int BASE_DATE_DAYS = 19723;
+        final long BASE_TS_MICROS = 1704067200_000000L;
+        for (int i = 0; i < 5; i++) {
+            Record rec = GenericRecord.create(SCHEMA.asStruct());
+            if (i == 4) {
+                rec.setField("data", null);
+                rec.setField("id", null);
+                rec.setField("age", null);
+                rec.setField("city", null);
+                records.add(rec);
+                continue;
+            }
+
+            ShreddedObject obj = Variants.object(metadata);
+            if (i != 3) {
+                obj.put("id", Variants.of(1000L + i));
+            }
+            obj.put("age", Variants.of(20 + i));
+            obj.put("city", Variants.of("city_" + i));
+            if (i % 2 == 0 || !multiTypes) {
+                obj.put("score", Variants.of(80 + i));
+            } else {
+                obj.put("score", Variants.of("S" + (80 + i)));
+            }
+            obj.put("status", Variants.of(i % 2 == 0 ? "active" : "inactive"));
+            obj.put("name", Variants.of("name_" + i));
+
+            org.apache.iceberg.variants.ValueArray events = Variants.array();
+            ShreddedObject event0 = Variants.object(metadata);
+            event0.put("type", Variants.of("view"));
+            event0.put("count", Variants.of(i + 1));
+            event0.put("detail", Variants.of("detail_view_" + i));
+            events.add(event0);
+            ShreddedObject event1 = Variants.object(metadata);
+            event1.put("type", Variants.of("click"));
+            event1.put("count", Variants.of((i + 1) * 2));
+            event1.put("detail", Variants.of("detail_click_" + i));
+            events.add(event1);
+            obj.put("events", events);
+
+            org.apache.iceberg.variants.ValueArray numbers = Variants.array();
+            numbers.add(Variants.of(1 + i));
+            numbers.add(Variants.of(2 + i));
+            numbers.add(Variants.of(3 + i));
+            obj.put("numbers", numbers);
+
+            ShreddedObject profile = Variants.object(metadata);
+            if (i != 2) {
+                profile.put("salary", Variants.of(50000.0 + i * 1000));
+            }
+            profile.put("price",
+                    Variants.of(new BigDecimal("10.50").add(new BigDecimal("0.50").multiply(BigDecimal.valueOf(i)))));
+            profile.put("amount", Variants.of(new BigDecimal("10000000000.10").multiply(BigDecimal.valueOf(i + 1))));
+            profile.put("balance",
+                    Variants.of(new BigDecimal("1000000000000000.0001").multiply(BigDecimal.valueOf(i + 1))));
+            profile.put("department", Variants.of("dept_" + i));
+            if (i % 2 == 0 || !multiTypes) {
+                profile.put("rank", Variants.of(i + 1));
+            } else {
+                profile.put("rank", Variants.of("L" + (i + 1)));
+            }
+            ShreddedObject metrics = Variants.object(metadata);
+            metrics.put("views", Variants.of(100 + i * 10));
+            metrics.put("ratio", Variants.of(0.1 + i * 0.05));
+            profile.put("metrics", metrics);
+            obj.put("profile", profile);
+
+            org.apache.iceberg.variants.ValueArray groups = Variants.array();
+            for (int g = 0; g < 2; g++) {
+                ShreddedObject groupObj = Variants.object(metadata);
+                groupObj.put("name", Variants.of("group_" + g));
+                groupObj.put("note", Variants.of("note_" + i + "_" + g));
+                org.apache.iceberg.variants.ValueArray scores = Variants.array();
+                scores.add(Variants.of(10 + i + g * 30));
+                scores.add(Variants.of(20 + i + g * 30));
+                scores.add(Variants.of(30 + i + g * 30));
+                groupObj.put("scores", scores);
+                groups.add(groupObj);
+            }
+            obj.put("groups", groups);
+            obj.put("email", Variants.of("user" + i + "@example.com"));
+            obj.put("created_at", Variants.of(PhysicalType.DATE, BASE_DATE_DAYS + i));
+            obj.put("updated_at", Variants.of(PhysicalType.TIMESTAMPTZ, BASE_TS_MICROS + (long) i * 3600 * 1_000_000L));
+
+            Variant value = Variant.of(metadata, obj);
+            rec.setField("data", value);
+            rec.setField("id", i == 3 ? null : 1000L + i);
+            rec.setField("age", 20 + i);
+            rec.setField("city", "city_" + i);
+            records.add(rec);
+        }
+        return records;
+    }
+
     private static long writeDataFile(Table table,
                                       PartitionSpec spec,
                                       List<Record> records,
-                                      boolean enableShredding) throws IOException {
+                                      boolean enableShredding,
+                                      String outputFileName) throws IOException {
         File dataDir = new File(table.location() + "/data");
         if (!dataDir.exists()) {
             dataDir.mkdirs();
         }
-        String outPath =
-                dataDir + "/data-" + (enableShredding ? "shred" : "noshred") + ".parquet";
+        String outPath = dataDir + "/" + outputFileName;
 
         OutputFile out = org.apache.iceberg.Files.localOutput(new File(outPath));
         long recordCount = 0L;
@@ -499,7 +627,7 @@ public class IcebergVariantShreddingTest {
         try (CloseableIterable<Record> rows = IcebergGenerics.read(table).build()) {
             for (Record row : rows) {
                 Variant variant = (Variant) row.getField("data");
-                System.out.println(Variant.toString(variant));
+                System.out.println(variant == null ? "null" : Variant.toString(variant));
             }
         } catch (Exception e) {
             e.printStackTrace();
