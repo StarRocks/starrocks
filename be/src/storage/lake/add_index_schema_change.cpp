@@ -277,6 +277,15 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
             RETURN_IF_ERROR(build_bloom_for_column(segment.get(), column, ix.index_type(), ix,
                                                    idx_writer.writable_file(), &meta));
             break;
+        case IndexType::BLOOM_FILTER:
+            // Plain (non-ngram) bloom filter. Shares the BloomFilterIndexWriter
+            // path with NGRAMBF; `build_bloom_for_column` picks use_ngram
+            // based on index_type. Triggered by the lake fast path for an
+            // ALTER TABLE ... SET ("bloom_filter_columns"="...") that only
+            // adds columns to the BF list.
+            RETURN_IF_ERROR(build_bloom_for_column(segment.get(), column, ix.index_type(), ix,
+                                                   idx_writer.writable_file(), &meta));
+            break;
         case IndexType::GIN:
         case IndexType::VECTOR:
         default:

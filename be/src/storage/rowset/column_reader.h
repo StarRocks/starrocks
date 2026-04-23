@@ -132,14 +132,15 @@ public:
     bool has_zone_map() const { return _zonemap_index != nullptr; }
     bool has_bitmap_index() const { return _bitmap_index != nullptr; }
     bool has_bloom_filter_index() const { return _bloom_filter_index != nullptr; }
-    // If the column's NGRAMBF index was tombstoned via a lake metadata-only
-    // DROP, the footer bloom is stale and must not be interpreted as either
-    // "original" or "ngram" bloom until compaction rewrites the segment.
-    // dropped_table_indices on the tablet schema carries that signal.
-    // (Regular per-column bloom is tracked via ColumnPB.is_bf_column, not as
-    // an IndexType entry, so only NGRAMBF is relevant here.)
+    // If the column's bloom-filter index was tombstoned via a lake
+    // metadata-only DROP, the footer bloom is stale and must not be
+    // interpreted as either "original" or "ngram" bloom until compaction
+    // rewrites the segment. dropped_table_indices on the tablet schema
+    // carries that signal. Both flavors share the same footer storage
+    // (_bloom_filter_index), so either tombstone disqualifies the footer.
     bool _bloom_filter_index_dropped() const {
-        return _segment->tablet_schema().has_dropped_index(_column_unique_id, NGRAMBF);
+        return _segment->tablet_schema().has_dropped_index(_column_unique_id, NGRAMBF) ||
+               _segment->tablet_schema().has_dropped_index(_column_unique_id, BLOOM_FILTER);
     }
     bool has_original_bloom_filter_index() const {
         return _bloom_filter_index != nullptr && !_bloom_filter_index_dropped() &&

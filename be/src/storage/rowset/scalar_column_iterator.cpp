@@ -70,13 +70,13 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts.stats->total_columns_data_page_count += _reader->num_data_pages();
 
     // One-shot IDG probe (lake only). If the fast path has published a
-    // sidecar .idx file covering this (segment, col_unique_id, NGRAMBF),
-    // remember it so that has_ngram_bloom_filter_index() and
+    // sidecar .idx file covering this (segment, col_unique_id, <BF flavor>),
+    // remember it so that has_{original,ngram}_bloom_filter_index() and
     // get_row_ranges_by_bloom_filter() surface it to the pruning gates
     // above. Without this bit both would short-circuit on the footer-only
     // `_reader->has_bloom_filter_index()` and the .idx file would never
     // participate in read-side filtering until compaction materialized the
-    // payload back into the segment footer.
+    // payload back into the segment footer. At most one flavor per column.
     if (_opts.idg_loader != nullptr && _opts.col_unique_id >= 0) {
         TabletSegmentId tsid(_opts.tablet_id, _opts.segment_id);
         lake::IndexDeltaGroupList list;
@@ -84,12 +84,14 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
         if (st.ok()) {
             for (const auto& e : list) {
                 for (const auto& k : e.keys) {
-                    if (k.col_unique_id == _opts.col_unique_id && k.index_type == IndexType::NGRAMBF) {
+                    if (k.col_unique_id != _opts.col_unique_id) continue;
+                    if (k.index_type == IndexType::NGRAMBF) {
                         _has_idg_ngram_bf = true;
-                        break;
+                    } else if (k.index_type == IndexType::BLOOM_FILTER) {
+                        _has_idg_original_bf = true;
                     }
                 }
-                if (_has_idg_ngram_bf) {
+                if (_has_idg_ngram_bf || _has_idg_original_bf) {
                     break;
                 }
             }
@@ -496,10 +498,12 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
 }
 
 bool ScalarColumnIterator::has_original_bloom_filter_index() const {
-    // Original (non-ngram) bloom filter is driven by the table property
-    // `bloom_filter_columns`, which rewrites the segment footer directly —
-    // it never lives in IDG. So the footer-only check is correct.
-    return _reader->has_original_bloom_filter_index();
+    // Footer-embedded original BF (legacy segment rewrite or inline build
+    // during ingest) OR IDG-backed original BF (lake ADD INDEX fast path
+    // applied to `bloom_filter_columns` property). Without the
+    // `_has_idg_original_bf` branch the fast-path sidecar is invisible to
+    // the read-side pruning gate above.
+    return _reader->has_original_bloom_filter_index() || _has_idg_original_bf;
 }
 
 bool ScalarColumnIterator::has_ngram_bloom_filter_index() const {
@@ -512,16 +516,17 @@ bool ScalarColumnIterator::has_ngram_bloom_filter_index() const {
 
 Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                             SparseRange<>* row_ranges) {
-    // The gate must include IDG-backed NGRAMBF, otherwise the standalone
-    // .idx file published by the lake fast path never reaches the bloom
-    // filter evaluation. `_reader->has_bloom_filter_index()` only reports
-    // the footer pointer, which is always null for IDG-only indexes.
-    RETURN_IF(!_reader->has_bloom_filter_index() && !_has_idg_ngram_bf, Status::OK());
+    // The gate must include IDG-backed bloom filters (original or NGRAMBF),
+    // otherwise the standalone .idx file published by the lake fast path
+    // never reaches the bloom filter evaluation. `_reader->has_bloom_filter_index()`
+    // only reports the footer pointer, which is always null for IDG-only
+    // indexes.
+    RETURN_IF(!_reader->has_bloom_filter_index() && !_has_idg_ngram_bf && !_has_idg_original_bf, Status::OK());
 
     bool support_original_bloom_filter = false;
     bool support_ngram_bloom_filter = false;
     // bloom filter index can only be either original bloom filter or ngram bloom filter
-    if (_reader->has_original_bloom_filter_index()) {
+    if (_reader->has_original_bloom_filter_index() || _has_idg_original_bf) {
         support_original_bloom_filter =
                 std::ranges::any_of(predicates, [](const auto* pred) { return pred->support_original_bloom_filter(); });
     } else if (_reader->has_ngram_bloom_filter_index() || _has_idg_ngram_bf) {

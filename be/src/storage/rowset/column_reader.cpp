@@ -522,21 +522,24 @@ Status ColumnReader::_parse_zone_map(const TypeInfoPtr& type_info, const ZoneMap
 template <bool is_original_bf>
 Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& predicates, SparseRange<>* row_ranges,
                                   const IndexReadOptions& opts) {
-    // Lake ADD INDEX fast-path for NGRAMBF: if the IDG loader has an
-    // active entry for this (segment, col_unique_id, NGRAMBF), open a
+    // Lake ADD INDEX fast-path for bloom filters: if the IDG loader has an
+    // active entry for this (segment, col_unique_id, <BF flavor>), open a
     // transient BloomFilterIndexReader from the .idx file. Holders are
     // kept on this function's stack so they outlive the iterator without
     // needing a virtual destructor on BloomFilterIndexIterator.
     //
-    // The "original" bloom filter (is_original_bf=true) is driven by the
-    // table property `bloom_filter_columns`, not by CreateIndexClause, so
-    // it never lives in IDG and stays on the existing footer-embedded path.
+    // The IDG key type disambiguates the two flavors. `is_original_bf=true`
+    // (plain BF, driven by the `bloom_filter_columns` table property) looks
+    // for IndexType::BLOOM_FILTER entries; `is_original_bf=false` (NGRAMBF)
+    // looks for IndexType::NGRAMBF. Only one flavor can exist per column at
+    // a time, mirroring the footer constraint.
     std::unique_ptr<RandomAccessFile> idg_file_holder;
     std::unique_ptr<BloomFilterIndexReader> idg_reader_holder;
     std::unique_ptr<BloomFilterIndexIterator> bf_iter;
 
     bool used_idg = false;
-    if (!is_original_bf && opts.idg_loader != nullptr) {
+    if (opts.idg_loader != nullptr) {
+        const IndexType wanted = is_original_bf ? IndexType::BLOOM_FILTER : IndexType::NGRAMBF;
         TabletSegmentId tsid(opts.tablet_id, opts.segment_id);
         lake::IndexDeltaGroupList list;
         Status load_st = opts.idg_loader->load(tsid, opts.query_version, &list);
@@ -544,7 +547,7 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
             for (const auto& e : list) {
                 bool match = false;
                 for (const auto& k : e.keys) {
-                    if (k.col_unique_id == opts.col_unique_id && k.index_type == IndexType::NGRAMBF) {
+                    if (k.col_unique_id == opts.col_unique_id && k.index_type == wanted) {
                         match = true;
                         break;
                     }
@@ -561,7 +564,7 @@ Status ColumnReader::bloom_filter(const std::vector<const ColumnPredicate*>& pre
 
                 lake::IndexFileReader idx_reader;
                 RETURN_IF_ERROR(idx_reader.init(idg_file_holder.get()));
-                const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, IndexType::NGRAMBF);
+                const ColumnIndexMetaPB* meta = idx_reader.find(opts.col_unique_id, wanted);
                 if (meta == nullptr || !meta->has_bloom_filter_index()) {
                     return Status::Corruption("IDG entry references missing bloom filter in .idx file");
                 }
