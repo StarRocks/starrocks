@@ -644,7 +644,7 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 
 #### `schema`
 
-从 v3.5 开始，`FILES()` 支持显式的 `schema` 参数，允许您显式声明要读取的列及其 StarRocks 类型，跳过 BE 端的自动 Schema 推断。
+从 v4.0 开始，`FILES()` 支持显式的 `schema` 参数，允许您显式声明要读取的列及其 StarRocks 类型，跳过 BE 端的自动 Schema 推断。
 
 ```SQL
 "schema" = "col_name TYPE[, col_name TYPE ...]"
@@ -740,30 +740,6 @@ FROM FILES(
   "schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
 );
 ```
-
-##### 已知限制
-
-:::warning 已知限制（ORC + 嵌套 + `fill_mismatch_column_with = "null"`）
-
-**仅在 ORC 格式下**，当 `schema` 声明了某个 `STRUCT` 子字段，而该子字段在部分文件中不存在，同时设置了 `fill_mismatch_column_with = "null"` 时，扫描会以 `NotFound` 错误失败，而不是为缺失的子字段返回 `NULL`。
-
-此问题**仅**影响以下组合：
-
-- 格式 = `orc`，**且**
-- 嵌套声明（声明的 `STRUCT` 内部存在子字段声明），**且**
-- 该声明的子字段在物理文件中缺失，**且**
-- `fill_mismatch_column_with = "null"`。
-
-不受影响的场景：
-
-- 任何格式（含 ORC）下的顶层列缺失。
-- 嵌套 `STRUCT` 投影，且所有声明的子字段在文件中都存在。
-- `fill_mismatch_column_with = "none"` 下的嵌套子字段缺失（按设计一致地失败）。
-- Parquet、Avro 和 CSV 的所有组合。
-
-此问题正在独立跟踪修复；修复合入后，该限制将自动消失，用户无需执行任何操作。
-
-:::
 
 #### `list_files_only`
 

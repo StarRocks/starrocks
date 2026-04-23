@@ -644,7 +644,7 @@ Suppose the data file **file1** is stored under a path in the format of `/geo/co
 
 #### `schema`
 
-From v3.5 onwards, `FILES()` supports an explicit `schema` parameter that lets you declare exactly which columns to read and their StarRocks types, bypassing BE-side schema inference.
+From v4.0 onwards, `FILES()` supports an explicit `schema` parameter that lets you declare exactly which columns to read and their StarRocks types, bypassing BE-side schema inference.
 
 ```SQL
 "schema" = "col_name TYPE[, col_name TYPE ...]"
@@ -740,30 +740,6 @@ FROM FILES(
   "schema" = "request_data STRUCT<device_data STRUCT<platform VARCHAR(64)>, now BIGINT>"
 );
 ```
-
-##### Known limitations
-
-:::warning Known limitation (ORC + nested + `fill_mismatch_column_with = "null"`)
-
-On **ORC only**, when `schema` declares a `STRUCT` subfield that does not exist in some file and `fill_mismatch_column_with = "null"` is set, the scan fails with a `NotFound` error instead of returning `NULL` for the missing subfield.
-
-This affects **only** the combination of:
-
-- format = `orc`, **and**
-- nested declaration (a subfield inside a declared `STRUCT`), **and**
-- that declared subfield is absent from the physical file, **and**
-- `fill_mismatch_column_with = "null"`.
-
-Unaffected cases:
-
-- Top-level missing columns on any format (ORC included).
-- Nested `STRUCT` projection where every declared subfield exists in the file.
-- Nested missing subfield under `fill_mismatch_column_with = "none"` (fails consistently as designed).
-- Parquet, Avro, and CSV in all combinations.
-
-A separate fix is tracked; once it lands, this limitation closes automatically and no user action is required.
-
-:::
 
 #### `list_files_only`
 
