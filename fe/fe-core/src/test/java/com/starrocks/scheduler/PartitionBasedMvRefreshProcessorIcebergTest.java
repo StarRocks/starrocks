@@ -27,7 +27,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.QueryDebugOptions;
@@ -193,7 +193,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -268,7 +268,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         initAndExecuteTaskRun(taskRun);
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
         MvTaskRunContext mvContext = processor.getMvContext();
         ExecPlan execPlan = mvContext.getExecPlan();
@@ -450,7 +450,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
             Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
             TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
             initAndExecuteTaskRun(taskRun);
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();

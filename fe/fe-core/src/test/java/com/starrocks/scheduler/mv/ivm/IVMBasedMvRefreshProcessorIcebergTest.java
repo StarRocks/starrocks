@@ -29,9 +29,9 @@ import com.starrocks.load.loadv2.IVMInsertLoadTxnCallback;
 import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
-import com.starrocks.scheduler.mv.hybrid.MVHybridBasedRefreshProcessor;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
+import com.starrocks.scheduler.mv.hybrid.MVHybridRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
@@ -471,10 +471,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         {
             advanceTableVersionTo(2);
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-            MVHybridBasedRefreshProcessor hybridBasedRefreshProcessor =
-                    (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+            MVHybridRefreshProcessor hybridBasedRefreshProcessor =
+                    (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
         }
         // Once a checkpoint exists, append-only changes can switch AUTO back to IVM.
         {
@@ -486,10 +486,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
                             TvrDeltaStats.EMPTY)
             ));
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(refreshedMv);
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-            MVHybridBasedRefreshProcessor hybridBasedRefreshProcessor =
-                    (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+            MVHybridRefreshProcessor hybridBasedRefreshProcessor =
+                    (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+            Assertions.assertTrue(hybridBasedRefreshProcessor.getCurrentProcessor() instanceof MVIVMRefreshProcessor);
         }
     }
 
@@ -502,10 +502,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         advanceTableVersionTo(2);
 
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
-        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid1 =
-                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid1 =
+                (MVHybridRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         MaterializedView refreshedMv = getMv("test_mv1");
         TvrVersionRange checkpoint = refreshedMv.getRefreshScheme()
@@ -525,10 +525,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         ));
 
         MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
-        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid2 =
-                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid2 =
+                (MVHybridRefreshProcessor) run2.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMRefreshProcessor);
     }
 
     @Test
@@ -539,20 +539,20 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         advanceTableVersionTo(2);
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
-        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid1 =
-                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid1 =
+                (MVHybridRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         MaterializedView refreshedMv = getMv("test_mv1");
         advanceTableVersionTo(3);
         mockListTableDeltaTraitsThrows("Starting snapshot (exclusive) 2 is not a parent ancestor of end snapshot 3");
 
         MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
-        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid2 =
-                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid2 =
+                (MVHybridRefreshProcessor) run2.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
     }
 
     @Test
@@ -565,13 +565,13 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         {
             advanceTableVersionTo(2);
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTRefreshProcessor);
         }
         // if the base table has retractable changes, the refresh processor should be full refresh
         {
             mockListTableDeltaTraits();
             MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
-            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor);
+            Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVPCTRefreshProcessor);
         }
     }
 
@@ -596,15 +596,15 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         // Run 1: IVM fails (retractable changes) → fallback to PCT
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
-        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid1 =
-                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(run1.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid1 =
+                (MVHybridRefreshProcessor) run1.getMVRefreshProcessor();
         // Verify fallback to PCT
-        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(hybrid1.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         // Verify canGenerateNextTaskRun is NOT blocked (the core fix)
-        MVPCTBasedRefreshProcessor pctProcessor =
-                (MVPCTBasedRefreshProcessor) hybrid1.getCurrentProcessor();
+        MVPCTRefreshProcessor pctProcessor =
+                (MVPCTRefreshProcessor) hybrid1.getCurrentProcessor();
         Assertions.assertTrue(pctProcessor.getMvRefreshParams().isCanGenerateNextTaskRun(),
                 "IVM→PCT fallback should allow multi-batch splitting (canGenerateNextTaskRun=true)");
 
@@ -628,11 +628,11 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         ));
 
         MVTaskRunProcessor run2 = getMVTaskRunProcessor(refreshedMv);
-        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid2 =
-                (MVHybridBasedRefreshProcessor) run2.getMVRefreshProcessor();
+        Assertions.assertTrue(run2.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid2 =
+                (MVHybridRefreshProcessor) run2.getMVRefreshProcessor();
         // Should switch back to IVM since delta[2,3] is append-only
-        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor,
+        Assertions.assertTrue(hybrid2.getCurrentProcessor() instanceof MVIVMRefreshProcessor,
                 "After PCT fallback persists checkpoint, next IVM refresh should recover");
     }
 
@@ -659,15 +659,15 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // First task_run: IVM fails (retractable changes) → fallback to PCT, batch 1
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybrid =
-                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
         // Verify fallback to PCT
-        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         // Verify canGenerateNextTaskRun is allowed
-        MVPCTBasedRefreshProcessor pctProcessor =
-                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+        MVPCTRefreshProcessor pctProcessor =
+                (MVPCTRefreshProcessor) hybrid.getCurrentProcessor();
         Assertions.assertTrue(pctProcessor.getMvRefreshParams().isCanGenerateNextTaskRun(),
                 "IVM→PCT fallback should allow multi-batch splitting");
 
@@ -703,13 +703,13 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
             while (nextTaskRun != null) {
                 initAndExecuteTaskRun(nextTaskRun);
                 MVTaskRunProcessor nextProcessor = getMVTaskRunProcessor(nextTaskRun);
-                BaseMVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
-                if (refreshProcessor instanceof MVHybridBasedRefreshProcessor) {
-                    MVHybridBasedRefreshProcessor nextHybrid =
-                            (MVHybridBasedRefreshProcessor) refreshProcessor;
+                MVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
+                if (refreshProcessor instanceof MVHybridRefreshProcessor) {
+                    MVHybridRefreshProcessor nextHybrid =
+                            (MVHybridRefreshProcessor) refreshProcessor;
                     nextTaskRun = nextHybrid.getCurrentProcessor().getNextTaskRun();
-                } else if (refreshProcessor instanceof MVPCTBasedRefreshProcessor) {
-                    nextTaskRun = ((MVPCTBasedRefreshProcessor) refreshProcessor).getNextTaskRun();
+                } else if (refreshProcessor instanceof MVPCTRefreshProcessor) {
+                    nextTaskRun = ((MVPCTRefreshProcessor) refreshProcessor).getNextTaskRun();
                 } else {
                     nextTaskRun = null;
                 }
@@ -751,9 +751,9 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         // Run: IVM fails → fallback to PCT (single batch, unpartitioned MV)
         MVTaskRunProcessor run1 = getMVTaskRunProcessor(mv);
-        MVHybridBasedRefreshProcessor hybrid =
-                (MVHybridBasedRefreshProcessor) run1.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) run1.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         // After single-batch completes: TVR promoted, owner cleared
         MaterializedView refreshedMv = getMv("test_mv1");
@@ -791,7 +791,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
 
         advanceTableVersionTo(2);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(mv);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVIVMBasedRefreshProcessor);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVIVMRefreshProcessor);
 
         MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
         MVTaskRunExtraMessage extraMessage = mvContext.getStatus().getMvTaskRunExtraMessage();
@@ -812,22 +812,22 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        MVHybridBasedRefreshProcessor hybridProcessor =
-                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        MVHybridRefreshProcessor hybridProcessor =
+                (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
 
         TaskRun nextTaskRun = hybridProcessor.getCurrentProcessor().getNextTaskRun();
         while (nextTaskRun != null) {
             initAndExecuteTaskRun(nextTaskRun);
             MVTaskRunProcessor nextProcessor = getMVTaskRunProcessor(nextTaskRun);
-            BaseMVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
-            if (refreshProcessor instanceof MVHybridBasedRefreshProcessor) {
-                MVHybridBasedRefreshProcessor nextHybrid =
-                        (MVHybridBasedRefreshProcessor) refreshProcessor;
+            MVRefreshProcessor refreshProcessor = nextProcessor.getMVRefreshProcessor();
+            if (refreshProcessor instanceof MVHybridRefreshProcessor) {
+                MVHybridRefreshProcessor nextHybrid =
+                        (MVHybridRefreshProcessor) refreshProcessor;
                 nextTaskRun = nextHybrid.getCurrentProcessor().getNextTaskRun();
-            } else if (refreshProcessor instanceof MVPCTBasedRefreshProcessor) {
-                nextTaskRun = ((MVPCTBasedRefreshProcessor) refreshProcessor).getNextTaskRun();
+            } else if (refreshProcessor instanceof MVPCTRefreshProcessor) {
+                nextTaskRun = ((MVPCTRefreshProcessor) refreshProcessor).getNextTaskRun();
             } else {
                 nextTaskRun = null;
             }
@@ -849,9 +849,9 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(refreshedMv.getDbId());
         taskRun = withMVRefreshTaskRun(db.getFullName(), refreshedMv);
         mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
-        hybridProcessor = (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVIVMBasedRefreshProcessor);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
+        hybridProcessor = (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybridProcessor.getCurrentProcessor() instanceof MVIVMRefreshProcessor);
 
         MvTaskRunContext mvContext = mvTaskRunProcessor.getMvTaskRunContext();
         MVTaskRunExtraMessage extraMessage = mvContext.getStatus().getMvTaskRunExtraMessage();
@@ -928,7 +928,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        Assertions.assertTrue(mvTaskRunProcessor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
 
         // First batch completed — inspect the runtime pinnedTvrMap hydrated by
         // setupPinnedContextIfNeeded after the afterSyncHook installed the owner.
@@ -961,11 +961,11 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor mvTaskRunProcessor = getMVTaskRunProcessor(taskRun);
-        MVHybridBasedRefreshProcessor hybrid =
-                (MVHybridBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
-        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTBasedRefreshProcessor);
-        MVPCTBasedRefreshProcessor pctProcessor =
-                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        Assertions.assertTrue(hybrid.getCurrentProcessor() instanceof MVPCTRefreshProcessor);
+        MVPCTRefreshProcessor pctProcessor =
+                (MVPCTRefreshProcessor) hybrid.getCurrentProcessor();
 
         // First batch should have generated a next batch (partition_refresh_number=1 on 4 partitions).
         TaskRun nextTaskRun = pctProcessor.getNextTaskRun();
@@ -1015,10 +1015,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // Job A: first batch installs owner=A_jobId and creates nextTaskRun for batch 2.
         TaskRun jobARun1 = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor jobARun1Processor = getMVTaskRunProcessor(jobARun1);
-        MVHybridBasedRefreshProcessor jobAHybrid =
-                (MVHybridBasedRefreshProcessor) jobARun1Processor.getMVRefreshProcessor();
-        MVPCTBasedRefreshProcessor jobAPct =
-                (MVPCTBasedRefreshProcessor) jobAHybrid.getCurrentProcessor();
+        MVHybridRefreshProcessor jobAHybrid =
+                (MVHybridRefreshProcessor) jobARun1Processor.getMVRefreshProcessor();
+        MVPCTRefreshProcessor jobAPct =
+                (MVPCTRefreshProcessor) jobAHybrid.getCurrentProcessor();
         TaskRun jobABatch2 = jobAPct.getNextTaskRun();
         Assertions.assertNotNull(jobABatch2, "Job A should generate a batch 2");
         String jobAId = jobARun1Processor.getMvTaskRunContext().getStatus().getStartTaskRunId();
@@ -1079,10 +1079,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // Batch 1: IVM fails -> Hybrid fallback to PCT -> afterSyncHook freezes at S2.
         TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
-        MVHybridBasedRefreshProcessor hybrid =
-                (MVHybridBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
-        MVPCTBasedRefreshProcessor pctProc =
-                (MVPCTBasedRefreshProcessor) hybrid.getCurrentProcessor();
+        MVHybridRefreshProcessor hybrid =
+                (MVHybridRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTRefreshProcessor pctProc =
+                (MVPCTRefreshProcessor) hybrid.getCurrentProcessor();
         TaskRun batch2 = pctProc.getNextTaskRun();
         Assertions.assertNotNull(batch2, "Multi-batch fallback should generate batch 2");
 
@@ -1134,10 +1134,10 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         // refresh_mode=pct routes through MVPCTBasedRefreshProcessor directly, not Hybrid.
         // Therefore no afterSyncHook is installed, no owner is written, and isPinnedMode()
         // returns false on every batch of this job.
-        Assertions.assertTrue(batch1Proc.getMVRefreshProcessor() instanceof MVPCTBasedRefreshProcessor,
+        Assertions.assertTrue(batch1Proc.getMVRefreshProcessor() instanceof MVPCTRefreshProcessor,
                 "refresh_mode=pct must use MVPCTBasedRefreshProcessor directly (not Hybrid)");
-        MVPCTBasedRefreshProcessor pctProc =
-                (MVPCTBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTRefreshProcessor pctProc =
+                (MVPCTRefreshProcessor) batch1Proc.getMVRefreshProcessor();
 
         TaskRun batch2 = pctProc.getNextTaskRun();
         Assertions.assertNotNull(batch2,
@@ -1188,8 +1188,8 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun batch1 = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor batch1Proc = getMVTaskRunProcessor(batch1);
-        MVPCTBasedRefreshProcessor pctProc =
-                (MVPCTBasedRefreshProcessor) batch1Proc.getMVRefreshProcessor();
+        MVPCTRefreshProcessor pctProc =
+                (MVPCTRefreshProcessor) batch1Proc.getMVRefreshProcessor();
         TaskRun batch2 = pctProc.getNextTaskRun();
         Assertions.assertNotNull(batch2, "Pure PCT multi-batch must generate a next batch");
         // Pure PCT never carries PINNED_REFRESH_JOB_ID, which is exactly what signals the
@@ -1266,7 +1266,7 @@ public class IVMBasedMvRefreshProcessorIcebergTest extends MVIVMIcebergTestBase 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mv.getDbId());
         TaskRun taskRun = withMVRefreshTaskRun(db.getFullName(), mv);
         MVTaskRunProcessor processor = getMVTaskRunProcessor(taskRun);
-        Assertions.assertTrue(processor.getMVRefreshProcessor() instanceof MVHybridBasedRefreshProcessor);
+        Assertions.assertTrue(processor.getMVRefreshProcessor() instanceof MVHybridRefreshProcessor);
 
         // After fallback batch 1, setupPinnedRangesIfNeeded should have written the snapshot id
         // into the task run's MVTaskRunExtraMessage. Pure PCT / non-pinned runs leave it empty.

@@ -19,7 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -230,8 +230,8 @@ public class MVTaskRunProcessorTest extends MVTestBase {
         taskRunContext.setProperties(testProperties);
         mvTaskRunProcessor.prepare(taskRunContext);
 
-        MVPCTBasedRefreshProcessor processor = 
-                (MVPCTBasedRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
+        MVPCTRefreshProcessor processor =
+                (MVPCTRefreshProcessor) mvTaskRunProcessor.getMVRefreshProcessor();
         Assertions.assertNotNull(processor);
 
         // Test getRetryTimes with different contexts
