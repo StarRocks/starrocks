@@ -27,6 +27,7 @@ CONF_Bool(compress_rowbatches, "true");
 // Compress ratio when shuffle row_batches in network, not in storage engine.
 // If ratio is less than this value, use uncompressed data instead.
 CONF_mDouble(rpc_compress_ratio_threshold, "1.1");
+
 // If true, skip compression when serialized_size exceeds the codec's max input size limit (instead of returning an error).
 CONF_mBool(enable_rpc_compress_overflow_skip, "true");
 
@@ -223,6 +224,9 @@ CONF_mInt64(split_exchanger_buffer_chunk_num, "1000");
 CONF_mInt64(two_level_memory_threshold, "-1");
 
 CONF_mBool(enable_pipeline_driver_parallel_prepare, "true");
+
+// When enabled, ScanExecutor uses LockFreeWorkGroupScanTaskQueue for OLAP and connector scan task scheduling.
+CONF_mBool(enable_lock_free_scan_task_queue, "true");
 
 // used by global late materialization, may be removed in the future
 CONF_mInt64(fetch_max_buffer_chunk_num, "8");
