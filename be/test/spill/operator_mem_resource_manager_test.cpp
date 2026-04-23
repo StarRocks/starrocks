@@ -14,9 +14,9 @@
 
 #include "exec/spill/operator_mem_resource_manager.h"
 
-#include <algorithm>
-
 #include <gtest/gtest.h>
+
+#include <algorithm>
 
 #include "base/uid_util.h"
 #include "runtime/runtime_state.h"
