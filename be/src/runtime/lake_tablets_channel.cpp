@@ -739,11 +739,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         const int64_t pid = log->partition_id();
                         if (my_partitions.count(pid) > 0) {
                             my_logs.emplace_back(std::move(log));
-                        } else if (all_claimed_partitions.count(pid) == 0 &&
-                                   sender_id == min_coord_sender_id) {
+                        } else if (all_claimed_partitions.count(pid) == 0 && sender_id == min_coord_sender_id) {
                             ++orphan_count;
-                            LOG(ERROR) << "combined_txn_log: orphan log for partition " << pid
-                                       << " on txn " << _txn_id
+                            LOG(ERROR) << "combined_txn_log: orphan log for partition " << pid << " on txn " << _txn_id
                                        << " — no sender claimed this partition via "
                                           "(incremental_)open. Log dropped; "
                                           "points to a missing open RPC or an "
@@ -751,8 +749,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
                         }
                     }
                     if (orphan_count > 0) {
-                        StarRocksMetrics::instance()
-                                ->lake_txn_log_collect_orphan_partition_total.increment(orphan_count);
+                        StarRocksMetrics::instance()->lake_txn_log_collect_orphan_partition_total.increment(
+                                orphan_count);
                     }
                     context->add_txn_logs(my_logs);
                 } else {
