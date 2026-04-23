@@ -62,11 +62,14 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.commons.io.FileUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -83,6 +86,12 @@ public class GlobalStateMgrTest {
     public void setUp() {
         Config.meta_dir = UUID.randomUUID().toString();
         Config.plugin_dir = UUID.randomUUID().toString();
+    }
+
+    @AfterEach
+    public void tearDown() throws Exception {
+        FileUtils.deleteQuietly(new File(Config.meta_dir));
+        FileUtils.deleteQuietly(new File(Config.plugin_dir));
     }
 
     @Test
