@@ -34,6 +34,8 @@
 
 #include "storage/rowset/ordinal_page_index.h"
 
+#include <fmt/ranges.h>
+
 #include <memory>
 
 #include "common/logging.h"

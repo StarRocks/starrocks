@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/nljoin/nljoin_probe_operator.h"
 
+#include <fmt/ranges.h>
+
 #include "base/simd/simd.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"

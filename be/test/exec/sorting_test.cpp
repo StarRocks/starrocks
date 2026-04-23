@@ -14,6 +14,7 @@
 
 #include "exec/sorting/sorting.h"
 
+#include <fmt/ranges.h>
 #include <gtest/gtest.h>
 
 #include <memory>

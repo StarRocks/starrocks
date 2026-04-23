@@ -14,6 +14,8 @@
 
 #include "connector_chunk_sink.h"
 
+#include <fmt/ranges.h>
+
 #include "column/chunk.h"
 #include "common/status.h"
 #include "connector/sink_memory_manager.h"

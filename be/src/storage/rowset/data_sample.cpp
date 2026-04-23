@@ -15,6 +15,7 @@
 #include "storage/rowset/data_sample.h"
 
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 #include <random>
 #include <stdexcept>

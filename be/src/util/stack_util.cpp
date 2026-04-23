@@ -38,6 +38,8 @@
 #endif
 #endif
 
+#include <fmt/std.h>
+
 #include <thread>
 #include <tuple>
 

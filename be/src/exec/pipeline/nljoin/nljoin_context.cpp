@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/nljoin/nljoin_context.h"
 
+#include <fmt/ranges.h>
+
 #include <algorithm>
 #include <memory>
 #include <numeric>

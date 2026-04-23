@@ -14,6 +14,8 @@
 
 #include "storage/rowset/json_column_iterator.h"
 
+#include <fmt/ranges.h>
+
 #include <memory>
 #include <utility>
 #include <vector>

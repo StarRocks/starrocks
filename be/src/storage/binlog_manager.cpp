@@ -14,6 +14,8 @@
 
 #include "storage/binlog_manager.h"
 
+#include <fmt/ranges.h>
+
 #include "fs/fs_factory.h"
 #include "storage/rowset/rowset.h"
 #include "storage/tablet.h"

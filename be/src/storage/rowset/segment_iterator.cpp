@@ -14,6 +14,8 @@
 
 #include "segment_iterator.h"
 
+#include <fmt/ranges.h>
+
 #include <algorithm>
 #include <memory>
 #include <unordered_map>
