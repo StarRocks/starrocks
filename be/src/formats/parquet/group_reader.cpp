@@ -385,6 +385,14 @@ bool collect_variant_leaf_paths(const ColumnAccessPath* node, std::vector<Varian
 
     segments->emplace_back(VariantSegment::make_object(node->path()));
     if (node->children().empty()) {
+        // A VARIANT-typed leaf hint is not precise enough for shredded-path pruning.
+        // FE may truncate paths with unsupported JSON semantics (e.g. array index in
+        // "$.a[0].b"), producing an intermediate VARIANT leaf like "a". Restricting
+        // reads to that lossy prefix can drop needed descendants and return NULL.
+        if (node->value_type().type == LogicalType::TYPE_VARIANT) {
+            segments->pop_back();
+            return false;
+        }
         VariantPath path(*segments);
         auto shredded_path = path.to_shredded_path();
         if (!shredded_path.has_value()) {
