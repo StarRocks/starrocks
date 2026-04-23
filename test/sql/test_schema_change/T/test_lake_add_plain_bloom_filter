@@ -1,0 +1,61 @@
+-- name: test_lake_add_plain_bloom_filter @cloud
+-- Fast-path for the `bloom_filter_columns` table property on a lake table.
+-- This is the IDG variant of the original (non-ngram) bloom filter: BE
+-- builds a per-column BF payload into a sidecar .idx file without
+-- rewriting segment data, and FE flips the catalog bf column set.
+--
+-- Coverage:
+--   1. ALTER SET ("bloom_filter_columns"="c1") on a table with no existing
+--      bf columns — pure-add path.
+--   2. Adding a second column via the same property — still pure-add.
+--   3. Query with = / IN predicates returns correct rows (BF is a
+--      may-contain filter; correctness is unchanged regardless of whether
+--      BE consults the BF or the page scan).
+--   4. Dropping one column via property overwrite — pure-drop path.
+--   5. Clearing all bf columns — pure-drop to empty.
+create database lake_plain_bf_${uuid0};
+use lake_plain_bf_${uuid0};
+
+CREATE TABLE t1 (
+    k1 int,
+    v1 int,
+    v2 varchar(32)
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into t1 values
+    (1, 10, 'aa'), (2, 20, 'bb'), (3, 30, 'cc'),
+    (4, 40, 'aa'), (5, 50, 'bb'), (6, 60, 'cc');
+
+-- 1. pure-add: enable BF on v2 (varchar, typical BF target)
+ALTER TABLE t1 SET ("bloom_filter_columns" = "v2");
+function: wait_alter_table_finish()
+
+select count(*) from t1 where v2 = 'aa';
+select count(*) from t1 where v2 in ('aa', 'cc');
+select k1, v1, v2 from t1 where v2 = 'bb' order by k1;
+
+-- 2. pure-add (additional column, keep v2)
+ALTER TABLE t1 SET ("bloom_filter_columns" = "v1,v2");
+function: wait_alter_table_finish()
+
+select count(*) from t1 where v1 = 20;
+select count(*) from t1 where v1 in (10, 30, 50);
+select k1, v1, v2 from t1 where v1 = 40 and v2 = 'aa' order by k1;
+
+-- 3. pure-drop: remove v1, keep v2
+ALTER TABLE t1 SET ("bloom_filter_columns" = "v2");
+function: wait_alter_table_finish()
+
+select count(*) from t1 where v1 = 20;
+select count(*) from t1 where v2 = 'aa';
+
+-- 4. pure-drop-to-empty: clear all bf columns
+ALTER TABLE t1 SET ("bloom_filter_columns" = "");
+function: wait_alter_table_finish()
+
+select count(*) from t1 where v2 = 'aa';
+select count(*) from t1;
+
+drop database lake_plain_bf_${uuid0};
