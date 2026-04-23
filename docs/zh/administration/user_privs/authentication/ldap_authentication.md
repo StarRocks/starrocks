@@ -28,7 +28,7 @@ authentication_ldap_simple_ssl_conn_trust_store_path =
 authentication_ldap_simple_ssl_conn_trust_store_pwd = 
 ```
 
-如果希望通过 StarRocks 直接在 LDAP 系统中检索用户进行认证，您需要**添加以下额外的配置项**。
+如果希望通过 StarRocks 直接在 LDAP 系统中检索用户进行认证（搜索绑定模式），您需要**添加以下额外的配置项**。
 
 ```Properties
 # 添加用户的 Base DN，指定用户的检索范围。
@@ -40,6 +40,29 @@ authentication_ldap_simple_bind_root_dn =
 # 添加用于检索用户的 Admin 密码。
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+如果希望使用**直接绑定模式**（跳过搜索步骤，直接使用构造的 DN 进行绑定），可以配置 DN 模式（pattern）。当用户 DN 结构可预测时，此模式非常有用。
+
+```Properties
+# 直接绑定认证的 DN 模式。
+# 使用 ${USER} 作为用户名的占位符。
+# 多个模式之间用分号 ';' 分隔。
+authentication_ldap_simple_bind_dn_pattern =
+```
+
+例如：`uid=${USER},ou=People,dc=example,dc=com`
+
+如果用户分布在多个 OU 中，可以指定多个模式，用分号分隔：
+
+`uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
+
+系统将按顺序尝试每个模式，并返回第一个成功绑定的结果。
+
+:::note
+
+模式必须生成合法的 LDAP Distinguished Name（DN），不支持 UPN 格式的模式（如 `${USER}@corp.example.com`），因为其结果不是 DN，会导致下游组查找失败。如果 DN 中的属性值包含 `@`（如 `uid=${USER}@corp.example.com,ou=People,dc=example,dc=com`），这是合法的。
+
+:::
 
 ## DN 匹配机制
 
@@ -61,30 +84,38 @@ authentication_ldap_simple_bind_root_pwd =
 - **Microsoft AD 环境**：组成员可能缺少用户名属性，无法配置 `ldap_user_search_attr` 参数，则直接使用 DN 匹配。
 - **混合环境**：支持两种匹配方式的灵活切换。
 
+## 认证优先级
+
+当用户使用 LDAP 认证登录时，StarRocks 按以下优先级确定用户的 DN：
+
+1. **用户指定 DN**：如果创建用户时指定了明确的 DN（`CREATE USER ... AS 'dn'`），则直接使用该 DN。
+2. **通过 DN 模式直接绑定**：如果配置了 `authentication_ldap_simple_bind_dn_pattern`，系统将根据模式构造 DN 并尝试直接绑定。多个模式按顺序尝试。
+3. **搜索绑定**：如果以上两种均不适用，系统将使用管理员账户在 LDAP 中搜索用户，然后使用找到的 DN 进行绑定。
+
 ## 使用 LDAP 创建用户
 
 创建用户时，通过 `IDENTIFIED WITH authentication_ldap_simple AS 'xxx'` 指定认证方式为 LDAP 认证。xxx 是用户在 LDAP 中的 DN（Distinguished Name）。
 
-示例 1：
+示例 1：创建用户并指定明确的 DN。
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com'
 ```
 
-可以在不指定用户在 LDAP 中的 DN 的情况下创建用户。当用户登录时，StarRocks 将到 LDAP 系统中检索用户信息。如果只有一个匹配项，认证成功。
-
-示例 2：
+示例 2：创建用户但不指定 DN。系统将根据配置在登录时通过 DN 模式（直接绑定）或搜索绑定来解析 DN。
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple
 ```
 
-在这种情况下，需要在 FE 中添加额外的配置
+如果使用**搜索绑定**模式，需要在 FE 中添加以下额外配置：
 
 - `authentication_ldap_simple_bind_base_dn`: 用户的 Base DN，指定用户的检索范围。
 - `authentication_ldap_simple_user_search_attr`: 在 LDAP 对象中标识用户的属性名称，默认为 uid。
 - `authentication_ldap_simple_bind_root_dn`: 用于检索用户信息的管理员账户的 DN。
 - `authentication_ldap_simple_bind_root_pwd`: 用于检索用户信息的管理员账户的密码。
+
+如果使用**直接绑定**模式，只需配置 `authentication_ldap_simple_bind_dn_pattern`，无需管理员账户。
 
 ## 认证用户
 

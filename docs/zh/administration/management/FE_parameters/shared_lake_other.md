@@ -715,6 +715,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: LDAP 服务器开始搜索用户身份验证信息的基准 DN。
 - 引入版本: -
 
+### `authentication_ldap_simple_bind_dn_pattern`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 用于直接绑定认证的 DN 模板。使用 `${USER}` 作为用户名占位符。模板必须生成合法的 LDAP Distinguished Name（DN），不支持 UPN 格式（如 `${USER}@domain`）。例如 `uid=${USER},ou=People,dc=example,dc=com`。多个模板可用分号分隔，系统会按顺序依次尝试直到成功。设置后将跳过搜索步骤，直接使用构造的 DN 进行绑定认证。
+
 ### `authentication_ldap_simple_bind_root_dn`
 
 - 默认值: 空字符串

@@ -28,7 +28,7 @@ authentication_ldap_simple_ssl_conn_trust_store_path =
 authentication_ldap_simple_ssl_conn_trust_store_pwd = 
 ```
 
-If you wish to authenticate users by means of StarRocks retrieving them directly in the LDAP system, you will need to **add the following additional configuration items**.
+If you wish to authenticate users by means of StarRocks retrieving them directly in the LDAP system (search-and-bind mode), you will need to **add the following additional configuration items**.
 
 ```Properties
 # Add the Base DN of the user, specifying the user's retrieval range.
@@ -40,6 +40,29 @@ authentication_ldap_simple_bind_root_dn =
 # Add the admin password for retrieving users.
 authentication_ldap_simple_bind_root_pwd =
 ```
+
+If you wish to use **direct bind mode** (skip the search step and bind directly with a constructed DN), you can configure a DN pattern instead. This is useful when the user DN structure is predictable.
+
+```Properties
+# The DN pattern for direct bind authentication.
+# Use ${USER} as a placeholder for the username.
+# Multiple patterns can be separated by semicolon ';'.
+authentication_ldap_simple_bind_dn_pattern =
+```
+
+For example: `uid=${USER},ou=People,dc=example,dc=com`
+
+If you have users across multiple OUs, you can specify multiple patterns separated by semicolons:
+
+`uid=${USER},ou=Engineering,dc=example,dc=com;uid=${USER},ou=Marketing,dc=example,dc=com`
+
+The system will try each pattern in order and return the first successful bind.
+
+:::note
+
+The pattern must produce a valid LDAP Distinguished Name (DN). UPN-style patterns like `${USER}@corp.example.com` are not supported, because the result is not a DN and would break downstream group lookups. If your DN contains `@` in an attribute value (e.g., `uid=${USER}@corp.example.com,ou=People,dc=example,dc=com`), that is valid.
+
+:::
 
 ## DN Matching Mechanism
 
@@ -61,30 +84,38 @@ Starting from v3.5.0, StarRocks supports recording and passing user Distinguishe
 - **Microsoft AD Environment**: Group members may lack username attributes. `ldap_user_search_attr` cannot be configured. The system will use DN directly for matching.
 - **Mixed Environment**: Flexible switching between both matching methods is supported.
 
+## Authentication priority
+
+When a user logs in with LDAP authentication, StarRocks determines the user's DN using the following priority:
+
+1. **Per-user DN**: If the user was created with an explicit DN (`CREATE USER ... AS 'dn'`), that DN is used directly.
+2. **Direct bind via DN pattern**: If `authentication_ldap_simple_bind_dn_pattern` is configured, the system constructs the DN from the pattern and attempts to bind directly. Multiple patterns are tried in order.
+3. **Search-and-bind**: If neither of the above applies, the system uses the admin account to search for the user in LDAP, then binds with the found DN.
+
 ## Create a user with LDAP
 
 When creating a user, specify the authentication method as LDAP authentication by `IDENTIFIED WITH authentication_ldap_simple AS 'xxx'`. xxx is the DN (Distinguished Name) of the user in LDAP.
 
-Example 1:
+Example 1: Create a user with an explicit DN.
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple AS 'uid=tom,ou=company,dc=example,dc=com'
 ```
 
-It is possible to create a user without specifying the user's DN in LDAP. When the user logs in, StarRocks will go to the LDAP system to retrieve the user information. if there is one and only one match, the authentication is successful.
-
-Example 2:
+Example 2: Create a user without specifying the DN. The system will resolve the DN at login time using either the DN pattern (direct bind) or search-and-bind, depending on the configuration.
 
 ```sql
 CREATE USER tom IDENTIFIED WITH authentication_ldap_simple
 ```
 
-In this case, additional configuration needs to be added to the FE
+If using **search-and-bind** mode, the following additional FE configuration is needed:
 
 - `authentication_ldap_simple_bind_base_dn`: The base DN of the user, specifying the retrieval range of the user.
 - `authentication_ldap_simple_user_search_attr`: The name of the attribute in the LDAP object that identifies the user, uid by default.
 - `authentication_ldap_simple_bind_root_dn`: The DN of the administrator account used to retrieve the user information.
 - `authentication_ldap_simple_bind_root_pwd`: The password of the administrator account used when retrieving the user information.
+
+If using **direct bind** mode, configure `authentication_ldap_simple_bind_dn_pattern` instead. This does not require an admin account.
 
 ## Authenticate users
 

@@ -159,6 +159,17 @@ This design enables LDAP Group Provider to adapt to different LDAP environments,
 
 :::
 
+:::tip
+
+**Interaction with `authentication_ldap_simple_bind_dn_pattern`**
+
+When using DN pattern authentication (e.g., `uid=${USER}@abc.com,ou=People,dc=example,dc=com`) where the `${USER}` substitution is embedded within a larger attribute value:
+
+- **Recommended**: Do not configure `ldap_user_search_attr`. The system will use the complete DN for group matching, which avoids extraction errors.
+- **If you must configure it**: Use a regex that extracts only the username portion. For example, if the DN pattern is `uid=${USER}@abc.com,ou=People,dc=example,dc=com`, set `ldap_user_search_attr` to `uid=([^,@]+)@abc.com` to extract only the `${USER}` part. A simple `uid` or `uid=([^,]+)` would incorrectly extract `alice@abc.com` instead of `alice`.
+
+:::
+
 #### `ldap_cache_arg` parameter group
 
 The argument used to define the cache behavior for the LDAP group information.
