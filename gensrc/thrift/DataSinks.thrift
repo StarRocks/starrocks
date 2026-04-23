@@ -60,7 +60,8 @@ enum TDataSinkType {
     MULTI_OLAP_TABLE_SINK,
     SPLIT_DATA_STREAM_SINK,
     NOOP_SINK,
-    ICEBERG_DELETE_SINK
+    ICEBERG_DELETE_SINK,
+    ICEBERG_ROW_DELTA_SINK
 }
 
 enum TResultSinkType {
@@ -265,6 +266,8 @@ struct TIcebergTableSink {
     7: optional i64 target_max_file_size
     8: optional i32 tuple_id
     9: optional string data_location
+    // write mode: "ROW_DELTA" for UPDATE/MERGE (mixed delete + data files)
+    10: optional string write_mode
 }
 
 struct THiveTableSink {
