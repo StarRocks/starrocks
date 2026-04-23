@@ -32,6 +32,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -1167,11 +1168,20 @@ public class CatalogRecycleBinTest {
         long tableId = 111L;
         long partitionId = 222L;
 
-        Table table = new Table(tableId, "t1", Table.TableType.VIEW, Lists.newArrayList());
+        // Use a LakeTable (cloud-native OlapTable) with the partition added, so that
+        // removeTableFromRecycleBin can find and clean up the partition via getAllPartitions().
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
+        List<Column> columns = Lists.newArrayList(k1);
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        SinglePartitionInfo pInfo = new SinglePartitionInfo();
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        pInfo.setDataProperty(partitionId, dataProperty);
+        pInfo.setReplicationNum(partitionId, (short) 1);
+        Partition partition = new Partition(partitionId, partitionId + 1, "p1", new MaterializedIndex(), null);
+        LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, pInfo, distributionInfo);
+        table.addPartition(partition);
         recycleBin.recycleTable(dbId, table, false);
 
-        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
-        Partition partition = new Partition(partitionId, partitionId + 1, "p1", new MaterializedIndex(), null);
         RecyclePartitionInfo partitionInfo =
                 new RecycleRangePartitionInfo(dbId, tableId, partition, null, dataProperty, (short) 1, null);
         recycleBin.setPartitionInfo(partitionId, partitionInfo);
