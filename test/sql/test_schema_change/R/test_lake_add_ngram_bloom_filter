@@ -1,42 +1,65 @@
 -- name: test_lake_add_ngram_bloom_filter @cloud
--- Fast-path ADD INDEX ... USING NGRAMBF on a varchar column.
--- Verifies that (1) the alter commits via the IDG fast path (wait_alter_table_finish observes FINISHED),
--- (2) queries with LIKE predicates return correct results after the index is published, and
--- (3) a DROP of the same index is also fast-path (metadata-only tombstone) and leaves queries correct.
 create database lake_ngram_${uuid0};
+-- result:
+-- !result
 use lake_ngram_${uuid0};
-
+-- result:
+-- !result
 CREATE TABLE t1 (
     k1 int,
     v1 varchar(64)
 ) DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
-
+-- result:
+-- !result
 insert into t1 values
     (1, 'apple'), (2, 'banana'), (3, 'cherry'),
     (4, 'applesauce'), (5, 'grape'), (6, 'pineapple');
-
--- ADD NGRAMBF via fast path (gram_num=3, fpp=0.05 are defaults but set
--- explicitly so the test is stable across default changes).
+-- result:
+-- !result
 ALTER TABLE t1 ADD INDEX idx_v1_ngbf (v1) USING NGRAMBF("gram_num"="3","bloom_filter_fpp"="0.05");
+-- result:
+-- !result
 function: wait_alter_table_finish()
-
--- Queries that the bloom filter is expected to help; results must match
--- a plain table scan.
+-- result:
+None
+-- !result
 select count(*) from t1 where v1 like '%app%';
+-- result:
+3
+-- !result
 select count(*) from t1 where v1 like '%banana%';
+-- result:
+1
+-- !result
 select k1, v1 from t1 where v1 like '%apple%' order by k1;
-
--- Equality still works (ngrambf is a probabilistic filter, query path
--- falls back to full evaluation for non-like equality).
+-- result:
+1	apple
+4	applesauce
+6	pineapple
+-- !result
 select count(*) from t1 where v1 = 'banana';
-
--- DROP via fast path (metadata-only tombstone) and re-check correctness.
+-- result:
+1
+-- !result
 ALTER TABLE t1 DROP INDEX idx_v1_ngbf;
+-- result:
+-- !result
 function: wait_alter_table_finish()
-
+-- result:
+None
+-- !result
 select count(*) from t1 where v1 like '%app%';
+-- result:
+3
+-- !result
 select k1, v1 from t1 where v1 like '%apple%' order by k1;
-
+-- result:
+1	apple
+4	applesauce
+6	pineapple
+-- !result
 drop database lake_ngram_${uuid0};
+-- result:
+-- !result

@@ -1,14 +1,10 @@
 -- name: test_lake_add_plain_bloom_filter @cloud
--- Fast-path for the `bloom_filter_columns` table property on a lake table.
--- BE builds a per-column BF payload into a sidecar .idx file via the IDG
--- pipeline without rewriting segment data; FE flips OlapTable.bfColumns
--- via LakeTableAddIndexJob.applyCatalogMutation.
---
--- Smoke coverage: first pure-add of a plain BF column on a populated lake
--- table, verifying classifier routing + BE build + query correctness.
 create database lake_plain_bf_${uuid0};
+-- result:
+-- !result
 use lake_plain_bf_${uuid0};
-
+-- result:
+-- !result
 CREATE TABLE t1 (
     k1 int,
     v1 int,
@@ -16,19 +12,33 @@ CREATE TABLE t1 (
 ) DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
-
+-- result:
+-- !result
 insert into t1 values
     (1, 10, 'aa'), (2, 20, 'bb'), (3, 30, 'cc'),
     (4, 40, 'aa'), (5, 50, 'bb'), (6, 60, 'cc');
-
--- First pure-add: enable BF on a varchar column via the property alter.
--- Classifier routes to LakeTableAddIndexJob (BF variant); BE writes an
--- IDG .idx sidecar with plain-BF payload.
+-- result:
+-- !result
 ALTER TABLE t1 SET ("bloom_filter_columns" = "v2");
+-- result:
+-- !result
 function: wait_alter_table_finish()
-
+-- result:
+None
+-- !result
 select count(*) from t1 where v2 = 'aa';
+-- result:
+2
+-- !result
 select count(*) from t1 where v2 in ('aa', 'cc');
+-- result:
+4
+-- !result
 select k1, v1, v2 from t1 where v2 = 'bb' order by k1;
-
+-- result:
+2	20	bb
+5	50	bb
+-- !result
 drop database lake_plain_bf_${uuid0};
+-- result:
+-- !result
