@@ -224,9 +224,10 @@ private:
 
     Status log_and_error_tablet_not_found(int64_t tablet_id, const PUniqueId& id, std::string_view signature) const;
 
-    // Record coordinator claims announced via the open/incremental_open RPC's
-    // `lake_tablet_params().coordinated_partition_ids`. Picks the smallest sender_id
-    // when multiple senders claim the same partition.
+    // Latch the FE-dispatched `enable_per_partition_coordinator` switch on this
+    // channel (AND semantics across opens) and, when enabled, record coordinator
+    // claims derived from this open's tablet list. Smallest sender_id wins per
+    // partition.
     void _record_coordinator_claims(const PTabletWriterOpenRequest& params);
 
     // write access to the delta writers map
@@ -293,17 +294,24 @@ private:
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
     TxnLogCollector _txn_log_collector;
 
-    // partition_id -> sender_id of the elected coordinator for that partition.
-    // A sender claims coordination by including the partition id in the
-    // `coordinated_partition_ids` field of its (incremental_)open RPC. When multiple
-    // senders claim the same partition, the smallest sender_id wins.
+    // Transaction-level switch latched from the open RPC's
+    // `lake_tablet_params().enable_per_partition_coordinator`. FE controls the
+    // value and sends it uniformly on every open for the transaction.
     //
-    // At close time, each sender only collects txn logs for partitions it coordinates
-    // (plus sender 0's fallback for unclaimed partitions, preserving legacy behavior
-    // for non-incremental channels). This makes the collection mechanism robust to
-    // incremental-only channels where sender 0 may not be present.
+    // - false (legacy / old FE): combined_txn_log collection uses the hard-coded
+    //   "sender_id == 0 collects all logs" rule.
+    // - true (new FE, all BEs upgraded): each partition elects a coordinator
+    //   (smallest sender_id among those whose (incremental_)open tablets list
+    //   included the partition), and the coordinator collects only its
+    //   partitions at close time.
+    //
+    // Defensive AND semantics across opens: if any open on this channel reports
+    // false, the channel falls back to the legacy rule. In normal operation all
+    // opens agree because FE is the single source of truth per transaction.
     mutable StackTraceMutex<bthread::Mutex> _partition_coordinator_mtx;
     std::unordered_map<int64_t, int32_t> _partition_coordinator;
+    bool _enable_per_partition_coordinator{true};
+    bool _per_partition_coordinator_initialized{false};
 
     std::map<string, string> _column_to_expr_value;
 
@@ -667,41 +675,42 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
     }
 
-    // Per-partition coordinator dispatch for combined txn log mode.
+    // combined_txn_log collection dispatch. Two modes, chosen per-transaction by FE
+    // via `lake_tablet_params.enable_per_partition_coordinator`, latched on the
+    // channel in `_record_coordinator_claims`:
     //
-    // Each partition has exactly one coordinator sender that collects and returns
-    // its txn logs to FE. The coordinator is elected by picking the smallest
-    // sender_id among those that declared `coordinated_partition_ids` covering
-    // that partition in their (incremental_)open RPC (see
-    // `_record_coordinator_claims`). The claim is sent to every owner CN of the
-    // partition's tablets, so every CN elects the same coordinator for a given
-    // partition -> exactly one writer downstream, no cross-CN races.
+    //   - enable_per_partition_coordinator = true (new FE, all BEs upgraded):
+    //     each partition has exactly one elected coordinator sender (smallest
+    //     sender_id among those whose (incremental_)open tablet list covered
+    //     the partition). Coordinator election is deterministic across every
+    //     CN that owns a tablet of the partition, so exactly one sender writes
+    //     the partition's combined_txn_log — no cross-CN races.
+    //   - enable_per_partition_coordinator = false/unset (old FE, or any BE
+    //     saw an inconsistent open): legacy "sender_id == 0 collects all"
+    //     rule. Preserves pre-fix behavior during the rolling-upgrade window.
     //
-    // Legacy compatibility: if `_partition_coordinator` is empty (happens when
-    // the upstream FE is older and doesn't populate `coordinated_partition_ids`),
-    // fall back to the legacy "sender_id == 0 collects all" rule. This preserves
-    // the exact pre-fix behavior during rolling upgrades where BE may be upgraded
-    // before FE.
+    // Since FE is the single source of truth for the flag and is upgraded last,
+    // flag=true implies all target BEs have the fix.
     if (_finish_mode == lake::kDontWriteTxnLog && request.eos() &&
         response->status().status_code() == TStatusCode::OK) {
         const int32_t sender_id = request.sender_id();
 
-        bool coordinator_map_populated;
+        bool per_partition_mode;
         std::unordered_set<int64_t> my_partitions;
         {
             std::lock_guard l(_partition_coordinator_mtx);
-            coordinator_map_populated = !_partition_coordinator.empty();
-            for (auto& [pid, sid] : _partition_coordinator) {
-                if (sid == sender_id) my_partitions.insert(pid);
+            per_partition_mode = _enable_per_partition_coordinator;
+            if (per_partition_mode) {
+                for (auto& [pid, sid] : _partition_coordinator) {
+                    if (sid == sender_id) my_partitions.insert(pid);
+                }
             }
         }
 
-        // Determine whether this sender should collect anything in this RPC:
-        //   - New path (coordinator map populated): only if this sender is
-        //     the elected coordinator of at least one partition.
-        //   - Legacy path (map empty, old FE): only sender 0 collects, same
-        //     as the pre-fix behavior.
-        const bool should_collect = coordinator_map_populated ? !my_partitions.empty() : (sender_id == 0);
+        // Should this sender collect anything on this eos?
+        //   - New mode: only if elected coordinator of at least one partition.
+        //   - Legacy mode: only sender 0.
+        const bool should_collect = per_partition_mode ? !my_partitions.empty() : (sender_id == 0);
 
         if (should_collect) {
             rolk.unlock();
@@ -710,10 +719,9 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             auto st = ok ? _txn_log_collector.status() : Status::TimedOut(fmt::format("wait txn log timed out: {}", t));
             if (st.ok()) {
                 auto all_logs = _txn_log_collector.logs();
-                if (coordinator_map_populated) {
+                if (per_partition_mode) {
                     // Filter: collect only the partitions this sender coordinates.
-                    // Other partitions will be returned by their respective
-                    // coordinators' eos responses.
+                    // Other partitions are returned by their coordinators' eos.
                     std::vector<TxnLogPtr> my_logs;
                     my_logs.reserve(all_logs.size());
                     for (auto& log : all_logs) {
@@ -997,16 +1005,33 @@ Status LakeTabletsChannel::log_and_error_tablet_not_found(int64_t tablet_id, con
 }
 
 void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenRequest& params) {
-    if (!params.has_lake_tablet_params()) {
-        return;
-    }
-    const auto& claimed = params.lake_tablet_params().coordinated_partition_ids();
-    if (claimed.empty()) {
-        return;
-    }
+    // Latch the FE-dispatched per-partition-coordinator switch. AND across opens
+    // defensively: if any open disagrees (e.g. should never happen because FE is
+    // the single source of truth, but an old BE sink wouldn't populate the field
+    // at all), fall back to the legacy `sender_id == 0` rule for the whole channel.
+    const bool flag_enabled = params.has_lake_tablet_params() &&
+                              params.lake_tablet_params().has_enable_per_partition_coordinator() &&
+                              params.lake_tablet_params().enable_per_partition_coordinator();
+
     int32_t sender_id = params.sender_id();
     std::lock_guard l(_partition_coordinator_mtx);
-    for (int64_t pid : claimed) {
+    if (!_per_partition_coordinator_initialized) {
+        _enable_per_partition_coordinator = flag_enabled;
+        _per_partition_coordinator_initialized = true;
+    } else {
+        _enable_per_partition_coordinator = _enable_per_partition_coordinator && flag_enabled;
+    }
+
+    if (!_enable_per_partition_coordinator) {
+        // Legacy path: coordinator map unused.
+        return;
+    }
+
+    // Claim set = distinct partition_ids in this (incremental_)open's tablet list.
+    // `PTabletWithPartition.partition_id` is a required field on the wire, so no
+    // has_partition_id() guard is needed.
+    for (const auto& t : params.tablets()) {
+        int64_t pid = t.partition_id();
         auto it = _partition_coordinator.find(pid);
         // Smallest sender_id wins (deterministic election across concurrent claimers).
         if (it == _partition_coordinator.end() || sender_id < it->second) {
