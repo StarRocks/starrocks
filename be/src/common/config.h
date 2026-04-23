@@ -491,6 +491,21 @@ CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 CONF_mInt32(pk_index_memtable_max_count, "4");
 // The maximum wait flush timeout for pk index memtable in shared-data mode, in milliseconds.
 CONF_mInt64(pk_index_memtable_max_wait_flush_timeout_ms, "30000");
+// When opening a persistent-index SST for read (LakePersistentIndex::init ->
+// PersistentIndexSstable::new_sstable -> sstable::Table::Open), Table::Open
+// issues 4 small, scattered reads for the tail (footer, index block,
+// metaindex block, filter block). On shared-data clusters at cold-start the
+// per-CN fan-out of those reads saturates OSS egress and drives the
+// `pindex_init_sst_open_us` tail (~ 12 s p99 on the 1 TB benchmark).
+// A single touch_cache(filesize - tail, tail) warms the starlet local cache
+// for the tail region, so the 4 subsequent Table::Open reads become
+// cache hits instead of 4 separate OSS GETs per SST. Disable to revert to
+// pre-optimization behavior.
+CONF_mBool(enable_pk_index_sst_tail_prefetch, "true");
+// Bytes to prefetch from the SST tail before Table::Open. 1 MiB by default
+// comfortably covers the footer (48 B) + index block + metaindex block +
+// bloom filter block for a PK-index SST of ~1 M keys @ 10 bits/key.
+CONF_mInt64(pk_index_sst_tail_prefetch_bytes, "1048576");
 // The parameters for pk index size-tiered compaction strategy.
 CONF_mInt64(pk_index_size_tiered_min_level_size, "131072");
 CONF_mInt64(pk_index_size_tiered_level_multiplier, "10");

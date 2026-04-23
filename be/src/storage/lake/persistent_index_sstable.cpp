@@ -262,6 +262,18 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
         opts.encryption_info = std::move(info);
     }
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, location));
+    // sstable::Table::Open will issue 4 scattered reads for the SST tail
+    // (footer / index / metaindex / filter). On starlet, turn them into
+    // cache hits by pre-warming the tail with a single touch_cache. No-op on
+    // local filesystems.
+    if (config::enable_pk_index_sst_tail_prefetch) {
+        const int64_t filesize = sstable_pb.filesize();
+        const int64_t tail_size =
+                std::min<int64_t>(filesize, std::max<int64_t>(0, config::pk_index_sst_tail_prefetch_bytes));
+        if (tail_size > 0) {
+            (void)rf->touch_cache(filesize - tail_size, tail_size);
+        }
+    }
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, cache, need_filter, delvec, metadata, tablet_mgr));
     return std::move(sstable);
 }
