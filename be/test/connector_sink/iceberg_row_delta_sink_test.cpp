@@ -44,14 +44,26 @@ public:
 
     void callback_on_commit(const CommitResult& result) override {}
 
+    // Skip the base class setup (profile / writer factory / op_mem_mgr wiring) that a
+    // mock doesn't need. The outer IcebergRowDeltaSink's init() still drives real
+    // assignments against `_op_mem_mgr` before invoking this, which is what the init()
+    // test inspects via get_op_mem_mgr().
+    Status init() override { return Status::OK(); }
+
     Status add(const ChunkPtr& chunk) override {
         received_chunks.push_back(chunk);
         total_rows += chunk->num_rows();
         return Status::OK();
     }
 
+    void rollback() override { ++rollback_count; }
+
+    // Expose protected _op_mem_mgr so tests can assert init() wired it.
+    SinkOperatorMemoryManager* get_op_mem_mgr() const { return _op_mem_mgr; }
+
     std::vector<ChunkPtr> received_chunks;
     int total_rows = 0;
+    int rollback_count = 0;
 };
 
 class IcebergRowDeltaSinkTest : public ::testing::Test {
@@ -261,6 +273,78 @@ TEST_F(IcebergRowDeltaSinkTest, unknown_op_code) {
     auto status = sink->add(chunk);
     EXPECT_FALSE(status.ok());
     EXPECT_THAT(std::string(status.message()), testing::HasSubstr("Unknown op_code"));
+}
+
+// Test 6: Verify rollback() fans out to both sub-sinks so cancelled queries
+// do not leak uncommitted position-delete or data files.
+TEST_F(IcebergRowDeltaSinkTest, rollback_forwards_to_both_sub_sinks) {
+    auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
+
+    EXPECT_EQ(delete_mock->rollback_count, 0);
+    EXPECT_EQ(data_mock->rollback_count, 0);
+
+    sink->rollback();
+
+    EXPECT_EQ(delete_mock->rollback_count, 1);
+    EXPECT_EQ(data_mock->rollback_count, 1);
+}
+
+// Test 7: Verify init() creates a child SinkOperatorMemoryManager for each sub-sink
+// when a SinkMemoryManager is supplied, so memory pressure logic can see both
+// sub-sinks' writer lists (OOM-safety wiring described in the commit).
+TEST_F(IcebergRowDeltaSinkTest, init_wires_sub_sink_mem_managers) {
+    auto query_pool_tracker =
+            std::make_unique<MemTracker>(MemTrackerType::QUERY_POOL, -1, "IcebergRowDeltaSinkTest_pool");
+    auto query_tracker = std::make_unique<MemTracker>(MemTrackerType::QUERY, -1, "IcebergRowDeltaSinkTest_query");
+    SinkMemoryManager mgr(query_pool_tracker.get(), query_tracker.get());
+
+    auto delete_sink = std::make_unique<MockChunkSink>(_runtime_state.get());
+    auto data_sink = std::make_unique<MockChunkSink>(_runtime_state.get());
+    auto* delete_ptr = delete_sink.get();
+    auto* data_ptr = data_sink.get();
+
+    IcebergRowDeltaSink sink(std::move(delete_sink), std::move(data_sink), /*op_code_index=*/3, &mgr,
+                             _runtime_state.get());
+    // Provide an outer SinkOperatorMemoryManager so the base init() path doesn't
+    // dereference a null pointer and so the add_candidates() branch is exercised.
+    sink.set_operator_mem_mgr(mgr.create_child_manager());
+
+    ASSERT_OK(sink.init());
+
+    // Each sub-sink should now have its own child manager, distinct from each other
+    // and from nullptr. This confirms lines 40–43 of iceberg_row_delta_sink.cpp ran.
+    EXPECT_NE(delete_ptr->get_op_mem_mgr(), nullptr);
+    EXPECT_NE(data_ptr->get_op_mem_mgr(), nullptr);
+    EXPECT_NE(delete_ptr->get_op_mem_mgr(), data_ptr->get_op_mem_mgr());
+}
+
+// Test 8: When every row in a chunk routes to the same sub-sink (pure DELETE or
+// pure INSERT), add() should forward the original ChunkPtr without copying.
+// This covers the `all_to_delete` / `all_to_data` fast path in add().
+TEST_F(IcebergRowDeltaSinkTest, add_fast_path_all_delete_skips_copy) {
+    auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
+
+    auto chunk = build_chunk({"file1.parquet", "file1.parquet", "file2.parquet"}, {0, 1, 2},
+                             {"val0", "val1", "val2"}, {1, 1, 1});  // all OP_DELETE
+
+    ASSERT_OK(sink->add(chunk));
+
+    ASSERT_EQ(delete_mock->received_chunks.size(), 1u);
+    // Zero-copy: the delete sink received the exact same shared_ptr.
+    EXPECT_EQ(delete_mock->received_chunks[0].get(), chunk.get());
+    EXPECT_TRUE(data_mock->received_chunks.empty());
+}
+
+TEST_F(IcebergRowDeltaSinkTest, add_fast_path_all_insert_skips_copy) {
+    auto [sink, delete_mock, data_mock] = create_row_delta_sink_with_mocks();
+
+    auto chunk = build_chunk({"", "", ""}, {0, 0, 0}, {"val0", "val1", "val2"}, {3, 3, 3});  // all OP_INSERT
+
+    ASSERT_OK(sink->add(chunk));
+
+    ASSERT_EQ(data_mock->received_chunks.size(), 1u);
+    EXPECT_EQ(data_mock->received_chunks[0].get(), chunk.get());
+    EXPECT_TRUE(delete_mock->received_chunks.empty());
 }
 
 } // namespace starrocks::connector
