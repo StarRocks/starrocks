@@ -512,6 +512,16 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
     // negotiates before uploading the payload body.
     client.set_header("Expect", "100-continue");
     // Follow the redirect with credentials preserved; the FE issues one.
+    //
+    // Security note: CURLOPT_UNRESTRICTED_AUTH = 1 makes libcurl include
+    // the Basic auth header on the host the FE returned in the Location
+    // header. That host is always another node in the same cluster
+    // (FE-owned redirect to a BE serving the Stream Load), so the
+    // credential never leaves the VPC. Operators running an FE behind a
+    // non-cluster reverse proxy should ensure that proxy only redirects
+    // inside their trust boundary; otherwise the
+    // rejected_record_sync_password would leak to whatever host the
+    // proxy named in the Location.
     client.set_unrestricted_auth(1);
 
     client.set_payload(payload);
