@@ -119,6 +119,7 @@ import com.starrocks.planner.FileScanNode;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergDeleteSink;
 import com.starrocks.planner.IcebergMetadataDeleteNode;
+import com.starrocks.planner.IcebergRowDeltaSink;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.OlapScanNode;
@@ -3473,7 +3474,12 @@ public class StmtExecutor {
                 List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
 
                 DataSink dataSink = execPlan.getFragments().get(0).getSink();
-                if (dataSink instanceof IcebergDeleteSink deleteSink) {
+                if (dataSink instanceof IcebergRowDeltaSink rowDeltaSink) {
+                    // This is an UPDATE/MERGE operation, use IcebergRowDeltaSink
+                    IcebergMetadata.IcebergSinkExtra extra = rowDeltaSink.getSinkExtraInfo();
+                    context.getGlobalStateMgr().getMetadataMgr().finishSink(
+                            catalogName, dbName, tableName, commitInfos, null, extra, context);
+                } else if (dataSink instanceof IcebergDeleteSink deleteSink) {
                     // This is a DELETE operation, use IcebergDeleteSink
                     IcebergMetadata.IcebergSinkExtra extra = deleteSink.getSinkExtraInfo();
                     context.getGlobalStateMgr().getMetadataMgr().finishSink(
@@ -3716,7 +3722,9 @@ public class StmtExecutor {
             return;
         }
 
-        if (dmlType == DmlType.DELETE) {
+        if (dmlType == DmlType.UPDATE) {
+            ConnectorMetricsMgr.increaseUpdateTotalFail(connectorType, t);
+        } else if (dmlType == DmlType.DELETE) {
             ConnectorMetricsMgr.increaseDeleteTotalFail(connectorType, t, "position");
         } else {
             String writeType = dmlType == DmlType.INSERT_OVERWRITE ? "overwrite" : "insert";
