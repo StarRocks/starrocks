@@ -57,17 +57,47 @@ void remove_file(const std::string& path) {
 }
 
 // Does this path name a live `.jsonl` writer file OR a dangling
-// `.jsonl.syncing.<id>` left over by a crashed previous tick?
+// `.jsonl.syncing.<numeric-tick-id>` left over by a crashed previous
+// tick?
+//
+// The nested-suffix check is strict: we accept exactly one `.syncing.`
+// segment followed by digits. This prevents two problems:
+//   1. Coincidental names like `foo.jsonl.syncing_backup` being picked up.
+//   2. A file that already carries `.syncing.<id>` from a failed post
+//      being re-claimed recursively, which would grow the filename by
+//      one segment every tick and eventually hit NAME_MAX.
 bool is_claimable(const std::filesystem::path& p) {
+    const std::string name = p.filename().string();
     if (p.extension() == kJsonlExtension) {
+        // Accept a live writer file (exactly ends in `.jsonl`).
         return true;
     }
-    // Match `foo.jsonl.syncing.<anything>`: the ".jsonl" needs to still
-    // be in the filename (as an interior extension) before ".syncing.*".
-    // extension() only returns the last component, so walk once.
-    const std::string name = p.filename().string();
-    auto pos = name.find(".jsonl.syncing");
-    return pos != std::string::npos;
+    // Accept `<name>.jsonl.syncing.<digits>` and nothing else. Anything
+    // that already carries more than one `.syncing.` is a retry leftover
+    // we don't want to rename again (that would balloon the filename).
+    static constexpr std::string_view kSyncingToken = ".jsonl.syncing.";
+    auto pos = name.find(kSyncingToken);
+    if (pos == std::string::npos) {
+        return false;
+    }
+    // Reject nested suffixes: a second `.syncing.` after the first means
+    // we already renamed this file on a prior failed tick.
+    if (name.find(kSyncingToken, pos + kSyncingToken.size()) != std::string::npos) {
+        return false;
+    }
+    // Tail after `.syncing.` must be all digits (our tick id is a
+    // nanosecond timestamp).
+    std::string_view tail(name.data() + pos + kSyncingToken.size(),
+                          name.size() - pos - kSyncingToken.size());
+    if (tail.empty()) {
+        return false;
+    }
+    for (char c : tail) {
+        if (c < '0' || c > '9') {
+            return false;
+        }
+    }
+    return true;
 }
 
 // Recursively walk `root` and collect `.jsonl` / `.jsonl.syncing.*`
@@ -274,36 +304,58 @@ std::vector<std::string> RejectedRecordSyncDaemon::store_path_roots() const {
     return roots;
 }
 
-std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
+std::vector<std::string> RejectedRecordSyncDaemon::list_once() const {
     std::vector<std::string> out;
     const std::vector<std::string> roots = store_path_roots();
-    if (roots.empty()) {
-        return out;
+    for (const auto& root : roots) {
+        std::string rejected_root = root + kRejectedRecordDir;
+        collect_jsonl(rejected_root, &out);
     }
+    return out;
+}
+
+std::vector<std::string> RejectedRecordSyncDaemon::scan_once() {
+    std::vector<std::string> out;
     // Per-tick suffix so a crash mid-tick leaves recoverable files --
     // the next boot sees a dangling `.syncing.<old-tick>` file and
-    // re-includes it (adopt_stale_syncing below).
+    // re-includes it via `is_claimable`'s nested-suffix check.
     const std::string tick_suffix =
             std::string(kSyncingSuffix) + "." +
             std::to_string(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
                                                          std::chrono::steady_clock::now().time_since_epoch())
                                                          .count()));
 
-    std::vector<std::string> candidates;
-    for (const auto& root : roots) {
-        std::string rejected_root = root + kRejectedRecordDir;
-        // Pick up both live `.jsonl` (rename them into this tick) and
-        // orphaned `.syncing.*` from previous crashed / killed ticks
-        // (re-claim them by rename into this tick's suffix, so we don't
-        // stomp on a genuinely-in-flight previous tick -- in normal
-        // operation ticks don't overlap because the daemon is single-
-        // threaded, but a fresh BE boot after a crash will find
-        // leftovers here).
-        collect_jsonl(rejected_root, &candidates);
-    }
+    // Pick up both live `.jsonl` (rename them into this tick) and
+    // orphaned `.syncing.<digits>` from previous crashed / killed ticks
+    // (re-claim them by rename into this tick's suffix, so we don't
+    // stomp on a genuinely-in-flight previous tick -- in normal
+    // operation ticks don't overlap because the daemon is single-
+    // threaded, but a fresh BE boot after a crash will find
+    // leftovers here).
+    const std::vector<std::string> candidates = list_once();
 
     for (const auto& src : candidates) {
-        std::string dst = src + tick_suffix;
+        // For already-claimed leftovers (path ends in `.syncing.<digits>`),
+        // strip the old tick suffix before re-appending the current one.
+        // Otherwise a file that previously failed to sync would gain a
+        // fresh `.syncing.<new>` suffix every tick and the filename would
+        // grow unbounded toward NAME_MAX.
+        std::string rename_base = src;
+        const std::string name = std::filesystem::path(src).filename().string();
+        static constexpr std::string_view kSyncingToken = ".jsonl.syncing.";
+        auto pos = name.find(kSyncingToken);
+        if (pos != std::string::npos) {
+            // Trim `.syncing.<digits>` back to the `.jsonl` boundary.
+            const size_t trim_from = src.size() - (name.size() - pos) + std::string(kJsonlExtension).size();
+            rename_base = src.substr(0, trim_from);
+        }
+        std::string dst = rename_base + tick_suffix;
+        if (dst == src) {
+            // Shouldn't happen with the trim above, but guard against a
+            // no-op rename that would otherwise burn a syscall.
+            out.push_back(src);
+            continue;
+        }
         std::error_code ec;
         std::filesystem::rename(src, dst, ec);
         if (ec) {
@@ -419,7 +471,12 @@ Status RejectedRecordSyncDaemon::post_to_stream_load(const std::string& payload)
 void RejectedRecordSyncDaemon::garbage_collect_stale_files() {
     int retention_hours = std::max(1, config::rejected_record_local_retention_hours);
     auto cutoff = std::filesystem::file_time_type::clock::now() - std::chrono::hours(retention_hours);
-    std::vector<std::string> files = scan_once();
+    // Use the read-only enumeration here; GC must never rename files.
+    // Renaming would flip them into this tick's `.syncing.<id>`,
+    // causing the next `run_one_tick` to re-adopt them under a second
+    // nested suffix -- the filename-balloon bug. A pure read also
+    // halves the directory-walk cost.
+    const std::vector<std::string> files = list_once();
     for (const auto& f : files) {
         std::error_code ec;
         auto mtime = std::filesystem::last_write_time(f, ec);

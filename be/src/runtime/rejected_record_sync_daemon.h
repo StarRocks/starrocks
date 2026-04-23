@@ -86,9 +86,20 @@ protected:
     // is_claimable() logic to execute under test control.
     virtual std::vector<std::string> store_path_roots() const;
 
-    // Enumerate .jsonl files under every store path's rejected_record tree.
-    // Exposed for tests. Relative ordering is filesystem-defined; callers
-    // should not rely on it.
+    // Read-only enumeration of `.jsonl` and `.jsonl.syncing.<digits>`
+    // files under every store-path's rejected_record tree. Does not
+    // rename or modify anything. Used by `garbage_collect_stale_files`
+    // to inspect mtimes without flipping files into the current tick's
+    // `.syncing.<id>`; `run_one_tick` uses the rename-ful `scan_once`
+    // below to adopt files for this tick.
+    virtual std::vector<std::string> list_once() const;
+
+    // Enumerate .jsonl files under every store path's rejected_record tree
+    // and rename each one into this tick's `.syncing.<id>`. Files that were
+    // left behind by a previous failed tick (already carry a `.syncing.<id>`
+    // suffix) are re-claimed without adding a second nested suffix, so the
+    // filename never grows past `<original>.jsonl.syncing.<id>` regardless
+    // of how many retry rounds happen.
     virtual std::vector<std::string> scan_once();
 
     // Test-only entry to the read-concat-post-delete loop. Drives the

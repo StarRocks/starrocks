@@ -316,6 +316,49 @@ TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectNoFilesIsNoOp) {
     EXPECT_NO_FATAL_FAILURE(daemon.garbage_collect_stale_files());
 }
 
+TEST(RejectedRecordSyncDaemonGCTest, GarbageCollectDoesNotRenameFiles) {
+    // Regression: GC used to call scan_once() which renames files into
+    // this tick's `.syncing.<id>`. That caused the filename-balloon bug
+    // any time the FE was unreachable (each tick added another suffix).
+    // GC now uses list_once() (pure read) and must leave filenames intact.
+    struct GCProbeDaemon : public RejectedRecordSyncDaemon {
+        explicit GCProbeDaemon(std::vector<std::string> roots)
+                : RejectedRecordSyncDaemon(/*env=*/nullptr), _roots(std::move(roots)) {}
+        using RejectedRecordSyncDaemon::garbage_collect_stale_files;
+
+    protected:
+        std::vector<std::string> store_path_roots() const override { return _roots; }
+        // If GC were to accidentally call scan_once, this would catch it
+        // because any rename would flip the file out from under the path
+        // we recorded below.
+        Status post_to_stream_load(const std::string&) override { return Status::OK(); }
+
+    private:
+        std::vector<std::string> _roots;
+    };
+
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string fresh = rr_dir + "/keep.jsonl";
+    {
+        std::ofstream f(fresh);
+        f << "{\"id\":\"x\"}\n";
+    }
+    std::string orphan = rr_dir + "/orphan.jsonl.syncing.123";
+    {
+        std::ofstream f(orphan);
+        f << "{\"id\":\"orphan\"}\n";
+    }
+
+    GCProbeDaemon daemon({dir.path().string()});
+    daemon.garbage_collect_stale_files();
+
+    // Both files must still exist at their original paths -- GC inspects
+    // mtimes, it doesn't claim.
+    EXPECT_TRUE(std::filesystem::exists(fresh)) << "GC renamed a live .jsonl file";
+    EXPECT_TRUE(std::filesystem::exists(orphan)) << "GC renamed an orphaned .syncing file";
+}
+
 // ===========================================================================
 // New: flush_batch with multiple files hitting the batch-rows cap
 // ===========================================================================
@@ -418,8 +461,11 @@ TEST(RejectedRecordSyncDaemonRealScanTest, ScanOncePicksUpJsonlFile) {
 
 TEST(RejectedRecordSyncDaemonRealScanTest, ScanOncePicksUpOrphanedSyncingFile) {
     // A file left by a previous crashed tick: foo.jsonl.syncing.OLD
-    // scan_once should rename it to foo.jsonl.syncing.OLD.syncing.<newtick>
-    // and return the new path.
+    // scan_once re-claims it under the current tick's suffix. Crucially
+    // it must NOT append a second `.syncing.<new>` (which would make the
+    // filename grow by ~30 bytes every retry round and eventually hit
+    // NAME_MAX once the FE has been unreachable long enough); it strips
+    // the old suffix back to `.jsonl` and re-appends exactly one suffix.
     TempDir dir;
     std::string rr_dir = dir.make_subdir("rejected_record");
     std::string orphan = rr_dir + "/foo.jsonl.syncing.999";
@@ -433,8 +479,46 @@ TEST(RejectedRecordSyncDaemonRealScanTest, ScanOncePicksUpOrphanedSyncingFile) {
 
     EXPECT_FALSE(std::filesystem::exists(orphan));
     ASSERT_EQ(1u, claimed.size());
-    EXPECT_NE(std::string::npos, claimed[0].find(".syncing."));
     EXPECT_TRUE(std::filesystem::exists(claimed[0]));
+    const std::string new_name = std::filesystem::path(claimed[0]).filename().string();
+    // Must contain exactly one `.syncing.` segment, not nested.
+    auto first = new_name.find(".syncing.");
+    ASSERT_NE(std::string::npos, first);
+    EXPECT_EQ(std::string::npos, new_name.find(".syncing.", first + std::string(".syncing.").size()));
+    // And it must start with the original basename + `.jsonl`.
+    EXPECT_EQ(0u, new_name.find("foo.jsonl.syncing."));
+}
+
+TEST(RejectedRecordSyncDaemonRealScanTest, RepeatedScanDoesNotBalloonFilename) {
+    // Regression test for the filename-balloon bug that used to surface
+    // any time the FE was unreachable: each tick's scan_once / GC would
+    // rename the leftover `.syncing.<id>` file to
+    // `.syncing.<id>.syncing.<newid>`, adding ~30 bytes per tick until
+    // the filename hit NAME_MAX and could no longer be renamed. The
+    // filename length must stay bounded no matter how many ticks go by.
+    TempDir dir;
+    std::string rr_dir = dir.make_subdir("rejected_record");
+    std::string writer_file = rr_dir + "/big.jsonl";
+    {
+        std::ofstream f(writer_file);
+        f << "{\"id\":\"x\"}\n";
+    }
+
+    RealScanDaemon daemon({dir.path().string()});
+    auto claimed = daemon.scan_once();
+    ASSERT_EQ(1u, claimed.size());
+    size_t initial_len = std::filesystem::path(claimed[0]).filename().string().size();
+
+    // Simulate 50 "failed post" cycles: scan_once adopts the leftover,
+    // process_files leaves it on disk (we emulate by not calling it).
+    for (int i = 0; i < 50; ++i) {
+        auto next = daemon.scan_once();
+        if (next.empty()) break; // nothing left to re-claim
+        size_t len = std::filesystem::path(next[0]).filename().string().size();
+        // Each re-claim must not grow the filename.
+        EXPECT_LE(len, initial_len + 4) << "filename grew on iteration " << i;
+        claimed = next;
+    }
 }
 
 TEST(RejectedRecordSyncDaemonRealScanTest, ScanOnceSkipsNonJsonlFiles) {
