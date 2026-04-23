@@ -235,6 +235,18 @@ public class JobSpec {
             TQueryOptions queryOptions = new TQueryOptions();
             queryOptions.setQuery_type(TQueryType.LOAD);
             queryOptions.setLoad_job_type(TLoadJobType.STREAM_LOAD);
+            // Propagate enable_profile decided by StreamLoadPlanner (e.g. from the
+            // table's enable_load_profile property) so that FE respects it when the
+            // ConnectContext session variable is not set, as is the case for stream
+            // loads sent directly to CN.
+            TQueryOptions plannerOptions = params.getQuery_options();
+            if (plannerOptions != null && plannerOptions.isSetEnable_profile()
+                    && plannerOptions.isEnable_profile()) {
+                queryOptions.setEnable_profile(true);
+                if (plannerOptions.isSetLoad_profile_collect_second()) {
+                    queryOptions.setLoad_profile_collect_second(plannerOptions.getLoad_profile_collect_second());
+                }
+            }
 
             return new Builder()
                     .queryId(queryId)
