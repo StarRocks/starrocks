@@ -568,6 +568,13 @@ CONF_mInt32(rejected_record_sync_max_batch_rows, "10000");
 // to OOM the BE / FE / intermediate proxies. 32 MiB matches the FE's
 // default streaming_load_max_mb.
 CONF_mInt64(rejected_record_sync_max_batch_bytes, "33554432");
+// Upper bound on the tick interval when post_to_stream_load has been
+// failing persistently. The daemon doubles its sleep after every
+// failure until this cap is reached, then stays there until a tick
+// succeeds. Useful for the common outage pattern where the FE is down
+// for minutes-to-hours and the default 30s interval would otherwise
+// keep pounding the dead endpoint and spamming WARN logs.
+CONF_mInt32(rejected_record_sync_max_backoff_sec, "600");
 // How long the daemon keeps unsyncable local files around before garbage
 // collecting them. Sync failures (FE down, auth error, table missing) keep
 // the files for re-sync; anything older than this is discarded so a

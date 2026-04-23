@@ -161,6 +161,12 @@ private:
     std::atomic<int64_t> _sync_failures{0};
     std::atomic<int64_t> _files_dropped_by_gc{0};
     std::atomic<int64_t> _open_failures{0};
+
+    // Consecutive failed ticks; drives exponential backoff in the tick
+    // loop. Reset to 0 by the first successful tick. Not counted as
+    // strictly observable state (no public getter) because operators
+    // should rely on `_sync_failures` + rate-of-change instead.
+    int _consecutive_failures = 0;
 };
 
 } // namespace starrocks

@@ -180,7 +180,21 @@ void* RejectedRecordSyncDaemon::tick_thread_entry(void* self) {
 
 void RejectedRecordSyncDaemon::tick_loop() {
     while (true) {
-        int interval_sec = std::max(1, config::rejected_record_sync_interval_sec);
+        const int base_interval = std::max(1, config::rejected_record_sync_interval_sec);
+        const int max_backoff = std::max(base_interval, config::rejected_record_sync_max_backoff_sec);
+        // Double-and-cap backoff on consecutive failures. The goal is to
+        // stop hammering a dead FE with a retry every `base_interval`
+        // seconds when an outage lasts minutes or hours: after 5
+        // consecutive failures at 30s base we'd be at 480s, at 10
+        // consecutive failures capped at max_backoff (default 600s).
+        int interval_sec = base_interval;
+        if (_consecutive_failures > 0) {
+            // Use int64 arithmetic so the shift can't overflow; then clamp.
+            const int shift = std::min(_consecutive_failures, 20); // 2^20 already well past any max
+            int64_t backoff = static_cast<int64_t>(base_interval) << shift;
+            if (backoff > max_backoff) backoff = max_backoff;
+            interval_sec = static_cast<int>(backoff);
+        }
         auto status = _stop_future.wait_for(std::chrono::seconds(interval_sec));
         if (status == std::future_status::ready) {
             // stop() was called; drain nothing and exit. A final sync would
@@ -192,7 +206,14 @@ void RejectedRecordSyncDaemon::tick_loop() {
             // Feature flag flipped off at runtime; behave as a no-op.
             continue;
         }
+        const int64_t failures_before = _sync_failures.load(std::memory_order_relaxed);
         run_one_tick();
+        const int64_t failures_after = _sync_failures.load(std::memory_order_relaxed);
+        if (failures_after > failures_before) {
+            ++_consecutive_failures;
+        } else {
+            _consecutive_failures = 0;
+        }
     }
 }
 
