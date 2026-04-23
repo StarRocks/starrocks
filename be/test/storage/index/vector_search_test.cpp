@@ -29,6 +29,8 @@
 #include "storage/index/index_descriptor.h"
 #include "storage/index/vector/tenann/del_id_filter.h"
 #include "storage/index/vector/tenann/tenann_index_utils.h"
+#include "storage/index/vector/vector_index_reader.h"
+#include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_index_writer.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
@@ -123,14 +125,14 @@ TEST_F(VectorIndexSearchTest, test_search_vector_index) {
         auto status = get_vector_meta(tablet_index, empty_meta);
 
         CHECK_OK(status);
-        const auto& meta = status.value();
+        auto index_meta = std::make_shared<tenann::IndexMeta>(status.value());
 
         std::shared_ptr<VectorIndexReader> ann_reader;
-        VectorIndexReaderFactory::create_from_file(index_path, meta, &ann_reader);
+        VectorIndexReaderFactory::create_from_file(index_path, index_meta, &ann_reader);
 
-        auto status = ann_reader->init_searcher(meta, index_path);
+        auto init_status = ann_reader->init_searcher(*index_meta, index_path);
 
-        ASSERT_TRUE(!status.is_not_supported());
+        ASSERT_TRUE(!init_status.is_not_supported());
 
         Status st;
         std::vector<int64_t> result_ids;

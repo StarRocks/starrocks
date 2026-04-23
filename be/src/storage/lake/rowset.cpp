@@ -292,6 +292,9 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.lake_io_opts = options.lake_io_opts;
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
+    seg_options.use_vector_index = options.use_vector_index;
+    seg_options.vector_search_option = options.vector_search_option;
+    seg_options.belonged_to_cloud_native = true;
     seg_options.has_preaggregation = options.has_preaggregation;
     seg_options.enable_predicate_col_late_materialize = options.enable_predicate_col_late_materialize;
     seg_options.tablet_id = tablet_id();
