@@ -943,7 +943,7 @@ Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pke
         auto pkc = pk_column->clone();
         auto st = serde::ColumnArraySerde::deserialize(data, end, pkc.get());
         if (!st.ok()) {
-            per_task_status[del_idx] = st;
+            per_task_status[del_idx] = st.status();
             return;
         }
         pkcs[del_idx] = std::move(pkc);
