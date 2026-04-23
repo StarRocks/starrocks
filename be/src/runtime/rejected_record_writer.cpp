@@ -14,7 +14,12 @@
 
 #include "runtime/rejected_record_writer.h"
 
+#include <fcntl.h>
+#include <unistd.h>
+
+#include <cerrno>
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
@@ -336,23 +341,56 @@ void RejectedRecordWriter::append_serialized(const std::string& raw_record_json,
     if (path.empty()) {
         return;
     }
-    // Append mode + explicit close-at-end. The sync daemon's processing
-    // loop atomically renames files it claims for a flush, so a concurrent
-    // rename between this ofstream's open() and close() is fine: we write
-    // to whatever inode the name now points at (new file the writer
-    // implicitly created for the post-rename path), and the daemon has
-    // already captured the previous inode under its claimed name. In
-    // the other direction, the daemon reads and removes only files
-    // suffixed with .syncing.<uuid>, never the live .jsonl path the
-    // writer touches here.
-    std::ofstream out(path, std::ios::out | std::ios::app);
-    if (!out.is_open()) {
-        LOG(WARNING) << "RejectedRecordWriter: failed to open " << path << " for append";
+    // Durability and concurrency notes:
+    //   - `::open(..., O_APPEND)` + one `::write(json + "\n")` is used
+    //     instead of `ofstream::write` + `ofstream::put` so the JSON line
+    //     lands on disk in a single syscall. POSIX guarantees an O_APPEND
+    //     write up to PIPE_BUF is atomic with respect to other appenders
+    //     on the same file (Linux: typically 4096 bytes, but the guarantee
+    //     for ext4/xfs is extended to the write size when the filesystem
+    //     holds the inode lock). For larger records we fall back to the
+    //     general "file write() appears atomic from a single thread" and
+    //     the daemon still never reads half a line because scan_once
+    //     renames files it claims: if the rename interleaves with our
+    //     `::open`, fd binds to the inode that is now visible under the
+    //     `.syncing.<id>` name, and the daemon reads that same inode.
+    //     The writer's next open-write-close cycle creates a fresh inode
+    //     at the original `.jsonl` path.
+    //   - Concurrency: the daemon renames files it has claimed; it does
+    //     NOT read the inode the writer is currently appending to. Any
+    //     rename that happens between our open() and close() leaves us
+    //     writing to the previously-live inode (now under `.syncing.<id>`),
+    //     which the daemon has already captured. Next writer call finds
+    //     the `.jsonl` path missing and creates a fresh inode for it.
+    int fd = ::open(path.c_str(), O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0644);
+    if (fd < 0) {
+        LOG(WARNING) << "RejectedRecordWriter: failed to open " << path << " for append (errno=" << errno << ")";
         return;
     }
-    out.write(buf.GetString(), buf.GetSize());
-    out.put('\n');
-    out.close();
+    // Assemble the full line (JSON + '\n') in one buffer so the write is
+    // one syscall. This matters most for large `raw_record` payloads --
+    // if we did two writes under O_APPEND, a concurrent daemon rename
+    // combined with a second appender could interleave the trailing
+    // newline between two different records and produce a JSON line
+    // the sync daemon would have to reject.
+    std::string line;
+    line.reserve(buf.GetSize() + 1);
+    line.assign(buf.GetString(), buf.GetSize());
+    line.push_back('\n');
+    const char* data = line.data();
+    size_t remaining = line.size();
+    while (remaining > 0) {
+        ssize_t written = ::write(fd, data, remaining);
+        if (written < 0) {
+            if (errno == EINTR) continue;
+            LOG(WARNING) << "RejectedRecordWriter: write to " << path << " failed (errno=" << errno << ")";
+            ::close(fd);
+            return;
+        }
+        data += written;
+        remaining -= static_cast<size_t>(written);
+    }
+    ::close(fd);
 
     // Single counter-increment site for the entire feature. All paths
     // that eventually reach the writer -- legacy
