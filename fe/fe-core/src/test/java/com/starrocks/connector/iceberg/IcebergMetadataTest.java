@@ -1226,6 +1226,59 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testFinishSinkSkipsEmptyCommit() {
+        // Zero-row INSERT / UPDATE / DELETE should NOT produce a new snapshot.
+        // Aligns with Trino's fix in trinodb/trino#12412 — empty DML pollutes
+        // snapshot history and confuses downstream CDC consumers.
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // Case 1: empty commitInfos against a fresh table — no snapshot should appear.
+        mockedNativeTableA.refresh();
+        Assertions.assertNull(mockedNativeTableA.currentSnapshot(),
+                "Precondition: fresh table has no snapshot");
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(), null);
+
+        mockedNativeTableA.refresh();
+        Assertions.assertNull(mockedNativeTableA.currentSnapshot(),
+                "Empty commitInfos must not create a snapshot");
+
+        // Case 2: after a real commit, a subsequent empty commit must not advance the snapshot.
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/c.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(10);
+        tIcebergDataFile.setSplit_offsets(Lists.newArrayList(4L));
+        tIcebergDataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        tIcebergDataFile.setFile_size_in_bytes(2000);
+        tIcebergDataFile.setPartition_null_fingerprint("0");
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        mockedNativeTableA.refresh();
+        long snapshotIdAfterRealCommit = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(), null);
+        mockedNativeTableA.refresh();
+        Assertions.assertEquals(snapshotIdAfterRealCommit, mockedNativeTableA.currentSnapshot().snapshotId(),
+                "Empty commitInfos after a real commit must not advance the snapshot");
+    }
+
+    @Test
     public void testFinishSinkWithCommitFailed(@Mocked IcebergMetadata.Append append) throws IOException {
         IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
 
@@ -3178,8 +3231,12 @@ public class IcebergMetadataTest extends TableTestBase {
             }
         };
 
+        // Provide a non-empty commit list so finishSink does not short-circuit on the
+        // empty-commit path (see testFinishSinkSkipsEmptyCommit) and actually reaches getTable().
+        TSinkCommitInfo dummyCommit = new TSinkCommitInfo();
+        dummyCommit.setIceberg_data_file(new TIcebergDataFile());
         RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
-                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(), null));
+                () -> metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(dummyCommit), null));
         Assertions.assertTrue(exception.getMessage().contains("checked failure"));
     }
 

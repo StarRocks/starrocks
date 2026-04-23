@@ -1,0 +1,159 @@
+-- name: test_iceberg_update_unpartitioned
+
+create external catalog iceberg_upd_unp_${uuid0}
+PROPERTIES ( "type"  =  "iceberg",
+    "iceberg.catalog.type"  =  "hive",
+    "iceberg.catalog.hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"  =  "${oss_ak}",
+    "aws.s3.secret_key"  =  "${oss_sk}",
+    "aws.s3.endpoint"  =  "${oss_endpoint}",
+    "enable_iceberg_metadata_cache"="false");
+
+create database iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0} properties (
+    "location" = "oss://${oss_bucket}/test_iceberg_update_unpartitioned/${uuid0}/iceberg_update_db_${uuid0}"
+);
+
+-- Create non-partitioned V2 table
+create table iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update (
+    id INT,
+    name STRING,
+    age INT,
+    salary BIGINT
+) PROPERTIES ("format-version" = "2");
+
+-- Insert initial data
+INSERT INTO iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update VALUES
+    (1, 'Alice', 25, 50000),
+    (2, 'Bob', 30, 60000),
+    (3, 'Charlie', 35, 70000),
+    (4, 'David', 28, 55000),
+    (5, 'Eve', 32, 65000);
+
+-- Verify initial data
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+
+-- ================================================
+-- Test 1: Basic single-column UPDATE
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'UPDATED' WHERE id = 3;
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+
+-- ================================================
+-- Test 2: UPDATE with expression in SET
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = salary + 10000 WHERE age > 30;
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+
+-- ================================================
+-- Test 3: Multi-column UPDATE
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'Bob_v2', age = 31 WHERE id = 2;
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+
+-- ================================================
+-- Test 4: UPDATE with complex WHERE conditions
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = 99999 WHERE age >= 30 AND salary < 70000;
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+
+-- ================================================
+-- Test 5: UPDATE with IN clause
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'BATCH_UPDATED' WHERE id IN (1, 4);
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+
+-- ================================================
+-- Test 6: UPDATE that matches no rows (should succeed with 0 affected)
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'GHOST' WHERE id = 999;
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update ORDER BY id;
+
+-- ================================================
+-- Test 7: UPDATE with NULL values
+-- ================================================
+INSERT INTO iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update VALUES
+    (6, NULL, 40, 80000),
+    (7, 'Grace', NULL, 58000);
+
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'WAS_NULL' WHERE name IS NULL;
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id IN (6, 7) ORDER BY id;
+
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET age = 0 WHERE age IS NULL;
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id IN (6, 7) ORDER BY id;
+
+-- ================================================
+-- Test 8: UPDATE followed by another UPDATE on same rows
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = 100000 WHERE id = 1;
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = 200000 WHERE id = 1;
+
+SELECT salary FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id = 1;
+
+-- ================================================
+-- Test 9: Verify snapshot is created after UPDATE
+-- ================================================
+SELECT count(*) > 1 FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update$snapshots;
+
+-- ================================================
+-- Error tests
+-- ================================================
+
+-- Test E1: UPDATE without WHERE should fail
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'ALL';
+
+-- Test E2: UPDATE on V1 table should fail
+create table iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_v1 (
+    id INT, name STRING
+) PROPERTIES ("format-version" = "1");
+
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_v1 SET name = 'X' WHERE id = 1;
+
+drop table iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_v1 force;
+
+-- Test E3: UPDATE non-existent column should fail
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET nonexistent_col = 1 WHERE id = 1;
+
+-- Test E4: UPDATE hidden metadata column should fail
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET _file = 'fake.parquet' WHERE id = 1;
+
+-- Test E5: SET col = DEFAULT not supported on Iceberg V2
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = DEFAULT WHERE id = 3;
+
+-- ================================================
+-- Test 12: Type cast — SET string literal to match column type
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET salary = 12345 WHERE id = 1;
+
+SELECT id, salary FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id = 1;
+
+-- ================================================
+-- Test 13: UPDATE with subquery in WHERE
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'SUBQUERY_HIT'
+WHERE id IN (SELECT id FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE age > 35);
+
+SELECT id, name FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE name = 'SUBQUERY_HIT' ORDER BY id;
+
+-- ================================================
+-- Test 14: UPDATE followed by DELETE on same table
+-- ================================================
+UPDATE iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update SET name = 'TO_DELETE' WHERE id = 2;
+DELETE FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE name = 'TO_DELETE';
+
+SELECT * FROM iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update WHERE id = 2;
+
+-- Cleanup
+drop table iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0}.t_update force;
+drop database iceberg_upd_unp_${uuid0}.iceberg_update_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_upd_unp_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_update_unpartitioned/${uuid0} >/dev/null || echo "exit 0" >/dev/null
