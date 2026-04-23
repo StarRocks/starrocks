@@ -994,8 +994,8 @@ void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenReque
     // defensively: if any open disagrees (shouldn't happen under a single FE per
     // transaction, but an old BE sink wouldn't populate the field at all), fall
     // back to the legacy `sender_id == 0` rule for the whole channel.
-    const bool flag_enabled = params.has_lake_tablet_params() &&
-                              params.lake_tablet_params().enable_per_partition_coordinator();
+    const bool flag_enabled =
+            params.has_lake_tablet_params() && params.lake_tablet_params().enable_per_partition_coordinator();
 
     int32_t sender_id = params.sender_id();
     std::lock_guard l(_partition_coordinator_mtx);
