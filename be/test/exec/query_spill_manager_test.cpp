@@ -31,10 +31,11 @@ protected:
     RuntimeState _dummy_state;
     TUniqueId dummy_query_id;
     GlobalSpillManager _global_mgr;
+    DirManager _dir_mgr;
 };
 
 TEST_F(QuerySpillManagerTest, test_inc) {
-    QuerySpillManager query_spill_manager_1(dummy_query_id, &_global_mgr);
+    QuerySpillManager query_spill_manager_1(dummy_query_id, &_global_mgr, &_dir_mgr);
 
     OperatorMemoryResourceManager op_mem_res_mgr;
     op_mem_res_mgr.prepare(&query_spill_manager_1, true, true, 128);
@@ -56,7 +57,7 @@ TEST_F(QuerySpillManagerTest, test_inc) {
 }
 
 TEST_F(QuerySpillManagerTest, test_low_memory_transition_is_idempotent) {
-    QuerySpillManager query_spill_manager(dummy_query_id, &_global_mgr);
+    QuerySpillManager query_spill_manager(dummy_query_id, &_global_mgr, &_dir_mgr);
     OperatorMemoryResourceManager op_mem_res_mgr;
     op_mem_res_mgr.prepare(&query_spill_manager, false, true, 64);
 

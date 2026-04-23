@@ -40,6 +40,7 @@ set(SPILL_CORE_FILES
     spill/log_block_manager.cpp
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp
+    spill/query_spill_manager.cpp
 )
 
 ADD_BE_LIB(SpillCore
@@ -79,7 +80,6 @@ set(PIPELINE_RUNTIME_SRCS
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     spill/operator_mem_resource_manager.cpp
-    spill/query_spill_manager.cpp
 )
 
 set(PIPELINE_ADAPTERS_SRCS

@@ -118,7 +118,7 @@
     {
       "id": "spillcore",
       "doc_label": "SpillCore",
-      "summary": "Core spill block and directory primitives without pipeline/query/runtime-service coupling.",
+      "summary": "Core spill block, directory, and query-local spill primitives without pipeline/runtime-service coupling.",
       "owned_targets": ["SpillCore"],
       "owned_globs": [
         "be/src/exec/spill/block_manager.h",
@@ -132,6 +132,8 @@
         "be/src/exec/spill/file_block_manager.cpp",
         "be/src/exec/spill/hybird_block_manager.h",
         "be/src/exec/spill/hybird_block_manager.cpp",
+        "be/src/exec/spill/query_spill_manager.h",
+        "be/src/exec/spill/query_spill_manager.cpp",
         "be/src/exec/spill/block_reader.cpp",
         "be/src/exec/spill/global_spill_manager.h"
       ],
@@ -144,7 +146,7 @@
       "allowed_target_deps": ["FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["spill_core_test"],
       "allowed_test_link_deps": ["SpillCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep SpillCore limited to reusable spill block and directory infrastructure; move query bootstrap, pipeline ownership, and runtime-service integration upward."
+      "remediation": "Keep SpillCore limited to reusable spill block, directory, and query-local spill infrastructure; move pipeline ownership and runtime-service integration upward."
     },
     {
       "id": "typecore",

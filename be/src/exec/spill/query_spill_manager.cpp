@@ -23,17 +23,20 @@
 #include "exec/spill/log_block_manager.h"
 #include "fs/fs_factory.h"
 #include "gen_cpp/InternalService_types.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::spill {
+
+Status QuerySpillManager::init_local_block_manager() {
+    _block_manager = std::make_unique<LogBlockManager>(_uid, _spill_dir_mgr);
+    return Status::OK();
+}
 
 Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options) {
     const TSpillOptions& spill_options = query_options.spill_options;
     bool enable_spill_to_remote_storage =
             spill_options.__isset.enable_spill_to_remote_storage && spill_options.enable_spill_to_remote_storage;
     if (!enable_spill_to_remote_storage) {
-        _block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
-        return Status::OK();
+        return init_local_block_manager();
     }
     DCHECK(spill_options.__isset.spill_to_remote_storage_options);
     const auto& options = spill_options.spill_to_remote_storage_options;
@@ -41,8 +44,7 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
     if (!options.__isset.remote_storage_paths || !options.__isset.remote_storage_conf) {
         DCHECK(false) << "enable spill_to_remote_storage but remote_storage_paths or remote_storage_conf "
                          "is not set";
-        _block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
-        return Status::OK();
+        return init_local_block_manager();
     }
     const auto& remote_storage_paths = options.remote_storage_paths;
     auto remote_storage_conf = std::make_shared<TCloudConfiguration>(options.remote_storage_conf);
@@ -65,7 +67,7 @@ Status QuerySpillManager::init_block_manager(const TQueryOptions& query_options)
     }
 
     // init block manager
-    auto local_block_manager = std::make_unique<LogBlockManager>(_uid, ExecEnv::GetInstance()->spill_dir_mgr());
+    auto local_block_manager = std::make_unique<LogBlockManager>(_uid, _spill_dir_mgr);
     auto remote_block_manager = std::make_unique<FileBlockManager>(_uid, _remote_dir_manager.get());
     _block_manager =
             std::make_unique<HyBirdBlockManager>(_uid, std::move(local_block_manager), std::move(remote_block_manager));

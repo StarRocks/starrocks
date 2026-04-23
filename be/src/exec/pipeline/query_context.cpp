@@ -210,7 +210,8 @@ Status QueryContext::init_spill_manager(const TQueryOptions& query_options) {
         auto* services = runtime_services(_query_execution_services);
         auto* g_spill_manager =
                 services != nullptr ? services->global_spill_manager : ExecEnv::GetInstance()->global_spill_manager();
-        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager);
+        auto* spill_dir_mgr = services != nullptr ? services->spill_dir_mgr : ExecEnv::GetInstance()->spill_dir_mgr();
+        _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id, g_spill_manager, spill_dir_mgr);
         st = _spill_manager->init_block_manager(query_options);
     });
     return st;
