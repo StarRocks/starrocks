@@ -87,8 +87,7 @@ bool is_claimable(const std::filesystem::path& p) {
     }
     // Tail after `.syncing.` must be all digits (our tick id is a
     // nanosecond timestamp).
-    std::string_view tail(name.data() + pos + kSyncingToken.size(),
-                          name.size() - pos - kSyncingToken.size());
+    std::string_view tail(name.data() + pos + kSyncingToken.size(), name.size() - pos - kSyncingToken.size());
     if (tail.empty()) {
         return false;
     }
@@ -240,7 +239,8 @@ void RejectedRecordSyncDaemon::run_one_tick() {
     process_files(files, max_rows, max_bytes);
     garbage_collect_stale_files();
     _last_tick_duration_us.store(
-            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - tick_start).count(),
+            std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - tick_start)
+                    .count(),
             std::memory_order_relaxed);
 }
 
@@ -265,7 +265,7 @@ void RejectedRecordSyncDaemon::run_one_tick() {
 //     their `.syncing.<tick>` suffix so scan_once's adopt-stale path
 //     reclaims them on a subsequent tick.
 void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& files, int64_t max_rows,
-                                              int64_t max_bytes) {
+                                             int64_t max_bytes) {
     std::ostringstream payload;
     // Files fully read into the current payload. Only these get deleted
     // on a successful commit. A file that triggers a mid-file commit
@@ -307,8 +307,8 @@ void RejectedRecordSyncDaemon::process_files(const std::vector<std::string>& fil
             } else {
                 _sync_failures.fetch_add(1, std::memory_order_relaxed);
                 LOG(WARNING) << "RejectedRecordSyncDaemon: post_to_stream_load failed (" << batch.size()
-                             << " full files, " << batch_rows << " rows, " << batch_bytes
-                             << " bytes): " << st.message() << "; leaving files on disk for retry.";
+                             << " full files, " << batch_rows << " rows, " << batch_bytes << " bytes): " << st.message()
+                             << "; leaving files on disk for retry.";
             }
         } else {
             _records_flushed.fetch_add(batch_rows, std::memory_order_relaxed);
@@ -591,8 +591,8 @@ void RejectedRecordSyncDaemon::garbage_collect_stale_files() {
             // rejected rows that never made it to the FE, i.e. data loss
             // visible to operators. The counter below feeds metrics so
             // dashboards can alert on it.
-            LOG(WARNING) << "RejectedRecordSyncDaemon: dropping stale rejected-record file " << f
-                         << " (retention " << retention_hours << "h exceeded); rejected rows in this file"
+            LOG(WARNING) << "RejectedRecordSyncDaemon: dropping stale rejected-record file " << f << " (retention "
+                         << retention_hours << "h exceeded); rejected rows in this file"
                          << " are lost. Check FE availability and rejected_record_sync_user / "
                             "rejected_record_sync_password if this repeats.";
             remove_file(f);
