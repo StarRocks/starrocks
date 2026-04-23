@@ -294,26 +294,22 @@ private:
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
     TxnLogCollector _txn_log_collector;
 
-    // Transaction-level switch latched from the open RPC's
-    // `lake_tablet_params().enable_per_partition_coordinator`. FE controls the
-    // value and sends it uniformly on every open for the transaction.
+    // combined_txn_log collection strategy, latched from the open RPC's
+    // `lake_tablet_params.enable_per_partition_coordinator` (FE-controlled,
+    // uniform per transaction).
     //
-    // - false (legacy / old FE): combined_txn_log collection uses the hard-coded
-    //   "sender_id == 0 collects all logs" rule.
-    // - true (new FE, all BEs upgraded): each partition elects a coordinator
-    //   (smallest sender_id among those whose (incremental_)open tablets list
-    //   included the partition), and the coordinator collects only its
-    //   partitions at close time.
+    // - false: legacy "sender_id == 0 collects all logs" rule.
+    // - true: each partition elects a coordinator (smallest sender_id among
+    //   those whose (incremental_)open tablet list covered the partition),
+    //   and the coordinator collects only its partitions at close time.
     //
-    // Defensive AND semantics across opens: if any open on this channel reports
-    // false, the channel falls back to the legacy rule. In normal operation all
-    // opens agree because FE is the single source of truth per transaction.
+    // `_enable_per_partition_coordinator` defaults to true and is ANDed with
+    // every open's flag, so the first open adopts and any disagreement flips
+    // the channel to legacy. It's only read on the close path (after at least
+    // one open), so the default never leaks. `_partition_coordinator` is
+    // populated only while the flag stays true; in legacy mode it is empty.
     mutable StackTraceMutex<bthread::Mutex> _partition_coordinator_mtx;
     std::unordered_map<int64_t, int32_t> _partition_coordinator;
-    // Default true, ANDed with every open's flag. First open therefore adopts;
-    // subsequent opens must agree or the whole channel falls back to legacy.
-    // Only read on the close path, which runs after at least one open, so the
-    // default never leaks to callers.
     bool _enable_per_partition_coordinator{true};
 
     std::map<string, string> _column_to_expr_value;
@@ -678,22 +674,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         }
     }
 
-    // combined_txn_log collection dispatch. Two modes, chosen per-transaction by FE
-    // via `lake_tablet_params.enable_per_partition_coordinator`, latched on the
-    // channel in `_record_coordinator_claims`:
-    //
-    //   - enable_per_partition_coordinator = true (new FE, all BEs upgraded):
-    //     each partition has exactly one elected coordinator sender (smallest
-    //     sender_id among those whose (incremental_)open tablet list covered
-    //     the partition). Coordinator election is deterministic across every
-    //     CN that owns a tablet of the partition, so exactly one sender writes
-    //     the partition's combined_txn_log — no cross-CN races.
-    //   - enable_per_partition_coordinator = false/unset (old FE, or any BE
-    //     saw an inconsistent open): legacy "sender_id == 0 collects all"
-    //     rule. Preserves pre-fix behavior during the rolling-upgrade window.
-    //
-    // Since FE is the single source of truth for the flag and is upgraded last,
-    // flag=true implies all target BEs have the fix.
+    // combined_txn_log collection dispatch. See `_enable_per_partition_coordinator`
+    // field comment for the two modes and their invariants.
     if (_finish_mode == lake::kDontWriteTxnLog && request.eos() &&
         response->status().status_code() == TStatusCode::OK) {
         const int32_t sender_id = request.sender_id();
@@ -1013,7 +995,6 @@ void LakeTabletsChannel::_record_coordinator_claims(const PTabletWriterOpenReque
     // transaction, but an old BE sink wouldn't populate the field at all), fall
     // back to the legacy `sender_id == 0` rule for the whole channel.
     const bool flag_enabled = params.has_lake_tablet_params() &&
-                              params.lake_tablet_params().has_enable_per_partition_coordinator() &&
                               params.lake_tablet_params().enable_per_partition_coordinator();
 
     int32_t sender_id = params.sender_id();
