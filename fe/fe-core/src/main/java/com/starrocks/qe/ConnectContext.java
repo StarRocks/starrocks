@@ -1634,18 +1634,9 @@ public class ConnectContext {
                 LOG.warn("onQueryFinished error", e);
             }
         }
-<<<<<<< HEAD
-=======
-
-        try {
-            auditEventBuilder.setCNGroup(getCurrentComputeResourceName());
-        } catch (Exception e) {
-            LOG.warn("set cn group name failed", e);
-        }
 
         // after current query finished, remove all current listeners
         listeners.clear();
->>>>>>> 5c97ea4fe7 ([BugFix] Fix query queue allocation time and pending timeout (#65802))
     }
 
     public boolean isSingleStmt() {
