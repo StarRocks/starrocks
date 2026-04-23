@@ -1517,6 +1517,10 @@ Status VariantColumnReader::append_variant_binding_row(size_t row, const TopBind
     }
 
     // Use the pre-parsed path cached in binding (parsed once at binding-build time).
+    // Invariant: a non-empty path must have a non-empty parsed_path; if violated the seek
+    // would silently return the whole variant root instead of the intended sub-field.
+    DCHECK(binding.path.empty() || !binding.parsed_path.segments.empty())
+            << "TopBinding has non-empty path but empty parsed_path: path=" << binding.path;
     auto field = VariantPath::seek_view(full_row, binding.parsed_path, 0);
     if (!field.ok()) {
         // Path not found (e.g. type mismatch at intermediate node): treat as missing.
