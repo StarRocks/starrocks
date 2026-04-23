@@ -613,25 +613,24 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                 nameToTableInfo.remove(dbId, tableInfo.table.getName());
             }
             removeRecycleMarkers(tableId);
-            // Clean up Lake Table partition tracking if exists.
-            // On the leader this is normally a no-op because cleanupLakeTableAfterPartitionsDeletion()
-            // already removed the entry before logAddApplyEraseTables() invokes this method.
-            // On a node that was previously the leader and then switched to follower, the stale
-            // in-memory lakeTableToPartitions entries from the old leader role still exist and
-            // need to be cleaned up here during edit log replay.
-            Set<Long> partitionIds = lakeTableToPartitions.remove(tableId);
-            if (partitionIds != null) {
-                if (!partitionIds.isEmpty()) {
-                    LOG.debug("Cleaning up lakeTableToPartitions for tableId {} during table erase. "
-                                    + "pendingPartitionCount={}, partitionIds={}",
-                            tableId, partitionIds.size(), partitionIds);
-                }
-                for (Long partitionId : partitionIds) {
-                    RecyclePartitionInfo partitionInfo = removePartitionFromRecycleBinInternal(partitionId);
-                    if (partitionInfo != null) {
-                        asyncDeleteForPartitions.remove(partitionInfo);
+            // Clean up any table-deletion partitions that were converted from this table.
+            // We derive the partition list from the table object itself rather than relying
+            // solely on the in-memory lakeTableToPartitions map, because lakeTableToPartitions
+            // is not persisted in checkpoint images. A FE that loads a checkpoint taken during
+            // the partition conversion window would have these partitions in idToPartition but
+            // no lakeTableToPartitions entry, leading to orphaned partition entries on replay.
+            lakeTableToPartitions.remove(tableId);
+            if (tableInfo != null && tableInfo.getTable() instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) tableInfo.getTable();
+                if (olapTable.isCloudNativeTableOrMaterializedView()) {
+                    for (Partition partition : olapTable.getAllPartitions()) {
+                        long partitionId = partition.getId();
+                        RecyclePartitionInfo partitionInfo = removePartitionFromRecycleBinInternal(partitionId);
+                        if (partitionInfo != null) {
+                            asyncDeleteForPartitions.remove(partitionInfo);
+                        }
+                        removeRecycleMarkers(partitionId);
                     }
-                    removeRecycleMarkers(partitionId);
                 }
             }
         }
