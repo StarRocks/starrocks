@@ -698,6 +698,11 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         const bool should_collect = per_partition_mode ? !my_partitions.empty() : (sender_id == 0);
 
         if (should_collect) {
+            if (per_partition_mode) {
+                StarRocksMetrics::instance()->lake_txn_log_collect_per_partition_total.increment(1);
+            } else {
+                StarRocksMetrics::instance()->lake_txn_log_collect_legacy_total.increment(1);
+            }
             rolk.unlock();
             auto t = request.timeout_ms() - (int64_t)(watch.elapsed_time() / 1000 / 1000);
             auto ok = _txn_log_collector.wait(t);
