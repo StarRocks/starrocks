@@ -303,7 +303,17 @@ CONF_mInt64(column_dictionary_key_size_threshold, "0");
 CONF_mInt32(memory_limitation_per_thread_for_schema_change, "2");
 CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 
-CONF_mInt32(update_cache_expire_sec, "360");
+// TTL (seconds) for primary-key update-state + persistent-index in-memory caches.
+// When this fires, `UpdateManager::expire_cache` drops every entry idle for longer than the
+// TTL. In shared-data (lake) mode, the next upsert on an evicted tablet must rebuild the
+// persistent index by reading SST metadata, del files, and segments from OSS (or the starlet
+// local datacache, which then saturates the local disk) — this is the "cold-start" pattern
+// observed on the 999_1gb_1_1tb benchmark: first-minute CommitAndPublish tail spiking to
+// 10-40 s while 300+ tablets simultaneously reload. The prior 360 s (6 min) TTL evicted all
+// warm PK indexes between benchmark iterations on reuse-cluster runs. Raise the default to
+// 7200 s (2 h) and let memory-pressure-driven eviction (`evict_cache`, keyed on
+// `memory_urgent_level` / `memory_high_level`) cap cache size instead of a short TTL.
+CONF_mInt32(update_cache_expire_sec, "7200");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
 CONF_mInt32(disk_stat_monitor_interval, "5");
 CONF_mInt32(profile_report_interval, "30");
