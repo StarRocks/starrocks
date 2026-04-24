@@ -10,23 +10,24 @@ create table t3(k int, v int) duplicate key(k) distributed by random buckets 10;
 function: assert_query_contains("show create table t3;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 create table t4(k int, v int) distributed by random;
 create table t5(k int, v int) distributed by random buckets 10;
-[UC] show create table t5;
+function: assert_query_contains("show create table t5;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 -- name: test_partition_random_distribution @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0"));
 create table t1(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random;
 create table t2(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
-[UC] show create table t2;
+function: assert_query_contains("show create table t2;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 insert into t2 values(-1,-1);
 select * from t2 order by k;
+
 -- name: test_add_partition @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
-[UC] show create table t;
+function: assert_query_contains("show create table t;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 alter table t add partition p2 values less than ("20");
-[UC] show create table t;
+function: assert_query_contains("show create table t;", "PARTITION p2 VALUES [(\"0\"), (\"20\")))")
 alter table t add partition p3 values less than ("30") distributed by random buckets 20;
-[UC] show create table t;
+function: assert_query_contains("show create table t;", "PARTITION p3 VALUES [(\"20\"), (\"30\"))")
 alter table t add partition p4 values less than ("40") distributed by random;
-[UC] show create table t;
+function: assert_query_contains("show create table t;", "PARTITION p4 VALUES [(\"30\"), (\"40\"))")
 alter table t add partition p5 values less than ("50") distributed by hash(k) buckets 10;
 insert into t values(-1,-1),(5,5),(15,15),(35,35);
 select * from t order by k;
