@@ -12,7 +12,7 @@ displayed_sidebar: docs
 
 - 对象存储设置错误（例如，`aws_s3_path`、`endpoint`、`authentication`）。
 - 对象存储服务不稳定或异常。
-- 对于 `CREATE STORAGE VOLUME` 和 `ALTER STORAGE VOLUME`，shared_data 模式下会执行存储可访问性校验。若校验失败，请先修复凭证、端点或网络连通性后再重试。
+- 对于 `CREATE STORAGE VOLUME` 和 `ALTER STORAGE VOLUME`，shared_data 模式下默认会执行存储可访问性校验，但该校验可通过 BE 配置 `enable_storage_volume_access_check` 关闭。排障时，请先确认该开关是否已被禁用；若校验失败，请先修复凭证、端点或网络连通性后再重试。
 
 其他错误：
 
