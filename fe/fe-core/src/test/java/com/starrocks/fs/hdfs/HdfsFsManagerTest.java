@@ -262,6 +262,51 @@ public class HdfsFsManagerTest {
         testFileSystemCache(blobProperties, Pair.create(wasbsPath1, wasbsPath2), Pair.create(wasbsPath3, wasbsPath4));
     }
 
+    /**
+     * Regression test for issue #66504: GCS Broker Load incorrectly reuses the
+     * bucket from a previous job when bucket names contain underscores.
+     *
+     * Root cause: java.net.URI.getHost() returns null for authorities containing
+     * underscores (DNS hostname rules forbid them). The pre-fix cache key was
+     * scheme + "://" + host, which collapsed every such bucket to the literal
+     * string "gs://null" and caused Job 2 to receive the cached FileSystem from
+     * Job 1. Fixed by PR #68901 which switched the key to use getAuthority().
+     */
+    @Test
+    public void testGcsFileSystemCache() throws StarRocksException, IOException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(CloudConfigurationConstants.GCP_GCS_USE_COMPUTE_ENGINE_SERVICE_ACCOUNT, "true");
+
+        // Sanity-check the regression trigger: getHost() is null for both,
+        // so any cache keyed on host would collide on "gs://null".
+        Assertions.assertNull(java.net.URI.create("gs://bucket_us/abc").getHost());
+        Assertions.assertNull(java.net.URI.create("gs://bucket_us_west1/xyz").getHost());
+
+        // Same underscore-bearing bucket, different key paths -> must share the cached FS.
+        HdfsFs fs1 = fileSystemManager.getFileSystem(
+                "gs://bucket_us/abc/file1.parquet", properties, null);
+        HdfsFs fs2 = fileSystemManager.getFileSystem(
+                "gs://bucket_us/xyz/file2.parquet", properties, null);
+        Assertions.assertSame(fs1, fs2);
+
+        // Two distinct underscore-bearing buckets -> must NOT share the cached FS.
+        HdfsFs fs3 = fileSystemManager.getFileSystem(
+                "gs://bucket_us/abc/file1.parquet", properties, null);
+        HdfsFs fs4 = fileSystemManager.getFileSystem(
+                "gs://bucket_us_west1/xyz/file2.parquet", properties, null);
+        try {
+            Assertions.assertNotSame(fs3, fs4);
+        } finally {
+            fs4.getDFSFileSystem().close();
+        }
+        try {
+            // Pre-fix behavior would hand back the bucket_us FS for bucket_us_west1.
+            Assertions.assertSame(fs1, fs3);
+        } finally {
+            fs3.getDFSFileSystem().close();
+        }
+    }
+
     private void testFileSystemCache(Map<String, String> properties, Pair<String, String> sameFsPaths,
                                      Pair<String, String> differentFsPaths) throws StarRocksException, IOException {
         HdfsFs fs1 = fileSystemManager.getFileSystem(sameFsPaths.first, properties, null);
