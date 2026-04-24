@@ -215,28 +215,17 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     }
 
     public synchronized void recyclePartition(RecyclePartitionInfo recyclePartitionInfo) {
-        long partitionId = recyclePartitionInfo.getPartition().getId();
-        String partitionName = recyclePartitionInfo.getPartition().getName();
+        Preconditions.checkState(!idToPartition.containsKey(recyclePartitionInfo.getPartition().getId()));
 
-        Preconditions.checkState(!idToPartition.containsKey(partitionId));
-        disableRecoverPartitionWithSameName(
-                recyclePartitionInfo.getDbId(), recyclePartitionInfo.getTableId(), partitionName);
-
-        idToRecycleTime.put(partitionId, System.currentTimeMillis());
-        putPartitionToRecycleBin(recyclePartitionInfo);
-    }
-
-    /**
-     * Stores a partition entry in the recycle-bin map after the caller has completed any
-     * required bookkeeping for the recycle flow.
-     */
-    private void putPartitionToRecycleBin(RecyclePartitionInfo recyclePartitionInfo) {
         long dbId = recyclePartitionInfo.getDbId();
         long tableId = recyclePartitionInfo.getTableId();
         Partition partition = recyclePartitionInfo.getPartition();
         long partitionId = partition.getId();
         String partitionName = partition.getName();
 
+        disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
+
+        idToRecycleTime.put(partitionId, System.currentTimeMillis());
         idToPartition.put(partitionId, recyclePartitionInfo);
         LOG.debug("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
                 partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
