@@ -22,8 +22,9 @@ create table t2(k int, v int) duplicate key(k) distributed by random;
 create table t3(k int, v int) duplicate key(k) distributed by random buckets 10;
 -- result:
 -- !result
-[UC] show create table t3;
+function: assert_query_contains("show create table t3;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 -- result:
+None
 -- !result
 create table t4(k int, v int) distributed by random;
 -- result:
@@ -31,8 +32,9 @@ create table t4(k int, v int) distributed by random;
 create table t5(k int, v int) distributed by random buckets 10;
 -- result:
 -- !result
-[UC] show create table t5;
+function: assert_query_contains("show create table t5;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 -- result:
+None
 -- !result
 -- name: test_partition_random_distribution @native
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0"));
@@ -44,8 +46,9 @@ create table t1(k int, v int) partition by range(k) (partition p1 values less th
 create table t2(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
 -- result:
 -- !result
-[UC] show create table t2;
+function: assert_query_contains("show create table t2;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 -- result:
+None
 -- !result
 insert into t2 values(-1,-1);
 -- result:
@@ -58,26 +61,30 @@ select * from t2 order by k;
 create table t(k int, v int) partition by range(k) (partition p1 values less than ("0")) distributed by random buckets 10;
 -- result:
 -- !result
-[UC] show create table t;
+function: assert_query_contains("show create table t;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 -- result:
+None
 -- !result
 alter table t add partition p2 values less than ("20");
 -- result:
 -- !result
-[UC] show create table t;
+function: assert_query_contains("show create table t;", "PARTITION p2 VALUES [(\"0\"), (\"20\")))")
 -- result:
+None
 -- !result
 alter table t add partition p3 values less than ("30") distributed by random buckets 20;
 -- result:
 -- !result
-[UC] show create table t;
+function: assert_query_contains("show create table t;", "PARTITION p3 VALUES [(\"20\"), (\"30\"))")
 -- result:
+None
 -- !result
 alter table t add partition p4 values less than ("40") distributed by random;
 -- result:
 -- !result
-[UC] show create table t;
+function: assert_query_contains("show create table t;", "PARTITION p4 VALUES [(\"30\"), (\"40\"))")
 -- result:
+None
 -- !result
 alter table t add partition p5 values less than ("50") distributed by hash(k) buckets 10;
 -- result:
@@ -160,6 +167,20 @@ select * from t order by k;
 -- !result
 [UC] show create table t;
 -- result:
+t	CREATE TABLE `t` (
+  `k` date NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+PARTITION BY date_trunc('day', k)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "1073741824",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
 -- !result
 -- name: test_sync_mv
 create table t(k int, v int);
@@ -187,6 +208,15 @@ create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k
 -- !result
 [UC] show create materialized view tva;
 -- result:
+tva	CREATE MATERIALIZED VIEW `tva` (`k`, `sum(v)`)
+DISTRIBUTED BY RANDOM
+REFRESH ASYNC
+PROPERTIES (
+"replicated_storage" = "true",
+"replication_num" = "1",
+"storage_medium" = "HDD"
+)
+AS select k, sum(v) from t group by k;
 -- !result
 select sum(v) from t;
 -- result:
@@ -216,16 +246,55 @@ create table c as select * from t;
 -- !result
 [UC] show create table c;
 -- result:
+c	CREATE TABLE `c` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "1073741824",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
 -- !result
 create table c1 distributed by random as select * from t;
 -- result:
 -- !result
 [UC] show create table c1;
 -- result:
+c1	CREATE TABLE `c1` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM
+PROPERTIES (
+"bucket_size" = "1073741824",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
 -- !result
 create table c2 distributed by random buckets 10 as select * from t;
 -- result:
 -- !result
 [UC] show create table c2;
 -- result:
+c2	CREATE TABLE `c2` (
+  `k` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `v`)
+DISTRIBUTED BY RANDOM BUCKETS 10
+PROPERTIES (
+"bucket_size" = "1073741824",
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
 -- !result
