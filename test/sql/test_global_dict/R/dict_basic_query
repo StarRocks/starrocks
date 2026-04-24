@@ -142,3 +142,8 @@ select * from (select max(v1) over (partition by v2) mv1 from t1) t where mv1 !=
 -- result:
 98
 -- !result
+select v1, v1 <=> 'a', v1 <=> 'b', v1 <=> null from t4 order by v1;
+-- result:
+None	0	0	1
+a	1	0	0
+-- !result
