@@ -118,24 +118,24 @@ TEST(TimerThreadTest, test) {
             int32_t& changed;
             std::counting_semaphore<>& s;
         };
-        Timer noop(changed, s);
+        auto noop = std::make_shared<Timer>(changed, s);
         //
         timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
         timespec s1 = abstime;
         s1.tv_sec -= 10;
         // schedule a expired task
-        ASSERT_OK(timer.schedule(&noop, s1));
+        ASSERT_OK(timer.schedule(noop.get(), s1));
         s.acquire();
-        noop.unschedule(&timer);
+        noop->unschedule(&timer);
         ASSERT_TRUE(changed);
 
         timespec s2 = abstime;
         s2.tv_sec += 3600;
         // schedule a task
         changed = false;
-        ASSERT_OK(timer.schedule(&noop, s2));
+        ASSERT_OK(timer.schedule(noop.get(), s2));
         sleep(1);
-        noop.unschedule(&timer);
+        noop->unschedule(&timer);
         ASSERT_FALSE(changed);
     }
     {
@@ -151,16 +151,16 @@ TEST(TimerThreadTest, test) {
             int32_t& changed;
             std::counting_semaphore<>& s;
         };
-        SleepTimer noop(changed, s);
+        auto noop = std::make_shared<SleepTimer>(changed, s);
         //
         timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
         timespec s1 = abstime;
         s1.tv_sec -= 10;
         // schedule a expired task
-        ASSERT_OK(timer.schedule(&noop, s1));
+        ASSERT_OK(timer.schedule(noop.get(), s1));
         s.acquire();
         // will wait util timer finished
-        noop.unschedule(&timer);
+        noop->unschedule(&timer);
         ASSERT_TRUE(changed);
     }
 }

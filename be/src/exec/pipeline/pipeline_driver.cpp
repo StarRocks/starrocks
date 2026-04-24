@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <memory>
 #include <random>
 #include <sstream>
 
@@ -795,7 +796,7 @@ void PipelineDriver::_update_global_rf_timer() {
     if (!_runtime_state->enable_event_scheduler()) {
         return;
     }
-    auto timer = std::make_unique<RFScanWaitTimeout>(true);
+    auto timer = std::make_shared<RFScanWaitTimeout>(true);
     timer->add_observer(_runtime_state, &_observer);
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
