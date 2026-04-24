@@ -55,6 +55,7 @@ import com.starrocks.sql.analyzer.Authorizer;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -111,7 +112,8 @@ public class TableRowCountAction extends RestBaseAction {
             // this endpoint is documented as approximate, and REST delivery already
             // races with drop/rename. The lock is still needed to protect
             // proximateRowCount's partition walk from concurrent mutation.
-            try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), table.getId(), LockType.READ)) {
+            try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(db.getId(), Collections.singletonList(table.getId()), LockType.READ)) {
                 OlapTable olapTable = (OlapTable) table;
                 resultMap.put("status", 200);
                 resultMap.put("size", olapTable.proximateRowCount());
