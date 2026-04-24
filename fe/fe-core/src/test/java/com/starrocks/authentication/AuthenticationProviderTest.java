@@ -14,11 +14,8 @@
 
 package com.starrocks.authentication;
 
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
->>>>>>> adee4f37c5 ([Enhancement] Support LDAP direct bind authentication via DN pattern (#71559))
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.mysql.MysqlAuthPacket;
