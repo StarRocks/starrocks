@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <atomic>
+
 #include "base/concurrency/limit_setter.h"
 #include "common/thread/threadpool.h"
 #include "exec/pipeline/pipeline_metrics.h"
@@ -52,6 +54,7 @@ private:
     void worker_thread();
 
     LimitSetter _num_threads_setter;
+    std::atomic<int> _next_worker_id{0};
     std::unique_ptr<ScanTaskQueue> _task_queue;
     // _thread_pool must be placed after _task_queue, because worker threads in _thread_pool use _task_queue.
     std::unique_ptr<ThreadPool> _thread_pool;

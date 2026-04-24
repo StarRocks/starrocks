@@ -25,6 +25,8 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.MVPartitionCellBuilder;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
@@ -53,12 +55,24 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
     // partition's base info to be used in `updateMeta`
     private Map<String, MaterializedView.BasePartitionInfo> refreshedPartitionInfos = Maps.newHashMap();
 
+    // Pinned snapshot; non-null means updatePCTExternalPartitionInfos reads partition info at the
+    // frozen snapshot instead of the live current snapshot.
+    private TvrVersionRange pinnedRange;
+
     public PCTTableSnapshotInfo(BaseTableInfo baseTableInfo, Table baseTable) {
         super(baseTableInfo, baseTable);
     }
 
     public Map<String, MaterializedView.BasePartitionInfo> getRefreshedPartitionInfos() {
         return refreshedPartitionInfos;
+    }
+
+    public TvrVersionRange getPinnedRange() {
+        return pinnedRange;
+    }
+
+    public void setPinnedRange(TvrVersionRange pinnedRange) {
+        this.pinnedRange = pinnedRange;
     }
 
     @Override
@@ -139,6 +153,13 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
             if (!partitionTableAndColumns.containsKey(baseTable)) {
                 return false;
             }
+            // In pinned mode, we're locked to a specific snapshot — partition-level DDL at newer
+            // snapshots is irrelevant to what we'll scan. Skip the comparison entirely.
+            TvrVersionRange frozen = mv.getRefreshScheme().getAsyncRefreshContext()
+                    .getTempBaseTableInfoTvrDeltaMap().get(baseTableInfo);
+            if (frozen != null) {
+                return false;
+            }
             List<Column> partitionColumns = partitionTableAndColumns.get(baseTable);
             Preconditions.checkArgument(partitionColumns.size() == 1,
                     "Only support one partition column in range partition");
@@ -192,9 +213,19 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
         // different in selectedPartitionNames and partitions and will lead to infinite partition refresh.
         Collections.sort(refreshedPartitionNames);
 
-        List<com.starrocks.connector.PartitionInfo> partitions = GlobalStateMgr.getCurrentState()
-                .getMetadataMgr()
-                .getPartitions(baseTableInfo.getCatalogName(), table, refreshedPartitionNames);
+        // When pinnedRange is set, read partition info at the frozen snapshot.
+        List<com.starrocks.connector.PartitionInfo> partitions;
+        if (pinnedRange != null) {
+            ConnectorMetadataRequestContext rc = new ConnectorMetadataRequestContext();
+            rc.setTableVersionRange(pinnedRange);
+            partitions = GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr()
+                    .getPartitions(baseTableInfo.getCatalogName(), table, refreshedPartitionNames, rc);
+        } else {
+            partitions = GlobalStateMgr.getCurrentState()
+                    .getMetadataMgr()
+                    .getPartitions(baseTableInfo.getCatalogName(), table, refreshedPartitionNames);
+        }
         if (partitions.size() != refreshedPartitionNames.size()) {
             LOG.warn("Partition names size {} does not match partitions size {} for table {}",
                     refreshedPartitionNames.size(), partitions.size(), table.getName());

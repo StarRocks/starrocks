@@ -14,6 +14,8 @@
 
 #include "exec/spill/operator_mem_resource_manager.h"
 
+#include <algorithm>
+
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {

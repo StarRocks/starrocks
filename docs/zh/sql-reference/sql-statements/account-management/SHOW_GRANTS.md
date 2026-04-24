@@ -18,12 +18,14 @@ displayed_sidebar: docs
 
 ```SQL
 SHOW GRANTS; -- 查看当前用户的权限信息。
+SHOW GRANTS FOR CURRENT_USER[()]; -- 查看当前用户的权限信息（MySQL 兼容语法）。
 SHOW GRANTS FOR ROLE <role_name>; -- 查看指定角色的权限信息。
 SHOW GRANTS FOR <user_identity>; -- 查看指定用户的权限信息。
 ```
 
 ## 参数说明
 
+- `CURRENT_USER[()]`：返回当前会话用户的权限信息，括号可省略。该语法与 `SHOW GRANTS` 等价，用于兼容在连接初始化时自动发送该语句的 MySQL 客户端（如 Metabase、DBeaver 等）。
 - role_name：角色名
 - user_identity：用户标识
 
@@ -52,6 +54,13 @@ SHOW GRANTS FOR <user_identity>; -- 查看指定用户的权限信息。
 
 ```SQL
 mysql> SHOW GRANTS;
++--------------+---------+----------------------------------------+
+| UserIdentity | Catalog | Grants                                 |
++--------------+---------+----------------------------------------+
+| 'root'@'%'   | NULL    | GRANT 'root', 'testrole' TO 'root'@'%' |
++--------------+---------+----------------------------------------+
+
+mysql> SHOW GRANTS FOR CURRENT_USER();
 +--------------+---------+----------------------------------------+
 | UserIdentity | Catalog | Grants                                 |
 +--------------+---------+----------------------------------------+

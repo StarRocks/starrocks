@@ -73,7 +73,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -144,11 +144,12 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class ReportHandler extends Daemon implements MemoryTrackable {
+public class ReportHandler extends LeaderDaemon implements MemoryTrackable {
 
     @Override
     public Map<String, Long> estimateCount() {
@@ -199,7 +200,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
 
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
-    private final Daemon resourceReportDaemon = new ResourceReportDaemon();
+    private final LeaderDaemon resourceReportDaemon = new ResourceReportDaemon();
 
     /**
      * Record the mapping of <tablet id, backend id> to the to be dropped time of tablet.
@@ -215,7 +216,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     private static final Table<Long, Long, Long> TABLET_TO_DROP_TIME = HashBasedTable.create();
 
     public ReportHandler() {
-        super("report-handler");
+        super("report-handler", 0L);
         pendingTaskMap.put(ReportType.TABLET_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.DISK_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.TASK_REPORT, Maps.newHashMap());
@@ -225,6 +226,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     public TMasterResult handleReport(TReportRequest request) throws TException {
+        // Inbound fence: reject if this FE is not (or is no longer) the active leader.
+        // The IllegalStateException is translated to a NOT_MASTER status in FrontendServiceImpl.report.
+        GlobalStateMgr.getCurrentState().captureLeaderLeaseOrThrow();
+
         TMasterResult result = new TMasterResult();
         TStatus tStatus = new TStatus(TStatusCode.OK);
         result.setStatus(tStatus);
@@ -348,6 +353,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                         dataCacheMetrics);
         try {
             putToQueue(reportTask);
+        } catch (IllegalStateException e) {
+            // Demotion fence fired inside putToQueue. Propagate so LeaderImpl.report() can
+            // translate this into a NOT_MASTER response and the BE re-resolves the new leader.
+            throw e;
         } catch (Exception e) {
             tStatus.setStatus_code(TStatusCode.INTERNAL_ERROR);
             List<String> errorMsgs = Lists.newArrayList();
@@ -374,6 +383,12 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     private void putToQueue(ReportTask reportTask) throws Exception {
+        if (isStopped()) {
+            // Demotion is in progress: reject so the caller can translate this into a NOT_MASTER
+            // response (see LeaderImpl#report). Silently dropping would ACK the request as OK and
+            // the BE would never retry against the new leader, losing the report update.
+            throw new IllegalStateException("report handler is stopped during leader demotion");
+        }
         try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
             if (!pendingTaskMap.containsKey(reportTask.type)) {
                 throw new Exception("Unknown report task type" + reportTask.toString());
@@ -2216,38 +2231,61 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     @Override
-    protected void runOneCycle() {
-        consumeQueue(reportQueue, "report");
+    protected void runAfterLeaseValid() throws InterruptedException {
+        consumeOne(reportQueue, "report");
     }
 
-    private void consumeQueue(BlockingQueue<Pair<Long, ReportType>> queue, String queueName) {
-        while (true) {
-            try {
-                Pair<Long, ReportType> pair = queue.take();
-                ReportTask task;
-                try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
-                    // using the latest task
-                    task = pendingTaskMap.get(pair.second).get(pair.first);
-                    if (task == null) {
-                        throw new Exception("pendingTaskMap not exists " + pair.first);
-                    }
-                    pendingTaskMap.get(task.type).remove(task.beId, task);
-                }
-                task.exec();
-            } catch (Exception e) {
-                LOG.warn("got exception when executing {} report", queueName, e);
+    @Override
+    protected void onStopped() {
+        try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
+            reportQueue.clear();
+            resourceReportQueue.clear();
+            for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+                taskMap.clear();
             }
+            TABLET_TO_DROP_TIME.clear();
+        }
+        // Stop the nested resource-report consumer as part of this handler's own shutdown,
+        // so both loops drain synchronously during leader demotion.
+        resourceReportDaemon.stopGracefully(Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L));
+    }
+
+    /**
+     * Process at most one queued report. Blocks up to one second waiting for work so that the outer
+     * {@link LeaderDaemon} loop can re-check the leader lease promptly even when the queue is idle.
+     * Propagates {@link InterruptedException} so {@link #setStop()} during demotion wakes us up.
+     */
+    private void consumeOne(BlockingQueue<Pair<Long, ReportType>> queue, String queueName)
+            throws InterruptedException {
+        Pair<Long, ReportType> pair = queue.poll(1, TimeUnit.SECONDS);
+        if (pair == null) {
+            return;
+        }
+        try {
+            ReportTask task;
+            try (CloseableLock ignored = CloseableLock.lock(lock.writeLock())) {
+                // using the latest task
+                task = pendingTaskMap.get(pair.second).get(pair.first);
+                if (task == null) {
+                    LOG.warn("pendingTaskMap not exists {}", pair.first);
+                    return;
+                }
+                pendingTaskMap.get(task.type).remove(task.beId, task);
+            }
+            task.exec();
+        } catch (Exception e) {
+            LOG.warn("got exception when executing {} report", queueName, e);
         }
     }
 
-    private class ResourceReportDaemon extends Daemon {
+    private class ResourceReportDaemon extends LeaderDaemon {
         public ResourceReportDaemon() {
-            super("resource-report-handler");
+            super("resource-report-handler", 0L);
         }
 
         @Override
-        protected void runOneCycle() {
-            consumeQueue(resourceReportQueue, "resource");
+        protected void runAfterLeaseValid() throws InterruptedException {
+            consumeOne(resourceReportQueue, "resource");
         }
     }
 }

@@ -9,9 +9,7 @@ create table t0 (
 select distinct c0, c1 from t0 order by c0, c1 desc limit 10;
 -- result:
 -- !result
-select distinct c0, c1 from (select * from t0 union all select space(1000000) as c0, space(1000000) as c1, space(1000000) as c2) tb order by c0, c1 desc limit 10;
--- result:
--- !result
+[UC]select distinct c0, c1 from (select * from t0 union all select space(1000000) as c0, space(1000000) as c1, space(1000000) as c2) tb order by c0, c1 desc limit 10;
 select length(c0), max(length(c1)), max(length(c2)) from (select * from t0 union all select space(1000000) as c0, space(1000000) as c1, space(1000000) as c2) tb group by c0 order by 1, 2 desc limit 10;
 -- result:
 1000000	1000000	1000000

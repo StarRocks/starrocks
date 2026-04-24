@@ -553,6 +553,14 @@ Used for MySQL client compatibility. No practical usage.
 * **Data Type**: boolean
 * **Introduced in**: v3.2.0
 
+### enable_cache_udaf
+
+* **Description**: When set to `true`, enables in-memory caching of the class-level Java UDAF initialization (class loading, method introspection, and batch-update stub generation). The cache is populated on first use and reused across all aggregator/analytor instances within the same BE process, eliminating the repeated per-instance initialization overhead that is otherwise proportional to pipeline DOP. Caching only applies to UDAFs and window functions that were created with `"isolation" = "shared"`. Functions created with `"isolation" = "private"` always go through the uncached path regardless of this setting. Default is `false`; enable after verifying that shared-isolation UDAFs are safe to share their class-level state across concurrent queries. The runtime profile exposes `UdafCacheHitCount`, `UdafCachePopulateCount`, and `UdafLoadTime` counters to observe cache behavior.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.4.0
+
 ### enable_color_explain_output
 
 * **Scope**: Session
@@ -1706,6 +1714,7 @@ Used to specify the SQL mode to accommodate certain SQL dialects. Valid values i
 * `SORT_NULLS_LAST`: places NULL values at the end after sorting.
 * `ERROR_IF_OVERFLOW`: returns an error instead of NULL in the case of arithmetic overflow. Currently, only the DECIMAL data type supports this option.
 * `GROUP_CONCAT_LEGACY`: uses the `group_concat` syntax of v2.5 and earlier. This option is supported from v3.0.9 and v3.1.6.
+* `FORBID_INVALID_IMPLICIT_CAST`: enforces Trino-style strict type checking at plan time. Only widening coercions within the same type family are allowed implicitly (for example, `TINYINT`→`INT`→`BIGINT`→`DECIMAL`→`DOUBLE`, `DATE`→`DATETIME`). Casts within the `VARCHAR`/`CHAR` family are allowed regardless of declared length. Cross-family casts (such as `string`↔`numeric`, `string`↔`date`, `numeric`↔`date`, `boolean`↔other types) and narrowing numeric casts (such as `BIGINT`→`INT` or `DOUBLE`→`FLOAT`) are rejected with a semantic error. Use an explicit `CAST` to perform those conversions.
 
 You can set only one SQL mode, for example:
 

@@ -395,6 +395,19 @@ public:
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(short_circuit_request_duration_us, MetricUnit::MICROSECONDS);
 
+    // Flat JSON metrics
+    METRIC_DEFINE_INT_COUNTER(flat_json_segment_write_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(flat_json_write_rows_total, MetricUnit::ROWS);
+    METRIC_DEFINE_INT_COUNTER(flat_json_paths_discovered_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(flat_json_paths_extracted_total, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(flat_json_access_hit_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(flat_json_access_miss_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(flat_json_cast_duration_ns_total, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_COUNTER(flat_json_merge_duration_ns_total, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_COUNTER(flat_json_flatten_duration_ns_total, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_COUNTER(flat_json_compaction_total, MetricUnit::OPERATIONS);
+    METRIC_DEFINE_INT_COUNTER(flat_json_compaction_schema_change_total, MetricUnit::OPERATIONS);
+
     // data cache metrics
     METRIC_DEFINE_INT_GAUGE(datacache_mem_quota_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(datacache_mem_used_bytes, MetricUnit::BYTES);

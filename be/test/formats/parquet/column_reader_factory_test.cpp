@@ -347,6 +347,43 @@ TEST(ColumnReaderFactoryTest, VariantShreddedCollectIoRangeAndSelectOffsetIndex)
     st.value()->select_offset_index(sparse_range, 0);
 }
 
+TEST(ColumnReaderFactoryTest, VariantShreddedAllNullFallbackSkipsIoRange) {
+    auto obj = make_shredded_object_node_with_nested_scalar("obj", 2, 3, 4, tparquet::Type::INT32);
+    ParquetField variant = make_variant_field_with_typed_group({obj});
+
+    auto collect_range_count = [&variant](ColumnReaderOptions opts) {
+        auto st = ColumnReaderFactory::create_variant_column_reader(opts, &variant, {});
+        EXPECT_TRUE(st.ok()) << st.status().to_string();
+        if (!st.ok()) {
+            return size_t{0};
+        }
+
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        st.value()->collect_column_io_range(&ranges, &end_offset, ColumnIOType::PAGES, true);
+        return ranges.size();
+    };
+
+    auto baseline_opts = make_opts_with_num_cols(5);
+    const size_t baseline_ranges = collect_range_count(baseline_opts);
+
+    auto all_null_opts = make_opts_with_num_cols(5);
+    auto mark_all_null = [&](int idx) {
+        auto* row_group_meta = const_cast<tparquet::RowGroup*>(all_null_opts.row_group_meta);
+        auto& meta = row_group_meta->columns[idx].meta_data;
+        meta.__set_num_values(8);
+        tparquet::Statistics statistics;
+        statistics.__set_null_count(meta.num_values);
+        meta.__set_statistics(statistics);
+    };
+    mark_all_null(2);
+    mark_all_null(3);
+
+    const size_t skipped_ranges = collect_range_count(all_null_opts);
+    ASSERT_GT(baseline_ranges, skipped_ranges);
+    ASSERT_EQ(baseline_ranges - 2, skipped_ranges);
+}
+
 TEST(ColumnReaderFactoryTest, StructWithoutFieldIdMatchesIcebergSubfieldsByName) {
     ParquetField field;
     field.name = "col";

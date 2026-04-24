@@ -17,7 +17,7 @@ package com.starrocks.scheduler;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -150,7 +150,7 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
         ExecPlan execPlan = getMVRefreshExecPlan(taskRun, true);
         Assertions.assertNotNull(execPlan);
 
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         TaskRun nextTaskRun = processor.getNextTaskRun();
         String v = nextTaskRun.getProperties().get(TaskRun.FORCE);
         Assertions.assertEquals("true", v);
@@ -289,7 +289,7 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
 
-        MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+        MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
         MvTaskRunContext mvContext = processor.getMvContext();
 
         // (1) Batch scan must be bounded by partition_refresh_number
@@ -373,7 +373,7 @@ public class PCTRefreshRangePartitionOlapTest extends MVTestBase {
             taskRun.executeTaskRun();
             batches++;
 
-            MVPCTBasedRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
             MVTaskRunExtraMessage extra = taskRun.getStatus().getMvTaskRunExtraMessage();
             Assertions.assertNotNull(extra);
             if (extra.getBasePartitionsToRefreshMap() != null) {

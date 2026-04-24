@@ -267,6 +267,19 @@ GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
     REGISTER_STARROCKS_METRIC(short_circuit_request_total);
     REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
 
+    // flat json metrics
+    REGISTER_STARROCKS_METRIC(flat_json_segment_write_total);
+    REGISTER_STARROCKS_METRIC(flat_json_write_rows_total);
+    REGISTER_STARROCKS_METRIC(flat_json_paths_discovered_total);
+    REGISTER_STARROCKS_METRIC(flat_json_paths_extracted_total);
+    REGISTER_STARROCKS_METRIC(flat_json_access_hit_total);
+    REGISTER_STARROCKS_METRIC(flat_json_access_miss_total);
+    REGISTER_STARROCKS_METRIC(flat_json_cast_duration_ns_total);
+    REGISTER_STARROCKS_METRIC(flat_json_merge_duration_ns_total);
+    REGISTER_STARROCKS_METRIC(flat_json_flatten_duration_ns_total);
+    REGISTER_STARROCKS_METRIC(flat_json_compaction_total);
+    REGISTER_STARROCKS_METRIC(flat_json_compaction_schema_change_total);
+
     // data cache metrics
     REGISTER_STARROCKS_METRIC(datacache_mem_quota_bytes);
     REGISTER_STARROCKS_METRIC(datacache_mem_used_bytes);

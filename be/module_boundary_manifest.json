@@ -94,6 +94,7 @@
         "be/src/fs/bundle_file.*",
         "be/src/fs/fs_options.*",
         "be/src/fs/fs_memory.*",
+        "be/src/fs/fs_factory.*",
         "be/src/fs/fs_posix.*",
         "be/src/fs/fs_registry.*",
         "be/src/fs/fs_scheme.*"
@@ -102,7 +103,6 @@
       "forbidden_include_prefixes": ["fs/azure/", "fs/credential/", "fs/hdfs/", "fs/s3/"],
       "forbidden_includes": [
         "fs/fs_broker.h",
-        "fs/fs_factory.h",
         "fs/fs_options_helper.h",
         "fs/fs_s3.h",
         "fs/fs_starlet.h",
@@ -118,7 +118,7 @@
     {
       "id": "spillcore",
       "doc_label": "SpillCore",
-      "summary": "Core spill block and directory primitives without pipeline/query/runtime-service coupling.",
+      "summary": "Core spill block, directory, query-local spill, and spill memory-resource primitives without pipeline/runtime-service coupling.",
       "owned_targets": ["SpillCore"],
       "owned_globs": [
         "be/src/exec/spill/block_manager.h",
@@ -132,20 +132,24 @@
         "be/src/exec/spill/file_block_manager.cpp",
         "be/src/exec/spill/hybird_block_manager.h",
         "be/src/exec/spill/hybird_block_manager.cpp",
+        "be/src/exec/spill/query_spill_manager.h",
+        "be/src/exec/spill/query_spill_manager.cpp",
         "be/src/exec/spill/block_reader.cpp",
-        "be/src/exec/spill/global_spill_manager.h"
+        "be/src/exec/spill/global_spill_manager.h",
+        "be/src/exec/spill/operator_mem_resource_manager.h",
+        "be/src/exec/spill/operator_mem_resource_manager.cpp",
+        "be/src/exec/spill/partition.h"
       ],
       "allowed_include_prefixes": ["exec/spill/", "fs/", "io/", "common/", "base/", "gutil/", "gen_cpp/"],
       "forbidden_include_prefixes": ["exec/pipeline/", "exec/workgroup/", "exprs/", "runtime/", "storage/", "util/"],
       "forbidden_includes": [
-        "fs/fs_factory.h",
         "runtime/exec_env.h",
         "exec/sort_exec_exprs.h"
       ],
-      "allowed_target_deps": ["FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "allowed_target_deps": ["RuntimeCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
       "allowed_test_targets": ["spill_core_test"],
-      "allowed_test_link_deps": ["SpillCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep SpillCore limited to reusable spill block and directory infrastructure; move query bootstrap, pipeline ownership, and runtime-service integration upward."
+      "allowed_test_link_deps": ["SpillCore", "RuntimeCore", "FSCore", "IOCore", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep SpillCore limited to reusable spill block, directory, query-local spill, and spill memory-resource infrastructure; move pipeline ownership and runtime-service integration upward."
     },
     {
       "id": "typecore",

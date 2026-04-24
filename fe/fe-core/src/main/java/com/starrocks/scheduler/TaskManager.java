@@ -45,7 +45,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.history.TaskRunHistory;
-import com.starrocks.scheduler.mv.pct.MVPCTBasedRefreshProcessor;
+import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.persist.ArchiveTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -395,10 +395,10 @@ public class TaskManager implements MemoryTrackable {
             if (!currentOption.getIsSync()) {
                 return firstResult;
             }
-            // Construction of the next batch's ExecuteOption lives in MVPCTBasedRefreshProcessor
+            // Construction of the next batch's ExecuteOption lives in MVPCTRefreshProcessor
             // so that the sync loop and the async follow-up share one implementation — future
             // fields added to continuation batches land in a single place.
-            ExecuteOption nextOption = MVPCTBasedRefreshProcessor.buildNextBatchOption(taskRun);
+            ExecuteOption nextOption = MVPCTRefreshProcessor.buildNextBatchOption(taskRun);
             if (nextOption == null) {
                 return firstResult;
             }

@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <memory>
 
 #include "base/phmap/phmap.h"
 #include "column/vectorized_fwd.h"
@@ -630,7 +631,7 @@ protected:
 
     std::atomic<bool> _is_operator_cancelled{false};
 
-    std::unique_ptr<PipelineTimerTask> _global_rf_timer;
+    std::shared_ptr<PipelineTimerTask> _global_rf_timer;
 
     std::atomic<bool> _local_prepare_is_done{false};
 

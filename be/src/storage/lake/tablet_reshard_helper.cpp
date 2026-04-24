@@ -14,6 +14,9 @@
 
 #include "storage/lake/tablet_reshard_helper.h"
 
+#include <algorithm>
+
+#include "storage/lake/tablet_manager.h"
 #include "storage/tablet_range.h"
 
 namespace starrocks::lake::tablet_reshard_helper {
@@ -212,6 +215,106 @@ void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int
         int64_t data_size = rowset->data_size();
         rowset->set_data_size(data_size / split_count + (split_index < data_size % split_count ? 1 : 0));
     }
+    if (rowset->has_num_dels()) {
+        int64_t num_dels = rowset->num_dels();
+        int64_t scaled_num_dels = num_dels / split_count + (split_index < num_dels % split_count ? 1 : 0);
+        rowset->set_num_dels(std::min<int64_t>(scaled_num_dels, rowset->num_rows()));
+    }
+}
+
+namespace {
+
+// Append output-side files of a single OpCompaction. Used both for the
+// top-level op_compaction and for every op_parallel_compaction.subtask_compactions[*].
+//
+// Only files newly written by this compaction are collected. In partial
+// compaction the output_rowset.segments() list concatenates uncompacted
+// (reused) input segments with newly written ones; the slice
+// [new_segment_offset, new_segment_offset + new_segment_count) identifies the
+// new ones. output_rowset.del_files() may likewise be carried over from input
+// rowsets (PK publish rebuilds them from input del files in
+// MetaFileBuilder::apply_opcompaction), so they are not collected here.
+// input_rowsets / input_sstables are also excluded — they have been absorbed
+// into the merged tablet by the preceding merge publish and remain live.
+//
+// No path-level dedup is performed: file names in this log are produced by
+// UUID-based writers per tablet/txn, so collisions are not expected in
+// practice. Follows the same no-dedup pattern as
+// transactions.cpp::collect_files_in_log.
+void append_compaction_output_files(const TxnLogPB_OpCompaction& op_compaction, int64_t tablet_id,
+                                    TabletManager* tablet_manager, std::vector<std::string>* output_paths) {
+    if (op_compaction.has_output_rowset()) {
+        const auto& segments = op_compaction.output_rowset().segments();
+        if (op_compaction.has_new_segment_count()) {
+            // Normal or partial compaction: only the
+            // [new_segment_offset, new_segment_offset + new_segment_count)
+            // slice is newly written; the rest are reused input segments.
+            // Defensively skip the whole slice if either field is negative
+            // (malformed log), matching the skip-on-empty-count behavior.
+            const int32_t new_segment_offset = op_compaction.new_segment_offset();
+            const int32_t new_segment_count = op_compaction.new_segment_count();
+            if (new_segment_offset >= 0 && new_segment_count > 0) {
+                for (int32_t idx = new_segment_offset, taken = 0; idx < segments.size() && taken < new_segment_count;
+                     ++idx, ++taken) {
+                    output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segments[idx]));
+                }
+            }
+        } else {
+            // Synthesized logs without an explicit new-segment marker — notably
+            // the merged subtask in op_parallel_compaction built by
+            // tablet_parallel_compaction_manager, whose output_rowset only
+            // contains segments the subtasks newly produced. Treat all as new.
+            for (const auto& segment : segments) {
+                output_paths->emplace_back(tablet_manager->segment_location(tablet_id, segment));
+            }
+        }
+    }
+    for (const auto& file_meta : op_compaction.ssts()) {
+        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, file_meta.name()));
+    }
+    if (op_compaction.has_output_sstable()) {
+        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, op_compaction.output_sstable().filename()));
+    }
+    for (const auto& sstable : op_compaction.output_sstables()) {
+        output_paths->emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
+    }
+    if (op_compaction.has_lcrm_file()) {
+        output_paths->emplace_back(tablet_manager->lcrm_location(tablet_id, op_compaction.lcrm_file().name()));
+    }
+}
+
+} // namespace
+
+std::vector<std::string> collect_compaction_output_file_paths(const TxnLogPB& txn_log, TabletManager* tablet_manager) {
+    DCHECK(tablet_manager != nullptr);
+
+    const int64_t tablet_id = txn_log.tablet_id();
+    std::vector<std::string> output_paths;
+
+    if (txn_log.has_op_compaction()) {
+        append_compaction_output_files(txn_log.op_compaction(), tablet_id, tablet_manager, &output_paths);
+    }
+    if (txn_log.has_op_parallel_compaction()) {
+        const auto& op_parallel_compaction = txn_log.op_parallel_compaction();
+        for (const auto& subtask : op_parallel_compaction.subtask_compactions()) {
+            append_compaction_output_files(subtask, tablet_id, tablet_manager, &output_paths);
+        }
+        if (op_parallel_compaction.has_output_sstable()) {
+            output_paths.emplace_back(
+                    tablet_manager->sst_location(tablet_id, op_parallel_compaction.output_sstable().filename()));
+        }
+        for (const auto& sstable : op_parallel_compaction.output_sstables()) {
+            output_paths.emplace_back(tablet_manager->sst_location(tablet_id, sstable.filename()));
+        }
+        // orphan_lcrm_files holds the ORIGINAL per-subtask lcrm files copied
+        // by the parallel-compaction manager (tablet_parallel_compaction_manager.cpp),
+        // distinct from the merged lcrm placed on each subtask_compactions[i]
+        // by _merge_subtask_lcrm_files. Both sets need cleanup on drop.
+        for (const auto& file_meta : op_parallel_compaction.orphan_lcrm_files()) {
+            output_paths.emplace_back(tablet_manager->lcrm_location(tablet_id, file_meta.name()));
+        }
+    }
+    return output_paths;
 }
 
 void update_txn_log_data_stats(TxnLogPB* txn_log, int32_t split_count, int32_t split_index) {

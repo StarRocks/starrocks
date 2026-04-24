@@ -43,6 +43,8 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
     private long dbId;
     private MaterializedView mv;
     private final Map<BaseTableInfo, TvrVersionRange> baseTableInfoTvrDeltaMap = Maps.newConcurrentMap();
+    // Owner captured in beforeCommitted; afterCommitted refuses to clear on mismatch.
+    private String capturedOwner;
 
     public IVMInsertLoadTxnCallback(long dbId, long tableId) {
         this.dbId = dbId;
@@ -69,6 +71,7 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
                     "skip update version range", mv.getName());
             return;
         }
+        this.capturedOwner = asyncRefreshContext.getTempTvrOwnerStartTaskRunId();
 
         // apply the delta into baseTableInfoTvrDeltaMap
         Map<BaseTableInfo, TvrVersionRange> mvBaseTableInfoTvrDeltaMap =
@@ -108,8 +111,14 @@ public class IVMInsertLoadTxnCallback implements InsertLoadTxnCallback {
 
         // update mv's base table info tvr version range map
         mvBaseTableInfoTvrDeltaMap.putAll(baseTableInfoTvrDeltaMap);
-        // clear the temp map and owner tag together
-        asyncRefreshContext.clearTempBaseTableInfoTvrDeltaState();
+        // Only clear if we still own the slot — guard against takeover between the two callbacks.
+        String currentOwner = asyncRefreshContext.getTempTvrOwnerStartTaskRunId();
+        if (currentOwner == null || currentOwner.equals(capturedOwner)) {
+            asyncRefreshContext.clearTempBaseTableInfoTvrDeltaState();
+        } else {
+            LOG.warn("Skip clearTempBaseTableInfoTvrDeltaState in IVM afterCommitted: " +
+                    "captured owner={}, current owner={}", capturedOwner, currentOwner);
+        }
 
         long maxChangedTableRefreshTime = mv.getRefreshScheme().getLastRefreshTime();
         copiedScheme.setLastRefreshTime(maxChangedTableRefreshTime);

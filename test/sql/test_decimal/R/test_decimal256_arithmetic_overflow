@@ -108,8 +108,10 @@ create table test_256min_result(d1 decimal(76, 0), d2 decimal(76, 0)) PROPERTIES
 insert into test_256min_result select 340282366920938463463374607431768211456, -170141183460469231731687303715884105728;
 -- result:
 -- !result
-select cast(d1 * d2 as string) from test_256min_result; -- 2^128 * -2^127
-
+select cast(d1 * d2 as string) from test_256min_result;
+-- result:
+-57896044618658097711785492504343953926634992332820282019728792003956564819968
+-- !result
 CREATE TABLE test_decimal_multiply_overflow (
     id INT,
     case_desc VARCHAR(200),

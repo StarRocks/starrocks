@@ -77,24 +77,36 @@ Status SegmentPKIterator::_load() {
 }
 
 Status SegmentPKIterator::init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                               PrimaryKeyEncodingType encoding_type) {
+                               PrimaryKeyEncodingType encoding_type, bool defer_data_load) {
     _iter = iter;
     _pkey_schema = pkey_schema;
     _lazy_load = lazy_load;
+    _defer_data_load = defer_data_load;
     _begin_rowid_offsets.push_back(0);
     RETURN_IF(encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE,
               Status::InvalidArgument("PK_ENCODING_TYPE_NONE is not a valid encoding type"));
     _encoding_type = encoding_type;
-    _status = _load();
-    if (_status.ok()) {
-        _memory_usage =
-                _pk_column_chunk->memory_usage() + (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
+    if (!_defer_data_load) {
+        _status = _load();
+        if (_status.ok()) {
+            _memory_usage = _pk_column_chunk->memory_usage() +
+                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
+        }
     }
     return _status;
 }
 
 bool SegmentPKIterator::done() {
-    return _pk_column_chunk->is_empty() || !_status.ok();
+    // Deferred first load: trigger on first done() call
+    if (_defer_data_load) {
+        _defer_data_load = false;
+        _status = _load();
+        if (_status.ok() && _pk_column_chunk != nullptr) {
+            _memory_usage = _pk_column_chunk->memory_usage() +
+                            (_standalone_pk_column ? _standalone_pk_column->memory_usage() : 0);
+        }
+    }
+    return (_pk_column_chunk == nullptr || _pk_column_chunk->is_empty()) || !_status.ok();
 }
 
 Status SegmentPKIterator::status() {

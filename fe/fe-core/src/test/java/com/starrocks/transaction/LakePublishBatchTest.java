@@ -127,13 +127,13 @@ public class LakePublishBatchTest {
     }
 
     /**
-     * Simulates the real PublishVersionDaemon's periodic behavior by retrying runAfterCatalogReady()
+     * Simulates the real PublishVersionDaemon's periodic behavior by retrying runAfterLeaseValid()
      * until all waiters are satisfied. This prevents flakiness caused by transient RPC failures or
      * thread pool scheduling delays under CI load.
      */
     private void awaitPublish(PublishVersionDaemon daemon, VisibleStateWaiter... waiters) {
         Awaitility.await().atMost(60, TimeUnit.SECONDS).pollInterval(1, TimeUnit.SECONDS).until(() -> {
-            daemon.runAfterCatalogReady();
+            daemon.runAfterLeaseValid();
             for (VisibleStateWaiter waiter : waiters) {
                 if (!waiter.await(500, TimeUnit.MILLISECONDS)) {
                     return false;
@@ -304,12 +304,12 @@ public class LakePublishBatchTest {
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
         TransactionState transactionState9 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId9);
         boolean success = false;
         for (int i = 0; i < 10; i++) {
-            publishVersionDaemon.runAfterCatalogReady();
+            publishVersionDaemon.runAfterLeaseValid();
             if (waiter9.await(1, TimeUnit.SECONDS)) {
                 success = true;
                 break;
@@ -366,7 +366,7 @@ public class LakePublishBatchTest {
         };
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
 
         TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId5);
@@ -429,7 +429,7 @@ public class LakePublishBatchTest {
         };
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
 
         TransactionState transactionState1 = globalTransactionMgr.getDatabaseTransactionMgr(db.getId()).
                 getTransactionState(transactionId7);
@@ -547,7 +547,7 @@ public class LakePublishBatchTest {
         publishVersionDaemon.publishingTransactionIds.add(transactionId6);
 
         Config.lake_enable_batch_publish_version = true;
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
         Assertions.assertFalse(waiter6.await(5, TimeUnit.SECONDS));
         Assertions.assertFalse(waiter7.await(5, TimeUnit.SECONDS));
 
@@ -630,7 +630,7 @@ public class LakePublishBatchTest {
             Assertions.assertTrue(transactionMgr.checkTxnStateBatchConsistent(db, readyStateBatch));
 
             PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-            publishVersionDaemon.runAfterCatalogReady();
+            publishVersionDaemon.runAfterLeaseValid();
         }
     }
 

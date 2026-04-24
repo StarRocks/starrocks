@@ -542,7 +542,12 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
         List<PhysicalPartition> physicalPartitions = new ArrayList<>();
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        // Intensive path: IS on DB + READ on this table. We only need table-scoped
+        // consistency here (partition walk on one known table plus a flag flip);
+        // DROP TABLE / DROP DATABASE both take DB WRITE which still conflict with
+        // IS, so the manual re-check below is still sufficient to detect a drop
+        // that committed before we acquired the lock.
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), table.getId()) == null) {
                 return false; // table might be dropped
@@ -554,11 +559,11 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     .forEach(physicalPartitions::addAll);
             table.setShardGroupChanged(false);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
 
         for (PhysicalPartition physicalPartition : physicalPartitions) {
-            locker.lockDatabase(db.getId(), LockType.READ);
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             try {
                 // schema change might replace the shards in the original shard group
                 if (table.getState() != OlapTable.OlapTableState.NORMAL) {
@@ -606,7 +611,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                     redundantGroupToShards.put(materializedIndex.getShardGroupId(), starmgrShardIdsSet);
                 }
             } finally {
-                locker.unLockDatabase(db.getId(), LockType.READ);
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
         }
 
@@ -640,7 +645,13 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             return;
         }
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
+        // Intensive path: IS on DB + READ on this table. Despite the "update" name,
+        // the call below only reads olapTable.getShardGroupIds(); the real mutation
+        // is of ColocateTableIndex's internal maps (guarded by its own writeLock)
+        // and external StarOS state via updateMetaGroup(). DROP TABLE / DROP DATABASE
+        // both take DB WRITE which still conflicts with IS, so the re-check below
+        // still detects a drop that committed before we acquired the lock.
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
             // check db and table again
             if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(db.getId()) == null) {
@@ -652,7 +663,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true /* isJoin */,
                     null /* expectGroupId */);
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
     }
 

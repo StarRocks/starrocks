@@ -27,6 +27,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.MvTaskRunContext;
@@ -118,29 +119,53 @@ public class MVPCTRefreshPlanBuilder {
                                                 PCellSetMapping refTableRefreshPartitions,
                                                 ConnectContext ctx) throws AnalysisException {
         Analyzer.analyze(insertStmt, ctx);
-        InsertStmt newInsertStmt = buildInsertPlan(insertStmt, mvToRefreshedPartitions, refTableRefreshPartitions, ctx);
-        return newInsertStmt;
+        return buildInsertPlan(insertStmt, mvToRefreshedPartitions, refTableRefreshPartitions, ctx);
     }
 
     private InsertStmt buildInsertPlan(InsertStmt insertStmt,
                                        PCellSortedSet mvToRefreshedPartitions,
                                        PCellSetMapping refTableRefreshPartitions,
                                        ConnectContext ctx) throws AnalysisException {
+        // Collect table relations once — used by pinned-TVR injection (all pinned batches) and by
+        // partition-predicate push-down (partitioned MVs only).
+        QueryStatement queryStatement = insertStmt.getQueryStatement();
+        Multimap<String, TableRelation> tableRelations = AnalyzerUtils.collectAllTableRelation(queryStatement);
+
+        // Pinned PCT mode: inject the frozen snapshot into every TableRelation whose base table
+        // is currently pinned. pinnedMap is populated by setupPinnedRangesIfNeeded only for
+        // IVM-supported connectors (i.e. those whose scan operator honors TvrVersionRange), so
+        // the get() call is self-gating — unsupported types return null. Needed for batch 1 too —
+        // the analyzer's getTable() may see a fresher instance than snapshotBaseTables if the
+        // connector cache refreshed between sync and analyze.
+        Map<String, TvrVersionRange> pinnedMap = mvContext.getRefreshRuntimeState().getPinnedTvrMap();
+        for (Map.Entry<String, TableRelation> entry : tableRelations.entries()) {
+            TableRelation relation = entry.getValue();
+            Table table = relation.getTable();
+            // An unresolved/dropped base table is handled as a controlled AnalysisException later
+            // in the ref-base-table path; skip here to preserve that error surface (and avoid NPE).
+            if (table == null) {
+                continue;
+            }
+            TvrVersionRange pinned = pinnedMap.get(table.getTableIdentifier());
+            if (pinned != null) {
+                relation.setTvrVersionRange(pinned);
+                logger.info("Inject pinned TVR {} into table relation {} for scan",
+                        pinned, table.getName());
+            }
+        }
+
         // if the refTableRefreshPartitions is empty(not partitioned mv), no need to generate partition predicate
         if (refTableRefreshPartitions.isEmpty() || mvToRefreshedPartitions.isEmpty()) {
             logger.info("There is no ref table partitions to refresh, skip to generate partition predicates");
             return insertStmt;
         }
 
-        // after analyze, we could get the table meta info of the tableRelation.
-        QueryStatement queryStatement = insertStmt.getQueryStatement();
         // try to push down into query relation so can push down filter into both sides
         // NOTE: it's safe here to push the partition predicate into query relation directly because
         // partition predicates always belong to the relation output expressions and can be resolved
         // by the query analyzer.
         QueryRelation queryRelation = queryStatement.getQueryRelation();
         List<Expr> extraPartitionPredicates = Lists.newArrayList();
-        Multimap<String, TableRelation> tableRelations = AnalyzerUtils.collectAllTableRelation(queryStatement);
         Map<Table, List<SlotRef>> refBaseTablePartitionSlots = mv.getRefBaseTablePartitionSlots();
         if (CollectionUtils.sizeIsEmpty(refBaseTablePartitionSlots)) {
             throw new AnalysisException(String.format("Materialized view %s.%s refresh failed: " +

@@ -62,6 +62,7 @@ import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.batchwrite.MergeCommitMetricRegistry;
 import com.starrocks.load.loadv2.JobState;
@@ -85,6 +86,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionMetricRegistry;
@@ -121,6 +123,16 @@ public final class MetricRepo {
     public static final String TABLET_MAX_COMPACTION_SCORE = "tablet_max_compaction_score";
     private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME = "iceberg_time_travel_query_total";
     private static final String ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC = "total iceberg time travel query";
+    private static final String PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_NAME = "plan_advisor_guide_generated_total";
+    private static final String PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_DESC =
+            "total generated plan advisor guides";
+    private static final String PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_NAME = "plan_advisor_guide_applied_total";
+    private static final String PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_DESC =
+            "total applied plan advisor guides";
+    private static final String PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_NAME =
+            "plan_advisor_optimization_duration_ms_total";
+    private static final String PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_DESC =
+            "total execution time saved by plan advisor in milliseconds";
 
     public static LongCounterMetric COUNTER_REQUEST_ALL;
     public static LongCounterMetric COUNTER_QUERY_ALL;
@@ -129,6 +141,7 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_QUERY_SUCCESS;
     public static LongCounterMetric COUNTER_SLOW_QUERY;
     public static LongCounterMetric COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL;
+    public static LongCounterMetric COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_PENDING;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TOTAL;
     public static LongCounterMetric COUNTER_QUERY_QUEUE_TIMEOUT;
@@ -143,6 +156,14 @@ public final class MetricRepo {
             new MetricWithLabelGroup<>("time_travel_type",
                     () -> new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
                             ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_PLAN_ADVISOR_GUIDE_GENERATED_TOTAL =
+            new MetricWithLabelGroup<>("operator_type",
+                    () -> new LongCounterMetric(PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            PLAN_ADVISOR_GUIDE_GENERATED_TOTAL_METRIC_DESC));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_PLAN_ADVISOR_GUIDE_APPLIED_TOTAL =
+            new MetricWithLabelGroup<>("operator_type",
+                    () -> new LongCounterMetric(PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_NAME, MetricUnit.REQUESTS,
+                            PLAN_ADVISOR_GUIDE_APPLIED_TOTAL_METRIC_DESC));
 
     // Per-catalog-type query counters
     public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_CATALOG_QUERY_TOTAL =
@@ -708,6 +729,11 @@ public final class MetricRepo {
         COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL = new LongCounterMetric(ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_NAME,
                 MetricUnit.REQUESTS, ICEBERG_TIME_TRAVEL_QUERY_TOTAL_METRIC_DESC);
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ICEBERG_TIME_TRAVEL_QUERY_TOTAL);
+        COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL = new LongCounterMetric(
+                PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_NAME,
+                MetricUnit.MILLISECONDS,
+                PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL_METRIC_DESC);
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_PLAN_ADVISOR_OPTIMIZATION_DURATION_MS_TOTAL);
         COUNTER_QUERY_QUEUE_PENDING = new LongCounterMetric("query_queue_pending", MetricUnit.REQUESTS,
                 "total pending query");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_QUERY_QUEUE_PENDING);
@@ -1056,6 +1082,36 @@ public final class MetricRepo {
             STARROCKS_METRIC_REGISTER.addMetric(tabletMaxCompactionScore);
 
         } // end for backends
+
+        if (!RunMode.isSharedDataMode()) {
+            return;
+        }
+        StarOSAgent starOsAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+
+        for (Long cnId : infoService.getComputeNodeIds(false)) {
+            ComputeNode cn = infoService.getComputeNode(cnId);
+            if (cn == null) {
+                continue;
+            }
+
+            // tablet number of each compute node
+            Metric<Long> tabletNum = new LeaderAwareGaugeMetricLong(TABLET_NUM,
+                    MetricUnit.NOUNIT, "tablet number") {
+                @Override
+                public Long getValueLeader() {
+                    ComputeNode cn = infoService.getComputeNode(cnId);
+                    if (cn == null) {
+                        return 0L;
+                    }
+                    String workerAddr = cn.getHost() + ":" + cn.getStarletPort();
+                    return starOsAgent.getWorkerTabletNum(workerAddr);
+                }
+            };
+            tabletNum.addLabel(new MetricLabel("backend",
+                    NetUtils.getHostPortInAccessibleFormat(cn.getHost(), cn.getHeartbeatPort())));
+            STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
+
+        } // end for compute nodes
     }
 
     public static void updateMemoryUsageMetrics() {

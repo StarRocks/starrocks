@@ -268,6 +268,10 @@ static StatusOr<MutableColumnPtr> cast_decimalv3_column(const Column& src_col, c
     return dst_col;
 }
 
+static bool is_string_like_type(LogicalType t) {
+    return t == TYPE_VARCHAR || t == TYPE_CHAR || t == TYPE_VARBINARY || t == TYPE_BINARY;
+}
+
 StatusOr<TypeDescriptor> VariantColumnMerger::choose_common_type(const TypeDescriptor& lhs, const TypeDescriptor& rhs) {
     if (lhs == rhs) {
         return lhs;
@@ -277,6 +281,11 @@ StatusOr<TypeDescriptor> VariantColumnMerger::choose_common_type(const TypeDescr
     }
     if (lhs.type == TYPE_ARRAY || rhs.type == TYPE_ARRAY) {
         return TypeDescriptor(TYPE_VARIANT);
+    }
+    // VARCHAR / CHAR / VARBINARY / BINARY all share the same physical BinaryColumn
+    // representation (raw bytes).  Treat them as compatible and keep the lhs type.
+    if (is_string_like_type(lhs.type) && is_string_like_type(rhs.type)) {
+        return lhs;
     }
     if (lhs.is_decimal_type() || rhs.is_decimal_type()) {
         if (lhs.is_decimalv3_type() && rhs.is_decimalv3_type()) {
@@ -303,6 +312,11 @@ StatusOr<MutableColumnPtr> VariantColumnMerger::cast_typed_column(const Column& 
                                                                   const TypeDescriptor& dst_type_desc,
                                                                   const cctz::time_zone& timezone) {
     if (src_type_desc == dst_type_desc) {
+        return src_col.clone();
+    }
+    // String-like types (VARCHAR/CHAR/VARBINARY/BINARY) share the same physical storage;
+    // no byte-level conversion is needed.
+    if (is_string_like_type(src_type_desc.type) && is_string_like_type(dst_type_desc.type)) {
         return src_col.clone();
     }
     if (dst_type_desc.type == TYPE_VARIANT) {

@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/spill/query_spill_manager.h"
+#include "exec/spill/operator_mem_resource_manager.h"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include "base/uid_util.h"
-#include "exec/spill/operator_mem_resource_manager.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
-class QuerySpillManagerTest : public ::testing::Test {
+class OperatorMemoryResourceManagerTest : public ::testing::Test {
 public:
     void SetUp() override { dummy_query_id = generate_uuid(); }
-
-    void TearDown() override {}
 
 protected:
     RuntimeState _dummy_state;
     TUniqueId dummy_query_id;
     GlobalSpillManager _global_mgr;
+    DirManager _dir_mgr;
 };
 
-TEST_F(QuerySpillManagerTest, test_inc) {
-    QuerySpillManager query_spill_manager_1(dummy_query_id, &_global_mgr);
+TEST_F(OperatorMemoryResourceManagerTest, test_inc) {
+    QuerySpillManager query_spill_manager_1(dummy_query_id, &_global_mgr, &_dir_mgr);
 
     OperatorMemoryResourceManager op_mem_res_mgr;
     op_mem_res_mgr.prepare(&query_spill_manager_1, true, true, 128);
@@ -55,8 +55,8 @@ TEST_F(QuerySpillManagerTest, test_inc) {
     EXPECT_EQ(_global_mgr.spill_expected_reserved_bytes(), 0);
 }
 
-TEST_F(QuerySpillManagerTest, test_low_memory_transition_is_idempotent) {
-    QuerySpillManager query_spill_manager(dummy_query_id, &_global_mgr);
+TEST_F(OperatorMemoryResourceManagerTest, test_low_memory_transition_is_idempotent) {
+    QuerySpillManager query_spill_manager(dummy_query_id, &_global_mgr, &_dir_mgr);
     OperatorMemoryResourceManager op_mem_res_mgr;
     op_mem_res_mgr.prepare(&query_spill_manager, false, true, 64);
 
@@ -66,7 +66,7 @@ TEST_F(QuerySpillManagerTest, test_low_memory_transition_is_idempotent) {
     EXPECT_FALSE(op_mem_res_mgr.enter_low_memory_mode());
 }
 
-TEST_F(QuerySpillManagerTest, test_compute_available_memory_bytes_matches_runtime_state) {
+TEST_F(OperatorMemoryResourceManagerTest, test_compute_available_memory_bytes_matches_runtime_state) {
     const size_t expected =
             std::min<size_t>(std::max<size_t>(_dummy_state.spill_mem_table_size() * _dummy_state.spill_mem_table_num(),
                                               _dummy_state.spill_operator_min_bytes()),

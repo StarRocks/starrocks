@@ -28,6 +28,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.lake.LakeAggregator;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.AggregateCompactRequest;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.proto.ComputeNodePB;
@@ -43,6 +44,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -180,7 +182,8 @@ public class CompactionSchedulerTest {
 
         new MockUp<CompactionScheduler>() {
             @Mock
-            protected long beginTransaction(PartitionIdentifier partition, ComputeResource computeResource) {
+            protected long beginTransaction(PartitionIdentifier partition, PhysicalPartition physicalPartition,
+                    ComputeResource computeResource) {
                 return 100L;
             }
 
@@ -763,5 +766,53 @@ public class CompactionSchedulerTest {
             // maxBytesPerSubtask is 0 (let BE use its own config)
             Assertions.assertEquals(0L, (long) req.parallelConfig.maxBytesPerSubtask);
         }
+    }
+
+    @Test
+    public void testBeginTransactionRegistersLoadedIndexes() throws Exception {
+        long dbId = 100L;
+        long tableId = 200L;
+        long partitionId = 300L;
+        long indexId = 400L;
+        long txnId = 500L;
+
+        // Create a PhysicalPartition with a visible index
+        MaterializedIndex baseIndex = new MaterializedIndex(indexId);
+        baseIndex.addTablet(new LakeTablet(1001L), null, false);
+        PhysicalPartition physicalPartition = new PhysicalPartition(partitionId, partitionId, baseIndex);
+
+        // Create a real TransactionState that will capture the loaded indexes
+        TransactionState txnState = new TransactionState(dbId, Lists.newArrayList(tableId),
+                txnId, "COMPACTION_test", null,
+                TransactionState.LoadJobSourceType.LAKE_COMPACTION,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"),
+                0, 60_000);
+
+        new Expectations() {
+            {
+                globalTransactionMgr.beginTransaction(dbId, (List<Long>) any, anyString,
+                        (TransactionState.TxnCoordinator) any,
+                        (TransactionState.LoadJobSourceType) any,
+                        anyLong, (ComputeResource) any);
+                result = txnId;
+
+                globalTransactionMgr.getTransactionState(dbId, txnId);
+                result = txnState;
+            }
+        };
+
+        CompactionScheduler scheduler = new CompactionScheduler(new CompactionMgr(), null,
+                globalTransactionMgr, globalStateMgr, "");
+
+        PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, tableId, partitionId);
+        long resultTxnId = scheduler.beginTransaction(partitionIdentifier, physicalPartition,
+                WarehouseManager.DEFAULT_RESOURCE);
+
+        Assertions.assertEquals(txnId, resultTxnId);
+
+        // Verify loaded indexes were registered
+        List<MaterializedIndex> loadedIndexes = txnState.getPartitionLoadedIndexes(tableId, physicalPartition);
+        Assertions.assertEquals(1, loadedIndexes.size());
+        Assertions.assertEquals(indexId, loadedIndexes.get(0).getId());
     }
 }

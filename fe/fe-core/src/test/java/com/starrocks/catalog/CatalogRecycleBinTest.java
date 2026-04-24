@@ -21,6 +21,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -53,7 +54,6 @@ import java.util.stream.Collectors;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
 public class CatalogRecycleBinTest {
@@ -80,13 +80,7 @@ public class CatalogRecycleBinTest {
     }
 
     private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
-        while (recycleBin.isDeletingTable(id)) {
-            recycleBin.eraseTable(time);
-            try {
-                Thread.sleep(100);
-            } catch (Exception ignore) {
-            }
-        }
+        // For shared-nothing mode, table deletion is synchronous, so this is a no-op.
     }
 
     private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
@@ -886,9 +880,9 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testAsyncDeleteForTablesMemoryLeak() {
-        // This test verifies the fix for memory leak in asyncDeleteForTables map
-        // Non-retryable tables should not be added to asyncDeleteForTables to prevent memory leak
+    public void testNonRetryableTableErasure() {
+        // This test verifies that non-retryable tables (shared-nothing mode) are erased synchronously
+        // and do not leak in any tracking data structures (lakeTableToPartitions, etc.)
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         long dbId = 1;
 
@@ -912,11 +906,6 @@ public class CatalogRecycleBinTest {
         recycleBin.idToRecycleTime.put(nonRetryableTable1.getId(), expireFromNow - 1000);
         recycleBin.idToRecycleTime.put(nonRetryableTable2.getId(), expireFromNow - 1000);
 
-        // Get asyncDeleteForTables map before erasure
-        java.util.Map<?, ?> asyncDeleteForTablesBefore =
-                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
-        int sizeBeforeErase = asyncDeleteForTablesBefore.size();
-
         // Trigger table erasure
         recycleBin.eraseTable(now);
         waitTableClearFinished(recycleBin, nonRetryableTable1.getId(), now);
@@ -926,25 +915,12 @@ public class CatalogRecycleBinTest {
         Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable1.getId()));
         Assertions.assertNull(recycleBin.getTable(dbId, nonRetryableTable2.getId()));
 
-        // CRITICAL: Verify asyncDeleteForTables map does NOT contain non-retryable tables
-        // This is the key assertion to verify the memory leak fix
-        java.util.Map<?, ?> asyncDeleteForTablesAfter =
-                Deencapsulation.getField(recycleBin, "asyncDeleteForTables");
-
-        // Non-retryable tables should never be added to asyncDeleteForTables
-        // So the size should remain the same (or even decrease if there were retryable tables before)
-        Assertions.assertTrue(asyncDeleteForTablesAfter.size() <= sizeBeforeErase,
-                "asyncDeleteForTables should not grow for non-retryable tables. " +
-                "Before: " + sizeBeforeErase + ", After: " + asyncDeleteForTablesAfter.size());
-
-        // Verify the map doesn't contain entries for our non-retryable tables
-        for (Object key : asyncDeleteForTablesAfter.keySet()) {
-            CatalogRecycleBin.RecycleTableInfo info = (CatalogRecycleBin.RecycleTableInfo) key;
-            Assertions.assertNotEquals(nonRetryableTable1.getId(), info.getTable().getId(),
-                    "Non-retryable table should not be in asyncDeleteForTables");
-            Assertions.assertNotEquals(nonRetryableTable2.getId(), info.getTable().getId(),
-                    "Non-retryable table should not be in asyncDeleteForTables");
-        }
+        // CRITICAL: Verify non-retryable tables are NOT tracked in lakeTableToPartitions
+        // Non-retryable tables should be deleted synchronously without any async tracking
+        java.util.Map<?, ?> lakeTableToPartitions =
+                Deencapsulation.getField(recycleBin, "lakeTableToPartitions");
+        Assertions.assertTrue(lakeTableToPartitions.isEmpty(),
+                "lakeTableToPartitions should be empty for non-retryable tables");
     }
 
     /**
@@ -1186,52 +1162,47 @@ public class CatalogRecycleBinTest {
     }
 
     @Test
-    public void testEraseRetryableTableFailureSetsNextEraseMinTime() {
-        long origTrashExpire = Config.catalog_trash_expire_second;
-        long origMinLatency = Config.catalog_recycle_bin_erase_min_latency_ms;
-        long origRetryInterval = Config.catalog_recycle_bin_erase_fail_retry_interval_ms;
-        try {
-            Config.catalog_trash_expire_second = 1L;
-            Config.catalog_recycle_bin_erase_min_latency_ms = 1000L;
-            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = 5000L;
+    public void testRemoveTableFromRecycleBinAlsoCleansLakeTableTracking() {
+        CatalogRecycleBin recycleBin = new CatalogRecycleBin();
+        long dbId = 1L;
+        long tableId = 111L;
+        long partitionId = 222L;
 
-            CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-            long dbId = 1;
+        // Use a LakeTable (cloud-native OlapTable) with the partition added, so that
+        // removeTableFromRecycleBin can find and clean up the partition via getAllPartitions().
+        Column k1 = new Column("k1", IntegerType.INT, true, null, "", "");
+        List<Column> columns = Lists.newArrayList(k1);
+        DistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        SinglePartitionInfo pInfo = new SinglePartitionInfo();
+        DataProperty dataProperty = new DataProperty(TStorageMedium.HDD);
+        pInfo.setDataProperty(partitionId, dataProperty);
+        pInfo.setReplicationNum(partitionId, (short) 1);
+        Partition partition = new Partition(partitionId, partitionId + 1, "p1", new MaterializedIndex(), null);
+        LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.AGG_KEYS, pInfo, distributionInfo);
+        table.addPartition(partition);
+        recycleBin.recycleTable(dbId, table, false);
 
-            // Create a retryable table (spy to override isDeleteRetryable)
-            Table table = spy(new Table(111, "retryable_t1", Table.TableType.OLAP, Lists.newArrayList()));
-            doReturn(true).when(table).isDeleteRetryable();
+        RecyclePartitionInfo partitionInfo =
+                new RecycleRangePartitionInfo(dbId, tableId, partition, null, dataProperty, (short) 1, null);
+        recycleBin.setPartitionInfo(partitionId, partitionInfo);
+        recycleBin.idToRecycleTime.put(partitionId, System.currentTimeMillis());
+        recycleBin.setDeleteFutureForPartition(partitionInfo, CompletableFuture.completedFuture(true));
 
-            // Recycle as non-recoverable
-            recycleBin.recycleTable(dbId, table, false);
+        java.util.Map<Long, java.util.Set<Long>> lakeTableToPartitions =
+                Deencapsulation.getField(recycleBin, "lakeTableToPartitions");
+        lakeTableToPartitions.put(tableId, Sets.newHashSet(partitionId));
 
-            // Set recycle time to be expired
-            long now = System.currentTimeMillis();
-            recycleBin.idToRecycleTime.put(table.getId(), now - 10000L);
+        List<CatalogRecycleBin.RecycleTableInfo> removed =
+                recycleBin.removeTableFromRecycleBin(Collections.singletonList(tableId));
+        Assertions.assertEquals(1, removed.size());
+        Assertions.assertEquals(tableId, removed.get(0).getTable().getId());
 
-            // Pre-set a completed future that returns false (simulates async delete failure)
-            CatalogRecycleBin.RecycleTableInfo tableInfo = recycleBin.getRecycleTableInfo(table.getId());
-            Assertions.assertNotNull(tableInfo);
-            recycleBin.setDeleteFutureForTable(tableInfo, CompletableFuture.completedFuture(false));
-
-            // Call eraseTable - should hit the failure retry path (lines 637-639)
-            // which calls setNextEraseMinTime (line 588)
-            recycleBin.eraseTable(now);
-
-            // Table should still exist in recycle bin (not erased due to failure)
-            Assertions.assertNotNull(recycleBin.getRecycleTableInfo(table.getId()),
-                    "Table should still be in recycle bin after failed erase");
-
-            // The recycle time should have been adjusted by setNextEraseMinTime
-            // so calling eraseTable again immediately should NOT trigger another erase attempt
-            long adjustedRecycleTime = recycleBin.idToRecycleTime.get(table.getId());
-            Assertions.assertTrue(adjustedRecycleTime > now - 10000L,
-                    "Recycle time should have been adjusted forward by setNextEraseMinTime");
-        } finally {
-            Config.catalog_trash_expire_second = origTrashExpire;
-            Config.catalog_recycle_bin_erase_min_latency_ms = origMinLatency;
-            Config.catalog_recycle_bin_erase_fail_retry_interval_ms = origRetryInterval;
-        }
+        Assertions.assertNull(recycleBin.getRecycleTableInfo(tableId));
+        Assertions.assertNull(recycleBin.getRecyclePartitionInfo(partitionId));
+        Assertions.assertFalse(recycleBin.isContainedInidToRecycleTime(partitionId));
+        Assertions.assertFalse(recycleBin.isPartitionFromTableDeletion(partitionId));
+        Assertions.assertFalse(recycleBin.isLakeTableDeletingInProgress(tableId));
+        Assertions.assertFalse(recycleBin.isDeletingPartition(partitionId));
     }
 
     @Test

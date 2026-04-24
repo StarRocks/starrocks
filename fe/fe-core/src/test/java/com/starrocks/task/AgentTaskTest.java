@@ -325,7 +325,7 @@ public class AgentTaskTest {
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
 
         Assertions.assertThrows(RuntimeException.class,
-                () -> Deencapsulation.invoke(TabletTaskExecutor.class, "sendCreateReplicaTasks", tasks, countDownLatch));
+                () -> Deencapsulation.invoke(TabletTaskExecutor.class, "sendCreateReplicaTasks", tasks, countDownLatch, false));
         Assertions.assertEquals(0, countDownLatch.getCount());
     }
 
@@ -348,7 +348,7 @@ public class AgentTaskTest {
 
         MarkedCountDownLatch<Long, Long> countDownLatch = new MarkedCountDownLatch<>(tasks.size());
         try {
-            Deencapsulation.invoke(TabletTaskExecutor.class, "sendCreateReplicaTasks", tasks, countDownLatch);
+            Deencapsulation.invoke(TabletTaskExecutor.class, "sendCreateReplicaTasks", tasks, countDownLatch, false);
         } catch (Exception e) {
             Assertions.assertTrue(e.getMessage().contains("Connection refused"));
             Assertions.assertEquals(0, countDownLatch.getCount());

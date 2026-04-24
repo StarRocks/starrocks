@@ -45,9 +45,9 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -79,18 +79,18 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
  * - Build an incremental refresh plan based on the changed version ranges of base tables.
  * - Execute the refresh plan to update the materialized view.
  */
-public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
+public final class MVIVMRefreshProcessor extends MVRefreshProcessor {
     // Per-call buffer: stores TVR deltas computed in getProcessExecPlan(), consumed in execProcessExecPlan().
     // NOT the editlog-persisted temp map (that is AsyncRefreshContext.tempBaseTableInfoTvrDeltaMap).
     private final Map<BaseTableInfo, TvrVersionRange> stagedTvrDeltaMap = Maps.newConcurrentMap();
     // whether the next task run is needed
     private boolean hasNextTaskRun = false;
 
-    public MVIVMBasedRefreshProcessor(Database db, MaterializedView mv,
-                                      MvTaskRunContext mvContext,
-                                      IMaterializedViewMetricsEntity mvEntity,
-                                      MaterializedView.RefreshMode refreshMode) {
-        super(db, mv, mvContext, mvEntity, refreshMode, MVIVMBasedRefreshProcessor.class);
+    public MVIVMRefreshProcessor(Database db, MaterializedView mv,
+                                 MvTaskRunContext mvContext,
+                                 IMaterializedViewMetricsEntity mvEntity,
+                                 MaterializedView.RefreshMode refreshMode) {
+        super(db, mv, mvContext, mvEntity, refreshMode, MVIVMRefreshProcessor.class);
     }
 
     @Override
@@ -101,7 +101,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
         // Reset per-call buffer to prevent accumulation across retries within the same task run
         // (processor instance is reused by retryProcessTaskRun).
         this.stagedTvrDeltaMap.clear();
-        syncAndCheckPCTPartitions(taskRunContext);
+        mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
 
         // collect change snapshots
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckChangedVersionRanges")) {
@@ -139,7 +139,7 @@ public final class MVIVMBasedRefreshProcessor extends BaseMVRefreshProcessor {
             try {
                 // IVM refreshes all changed partitions via TVR delta (not limited by partition_refresh_number),
                 // so pass skipBatchFilter=true to record complete PCT metadata without truncation.
-                updatePCTToRefreshMetas(taskRunContext, /* skipBatchFilter */ true);
+                mvPctRefreshSynchronizer.updatePCTToRefreshMetas(/* skipBatchFilter */ true);
             } catch (Exception e) {
                 // if the check failed, we should not throw exception here
                 // because this check only affects pct-based refresh rather than ivm-based mv refresh.

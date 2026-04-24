@@ -65,7 +65,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.concurrent.ExecutorService;
 
 public class HeartbeatMgrTest {
 
@@ -246,5 +248,22 @@ public class HeartbeatMgrTest {
                 Assertions.assertEquals(TRunMode.SHARED_DATA, masterInfo.getRun_mode());
             }
         };
+    }
+
+    @Test
+    public void testOnStoppedShutsDownAndClearsExecutor() throws Exception {
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        // start() lazy-inits the executor.
+        mgr.start();
+        Field execField = HeartbeatMgr.class.getDeclaredField("executor");
+        execField.setAccessible(true);
+        ExecutorService before = (ExecutorService) execField.get(mgr);
+        Assertions.assertNotNull(before, "executor must be initialized after start()");
+
+        // protected onStopped() is visible from the same package.
+        mgr.onStopped();
+
+        Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
+        Assertions.assertNull(execField.get(mgr), "executor reference must be nulled for re-init on next start()");
     }
 }

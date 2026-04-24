@@ -40,13 +40,15 @@ set(SPILL_CORE_FILES
     spill/log_block_manager.cpp
     spill/file_block_manager.cpp
     spill/hybird_block_manager.cpp
+    spill/query_spill_manager.cpp
+    spill/operator_mem_resource_manager.cpp
 )
 
 ADD_BE_LIB(SpillCore
     ${SPILL_CORE_FILES}
 )
 
-target_link_libraries(SpillCore PUBLIC FSCore IOCore Common Base Gutil StarRocksGen)
+target_link_libraries(SpillCore PUBLIC RuntimeCore FSCore IOCore Common Base Gutil StarRocksGen)
 
 set(PIPELINE_PRIMITIVES_SRCS
     pipeline/operator.cpp
@@ -78,8 +80,6 @@ set(PIPELINE_RUNTIME_SRCS
     pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
-    spill/operator_mem_resource_manager.cpp
-    spill/query_spill_manager.cpp
 )
 
 set(PIPELINE_ADAPTERS_SRCS
@@ -129,7 +129,6 @@ set(PIPELINE_OPERATORS_BATCH_SRCS
     pipeline/sink/olap_table_sink_operator.cpp
     pipeline/sink/result_sink_operator.cpp
     pipeline/sink/sink_io_buffer.cpp
-    pipeline/sink/table_function_table_sink_operator.cpp
     pipeline/sink/blackhole_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
@@ -396,6 +395,8 @@ set(EXEC_NON_PIPELINE_FILES
     workgroup/mem_tracker_manager.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
+    workgroup/lock_free_scan_task_queue.cpp
+    workgroup/lock_free_work_group_scan_task_queue.cpp
 )
 
 add_library(pipeline_primitives_exec_objs OBJECT

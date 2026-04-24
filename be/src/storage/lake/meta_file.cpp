@@ -793,15 +793,19 @@ Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, co
     }
     const auto& delvec_name = iter->second.name();
     RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache};
-    std::unique_ptr<RandomAccessFile> rf;
-    if (lake_io_opts.fs && lake_io_opts.location_provider) {
-        ASSIGN_OR_RETURN(rf,
-                         lake_io_opts.fs->new_random_access_file(
-                                 opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
-    } else {
-        ASSIGN_OR_RETURN(rf, fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+    {
+        TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+        std::unique_ptr<RandomAccessFile> rf;
+        if (lake_io_opts.fs && lake_io_opts.location_provider) {
+            ASSIGN_OR_RETURN(
+                    rf, lake_io_opts.fs->new_random_access_file(
+                                opts, lake_io_opts.location_provider->delvec_location(metadata.id(), delvec_name)));
+        } else {
+            ASSIGN_OR_RETURN(rf,
+                             fs::new_random_access_file(opts, tablet_mgr->delvec_location(metadata.id(), delvec_name)));
+        }
+        RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
     }
-    RETURN_IF_ERROR(rf->read_at_fully(delvec_page.offset(), buf.data(), delvec_page.size()));
     if (delvec_page.has_crc32c() && delvec_page.crc32c_gen_version() == delvec_page.version()) {
         // check crc32c
         uint32_t crc32c = crc32c::Value(buf.data(), delvec_page.size());

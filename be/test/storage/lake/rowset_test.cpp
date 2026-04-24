@@ -135,6 +135,43 @@ protected:
     std::shared_ptr<Schema> _schema;
 };
 
+// Rowset::data_size_after_deletion must never return a negative value. Before the fix,
+// a reshard child could inherit an inflated num_dels (the parent's full delvec
+// cardinality) while its num_rows was only its proportional share, so num_rows-num_dels
+// went negative and compaction tasks consumed a nonsense (int64 cast) data-size.
+TEST_F(LakeRowsetTest, test_data_size_after_deletion_clamps_negative_live_rows) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(next_id()); // TabletSchemaMap::emplace DCHECKs id != invalid_id()
+    schema->set_keys_type(DUP_KEYS);
+    auto* r = metadata->add_rowsets();
+    r->set_id(1);
+    r->set_num_rows(3);
+    r->set_data_size(300);
+    r->set_num_dels(10); // pathological: deletes > rows (post-split pre-fix pattern)
+
+    Rowset rs(_tablet_mgr.get(), metadata, 0, /*compaction_segment_limit=*/0);
+    EXPECT_EQ(0, rs.data_size_after_deletion());
+}
+
+// Sanity-check: when num_dels <= num_rows the formula keeps its original arithmetic.
+TEST_F(LakeRowsetTest, test_data_size_after_deletion_scales_by_live_fraction) {
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(next_id());
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(next_id()); // TabletSchemaMap::emplace DCHECKs id != invalid_id()
+    schema->set_keys_type(DUP_KEYS);
+    auto* r = metadata->add_rowsets();
+    r->set_id(1);
+    r->set_num_rows(10);
+    r->set_data_size(1000);
+    r->set_num_dels(4);
+
+    Rowset rs(_tablet_mgr.get(), metadata, 0, /*compaction_segment_limit=*/0);
+    EXPECT_EQ(600, rs.data_size_after_deletion());
+}
+
 TEST_F(LakeRowsetTest, test_load_segments) {
     create_rowsets_for_testing();
 

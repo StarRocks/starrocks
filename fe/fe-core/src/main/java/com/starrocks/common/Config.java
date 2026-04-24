@@ -784,6 +784,16 @@ public class Config extends ConfigBase {
     public static boolean start_with_incomplete_meta = false;
 
     /**
+     * Per-daemon timeout, in seconds, used by leader demotion when stopping leader-only daemons.
+     * Each daemon has up to this much time for its worker thread to exit after being interrupted.
+     * If the worker is still alive when the timeout elapses the JVM is terminated, because a
+     * stuck worker plus a later re-election would run two workers against the same singleton
+     * state - strictly worse than a process restart.
+     */
+    @ConfField(mutable = true)
+    public static int leader_demotion_drain_timeout_sec = 180;
+
+    /**
      * If true, non-leader FE will ignore the metadata delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
      * Non-leader FE will still offer read service.
@@ -1133,6 +1143,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
+
+    @ConfField(mutable = true, comment = "Max retry times for failed create tablet tasks in shared-data mode. " +
+            "Only explicitly failed tasks are retried (not timeouts). Set 0 to disable retry.")
+    public static int lake_create_tablet_max_retries = 1;
 
     /**
      * The thrift server max worker threads
@@ -2182,6 +2196,17 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String authentication_ldap_simple_bind_root_pwd = "";
+
+    /**
+     * The DN pattern for direct bind authentication for authentication_ldap_simple.
+     * Use ${USER} as a placeholder for the username.
+     * e.g. "uid=${USER},ou=People,dc=example,dc=com"
+     * Multiple patterns can be separated by semicolon, e.g. "uid=${USER},ou=A,dc=com;uid=${USER},ou=B,dc=com"
+     * When set, the system will skip the search step and directly bind with the constructed DN.
+     */
+    @ConfField(mutable = true, comment = "DN pattern for direct bind authentication; " +
+            "use ${USER} as username placeholder, multiple patterns separated by semicolon")
+    public static String authentication_ldap_simple_bind_dn_pattern = "";
 
     /**
      * For forward compatibility, will be removed later.
@@ -4102,6 +4127,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int lake_remove_partition_thread_num = 8;
 
+    /**
+     * The remove process of lake table has been unified with partition erase process.
+     * So this config is not needed, will be removed in the future.
+     */
+    @Deprecated
     @ConfField(mutable = false)
     public static int lake_remove_table_thread_num = 4;
 

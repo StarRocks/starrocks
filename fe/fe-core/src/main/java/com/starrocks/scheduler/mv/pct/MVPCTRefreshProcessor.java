@@ -34,15 +34,16 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
+import com.starrocks.scheduler.MVTaskRunProcessor;
 import com.starrocks.scheduler.MvTaskRunContext;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.scheduler.TaskRunContext;
-import com.starrocks.scheduler.mv.BaseMVRefreshProcessor;
 import com.starrocks.scheduler.mv.BaseTableSnapshotInfo;
 import com.starrocks.scheduler.mv.MVRefreshExecutor;
+import com.starrocks.scheduler.mv.MVRefreshProcessor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
@@ -69,15 +70,46 @@ import static com.starrocks.scheduler.TaskRun.MV_UNCOPYABLE_PROPERTIES;
 /**
  * PCT(Partition Change Tracking) based materialized view refresh processor which is designed to refresh materialized views
  * based on partition changes in the base tables.
- * MVPCTBasedRefreshProcessor is not thread safe for concurrent runs of the same materialized view
+ * MVPCTRefreshProcessor is not thread safe for concurrent runs of the same materialized view
  */
-public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
+public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
 
-    public MVPCTBasedRefreshProcessor(Database db, MaterializedView mv,
-                                      MvTaskRunContext mvContext,
-                                      IMaterializedViewMetricsEntity mvEntity,
-                                      MaterializedView.RefreshMode refreshMode) {
-        super(db, mv, mvContext, mvEntity, refreshMode, MVPCTBasedRefreshProcessor.class);
+    // One-shot callback invoked after syncAndCheckPCTPartitions and before plan building. Used by
+    // Hybrid fallback to freeze TVR so the pinned state is visible to the plan builder and differ.
+    private Runnable afterSyncHook;
+
+    // True when this is a subsequent pinned batch whose pinning owner has been overwritten by
+    // a newer job — we must SKIP to avoid touching the newer job's state.
+    //
+    // Gate on PINNED_REFRESH_JOB_ID to confirm the current run is actually a pinned batch.
+    // Without this, an unrelated partial refresh running while a prior pinning job's owner
+    // state has been left behind (e.g. failure/abort before final cleanup) would be falsely
+    // SKIPPED and its requested partitions would never refresh.
+    private boolean isStalePinnedBatch() {
+        if (mvRefreshParams.isCompleteRefresh()) {
+            return false;
+        }
+        if (mvContext.getProperties().get(TaskRun.PINNED_REFRESH_JOB_ID) == null) {
+            return false;
+        }
+        String owner = mv.getRefreshScheme().getAsyncRefreshContext().getTempTvrOwnerStartTaskRunId();
+        String startTaskRunId = getStartTaskRunId();
+        if (owner != null && !owner.equals(startTaskRunId)) {
+            logger.warn("Skip stale pinned batch: pinning owner={}, startTaskRunId={}", owner, startTaskRunId);
+            return true;
+        }
+        return false;
+    }
+
+    public MVPCTRefreshProcessor(Database db, MaterializedView mv,
+                                 MvTaskRunContext mvContext,
+                                 IMaterializedViewMetricsEntity mvEntity,
+                                 MaterializedView.RefreshMode refreshMode) {
+        super(db, mv, mvContext, mvEntity, refreshMode, MVPCTRefreshProcessor.class);
+    }
+
+    public void setAfterSyncHook(Runnable afterSyncHook) {
+        this.afterSyncHook = afterSyncHook;
     }
 
     @Override
@@ -97,12 +129,25 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
 
     @Override
     public ProcessExecPlan getProcessExecPlan(TaskRunContext taskRunContext) throws Exception {
+        if (isStalePinnedBatch()) {
+            return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
+        }
+
         // sync and check partitions of base tables
-        syncAndCheckPCTPartitions(taskRunContext);
+        mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
+
+        // Clear-before-run: if the hook throws, the field is still nulled out on retry.
+        final Runnable hook = this.afterSyncHook;
+        this.afterSyncHook = null;
+        if (hook != null) {
+            hook.run();
+        }
+
+        setupPinnedRangesIfNeeded();
 
         // check to refresh partitions of mv and base tables
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
-            updatePCTToRefreshMetas(taskRunContext);
+            mvPctRefreshSynchronizer.updatePCTToRefreshMetas(false);
             PCTRefreshScope refreshScope = mvContext.getRefreshScope();
             if (refreshScope == null || refreshScope.isEmpty()) {
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
@@ -174,7 +219,7 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
                     db.getFullName(), mv.getName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
-        PCTPredicateBuilder predicateBuilder = new PCTPredicateBuilder(mvRefreshPartitioner);
+        PCTPredicateBuilder predicateBuilder = new PCTPredicateBuilder(mvPctRefreshPartitioner);
         MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, predicateBuilder);
         try {
             // Analyze and prepare a partition & Rebuild insert statement by
@@ -371,6 +416,9 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         if (!Strings.isNullOrEmpty(prevStatus.getStartTaskRunId())) {
             nextProps.put(TaskRun.START_TASK_RUN_ID, prevStatus.getStartTaskRunId());
         }
+        if (isPinnedRefreshTaskRun(prevTaskRun) && !Strings.isNullOrEmpty(prevStatus.getStartTaskRunId())) {
+            nextProps.put(TaskRun.PINNED_REFRESH_JOB_ID, prevStatus.getStartTaskRunId());
+        }
 
         // Bump priority to HIGHER for continuation batches so a long refresh does not starve
         // behind newly arriving lower-priority tasks (matches the pre-refactor async path).
@@ -383,6 +431,15 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         return nextOption;
     }
 
+    private static boolean isPinnedRefreshTaskRun(TaskRun prevTaskRun) {
+        if (!(prevTaskRun.getProcessor() instanceof MVTaskRunProcessor)) {
+            return false;
+        }
+        MVRefreshProcessor refreshProcessor =
+                ((MVTaskRunProcessor) prevTaskRun.getProcessor()).getMVRefreshProcessor();
+        return refreshProcessor instanceof MVPCTRefreshProcessor && refreshProcessor.isPinnedMode();
+    }
+
     @VisibleForTesting
     public Map<Long, BaseTableSnapshotInfo> getSnapshotBaseTables() {
         return snapshotBaseTables;
@@ -393,28 +450,49 @@ public final class MVPCTBasedRefreshProcessor extends BaseMVRefreshProcessor {
         return new PCTTableSnapshotInfo(baseTableInfo, table);
     }
 
-    public MVPCTRefreshPartitioner getMvRefreshPartitioner() {
-        return mvRefreshPartitioner;
+    public MVPCTRefreshPartitioner getMvPctRefreshPartitioner() {
+        return mvPctRefreshPartitioner;
     }
 
     @Override
     public void updateVersionMeta(ExecPlan execPlan,
                                   PCellSortedSet mvRefreshedPartitions,
                                   Map<BaseTableSnapshotInfo, PCellSortedSet> refTableAndPartitionNames) {
-        // Only promote TVR checkpoint on the last batch. Intermediate batches pass empty map
-        // to avoid committing TVR before all partitions are refreshed.
-        Map<BaseTableInfo, TvrVersionRange> tvrMap;
-        if (mvContext.hasNextBatchPartition()) {
-            tvrMap = Maps.newHashMap();
-        } else {
-            tvrMap = mv.getRefreshScheme().getAsyncRefreshContext().getTempBaseTableInfoTvrDeltaMap();
+        final String startTaskRunId = getStartTaskRunId();
+        final boolean isLastBatch = !mvContext.hasNextBatchPartition();
+
+        // Promote TVR only on the last batch, and only when we still own the pending state — a
+        // newer job that overwrote the owner must not have its delta replaced by ours.
+        Map<BaseTableInfo, TvrVersionRange> tvrMap = Maps.newHashMap();
+        if (isLastBatch) {
+            MaterializedView.AsyncRefreshContext ctxBefore = mv.getRefreshScheme().getAsyncRefreshContext();
+            if (ownsPinningState(ctxBefore, startTaskRunId)) {
+                tvrMap = ctxBefore.getTempBaseTableInfoTvrDeltaMap();
+            } else {
+                logger.warn("Skip TVR promotion: pinning owner={}, startTaskRunId={}",
+                        ctxBefore.getTempTvrOwnerStartTaskRunId(), startTaskRunId);
+            }
         }
+        // updatePCTMeta swaps the refresh scheme on the MV via copy-on-write + editlog replay,
+        // so re-read AsyncRefreshContext after this call — the previous reference is detached.
         updatePCTMeta(execPlan, pctMVToRefreshedPartitions, pctRefTableRefreshPartitions, tvrMap);
-        // Clear temp map after the last batch promotes TVR, preventing stale data from being
-        // reused by subsequent unrelated refreshes (e.g., user-initiated partial refresh or
-        // explain-time planning that populates the temp map without executing).
-        if (!mvContext.hasNextBatchPartition()) {
-            mv.getRefreshScheme().getAsyncRefreshContext().clearTempBaseTableInfoTvrDeltaState();
+
+        // Clear only if we still own it (defence-in-depth behind the early-SKIP in
+        // getProcessExecPlan); otherwise a stale batch would wipe a newer job's pending state.
+        if (isLastBatch) {
+            MaterializedView.AsyncRefreshContext ctxAfter = mv.getRefreshScheme().getAsyncRefreshContext();
+            if (ownsPinningState(ctxAfter, startTaskRunId)) {
+                ctxAfter.clearTempBaseTableInfoTvrDeltaState();
+            } else {
+                logger.warn("Skip clearTempBaseTableInfoTvrDeltaState: pinning owner={}, startTaskRunId={}",
+                        ctxAfter.getTempTvrOwnerStartTaskRunId(), startTaskRunId);
+            }
         }
+    }
+
+    // True when the pinning slot is either unowned or owned by the current job — safe to mutate.
+    private static boolean ownsPinningState(MaterializedView.AsyncRefreshContext ctx, String startTaskRunId) {
+        String owner = ctx.getTempTvrOwnerStartTaskRunId();
+        return owner == null || owner.equals(startTaskRunId);
     }
 }

@@ -17,8 +17,12 @@
 namespace starrocks {
 
 static butil::DoublyBufferedData<TMasterInfo>* get_or_create_data() {
-    static butil::DoublyBufferedData<TMasterInfo> obj;
-    return &obj;
+    // Intentionally leaked: background threads (e.g. ReportOlapTableTaskWorkerPool)
+    // may still call get_master_info() during process shutdown. If this singleton
+    // were destroyed at exit, its internal TLS key would be invalidated to -1 and
+    // subsequent reads would fire the `Invalid id=-1` CHECK in butil.
+    static auto* obj = new butil::DoublyBufferedData<TMasterInfo>();
+    return obj;
 }
 
 static bool update(TMasterInfo& bg, const TMasterInfo& new_value) {

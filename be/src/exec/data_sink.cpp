@@ -68,7 +68,6 @@
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/pipeline/sink/olap_table_sink_operator.h"
 #include "exec/pipeline/sink/result_sink_operator.h"
-#include "exec/pipeline/sink/table_function_table_sink_operator.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
