@@ -79,4 +79,4 @@ function: assert_query_contains("show create table c", "DUPLICATE KEY(`k`, `v`)"
 create table c1 distributed by random as select * from t;
 function: assert_query_contains("show create table c1", "DUPLICATE KEY(`k`, `v`)", "DISTRIBUTED BY RANDOM")
 create table c2 distributed by random buckets 10 as select * from t;
-[UC] show create table c2;
+function: assert_query_contains("show create table c2", "DUPLICATE KEY(`k`, `v`)", "DISTRIBUTED BY RANDOM BUCKETS 10")
