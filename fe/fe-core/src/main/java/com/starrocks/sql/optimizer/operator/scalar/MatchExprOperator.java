@@ -33,6 +33,10 @@ public class MatchExprOperator extends ScalarOperator {
         this.matchOperator = matchOperator;
     }
 
+    public MatchExpr.MatchOperator getMatchOperator() {
+        return matchOperator;
+    }
+
     public MatchExprOperator(List<ScalarOperator> arguments) {
         super(OperatorType.MATCH_EXPR, Type.BOOLEAN);
         Preconditions.checkState(arguments.size() == 2);

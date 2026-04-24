@@ -19,7 +19,6 @@
 #include <memory>
 #include <vector>
 
-#include "base/string/slice.h"
 #include "storage/index/inverted/builtin/builtin_simple_analyzer.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/rowset/bitmap_index_reader.h"
