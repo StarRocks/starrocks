@@ -87,7 +87,7 @@ void NLJoinProbeOperator::_advance_join_stage(JoinStage stage) const {
     DCHECK_LE(_join_stage, stage) << "current=" << _join_stage << ", advance to " << stage;
     if (_join_stage != stage) {
         _join_stage = stage;
-        VLOG(3) << fmt::format("operator {} enter join_stage {}", _driver_sequence, stage);
+        VLOG(3) << fmt::format("operator {} enter join_stage {}", _driver_sequence, static_cast<int>(stage));
     }
 }
 
