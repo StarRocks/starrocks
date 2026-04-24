@@ -404,7 +404,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             for (CallOperator agg : aggregateExprs) {
                 if (agg.getColumnRefs().stream().map(ColumnRefOperator::getId)
                         .anyMatch(context.allStringColumns::contains)) {
-                    context.stringAggregateExprs.addAll(aggregateExprs);
+                    context.stringAggregateExprs.put(aggregateId, aggregateExprs);
                     context.allStringColumns.add(aggregateId);
                     break;
                 }
@@ -420,6 +420,24 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             info.inputStringColumns.intersect(alls);
             if (!info.isEmpty()) {
                 context.operatorDecodeInfo.put(operator, info);
+                if (operator instanceof PhysicalHashAggregateOperator hashAgg) {
+                    hashAgg.getAggregations().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
+                if (operator instanceof PhysicalWindowOperator window) {
+                    window.getAnalyticCall().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
+                if (operator instanceof PhysicalTopNOperator topN && topN.getPreAggCall() != null) {
+                    topN.getPreAggCall().keySet().forEach(agg -> {
+                        context.aggIdToSupportColumns.computeIfAbsent(agg.getId(), k -> new ColumnRefSet())
+                                .union(info.inputStringColumns);
+                    });
+                }
             }
         }
         // Filling context's structOpToFieldUseStringRefMap and structRefToFieldUseStringRefMap with fields in
