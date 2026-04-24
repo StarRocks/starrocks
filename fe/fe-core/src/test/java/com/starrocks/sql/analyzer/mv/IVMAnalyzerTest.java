@@ -14,19 +14,25 @@
 
 package com.starrocks.sql.analyzer.mv;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.scheduler.mv.ivm.MVIVMIcebergTestBase;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -106,6 +112,151 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
         assertTrue(result.isPresent(), "non-aggregate MV query must produce an IVM rewrite result");
         assertEquals(RowIdStrategy.AUTO_INCREMENT, result.get().rowIdStrategy(),
                 "non-aggregate MV over append-only Iceberg must yield AUTO_INCREMENT");
+    }
+
+    /**
+     * A non-aggregate incremental MV must be created as a PK table with an
+     * AUTO_INCREMENT {@code __ROW_ID__} column (strategy = AUTO_INCREMENT).
+     */
+    @Test
+    public void testNonAggregateIncrementalMvIsPrimaryKeyWithAutoIncrementRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_nonagg_pk "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_nonagg_pk");
+
+            // All incremental MVs are PK tables.
+            assertEquals(KeysType.PRIMARY_KEYS, mv.getKeysType(),
+                    "non-aggregate incremental MV must be a PRIMARY_KEYS table");
+
+            // __ROW_ID__ column: BIGINT, AUTO_INCREMENT, hidden, key, not null
+            Column rowIdCol = mv.getColumn(IvmOpUtils.COLUMN_ROW_ID);
+            assertNotNull(rowIdCol, "__ROW_ID__ column must exist on non-agg incremental MV");
+            assertEquals(IntegerType.BIGINT, rowIdCol.getType(),
+                    "__ROW_ID__ must be BIGINT for AUTO_INCREMENT strategy");
+            assertTrue(rowIdCol.isAutoIncrement(), "__ROW_ID__ must be AUTO_INCREMENT");
+            assertTrue(rowIdCol.isKey(), "__ROW_ID__ must be a PK column");
+            assertFalse(rowIdCol.isAllowNull(), "__ROW_ID__ must be NOT NULL");
+
+            // Strategy persisted on MV
+            assertEquals(RowIdStrategy.AUTO_INCREMENT, mv.getRowIdStrategy(),
+                    "non-aggregate MV must persist AUTO_INCREMENT strategy");
+        });
+    }
+
+    /**
+     * An aggregate incremental MV must also be a PK table but with QUERY_COMPUTED
+     * strategy — {@code __ROW_ID__} comes from the query's encode(group_by_keys)
+     * expression and is NOT AUTO_INCREMENT.
+     */
+    @Test
+    public void testAggregateIncrementalMvStillUsesQueryComputedRowId() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_agg_pk "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_agg_pk");
+
+            assertEquals(KeysType.PRIMARY_KEYS, mv.getKeysType(),
+                    "aggregate incremental MV must still be a PRIMARY_KEYS table");
+
+            Column rowIdCol = mv.getColumn(IvmOpUtils.COLUMN_ROW_ID);
+            assertNotNull(rowIdCol, "__ROW_ID__ must exist on aggregate incremental MV");
+            assertFalse(rowIdCol.isAutoIncrement(),
+                    "aggregate MV's __ROW_ID__ is QUERY_COMPUTED (encode), not AUTO_INCREMENT");
+
+            assertEquals(RowIdStrategy.QUERY_COMPUTED, mv.getRowIdStrategy(),
+                    "aggregate MV must persist QUERY_COMPUTED strategy");
+        });
+    }
+
+    /**
+     * Non-aggregate incremental MV (AUTO_INCREMENT): refresh SQL must use an explicit
+     * column list that omits {@code __ROW_ID__} so the storage engine auto-fills it.
+     */
+    @Test
+    public void testGetIVMTaskDefinitionOmitsAutoIncrementColumn() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_taskdef_nonagg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_taskdef_nonagg");
+            String sql = mv.getIVMTaskDefinition();
+
+            assertTrue(sql.startsWith("INSERT INTO `mv_taskdef_nonagg` ("),
+                    "must use explicit column list form, got: " + sql);
+            assertFalse(sql.contains("`" + IvmOpUtils.COLUMN_ROW_ID + "`"),
+                    "AUTO_INCREMENT __ROW_ID__ must NOT be in the column list, got: " + sql);
+            assertTrue(sql.contains("`id`") && sql.contains("`data`") && sql.contains("`date`"),
+                    "visible columns must all be in the column list, got: " + sql);
+        });
+    }
+
+    /**
+     * Aggregate incremental MV (QUERY_COMPUTED): refresh SQL uses positional form since
+     * the schema has no AUTO_INCREMENT columns; the query itself produces {@code __ROW_ID__}
+     * via encode(group_by_keys).
+     */
+    @Test
+    public void testGetIVMTaskDefinitionForQueryComputedUsesPositionalForm() throws Exception {
+        String ddl = "CREATE MATERIALIZED VIEW mv_taskdef_agg "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, SUM(c1) FROM `iceberg0`.`unpartitioned_db`.`t_numeric` GROUP BY id";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_taskdef_agg");
+            String sql = mv.getIVMTaskDefinition();
+
+            assertTrue(sql.startsWith("INSERT INTO `mv_taskdef_agg` "),
+                    "aggregate MV uses positional INSERT, got: " + sql);
+            assertFalse(sql.startsWith("INSERT INTO `mv_taskdef_agg` ("),
+                    "no explicit column list expected (no AUTO_INCREMENT columns), got: " + sql);
+            assertTrue(sql.contains(IvmOpUtils.COLUMN_ROW_ID),
+                    "__ROW_ID__ must appear in the SELECT alias (produced by encode), got: " + sql);
+        });
+    }
+
+    /**
+     * When user ORDER BY reorders the MV schema, the INSERT column list must still follow
+     * the query SELECT order (not the physical sort-key order). Otherwise refresh writes
+     * values into the wrong target columns (e.g. id's value into data's slot).
+     */
+    @Test
+    public void testGetIVMTaskDefinitionPreservesQueryOrderWhenReordered() throws Exception {
+        // Schema after PR-B + ORDER BY (data):
+        //   physical:          [__ROW_ID__ (PK), data (sort key), id, date]
+        //   query projection:  [id, data, date]
+        // Correct INSERT column list:  (id, data, date)  ← query SELECT order
+        // Buggy pre-fix would emit:    (data, id, date)  ← schema sort-key order
+        String ddl = "CREATE MATERIALIZED VIEW mv_reordered_nonagg "
+                + "ORDER BY (`data`) "
+                + "REFRESH DEFERRED MANUAL "
+                + "PROPERTIES (\"refresh_mode\" = \"incremental\") "
+                + "AS SELECT id, data, date FROM `iceberg0`.`unpartitioned_db`.`t0`";
+        starRocksAssert.withMaterializedView(ddl, () -> {
+            MaterializedView mv = getMv("test", "mv_reordered_nonagg");
+            String sql = mv.getIVMTaskDefinition();
+
+            assertTrue(sql.startsWith("INSERT INTO `mv_reordered_nonagg` ("),
+                    "must use explicit column list form, got: " + sql);
+            assertFalse(sql.contains("`" + IvmOpUtils.COLUMN_ROW_ID + "`"),
+                    "AUTO_INCREMENT __ROW_ID__ must NOT be in the column list, got: " + sql);
+
+            // All three user columns must appear; their relative order must match the
+            // SELECT list (id, then data, then date), not the physical schema order
+            // (which would put the sort key `data` first).
+            int idPos = sql.indexOf("`id`");
+            int dataPos = sql.indexOf("`data`");
+            int datePos = sql.indexOf("`date`");
+            assertTrue(idPos > 0 && dataPos > 0 && datePos > 0,
+                    "all three user columns must be in the list, got: " + sql);
+            assertTrue(idPos < dataPos && dataPos < datePos,
+                    "INSERT column list must be in SELECT order (id, data, date), got: " + sql);
+        });
     }
 
     // ── helpers ──────────────────────────────────────────────────────────────

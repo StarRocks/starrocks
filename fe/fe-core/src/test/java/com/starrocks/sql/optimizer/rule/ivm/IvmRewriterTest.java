@@ -199,6 +199,63 @@ public class IvmRewriterTest {
         Assertions.assertFalse(hasActionColumn, "__ACTION__ should be replaced by __op");
     }
 
+    /**
+     * Non-aggregate incremental MVs are PK tables, so
+     * {@code IvmRewriter.appendPkLoadOpColumn} runs for them too.
+     * Verify via the same mock-based plumbing: when the target MV has
+     * {@link KeysType#PRIMARY_KEYS}, the rewritten plan contains {@code __op}.
+     */
+    @Test
+    public void testNonAggregateIncrementalMvGetsOpColumn(@Mocked IcebergTable table,
+                                                           @Mocked MaterializedView targetMv,
+                                                           @Mocked InsertStmt insertStmt) {
+        mockIcebergTable(table);
+        new Expectations() {
+            {
+                insertStmt.getTargetTable();
+                result = targetMv;
+                minTimes = 0;
+
+                // Non-aggregate incremental MVs are also PRIMARY_KEYS.
+                targetMv.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+            }
+        };
+
+        ColumnRefFactory factory = new ColumnRefFactory();
+        OptimizerContext context = OptimizerFactory.mockContext(factory);
+        context.getSessionVariable().setEnableIVMRefresh(true);
+        context.setStatement(insertStmt);
+
+        ColumnRefOperator idRef = factory.create("id", IntegerType.INT, false);
+        ColumnRefOperator dataRef = factory.create("data", StringType.STRING, true);
+        OptExpression scan = newIcebergScan(factory, table, idRef, dataRef,
+                TvrTableDelta.of(TvrVersion.of(100L), TvrVersion.of(200L)));
+
+        OptExpression root = OptExpression.create(new LogicalTreeAnchorOperator(), scan);
+        deriveLogicalProperty(root);
+
+        TaskContext taskContext = newTaskContext(context);
+        TaskScheduler scheduler = new TaskScheduler();
+        ColumnRefSet requiredColumns = new ColumnRefSet();
+
+        IvmRewriter.rewrite(root, taskContext, scheduler, requiredColumns);
+
+        // Non-aggregate PK MV should have TopN → Project(__op) at the top, same as aggregate PK MV
+        OptExpression rewrittenChild = root.inputAt(0);
+        Assertions.assertTrue(rewrittenChild.getOp() instanceof LogicalTopNOperator,
+                "Non-aggregate PK MV should have TopN for DELETE-before-INSERT ordering");
+        OptExpression opProject = rewrittenChild.inputAt(0);
+        Assertions.assertTrue(opProject.getOp() instanceof LogicalProjectOperator);
+        LogicalProjectOperator opProjectOp = (LogicalProjectOperator) opProject.getOp();
+        // Should contain __op column
+        boolean hasOpColumn = opProjectOp.getColumnRefMap().keySet().stream()
+                .anyMatch(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        Assertions.assertTrue(hasOpColumn,
+                "Non-aggregate PK MV should have __op column (IvmRewriter.appendPkLoadOpColumn)");
+    }
+
     @Test
     public void testNoPkLoadOpColumnForDupKeysMv(@Mocked IcebergTable table,
                                                   @Mocked MaterializedView targetMv,

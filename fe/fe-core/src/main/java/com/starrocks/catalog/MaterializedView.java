@@ -72,6 +72,7 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SelectAnalyzer;
+import com.starrocks.sql.analyzer.mv.RowIdStrategy;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ParseNode;
@@ -84,6 +85,7 @@ import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.ivm.common.IvmOpUtils;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
@@ -879,11 +881,41 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public String getTaskDefinition() {
-        return String.format("insert overwrite `%s` %s", getName(), getMVQueryDefinedSql());
+        return formatInsertSql("insert overwrite");
     }
 
     public String getIVMTaskDefinition() {
-        return String.format("INSERT INTO `%s` %s", getName(), getMVQueryDefinedSql());
+        return formatInsertSql("INSERT INTO");
+    }
+
+    /**
+     * Build an INSERT SQL for this MV. Uses an explicit column list only when the schema
+     * has storage-filled columns (AUTO_INCREMENT) that the query doesn't produce. Otherwise
+     * uses positional form — matching pre-existing behavior for MVs with generated columns,
+     * which {@code InsertAnalyzer} rejects if listed explicitly.
+     */
+    private String formatInsertSql(String insertKeyword) {
+        String targetSpec = hasAutoIncrementColumn()
+                ? String.format("`%s` (%s)", getName(), queryProducedColumnList())
+                : String.format("`%s`", getName());
+        return String.format("%s %s %s", insertKeyword, targetSpec, getMVQueryDefinedSql());
+    }
+
+    /**
+     * Backtick-quoted schema columns in <strong>query projection order</strong>, excluding
+     * columns the storage engine fills in itself (AUTO_INCREMENT / generated). Sort-key
+     * reorder may permute schema order; the INSERT column list must still match the query's
+     * SELECT order so values line up correctly.
+     */
+    private String queryProducedColumnList() {
+        // getOrderedOutputColumns(true) returns query-output-order columns, already excluding
+        // generated (via baseSchemaWithoutGeneratedColumn) and AUTO_INCREMENT columns (which
+        // are marked NO_QUERY_OUTPUT in queryOutputIndices). Defensive !isAutoIncrement
+        // filter covers the identity-queryOutputIndices edge case.
+        return getOrderedOutputColumns(true).stream()
+                .filter(col -> !col.isAutoIncrement())
+                .map(col -> "`" + col.getName() + "`")
+                .collect(Collectors.joining(", "));
     }
 
     /**
@@ -1028,6 +1060,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setEncodeRowIdVersion(int encodeRowIdVersion) {
         this.encodeRowIdVersion = encodeRowIdVersion;
+    }
+
+    /** Derived from the schema: {@code null} for non-IVM MVs, otherwise based on {@code __ROW_ID__}'s auto-increment flag. */
+    public RowIdStrategy getRowIdStrategy() {
+        Column rowIdCol = getColumn(IvmOpUtils.COLUMN_ROW_ID);
+        if (rowIdCol == null) {
+            return null;
+        }
+        return rowIdCol.isAutoIncrement()
+                ? RowIdStrategy.AUTO_INCREMENT
+                : RowIdStrategy.QUERY_COMPUTED;
     }
 
     /**
@@ -1795,9 +1838,18 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
 
-        // NOTE: only output non-generated columns
-        // use ordered columns to keep the same order as the original create statement
-        List<Column> orderedColumns = getOrderedOutputColumns(true);
+        // NOTE: only output non-generated columns.
+        // Start with query-output order (preserves user's ORDER BY reorder effect), then
+        // append schema columns not produced by the query (e.g. AUTO_INCREMENT __ROW_ID__
+        // on non-aggregate IVM). Match the pre-existing behavior of showing hidden columns
+        // like __ROW_ID__ / __AGG_STATE__ in the DDL.
+        List<Column> orderedColumns = new ArrayList<>(getOrderedOutputColumns(true));
+        Set<String> alreadyIncluded = orderedColumns.stream()
+                .map(Column::getName)
+                .collect(Collectors.toSet());
+        getBaseSchemaWithoutGeneratedColumn().stream()
+                .filter(col -> !alreadyIncluded.contains(col.getName()))
+                .forEach(orderedColumns::add);
         for (Column column : orderedColumns) {
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
