@@ -110,7 +110,9 @@ static JNINativeMethod java_native_methods[] = {
 
 StatusOr<jobject> MapMeta::newLocalInstance(jobject keys, jobject values) const {
     JNIEnv* env = getJNIEnv();
-    return env->NewObject(immutable_map_class->clazz(), immutable_map_constructor, keys, values);
+    auto res = env->NewObject(immutable_map_class->clazz(), immutable_map_constructor, keys, values);
+    RETURN_ERROR_IF_JNI_EXCEPTION(env);
+    return res;
 }
 
 JVMFunctionHelper& JVMFunctionHelper::getInstance() {
@@ -240,6 +242,7 @@ void JVMFunctionHelper::_init() {
 
 jobjectArray JVMFunctionHelper::_build_object_array(jclass clazz, jobject* arr, int sz) {
     jobjectArray res_arr = _env->NewObjectArray(sz, _object_array_class, nullptr);
+    RETURN_IF_JNI_EXCEPTION(_env, "_build_object_array: NewObjectArray failed", nullptr);
     for (int i = 0; i < sz; ++i) {
         _env->SetObjectArrayElement(res_arr, i, arr[i]);
     }
@@ -324,8 +327,13 @@ jmethodID JVMFunctionHelper::getToStringMethod(jclass clazz) {
     return _env->GetMethodID(clazz, "toString", "()Ljava/lang/String;");
 }
 
-jstring JVMFunctionHelper::to_jstring(const std::string& str) {
-    return _env->NewStringUTF(str.c_str());
+StatusOr<jstring> JVMFunctionHelper::to_jstring(const std::string& str) {
+    auto res = _env->NewStringUTF(str.c_str());
+    if (UNLIKELY(res == nullptr)) {
+        _env->ExceptionClear();
+        return Status::InternalError(fmt::format("NewStringUTF failed for: {}", str));
+    }
+    return res;
 }
 
 jmethodID JVMFunctionHelper::getMethod(jclass clazz, const std::string& method, const std::string& sig) {
@@ -337,11 +345,14 @@ jmethodID JVMFunctionHelper::getStaticMethod(jclass clazz, const std::string& me
 }
 
 jobject JVMFunctionHelper::create_array(int sz) {
-    return _env->NewObjectArray(sz, _object_class, nullptr);
+    auto res = _env->NewObjectArray(sz, _object_class, nullptr);
+    RETURN_IF_JNI_EXCEPTION(_env, "create_array: NewObjectArray failed", nullptr);
+    return res;
 }
 
 jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nullable, DirectByteBuffer* buffs, int sz) {
     jobjectArray input_arr = _env->NewObjectArray(sz, _direct_buffer_class, nullptr);
+    RETURN_IF_JNI_EXCEPTION(_env, "create_boxed_array: NewObjectArray failed", nullptr);
     LOCAL_REF_GUARD(input_arr);
     for (int i = 0; i < sz; ++i) {
         _env->SetObjectArrayElement(input_arr, i, buffs[i].handle());
@@ -354,12 +365,14 @@ jobject JVMFunctionHelper::create_boxed_array(int type, int num_rows, bool nulla
 
 jobject JVMFunctionHelper::create_object_array(jobject o, int num_rows) {
     jobjectArray res_arr = _env->NewObjectArray(num_rows, _object_array_class, o);
+    RETURN_IF_JNI_EXCEPTION(_env, "create_object_array: NewObjectArray failed", nullptr);
     return res_arr;
 }
 
 jobject JVMFunctionHelper::batch_create_bytebuf(unsigned char* ptr, const uint32_t* offset, int begin, int end) {
     int size = end - begin;
     auto offsets = _env->NewIntArray(size + 1);
+    RETURN_IF_JNI_EXCEPTION(_env, "batch_create_bytebuf: NewIntArray failed", nullptr);
     _env->SetIntArrayRegion(offsets, 0, size + 1, (const int32_t*)offset);
     LOCAL_REF_GUARD(offsets);
     auto res = _env->CallStaticObjectMethod(_udf_helper_class, _batch_create_bytebuf, ptr, offsets, size);
@@ -473,9 +486,11 @@ DEFINE_NEW_BOX(double, double, Double, Double);
 
 jobject JVMFunctionHelper::newString(const char* data, size_t size) {
     auto bytesArr = _env->NewByteArray(size);
+    RETURN_IF_JNI_EXCEPTION(_env, "newString: NewByteArray failed", nullptr);
     LOCAL_REF_GUARD(bytesArr);
     _env->SetByteArrayRegion(bytesArr, 0, size, reinterpret_cast<const jbyte*>(data));
     jobject nstr = _env->NewObject(_string_class, _string_construct_with_bytes, bytesArr, _utf8_charsets);
+    RETURN_IF_JNI_EXCEPTION(_env, "newString: NewObject failed", nullptr);
     return nstr;
 }
 
@@ -548,9 +563,13 @@ StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
     // get default constructor
     jmethodID constructor = env->GetMethodID((jclass)_clazz.handle(), "<init>", "()V");
     if (constructor == nullptr) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
         return Status::InternalError("couldn't found default constructor for Java Object");
     }
     auto local_ref = env->NewObject((jclass)_clazz.handle(), constructor);
+    RETURN_ERROR_IF_JNI_EXCEPTION(env);
     LOCAL_REF_GUARD(local_ref);
     return env->NewGlobalRef(local_ref);
 }
@@ -560,9 +579,14 @@ StatusOr<jobject> JVMClass::newLocalInstance() const {
     // get default constructor
     jmethodID constructor = env->GetMethodID((jclass)_clazz.handle(), "<init>", "()V");
     if (constructor == nullptr) {
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        }
         return Status::InternalError("couldn't found default constructor for Java Object");
     }
-    return env->NewObject((jclass)_clazz.handle(), constructor);
+    auto res = env->NewObject((jclass)_clazz.handle(), constructor);
+    RETURN_ERROR_IF_JNI_EXCEPTION(env);
+    return res;
 }
 
 UDAFStateList::UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get,
@@ -625,36 +649,44 @@ Status ClassLoader::init() {
     std::string name = JVMFunctionHelper::to_jni_class_name(CLASS_LOADER_NAME);
     jclass clazz = env->FindClass(name.c_str());
     LOCAL_REF_GUARD(clazz);
-    _clazz = env->NewGlobalRef(clazz);
 
     if (clazz == nullptr) {
+        RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "ClassLoader Not Found");
         return Status::InternalError(fmt::format("ClassLoader Not Found: {}", CLASS_LOADER_NAME));
     }
+    _clazz = env->NewGlobalRef(clazz);
 
     jmethodID udf_loader_contructor = env->GetMethodID(clazz, "<init>", "(Ljava/lang/String;)V");
     if (udf_loader_contructor == nullptr) {
+        RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "ClassLoader constructor Not Found");
         return Status::InternalError("ClassLoader constructor Not Found");
     }
 
     // create class loader instance
     jstring jstr = env->NewStringUTF(_path.c_str());
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "couldn't create jstring for classloader path");
     LOCAL_REF_GUARD(jstr);
 
     auto handle = env->NewObject(clazz, udf_loader_contructor, jstr);
+    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "couldn't create classloader");
     LOCAL_REF_GUARD(handle);
     _handle = env->NewGlobalRef(handle);
 
-    RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "couldn't create classloader");
-
     // init method id
     _get_class = env->GetMethodID((jclass)_clazz.handle(), "findClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    if (_get_class == nullptr) {
+        RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "couldn't get findClass method for classloader");
+        return Status::InternalError("couldn't get findClass method for classloader");
+    }
+
     _get_call_stub =
             env->GetMethodID((jclass)_clazz.handle(), "generateCallStubV",
                              "(Ljava/lang/String;Ljava/lang/Class;Ljava/lang/reflect/Method;I)Ljava/lang/Class;");
 
     // init method
-    if (_get_class == nullptr || _get_call_stub == nullptr) {
-        return Status::InternalError("couldn't get method for classloader");
+    if (_get_call_stub == nullptr) {
+        RETURN_ERROR_IF_JNI_EXCEPTION_WITH_PREFIX(env, "couldn't get generateCallStubV method for classloader");
+        return Status::InternalError("couldn't get generateCallStubV method for classloader");
     }
 
     return Status::OK();
@@ -668,7 +700,7 @@ StatusOr<JVMClass> ClassLoader::getClass(const std::string& className) {
     // class Name java.lang.Object -> java/lang/Object
     std::string jni_class_name = JVMFunctionHelper::to_jni_class_name(className);
     // invoke class loader
-    jstring jstr_name = helper.to_jstring(jni_class_name);
+    ASSIGN_OR_RETURN(jstring jstr_name, helper.to_jstring(jni_class_name));
     LOCAL_REF_GUARD(jstr_name);
 
     auto loaded_clazz = env->CallObjectMethod(_handle.handle(), _get_class, jstr_name);
@@ -688,7 +720,7 @@ StatusOr<JVMClass> ClassLoader::genCallStub(const std::string& stubClassName, jc
     JNIEnv* env = helper.getEnv();
 
     std::string jni_class_name = JVMFunctionHelper::to_jni_class_name(stubClassName);
-    jstring jstr_name = helper.to_jstring(jni_class_name);
+    ASSIGN_OR_RETURN(jstring jstr_name, helper.to_jstring(jni_class_name));
     LOCAL_REF_GUARD(jstr_name);
 
     // generate call stub
@@ -725,7 +757,7 @@ Status ClassAnalyzer::has_method(jclass clazz, const std::string& method, bool* 
         return Status::InternalError("couldn't found hasMethod method");
     }
 
-    jstring method_name = helper.to_jstring(method.c_str());
+    ASSIGN_OR_RETURN(jstring method_name, helper.to_jstring(method.c_str()));
     LOCAL_REF_GUARD(method_name);
 
     *has = env->CallStaticBooleanMethod(class_analyzer, hasMethod, method_name, (jobject)clazz);
@@ -769,7 +801,7 @@ Status ClassAnalyzer::get_signature(jclass clazz, const std::string& method, std
         return Status::InternalError("couldn't found getSignature method");
     }
 
-    jstring method_name = helper.to_jstring(method.c_str());
+    ASSIGN_OR_RETURN(jstring method_name, helper.to_jstring(method.c_str()));
     LOCAL_REF_GUARD(method_name);
 
     jobject result_sign = env->CallStaticObjectMethod(class_analyzer, getSign, method_name, (jobject)clazz);
@@ -804,7 +836,7 @@ StatusOr<jobject> ClassAnalyzer::get_method_object(jclass clazz, const std::stri
     jmethodID getMethodObject = env->GetStaticMethodID(
             class_analyzer, "getMethodObject", "(Ljava/lang/String;Ljava/lang/Class;)Ljava/lang/reflect/Method;");
     DCHECK(getMethodObject);
-    jstring method_name = helper.to_jstring(method.c_str());
+    ASSIGN_OR_RETURN(jstring method_name, helper.to_jstring(method.c_str()));
     LOCAL_REF_GUARD(method_name);
 
     jobject method_object = env->CallStaticObjectMethod(class_analyzer, getMethodObject, method_name, (jobject)clazz);
