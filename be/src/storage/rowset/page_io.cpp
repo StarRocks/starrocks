@@ -323,7 +323,13 @@ static Status read_and_decompress_page_internal(const PageReadOptions& opts, Pag
     bool page_cache_available = (cache != nullptr) && cache->available();
 #endif
     PageCacheHandle cache_handle;
-    std::string cache_key = encode_cache_key(opts.read_file->filename(), opts.page_pointer.offset);
+    // For bundled-format segments, opts.page_pointer.offset is stream-relative (0-based within
+    // the slice). Two slices of the same physical file therefore produce identical
+    // (filename, page_pointer.offset) keys even though the pages live at different absolute
+    // byte ranges. Mix in the stream's bundle_file_offset so the key names the page's unique
+    // position in the physical file; non-bundled streams return 0 and the key is unchanged.
+    std::string cache_key = encode_cache_key(opts.read_file->filename(),
+                                             opts.read_file->bundle_file_offset() + opts.page_pointer.offset);
     if (opts.use_page_cache && page_cache_available && cache->lookup(cache_key, &cache_handle)) {
         return parse_page_from_cache(handle, body, footer, &cache_handle, opts);
     }

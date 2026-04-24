@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "cache/mem_cache/lrucache_engine.h"
 #include "cache/mem_cache/page_cache.h"
+#include "fs/bundle_file.h"
 #include "fs/fs_memory.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/bitshuffle_page.h"
@@ -307,6 +308,97 @@ TEST_F(PageIOTest, test_corrupted_cache) {
     PageFooterPB read_footer;
     Status s = PageIO::read_and_decompress_page(read_opts, &handle, &body, &read_footer);
     ASSERT_TRUE(s.is_corruption());
+}
+
+// Two slices of the same bundled data file must not collide in the page cache.
+//
+// Pre-fix, the page cache key was (filename, page_pointer.offset). page_pointer.offset is
+// stream-relative for BundleSeekableInputStream, so two slices at different bundle offsets
+// produced identical keys at equal intra-slice positions. A cross-boundary UPSERT that
+// packs multiple child tablets' writes into one physical file (and a subsequent MERGE that
+// collects those slices into one tablet) therefore made slice B return slice A's cached
+// bytes — silently duplicating slice A and erasing slice B from query results.
+//
+// Fix: mix in the stream's bundle_file_offset so the key names the page's unique absolute
+// position in the physical file. This test writes two distinct pages back-to-back into one
+// file, exposes them via BundleSeekableInputStream wrappers at offsets 0 and page_a_size,
+// and confirms a cache warm on slice A does not bleed into slice B.
+TEST_F(PageIOTest, test_bundle_slices_do_not_collide_in_page_cache) {
+    WritableFileOptions write_opts;
+    write_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
+    ASSIGN_OR_ASSERT_FAIL(auto write_file, _fs->new_writable_file(write_opts, "/test_bundle_slices"));
+
+    PagePointer result_a;
+    std::vector<int32_t> values_a{1, 2, 3};
+    OwnedSlice page_a = _build_data_page(values_a);
+    PageFooterPB footer_a = _build_page_footer(page_a.slice().size);
+    std::vector<Slice> page_a_body{page_a.slice()};
+    ASSERT_OK(PageIO::write_page(write_file.get(), page_a_body, footer_a, &result_a));
+    uint64_t slice_a_size = write_file->size();
+
+    PagePointer result_b;
+    std::vector<int32_t> values_b{10, 20, 30};
+    OwnedSlice page_b = _build_data_page(values_b);
+    PageFooterPB footer_b = _build_page_footer(page_b.slice().size);
+    std::vector<Slice> page_b_body{page_b.slice()};
+    ASSERT_OK(PageIO::write_page(write_file.get(), page_b_body, footer_b, &result_b));
+    ASSERT_OK(write_file->close());
+    const uint64_t slice_b_size = write_file->size() - slice_a_size;
+    ASSERT_GT(slice_a_size, 0u);
+    ASSERT_GT(slice_b_size, 0u);
+
+    ASSIGN_OR_ASSERT_FAIL(auto raw_a, _fs->new_random_access_file("/test_bundle_slices"));
+    ASSIGN_OR_ASSERT_FAIL(auto raw_b, _fs->new_random_access_file("/test_bundle_slices"));
+    auto slice_a = std::make_shared<BundleSeekableInputStream>(raw_a->stream(), /*offset=*/0, slice_a_size);
+    auto slice_b = std::make_shared<BundleSeekableInputStream>(raw_b->stream(),
+                                                               /*offset=*/slice_a_size, slice_b_size);
+    ASSERT_OK(slice_a->init());
+    ASSERT_OK(slice_b->init());
+
+    // Sanity: the two slices must report different bundle_file_offsets, otherwise the fix
+    // being tested is not even exercised.
+    ASSERT_EQ(slice_a->bundle_file_offset(), 0);
+    ASSERT_EQ(slice_b->bundle_file_offset(), static_cast<int64_t>(slice_a_size));
+
+    // Warm the cache with slice A's page at stream-relative offset 0.
+    PageReadOptions read_opts_a = _build_read_options(slice_a.get(), 0, slice_a_size, true);
+    {
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(read_opts_a, &handle, &body, &read_footer));
+    }
+    {
+        // second read is a cache hit on slice A
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(read_opts_a, &handle, &body, &read_footer));
+        ASSERT_EQ(_stats.cached_pages_num, 1);
+    }
+
+    // Now read slice B at stream-relative offset 0. The stream's bundle_file_offset is
+    // slice_a_size, so the key must differ from slice A's — otherwise this lookup hits slice
+    // A's cached bytes and decodes `{1,2,3}` instead of `{10,20,30}`.
+    PageReadOptions read_opts_b = _build_read_options(slice_b.get(), 0, slice_b_size, true);
+    const auto cached_before = _stats.cached_pages_num;
+    {
+        PageHandle handle;
+        Slice body;
+        PageFooterPB read_footer;
+        ASSERT_OK(PageIO::read_and_decompress_page(read_opts_b, &handle, &body, &read_footer));
+
+        // This must be a cache miss: the cache key included slice B's bundle offset.
+        ASSERT_EQ(_stats.cached_pages_num, cached_before);
+
+        // And the decoded bytes must be slice B's content, not slice A's.
+        BitShufflePageDecoder<TYPE_INT> decoder(body);
+        ASSERT_OK(decoder.init());
+        size_t size = 10;
+        Int32Column col;
+        ASSERT_OK(decoder.next_batch(&size, &col));
+        ASSERT_EQ(col.debug_string(), "[10, 20, 30]");
+    }
 }
 
 } // namespace starrocks

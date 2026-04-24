@@ -112,6 +112,12 @@ public:
     Status touch_cache(int64_t offset, size_t length) override;
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override;
 
+    // Base offset of this slice within the shared physical file. Consumers keyed on
+    // stream-relative offsets (e.g. the page cache) must mix this in; otherwise two
+    // different slices of the same physical file would collide on the same (filename,
+    // stream-offset) key.
+    int64_t bundle_file_offset() const override { return _offset; }
+
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;
     int64_t _offset = 0;

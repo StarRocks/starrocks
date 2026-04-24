@@ -89,6 +89,12 @@ public:
 
     virtual bool is_encrypted() const { return false; };
 
+    // Starting byte position of this stream within a shared underlying physical file.
+    // Zero for non-bundled streams. BundleSeekableInputStream overrides to return its slice
+    // base offset so that callers keyed on (filename, stream-relative offset) can convert to
+    // a globally unique (filename, absolute offset).
+    virtual int64_t bundle_file_offset() const { return 0; }
+
 protected:
     std::string _filename = "";
 };
@@ -144,6 +150,8 @@ public:
     bool is_encrypted() const override { return _impl->is_encrypted(); };
 
     Status touch_cache(int64_t offset, size_t length) override { return _impl->touch_cache(offset, length); }
+
+    int64_t bundle_file_offset() const override { return _impl->bundle_file_offset(); }
 
 private:
     SeekableInputStream* _impl;
