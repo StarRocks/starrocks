@@ -778,8 +778,6 @@ public class SecurityIntegrationTest {
         authenticationMgr.dropSecurityIntegration("valid_jwt", true);
         authenticationMgr.dropSecurityIntegration("full_jwt", true);
     }
-<<<<<<< HEAD
-=======
 
     /**
      * Test case: LDAP Security Integration with bind DN pattern
@@ -827,5 +825,4 @@ public class SecurityIntegrationTest {
         // Clean up
         authenticationMgr.replayDropSecurityIntegration("ldap_pattern");
     }
->>>>>>> adee4f37c5 ([Enhancement] Support LDAP direct bind authentication via DN pattern (#71559))
 }
