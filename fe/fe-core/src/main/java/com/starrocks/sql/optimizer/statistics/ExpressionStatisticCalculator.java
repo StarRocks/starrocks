@@ -744,7 +744,24 @@ public class ExpressionStatisticCalculator {
                     distinctValues = thenStat.getDistinctValuesCount() + elseStat.getDistinctValuesCount();
                     double minValue = Math.min(thenStat.getMinValue(), elseStat.getMinValue());
                     double maxValue = Math.max(thenStat.getMaxValue(), elseStat.getMaxValue());
+
+                    // Assume 50/50 distribution of true/false path
                     nullsFraction = (thenStat.getNullsFraction() + elseStat.getNullsFraction()) / 2;
+
+                    // If there are MCVs, we can compute null fractions weighted by condition's true/false distribution
+                    final var conditionHistogram = condStat.getHistogram();
+                    if (conditionHistogram != null && conditionHistogram.getMCV() != null) {
+                        final var conditionMcv = conditionHistogram.getMCV();
+                        final long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
+                        final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
+                        final long totalRows = trueRows + falseRows;
+                        if (totalRows > 0) {
+                            final double trueWeight = (double) trueRows / totalRows;
+                            final double falseWeight = (double) falseRows / totalRows;
+                            nullsFraction = thenStat.getNullsFraction() * trueWeight
+                                    + elseStat.getNullsFraction() * falseWeight;
+                        }
+                    }
 
                     final var histogram = buildIfMcv(condStat, thenStat, elseStat);
 
