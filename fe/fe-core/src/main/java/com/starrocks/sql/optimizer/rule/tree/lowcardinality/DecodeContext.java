@@ -378,7 +378,7 @@ class DecodeContext {
                 // This is result of an unnest operator on an ARRAY<VARCHAR>, we replace the type with INT so that
                 // backend doesn't get confused when creating dictionaries.
                 ColumnRefOperator ref = result.cast();
-                return new ColumnRefOperator(ref.getId(), IntegerType.INT, ref.getName(), ref.isNullable());
+                return new ColumnRefOperator(ref.getId(), Type.INT, ref.getName(), ref.isNullable());
             }
             return result;
         }
