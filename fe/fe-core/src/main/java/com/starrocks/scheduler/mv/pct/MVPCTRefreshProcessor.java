@@ -134,7 +134,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         }
 
         // sync and check partitions of base tables
-        syncAndCheckPCTPartitions(taskRunContext);
+        mvPctRefreshSynchronizer.syncAndCheckPCTPartitions();
 
         // Clear-before-run: if the hook throws, the field is still nulled out on retry.
         final Runnable hook = this.afterSyncHook;
@@ -147,7 +147,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
 
         // check to refresh partitions of mv and base tables
         try (Timer ignored = Tracers.watchScope("MVRefreshCheckMVToRefreshPartitions")) {
-            updatePCTToRefreshMetas(taskRunContext);
+            mvPctRefreshSynchronizer.updatePCTToRefreshMetas(false);
             PCTRefreshScope refreshScope = mvContext.getRefreshScope();
             if (refreshScope == null || refreshScope.isEmpty()) {
                 return new ProcessExecPlan(Constants.TaskRunState.SKIPPED, null, null);
@@ -219,7 +219,7 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
                     db.getFullName(), mv.getName(), Config.mv_refresh_try_lock_timeout_ms));
         }
 
-        PCTPredicateBuilder predicateBuilder = new PCTPredicateBuilder(mvRefreshPartitioner);
+        PCTPredicateBuilder predicateBuilder = new PCTPredicateBuilder(mvPctRefreshPartitioner);
         MVPCTRefreshPlanBuilder planBuilder = new MVPCTRefreshPlanBuilder(db, mv, mvContext, predicateBuilder);
         try {
             // Analyze and prepare a partition & Rebuild insert statement by
@@ -361,8 +361,8 @@ public final class MVPCTRefreshProcessor extends MVRefreshProcessor {
         return new PCTTableSnapshotInfo(baseTableInfo, table);
     }
 
-    public MVPCTRefreshPartitioner getMvRefreshPartitioner() {
-        return mvRefreshPartitioner;
+    public MVPCTRefreshPartitioner getMvPctRefreshPartitioner() {
+        return mvPctRefreshPartitioner;
     }
 
     @Override
