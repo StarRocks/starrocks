@@ -285,7 +285,7 @@ public class PublishVersionDaemonTest {
         };
 
         PublishVersionDaemon daemon = new PublishVersionDaemon();
-        daemon.runAfterCatalogReady();
+        daemon.runAfterLeaseValid();
 
         Assertions.assertEquals(2, finishedTxnIds.size());
         Assertions.assertTrue(finishedTxnIds.contains(txnId1));
@@ -335,7 +335,7 @@ public class PublishVersionDaemonTest {
 
         daemon.publishingTransactionIds = Sets.newConcurrentHashSet();
         daemon.publishingTransactionIds.add(txnId1);
-        daemon.runAfterCatalogReady();
+        daemon.runAfterLeaseValid();
 
         Assertions.assertEquals(0, finishedTxnIds.size());
 
@@ -383,7 +383,7 @@ public class PublishVersionDaemonTest {
         };
 
         PublishVersionDaemon daemon2 = new PublishVersionDaemon();
-        daemon2.runAfterCatalogReady();
+        daemon2.runAfterLeaseValid();
 
         Assertions.assertTrue(canTxnFinishedCallCount.get() > 0);
         Assertions.assertEquals(0, finishedTxnIds.size());
@@ -427,7 +427,7 @@ public class PublishVersionDaemonTest {
         };
 
         PublishVersionDaemon daemon3 = new PublishVersionDaemon();
-        daemon3.runAfterCatalogReady();
+        daemon3.runAfterLeaseValid();
 
         // Even if submission fails, publishingTransactionIds should be cleaned up
         Assertions.assertFalse(daemon3.publishingTransactionIds.contains(txnId1));
@@ -478,7 +478,7 @@ public class PublishVersionDaemonTest {
 
         PublishVersionDaemon daemon4 = new PublishVersionDaemon();
         // ERR_LOCK_ERROR is swallowed with an info log and retried next cycle — must not throw
-        Assertions.assertDoesNotThrow(daemon4::runAfterCatalogReady);
+        Assertions.assertDoesNotThrow(daemon4::runAfterLeaseValid);
         // finishTransaction must NOT have been invoked because tryFinishTransaction returned early
         Assertions.assertEquals(0, finishedTxnIds.size());
 
@@ -512,9 +512,9 @@ public class PublishVersionDaemonTest {
         };
 
         // The non-lock exception propagates from tryFinishTransaction, is caught as Throwable
-        // by the executor's catch block (LOG.error), so runAfterCatalogReady itself does not throw
+        // by the executor's catch block (LOG.error), so runAfterLeaseValid itself does not throw
         PublishVersionDaemon daemon5 = new PublishVersionDaemon();
-        Assertions.assertDoesNotThrow(daemon5::runAfterCatalogReady);
+        Assertions.assertDoesNotThrow(daemon5::runAfterLeaseValid);
         // finishTransaction was never reached because exception was thrown before it
         Assertions.assertEquals(0, finishedTxnIds.size());
     }
@@ -579,5 +579,75 @@ public class PublishVersionDaemonTest {
 
         Assertions.assertEquals(1, originalState.getPublishVersionTasks().size());
         Assertions.assertTrue(latestState.getPublishVersionTasks().isEmpty());
+    }
+
+    @Test
+    public void testOnStoppedReleasesExecutorsAndDedupSets() throws Exception {
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        // Force lazy init of both executors through their getters; getDeleteTxnLogExecutor is private.
+        ThreadPoolExecutor taskExec = daemon.getTaskExecutor();
+        ThreadPoolExecutor deleteExec =
+                (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertNotNull(taskExec);
+        Assertions.assertNotNull(deleteExec);
+
+        // Populate both dedup sets so we can verify onStopped() clears them.
+        Set<Long> publishing = Sets.newConcurrentHashSet();
+        publishing.add(42L);
+        FieldUtils.writeField(daemon, "publishingTransactionIds", publishing, true);
+        Set<Long> batchTable = Sets.newConcurrentHashSet();
+        batchTable.add(7L);
+        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", batchTable, true);
+
+        daemon.onStopped();
+
+        Assertions.assertTrue(taskExec.isShutdown(), "taskExecutor must be shut down");
+        Assertions.assertTrue(deleteExec.isShutdown(), "deleteTxnLogExecutor must be shut down");
+        Assertions.assertNull(FieldUtils.readField(daemon, "taskExecutor", true));
+        Assertions.assertNull(FieldUtils.readField(daemon, "deleteTxnLogExecutor", true));
+        Assertions.assertTrue(publishing.isEmpty(), "publishingTransactionIds must be cleared");
+        Assertions.assertTrue(batchTable.isEmpty(), "publishingLakeTransactionsBatchTableId must be cleared");
+    }
+
+    @Test
+    public void testOnStoppedTolerantOfNullExecutorsAndNullSets() throws Exception {
+        // Fresh instance: executors and dedup sets may both be null. onStopped must be no-op-safe.
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        FieldUtils.writeField(daemon, "taskExecutor", null, true);
+        FieldUtils.writeField(daemon, "deleteTxnLogExecutor", null, true);
+        FieldUtils.writeField(daemon, "publishingTransactionIds", null, true);
+        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", null, true);
+        Assertions.assertDoesNotThrow(daemon::onStopped);
+    }
+
+    @Test
+    public void testConfigRefreshListenersDoNotAccumulateAcrossStopCycles() throws Exception {
+        ConfigRefreshDaemon configDaemon = GlobalStateMgr.getCurrentState().getConfigRefreshDaemon();
+        @SuppressWarnings("unchecked")
+        List<?> listeners = (List<?>) FieldUtils.readField(configDaemon, "listeners", true);
+
+        PublishVersionDaemon daemon = new PublishVersionDaemon();
+        int before = listeners.size();
+        // First activation: both listeners get registered.
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "first getTaskExecutor + getDeleteTxnLogExecutor should register exactly two listeners");
+
+        // Simulate demote: executors are nulled so the next activation will recreate them.
+        daemon.onStopped();
+
+        // Re-activation: executors recreated, but listeners must not be registered again.
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "re-creating executors after onStopped must not leak additional listeners");
+
+        // And a third cycle stays stable.
+        daemon.onStopped();
+        daemon.getTaskExecutor();
+        MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        Assertions.assertEquals(before + 2, listeners.size(),
+                "listener count must stay stable across repeated demote/re-elect cycles");
     }
 }

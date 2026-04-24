@@ -784,6 +784,16 @@ public class Config extends ConfigBase {
     public static boolean start_with_incomplete_meta = false;
 
     /**
+     * Per-daemon timeout, in seconds, used by leader demotion when stopping leader-only daemons.
+     * Each daemon has up to this much time for its worker thread to exit after being interrupted.
+     * If the worker is still alive when the timeout elapses the JVM is terminated, because a
+     * stuck worker plus a later re-election would run two workers against the same singleton
+     * state - strictly worse than a process restart.
+     */
+    @ConfField(mutable = true)
+    public static int leader_demotion_drain_timeout_sec = 180;
+
+    /**
      * If true, non-leader FE will ignore the metadata delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
      * Non-leader FE will still offer read service.

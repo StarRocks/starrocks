@@ -117,7 +117,7 @@ public class LakeAggregatePublishTest {
                 Lists.newArrayList(), null);
 
         PublishVersionDaemon publishVersionDaemon = new PublishVersionDaemon();
-        publishVersionDaemon.runAfterCatalogReady();
+        publishVersionDaemon.runAfterLeaseValid();
 
         Assertions.assertTrue(waiter1.await(10, TimeUnit.SECONDS));
     }

@@ -24,6 +24,10 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TMasterResult;
+import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TStatusCode;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -99,5 +103,47 @@ public class LeaderImplTest {
 
         Assertions.assertEquals(new Replica(tabletId, backendId, -1, NORMAL), Deencapsulation.invoke(leader, "findRelatedReplica",
                 olapTable, physicalPartition, backendId, tabletId, indexId));
+    }
+
+    @Test
+    public void testReportTranslatesIllegalStateExceptionToNotMaster(@Mocked GlobalStateMgr globalStateMgr,
+                                                                     @Mocked ReportHandler reportHandler) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.isLeader();
+                result = true;
+                globalStateMgr.getReportHandler();
+                result = reportHandler;
+                reportHandler.handleReport((TReportRequest) any);
+                result = new IllegalStateException("leader lease invalidated");
+            }
+        };
+
+        TMasterResult result = leader.report(new TReportRequest());
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        Assertions.assertNotNull(result.getStatus().getError_msgs());
+        Assertions.assertEquals(1, result.getStatus().getError_msgs().size());
+        String msg = result.getStatus().getError_msgs().get(0);
+        Assertions.assertTrue(msg.contains("current fe is not master"), "error msg must include non-master marker, got: " + msg);
+        Assertions.assertTrue(msg.contains("leader lease invalidated"),
+                "error msg must propagate the IllegalStateException message, got: " + msg);
+    }
+
+    @Test
+    public void testReportRejectsWhenNotLeader(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.isLeader();
+                result = false;
+            }
+        };
+
+        TMasterResult result = leader.report(new TReportRequest());
+        Assertions.assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+        Assertions.assertEquals("current fe is not master", result.getStatus().getError_msgs().get(0));
     }
 }
