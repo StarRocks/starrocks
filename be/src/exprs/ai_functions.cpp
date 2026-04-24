@@ -208,3 +208,5 @@ StatusOr<ColumnPtr> AiFunctions::ai_query(FunctionContext* context, const starro
     return result.build(ColumnHelper::is_all_const(columns));
 }
 } // namespace starrocks
+
+#include "gen_cpp/opcode/AiFunctions.inc"
