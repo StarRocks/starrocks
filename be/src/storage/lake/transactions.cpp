@@ -44,18 +44,18 @@ ParallelSet<int64_t> tablet_txns;
 // the situation happens in create rollup.
 const int64_t EMPTY_TXNLOG_TXNID = -1;
 
-bool add_tablet(int64_t tablet_id) {
+} // namespace
+
+namespace starrocks::lake {
+
+bool acquire_publish_tablet(int64_t tablet_id) {
     auto [_, ok] = tablet_txns.insert(tablet_id);
     return ok;
 }
 
-void remove_tablet(int64_t tablet_id) {
+void release_publish_tablet(int64_t tablet_id) {
     tablet_txns.erase(tablet_id);
 }
-
-} // namespace
-
-namespace starrocks::lake {
 
 static void clear_remote_snapshot_async(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                         std::vector<std::string>* files_to_delete) {
@@ -198,13 +198,13 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         return new_metadata;
     }
 
-    if (!add_tablet(tablet_info.get_tablet_id_in_metadata())) {
+    if (!acquire_publish_tablet(tablet_info.get_tablet_id_in_metadata())) {
         return Status::ResourceBusy(
                 fmt::format("The previous publish version task for tablet {} has not finished. You can ignore this "
                             "error and the task will retry later.",
                             tablet_info.get_tablet_id_in_metadata()));
     }
-    DeferOp remove_tablet_txn([&] { remove_tablet(tablet_info.get_tablet_id_in_metadata()); });
+    DeferOp remove_tablet_txn([&] { release_publish_tablet(tablet_info.get_tablet_id_in_metadata()); });
 
     if (txns.size() > 1) {
         CHECK_EQ(new_version, base_version + txns.size());
