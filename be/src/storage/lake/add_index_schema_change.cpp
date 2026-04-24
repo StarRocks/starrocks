@@ -184,11 +184,41 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
                 // to drain, then report the submit error (which takes
                 // precedence over any task-level error we might collect).
                 (void)runner.wait();
+                cleanup_written_idx_files();
                 return submit_st;
             }
         }
     }
-    return runner.wait();
+    Status run_st = runner.wait();
+    if (!run_st.ok()) {
+        // Best-effort remove any .idx files already written by tasks that
+        // succeeded before the first failure. The caller (schema_change.cpp)
+        // will fall back to the legacy rewrite path; without this cleanup
+        // the orphan .idx files would sit on object storage until a later
+        // compaction or vacuum reclaims them, and could also confuse any
+        // tool that scans segment dirs.
+        cleanup_written_idx_files();
+    }
+    return run_st;
+}
+
+void AddIndexSchemaChange::cleanup_written_idx_files() {
+    std::vector<std::string> paths;
+    {
+        std::lock_guard<std::mutex> lg(_written_paths_mtx);
+        paths.swap(_written_paths);
+    }
+    for (const auto& p : paths) {
+        auto fs_or = FileSystemFactory::CreateSharedFromString(p);
+        if (!fs_or.ok()) {
+            LOG(WARNING) << "AddIndexSchemaChange cleanup: failed to resolve fs for " << p << ": " << fs_or.status();
+            continue;
+        }
+        auto st = (*fs_or)->delete_file(p);
+        if (!st.ok() && !st.is_not_found()) {
+            LOG(WARNING) << "AddIndexSchemaChange cleanup: failed to delete orphan .idx " << p << ": " << st;
+        }
+    }
 }
 
 Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset,
@@ -241,6 +271,14 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
         encryption_meta = std::move(pair.encryption_meta);
     }
     ASSIGN_OR_RETURN(auto wfile, fs::new_writable_file(wopts, idx_path));
+    // Track the .idx path so `run()` can delete it on failure. Recording
+    // happens right after the remote file is created — even a half-written
+    // payload occupies an S3 object that benefits from explicit cleanup on
+    // fallback, rather than waiting for vacuum to treat it as an orphan.
+    {
+        std::lock_guard<std::mutex> lg(_written_paths_mtx);
+        _written_paths.emplace_back(idx_path);
+    }
     IndexFileWriter idx_writer(std::move(wfile));
 
     // 3. For each index to build, locate the column, dispatch to the

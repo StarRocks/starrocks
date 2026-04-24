@@ -92,13 +92,23 @@ private:
     Status build_bloom_for_column(Segment* segment, const TabletColumn& column, IndexType index_type,
                                   const TabletIndexPB& ix, WritableFile* target_wfile, ColumnIndexMetaPB* out_meta);
 
+    // Best-effort remove every .idx file whose path we recorded in
+    // `_written_paths`. Called from `run()` when the overall build fails so
+    // we don't leak objects on S3 when the ADD INDEX fast path aborts and
+    // the caller falls back to the legacy rewrite path. Errors here are
+    // swallowed (logged): the cleanup is a courtesy, vacuum still reclaims
+    // these files later as orphans.
+    void cleanup_written_idx_files();
+
     TabletManager* _tablet_mgr;
     const int64_t _txn_id;
     VersionedTablet _base_tablet;
     VersionedTablet _new_tablet;
     std::vector<TabletIndexPB> _indexes_to_build;
     const int64_t _alter_version;
-    std::mutex _op_mtx; // protects concurrent writes to op_add_index.segment_entries
+    std::mutex _op_mtx;                      // protects concurrent writes to op_add_index.segment_entries
+    std::mutex _written_paths_mtx;           // protects _written_paths
+    std::vector<std::string> _written_paths; // absolute paths of .idx files created by build_idg_for_segment
 };
 
 } // namespace starrocks::lake
