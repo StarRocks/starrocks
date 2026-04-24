@@ -115,7 +115,19 @@ bool AggrAutoContext::is_low_reduction(const size_t agg_count, const size_t chun
 }
 
 Status init_udaf_context(int64_t fid, const std::string& url, const std::string& checksum, const std::string& symbol,
+<<<<<<< HEAD
                          FunctionContext* context);
+=======
+                         FunctionContext* context, const TCloudConfiguration& cloud_configuration,
+                         bool use_cache = false, bool* cache_hit_out = nullptr);
+
+int64_t Aggregator::get_two_level_threahold() {
+    if (config::two_level_memory_threshold < 0) {
+        return agg::two_level_memory_threshold;
+    }
+    return config::two_level_memory_threshold;
+}
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
 
 AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode) {
     auto params = std::make_shared<AggregatorParams>();
@@ -232,6 +244,7 @@ Status Aggregator::open(RuntimeState* state) {
     _has_udaf = std::any_of(_fns.begin(), _fns.end(),
                             [](const auto& ctx) { return ctx.binary_type == TFunctionBinaryType::SRJAR; });
     if (_has_udaf) {
+<<<<<<< HEAD
         auto promise_st = call_function_in_pthread(state, [this]() {
             for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
                 if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
@@ -239,6 +252,40 @@ Status Aggregator::open(RuntimeState* state) {
                     auto st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
                                                 _agg_fn_ctxs[i]);
                     RETURN_IF_ERROR(st);
+=======
+        auto& opts = state->query_options();
+        bool enable_cache = opts.__isset.enable_cache_udaf && opts.enable_cache_udaf;
+        auto promise_st = call_function_in_pthread(state, [this, enable_cache]() {
+            std::vector<int> attached_udaf_idx;
+            attached_udaf_idx.reserve(_agg_fn_ctxs.size());
+            for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
+                if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
+                    const auto& fn = _fns[i];
+                    // use_cache only when isolation is explicitly shared and enable_cache_udaf is set
+                    bool use_cache = enable_cache && fn.__isset.isolated && !fn.isolated;
+                    bool cache_hit = false;
+                    Status st;
+                    {
+                        SCOPED_TIMER(_agg_stat->udaf_load_timer);
+                        st = init_udaf_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                               _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                               use_cache ? &cache_hit : nullptr);
+                    }
+                    if (use_cache) {
+                        if (cache_hit) {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_hit_count, 1);
+                        } else {
+                            COUNTER_UPDATE(_agg_stat->udaf_cache_populate_count, 1);
+                        }
+                    }
+                    if (!st.ok()) {
+                        for (int idx : attached_udaf_idx) {
+                            destroy_java_udaf_context(_agg_fn_ctxs[idx]);
+                        }
+                        return st;
+                    }
+                    attached_udaf_idx.emplace_back(i);
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
                 }
             }
             return Status::OK();

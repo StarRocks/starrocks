@@ -320,7 +320,13 @@ public class CreateFunctionAnalyzer {
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType.getType()).objectFile(objectFile)
                 .isAnalyticFn(isAnalyticFn)
+<<<<<<< HEAD
                 .symbolName(mainClass.getCanonicalName());
+=======
+                .symbolName(mainClass.getCanonicalName())
+                .cloudConfiguration(cloudConfiguration)
+                .setIsolationType(!"shared".equalsIgnoreCase(isolation));
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;

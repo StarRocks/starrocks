@@ -49,7 +49,19 @@
 
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
+<<<<<<< HEAD
                                const std::string& symbol, FunctionContext* context);
+=======
+                               const std::string& symbol, FunctionContext* context,
+                               const TCloudConfiguration& cloud_configuration, bool use_cache,
+                               bool* cache_hit_out = nullptr);
+
+Analytor::~Analytor() {
+    if (_state != nullptr) {
+        close(_state);
+    }
+}
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
 
 Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                    const TupleDescriptor* result_tuple_desc, bool use_hash_based_partition)
@@ -302,6 +314,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
     _partition_search_timer = ADD_TIMER(_runtime_profile, "PartitionSearchTime");
     _peer_group_search_timer = ADD_TIMER(_runtime_profile, "PeerGroupSearchTime");
+    _udaf_load_timer = ADD_TIMER(_runtime_profile, "UdafLoadTime");
+    _udaf_cache_hit_count = ADD_COUNTER(_runtime_profile, "UdafCacheHitCount", TUnit::UNIT);
+    _udaf_cache_populate_count = ADD_COUNTER(_runtime_profile, "UdafCachePopulateCount", TUnit::UNIT);
 
     DCHECK_EQ(_result_tuple_desc->slots().size(), _agg_functions.size());
 
@@ -347,8 +362,29 @@ Status Analytor::open(RuntimeState* state) {
         for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
             if (_fns[i].binary_type == TFunctionBinaryType::SRJAR) {
                 const auto& fn = _fns[i];
+<<<<<<< HEAD
                 auto st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
                                                   _agg_fn_ctxs[i]);
+=======
+                auto& opts = _state->query_options();
+                bool use_cache =
+                        opts.__isset.enable_cache_udaf && opts.enable_cache_udaf && fn.__isset.isolated && !fn.isolated;
+                bool cache_hit = false;
+                Status st;
+                {
+                    SCOPED_TIMER(_udaf_load_timer);
+                    st = window_init_jvm_context(fn.fid, fn.hdfs_location, fn.checksum, fn.aggregate_fn.symbol,
+                                                 _agg_fn_ctxs[i], fn.cloud_configuration, use_cache,
+                                                 use_cache ? &cache_hit : nullptr);
+                }
+                if (use_cache) {
+                    if (cache_hit) {
+                        COUNTER_UPDATE(_udaf_cache_hit_count, 1);
+                    } else {
+                        COUNTER_UPDATE(_udaf_cache_populate_count, 1);
+                    }
+                }
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
                 RETURN_IF_ERROR(st);
             }
         }

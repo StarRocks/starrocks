@@ -139,12 +139,24 @@ Status UserFunctionCache::get_libpath(int64_t fid, const std::string& url, const
     return Status::OK();
 }
 
+<<<<<<< HEAD
 StatusOr<std::any> UserFunctionCache::load_cacheable_java_udf(
         int64_t fid, const std::string& url, const std::string& checksum,
         const std::function<StatusOr<std::any>(const std::string& path)>& loader) {
     UserFunctionCacheEntryPtr entry;
     RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, &entry, loader));
     return entry->cache_handle;
+=======
+StatusOr<std::pair<bool, std::any>> UserFunctionCache::load_cacheable_java_udf(
+        int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
+        const std::function<StatusOr<std::any>(const std::string& path)>& loader,
+        const TCloudConfiguration& cloud_configuration) {
+    UserFunctionCacheEntryPtr entry;
+    bool cache_hit = false;
+    RETURN_IF_ERROR(
+            _get_cache_entry(fid, url, checksum, function_type, &entry, loader, cloud_configuration, &cache_hit));
+    return std::make_pair(cache_hit, entry->cache_handle);
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
 }
 
 // Now we only support JAVA_UDF
@@ -206,7 +218,12 @@ Status UserFunctionCache::_load_cached_lib() {
 }
 template <class Loader>
 Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
+<<<<<<< HEAD
                                            UserFunctionCacheEntryPtr* output_entry, Loader&& loader) {
+=======
+                                           FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader,
+                                           const TCloudConfiguration& cloud_configuration, bool* cache_hit) {
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
     std::string suffix = ".unk";
     int type = get_function_type(url);
     if (type == UDF_TYPE_JAVA) {
@@ -229,7 +246,16 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
             _entry_map.emplace(fid, entry);
         }
     }
+<<<<<<< HEAD
     auto st = _load_cache_entry(url, entry, loader);
+=======
+
+    if (cache_hit != nullptr) {
+        *cache_hit = entry->is_loaded.load();
+    }
+
+    auto st = _load_cache_entry(url, entry, loader, cloud_configuration);
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
     if (!st.ok()) {
         LOG(WARNING) << "fail to load cache entry, fid=" << fid;
         // if we load a cache entry failed, I think we should delete this entry cache
@@ -294,7 +320,14 @@ Status UserFunctionCache::_load_cache_entry_internal(const std::string& url, Use
         return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}' or '{}'",
                                                 entry->function_type, url, JAVA_UDF_SUFFIX, PY_UDF_SUFFIX));
     }
-    entry->is_loaded.store(true);
+    // Only mark loaded when the loader populated a real cache handle.
+    // get_libpath uses a trivial loader that returns empty std::any{}; if we mark
+    // is_loaded=true there, a subsequent load_cacheable_java_udf for the same fid
+    // would skip building the shared context and return an empty handle, causing
+    // bad_any_cast at the call site.
+    if (entry->cache_handle.has_value()) {
+        entry->is_loaded.store(true);
+    }
     return Status::OK();
 }
 

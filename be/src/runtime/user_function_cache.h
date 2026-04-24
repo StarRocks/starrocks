@@ -74,19 +74,59 @@ public:
 
     static UserFunctionCache* instance();
 
+<<<<<<< HEAD
     Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, std::string* libpath);
     StatusOr<std::any> load_cacheable_java_udf(
             int64_t fid, const std::string& url, const std::string& checksum,
             const std::function<StatusOr<std::any>(const std::string& entry)>& loader);
 
     static int get_function_type(const std::string& url);
+=======
+    struct FunctionCacheDesc {
+        FunctionCacheDesc(int64_t fid_, const std::string& url_, const std::string& checksum_, FuncType function_type_,
+                          const TCloudConfiguration& conf)
+                : fid(fid_), url(url_), checksum(checksum_), function_type(function_type_), cloud_configuration(conf) {}
+
+        int64_t fid;
+        const std::string& url;
+        const std::string& checksum;
+        FuncType function_type;
+        TCloudConfiguration cloud_configuration;
+    };
+
+    Status get_libpath(const FunctionCacheDesc& desc, std::string* libpath) {
+        return get_libpath(desc.fid, desc.url, desc.checksum, desc.function_type, libpath, desc.cloud_configuration);
+    }
+
+    Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
+                       std::string* libpath, const TCloudConfiguration& cloud_configuration);
+
+    // Returns {cache_hit, value}. cache_hit=false means the loader was called (cache miss/populate).
+    StatusOr<std::pair<bool, std::any>> load_cacheable_java_udf(
+            const FunctionCacheDesc& desc, const std::function<StatusOr<std::any>(const std::string& entry)>& loader) {
+        return load_cacheable_java_udf(desc.fid, desc.url, desc.checksum, desc.function_type, loader,
+                                       desc.cloud_configuration);
+    }
+
+    // Returns {cache_hit, value}. cache_hit=false means the loader was called (cache miss/populate).
+    StatusOr<std::pair<bool, std::any>> load_cacheable_java_udf(
+            int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
+            const std::function<StatusOr<std::any>(const std::string& entry)>& loader,
+            const TCloudConfiguration& cloud_configuration);
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
 
 private:
     Status _load_cached_lib();
     Status _load_entry_from_lib(const std::string& dir, const std::string& file);
     template <class Loader>
+<<<<<<< HEAD
     Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
                             UserFunctionCacheEntryPtr* output_entry, Loader&& loader);
+=======
+    Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
+                            UserFunctionCacheEntryPtr* output_entry, Loader&& loader,
+                            const TCloudConfiguration& cloud_configuration, bool* cache_hit = nullptr);
+>>>>>>> 8c1e0cbb07 ([Enhancement] Cache UDAF for loading&initialize only once and re-use across queries (#72038))
     template <class Loader>
     Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
     Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);
