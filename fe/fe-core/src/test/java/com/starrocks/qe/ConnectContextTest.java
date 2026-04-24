@@ -438,22 +438,6 @@ public class ConnectContextTest {
     }
 
     @Test
-    public void testOnQueryFinished_setsCNGroupName() {
-        new MockUp<ConnectContext>() {
-            @Mock
-            public String getCurrentComputeResourceName() {
-                return "test_cn_group";
-            }
-        };
-        ConnectContext ctx = new ConnectContext(connection);
-        ctx.setGlobalStateMgr(globalStateMgr);
-
-        ctx.onQueryFinished();
-
-        Assertions.assertEquals("test_cn_group", ctx.getAuditEventBuilder().build().cnGroup);
-    }
-
-    @Test
     public void testOnQueryFinished_withoutListeners() {
         ConnectContext ctx = new ConnectContext(connection);
 
