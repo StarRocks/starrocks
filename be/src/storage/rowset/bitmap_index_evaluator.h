@@ -56,6 +56,8 @@ public:
 
     Status evaluate(SparseRange<>& dst_scan_range, PredicateTree& dst_pred_tree);
 
+    void reset() { _ctx = BitmapContext{}; }
+
     void close();
 
     bool has_bitmap_index() const { return _has_bitmap_index; }

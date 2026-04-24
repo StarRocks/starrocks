@@ -85,6 +85,7 @@ public:
     // should be read out and merged with the cache result, here from_version is cached version.
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
+    int64_t from_version() const { return _from_version; }
 
     void set_rowsets(const std::vector<BaseRowsetSharedPtr>& rowsets) { _rowsets = &rowsets; }
     void set_delta_rowsets(std::vector<BaseRowsetSharedPtr>&& delta_rowsets) {
@@ -159,6 +160,7 @@ public:
     ~ScanMorsel() override = default;
 
     TScanRange* get_scan_range() { return _scan_range.get(); }
+    const TScanRange* get_scan_range() const { return _scan_range.get(); }
 
     TInternalScanRange* get_olap_scan_range() { return &(_scan_range->internal_scan_range); }
 
@@ -172,6 +174,7 @@ public:
         _is_last_split = _split_context->is_last_split();
     }
     ScanSplitContext* get_split_context() { return _split_context.get(); }
+    const ScanSplitContext* get_split_context() const { return _split_context.get(); }
 
     bool has_owner_id() const { return _has_owner_id; }
     int32_t owner_id() const { return _owner_id; }
