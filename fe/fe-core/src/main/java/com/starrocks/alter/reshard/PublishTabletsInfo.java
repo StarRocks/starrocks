@@ -17,7 +17,9 @@ package com.starrocks.alter.reshard;
 import com.starrocks.proto.ReshardingTabletInfoPB;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /*
  * PublishTabletsInfo is for publish version
@@ -25,6 +27,15 @@ import java.util.List;
 public class PublishTabletsInfo {
     private final List<Long> tabletIds = new ArrayList<>();
     private final List<ReshardingTabletInfoPB> reshardingTablets = new ArrayList<>();
+
+    // A ReshardingTablet may be registered under every one of its old tablet
+    // ids (see MergeTabletJob.registerReshardingTablets). Iteration over
+    // partition tablets then calls addReshardingTablet multiple times for the
+    // same logical op. Dedupe by getIdentityKey() so each op is serialised
+    // into the wire request exactly once. Without this dedup, BE fan-outs
+    // parallel publish_resharding_tablet tasks that self-conflict on the
+    // per-reshard publish slot, leaving MERGE stuck in RUNNING.
+    private final Set<Long> addedReshardOpIds = new HashSet<>();
 
     public List<Long> getTabletIds() {
         return tabletIds;
@@ -39,7 +50,9 @@ public class PublishTabletsInfo {
     }
 
     public void addReshardingTablet(ReshardingTablet reshardingTablet) {
-        reshardingTablets.add(reshardingTablet.toProto());
+        if (addedReshardOpIds.add(reshardingTablet.getFirstNewTabletId())) {
+            reshardingTablets.add(reshardingTablet.toProto());
+        }
     }
 
     public List<Long> getOldTabletIds() {
