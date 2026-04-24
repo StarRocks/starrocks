@@ -25,6 +25,7 @@
 namespace starrocks::pipeline {
 
 void PipelineTimerTask::waitUtilFinished() {
+<<<<<<< HEAD
     if (_finished.load(std::memory_order_acquire)) {
         return;
     }
@@ -33,6 +34,9 @@ void PipelineTimerTask::waitUtilFinished() {
     while (!_finished) {
         _cv.wait(lock);
     }
+=======
+    _latch.wait();
+>>>>>>> 9db4424d96 ([BugFix] Fix PipelineTimerTask stuck in waitUtilFinished (#72058))
 }
 
 void PipelineTimerTask::unschedule(PipelineTimer* timer) {
