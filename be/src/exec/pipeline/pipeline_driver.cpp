@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <memory>
 #include <random>
 #include <sstream>
 
@@ -761,7 +762,11 @@ void PipelineDriver::_update_global_rf_timer() {
     if (!_runtime_state->enable_event_scheduler()) {
         return;
     }
+<<<<<<< HEAD
     auto timer = std::make_unique<RFScanWaitTimeout>(_fragment_ctx, true);
+=======
+    auto timer = std::make_shared<RFScanWaitTimeout>(true);
+>>>>>>> 9db4424d96 ([BugFix] Fix PipelineTimerTask stuck in waitUtilFinished (#72058))
     timer->add_observer(_runtime_state, &_observer);
     _global_rf_timer = std::move(timer);
     timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
