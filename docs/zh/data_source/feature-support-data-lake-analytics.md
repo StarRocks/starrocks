@@ -195,7 +195,9 @@ TEXT 格式的 Hive 表不支持 MAP 和 STRUCT 类型。
 
 StarRocks 从 v3.1.0 版本开始支持查询 Hive 视图。
 
-:::note 当 StarRocks 执行 Hive 视图的查询时，会尝试使用 StarRocks 和 Trino 的语法解析视图定义。如果 StarRocks 无法解析视图定义，将返回错误。使用 Hive 或 Spark 独有函数创建的 Hive 视图可能无法被 StarRocks 解析。
+:::note
+
+当 StarRocks 执行 Hive 视图的查询时，会尝试使用 StarRocks 和 Trino 的语法解析视图定义。如果 StarRocks 无法解析视图定义，将返回错误。使用 Hive 或 Spark 独有函数创建的 Hive 视图可能无法被 StarRocks 解析。
 
 :::
 
