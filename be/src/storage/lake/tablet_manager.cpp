@@ -188,6 +188,13 @@ std::string TabletManager::tablet_latest_metadata_cache_key(int64_t tablet_id) {
     return fmt::format("TL{}", tablet_id);
 }
 
+std::string TabletManager::segment_cache_key(const FileInfo& segment_info) {
+    if (segment_info.bundle_file_offset.has_value() && segment_info.bundle_file_offset.value() > 0) {
+        return fmt::format("{}#{}", segment_info.path, segment_info.bundle_file_offset.value());
+    }
+    return segment_info.path;
+}
+
 Status TabletManager::drop_local_cache(const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
     return fs->drop_local_cache(path);
@@ -1348,7 +1355,14 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     //       for example, in tablet X, segment `a` has segment id 10, if partial compaction happens,
     //                    in tablet X+1, segment `a` might still exists, but its actual id will not be 10.
     //       but in meta cache, segment `a` still has segment id 10, it is not changed.
-    auto segment = metacache()->lookup_segment(segment_info.path);
+    //
+    // A bundled data file can be referenced by multiple rowsets at different byte ranges
+    // (distinct bundle_file_offsets). The ranges contain different rows, so each must produce
+    // its own Segment bound to its own slice. Keying the cache on path alone would let the
+    // first-loaded slice be returned for every other offset, silently replacing later slices'
+    // data with the first one. Include bundle_file_offset in the key to keep slices distinct.
+    const std::string cache_key = segment_cache_key(segment_info);
+    auto segment = metacache()->lookup_segment(cache_key);
     if (segment == nullptr) {
         std::shared_ptr<FileSystem> fs;
         if (segment_info.fs) {
@@ -1360,7 +1374,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
         if (fill_meta_cache) {
             // NOTE: the returned segment may be not the same as the parameter passed in
             // Use the one in cache if the same key already exists
-            if (auto cached_segment = _metacache->cache_segment_if_absent(segment_info.path, segment);
+            if (auto cached_segment = _metacache->cache_segment_if_absent(cache_key, segment);
                 cached_segment != nullptr) {
                 segment = cached_segment;
             }

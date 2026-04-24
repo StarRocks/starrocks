@@ -290,6 +290,15 @@ public:
     // Return nullptr if not found.
     TabletSchemaPtr get_cached_schema(int64_t schema_id);
 
+    // Build the cache key used to insert/lookup a Segment in the metacache.
+    // Two rowsets in the same tablet can legitimately reference the same physical file at
+    // different byte ranges when the file was written in bundle format and later consolidated
+    // into one tablet (e.g. tablet MERGE collecting per-child slices of a cross-boundary
+    // UPSERT). Each slice must produce its own Segment, so the cache key includes the
+    // bundle offset. Regular (non-bundled) segments fall back to the path alone, preserving
+    // the pre-existing cache layout.
+    static std::string segment_cache_key(const FileInfo& segment_info);
+
 private:
     static std::string global_schema_cache_key(int64_t index_id);
     static std::string tablet_schema_cache_key(int64_t tablet_id);
