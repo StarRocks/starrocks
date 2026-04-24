@@ -447,7 +447,6 @@ public class ConnectContextTest {
         };
         ConnectContext ctx = new ConnectContext(connection);
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setCurrentComputeResource(WarehouseComputeResource.of(1L));
 
         ctx.onQueryFinished();
 
@@ -709,7 +708,6 @@ public class ConnectContextTest {
     public void testOnQueryFinished_getCNGroupNameFails(@Mocked WarehouseManager warehouseManager) {
         ConnectContext ctx = new ConnectContext(connection);
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setCurrentComputeResource(WarehouseComputeResource.of(1L));
 
         // Should not throw exception even if getting CN group name fails
         Assertions.assertDoesNotThrow(() -> ctx.onQueryFinished());
