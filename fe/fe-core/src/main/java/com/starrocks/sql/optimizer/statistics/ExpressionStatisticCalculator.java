@@ -109,7 +109,7 @@ public class ExpressionStatisticCalculator {
             operator.castTo(VarcharType.VARCHAR)
                     .map(ConstantOperator::toString)
                     .ifPresent(key -> {
-                        final var mcv = Collections.singletonMap(key, (long) rowCount);
+                        final var mcv = Collections.singletonMap(key, Math.round(rowCount));
                         builder.setHistogram(new Histogram(Collections.emptyList(), mcv));
                     });
 
