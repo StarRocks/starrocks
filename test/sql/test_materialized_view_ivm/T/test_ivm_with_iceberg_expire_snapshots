@@ -1,0 +1,189 @@
+-- name: test_ivm_with_iceberg_expire_snapshots
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog mv_iceberg_${uuid0};
+create database mv_ice_db_${uuid0};
+use mv_ice_db_${uuid0};
+
+-- Set history.expire.max-snapshot-age-ms = 1 (default is 5 days) so
+-- expire_snapshots can actually expire freshly created snapshots in
+-- this test. Without this override, all snapshots are younger than
+-- the default 5-day safety window and retain_last / older_than have
+-- no observable effect on MV anchor expiry.
+create table t1 (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt)
+properties ('history.expire.max-snapshot-age-ms' = '1');
+
+insert into t1 values
+  ('a', 1, '2023-12-01'), ('a', 2, '2023-12-01'),
+  ('b', 3, '2023-12-02'), ('b', 4, '2023-12-02'),
+  ('c', 5, '2023-12-03'), ('c', 6, '2023-12-03'),
+  ('d', 7, '2023-12-04'), ('d', 8, '2023-12-04');
+
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+
+set enable_materialized_view_rewrite = false;
+
+-- ==============================================================
+-- Part A: refresh_mode = "auto" — snapshot lifecycle scenarios
+-- Single aggregation MV reused across A1..A4.
+-- Note: count(col_int) is used instead of count(*) because IVM
+-- requires aggregate functions with combine semantics; count(*) would
+-- fail MV creation with "No matching function: count_combine()".
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "auto")
+AS SELECT dt, sum(col_int) AS sum_col_int, count(col_int) AS cnt
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   WHERE col_int > 3
+   GROUP BY dt;
+
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+
+-- --- A1: expire keeps the MV's anchor -> IVM chain unbroken ---
+-- Expected refreshMode sequence: PCT, INCREMENTAL, INCREMENTAL
+-- Note: First refresh is PCT (new MV baseline build); second is IVM
+-- (append-only); third runs after expire_snapshots but anchor is the
+-- latest snapshot so IVM chain is unbroken.
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- Second batch + refresh (append-only, still IVM)
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('e', 9, '2023-12-05');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- Expire all but latest snapshot; MV anchor IS the latest -> still valid
+ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(retain_last = 1);
+
+-- Next append: anchor preserved -> stays IVM
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('f', 10, '2023-12-06');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- --- A2: expire MV's anchor -> PCT fallback + IVM recovery ---
+-- Expected refreshMode sequence: PCT, INCREMENTAL
+-- Create multiple snapshots beyond the MV's current anchor
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('g', 11, '2023-12-07');
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('h', 12, '2023-12-08');
+
+-- Sleep so all snapshots age past history.expire.max-snapshot-age-ms=1
+shell: sleep 2
+-- retain_last=1 now keeps only the very latest snapshot; MV anchor is gone
+ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(retain_last = 1);
+
+-- Refresh must fall back to PCT
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- Next append: IVM should recover (anchor is now the post-PCT snapshot)
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('k', 13, '2023-12-11');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- --- A3: DELETE + expire + refresh — position delete lifecycle ---
+-- Expected refreshMode: PCT
+-- MV and base-table-direct aggregation must match after delete+expire.
+DELETE FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 WHERE col_int = 6;
+-- Expire older than latest snapshot's commit time (keeps the post-delete snapshot only).
+-- Using t1$snapshots metadata table to obtain the latest committed_at as a string.
+[UC]EXPIRE_CUTOFF=SELECT cast(max(committed_at) as string) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1$snapshots;
+ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(older_than = '${EXPIRE_CUTOFF}');
+
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+-- Cross-check MV vs direct aggregation on base table
+SELECT dt, sum(col_int) AS sum_col_int, count(*) AS cnt
+  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+  WHERE col_int > 3
+  GROUP BY dt ORDER BY dt;
+
+-- --- A4: older_than parameter variants ---
+-- Expected refreshMode sequence: INCREMENTAL, INCREMENTAL, PCT
+-- Return to clean IVM state after A3
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('l', 14, '2023-12-12');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+-- Capture MV's current anchor timestamp (committed_at of latest snapshot)
+[UC]ANCHOR_TS=SELECT cast(max(committed_at) as string) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1$snapshots;
+
+-- 4a: expire older_than = (anchor_ts - 1 hour) -> no-op, anchor preserved
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('m', 15, '2023-12-13');
+[UC]BEFORE_ANCHOR=SELECT cast(date_sub('${ANCHOR_TS}', interval 1 hour) as string);
+ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(older_than = '${BEFORE_ANCHOR}');
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+-- 4b: produce newer snapshots, then expire older_than = now() -> anchor gone, PCT
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('n', 16, '2023-12-14');
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('o', 17, '2023-12-15');
+-- Sleep so snapshots age past property threshold AND NOW_TS is strictly newer
+shell: sleep 2
+[UC]NOW_TS=SELECT cast(now() as string);
+ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(older_than = '${NOW_TS}', retain_last = 1);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT dt, sum_col_int, cnt FROM test_mv1 ORDER BY dt;
+
+DROP MATERIALIZED VIEW test_mv1;
+
+-- ==============================================================
+-- Part B: refresh_mode = "incremental" — expect FAILED when anchor expires
+-- ==============================================================
+CREATE MATERIALIZED VIEW test_mv2 PARTITION BY dt
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "incremental")
+AS SELECT dt, sum(col_int) AS sum_col_int, count(col_int) AS cnt
+   FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1
+   WHERE col_int > 3
+   GROUP BY dt;
+
+[UC]TASK_NAME2=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv2';
+
+-- Initial refresh succeeds as IVM
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+-- Produce newer snapshots, then expire the anchor
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('p', 18, '2023-12-16');
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values ('q', 19, '2023-12-17');
+-- Sleep so snapshots age past history.expire.max-snapshot-age-ms=1
+shell: sleep 2
+ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE expire_snapshots(retain_last = 1);
+
+-- Refresh must FAIL (incremental cannot handle expired anchor).
+-- The Iceberg connector surfaces this as "Starting snapshot ... is
+-- not a parent ancestor of end snapshot ..." because the MV's TVR
+-- anchor is no longer part of the current snapshot chain after
+-- expire_snapshots removed it.
+[UC]REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+SELECT ERROR_MESSAGE REGEXP '(not append-only|not a parent ancestor)' FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME2}' ORDER BY FINISH_TIME DESC LIMIT 1;
+
+DROP MATERIALIZED VIEW test_mv2;
+
+-- ==============================================================
+-- Cleanup
+-- ==============================================================
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+drop database db_${uuid0} force;
