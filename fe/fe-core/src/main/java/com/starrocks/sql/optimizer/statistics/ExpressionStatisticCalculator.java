@@ -36,6 +36,7 @@ import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigInteger;
 import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -737,20 +738,15 @@ public class ExpressionStatisticCalculator {
                 default:
                     return ColumnStatistic.unknown();
             }
-            return ColumnStatistic.builder()
+            final var builder = ColumnStatistic.builder()
                     .setMinValue(minValue)
                     .setMaxValue(maxValue)
                     .setNullsFraction(nullsFraction)
                     .setAverageRowSize(averageRowSize)
                     .setDistinctValuesCount(distinctValues)
-<<<<<<< HEAD
-                    .build();
-=======
                     .setCollectionSize(collectionSize);
             transformHistogramForBinary(callOperator, left, right).ifPresent(builder::setHistogram);
             return builder.build();
-
->>>>>>> 76174eb50d ([Enhancement] Add stats propagation for binary `array_map` (#70372))
         }
 
         private ColumnStatistic multiaryExpressionCalculate(CallOperator callOperator,
@@ -819,8 +815,6 @@ public class ExpressionStatisticCalculator {
                 return max.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) - min.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR) + 1;
             }
         }
-<<<<<<< HEAD
-=======
 
         /**
          * Only do histogram/MCV propagation when the transformation is definitely correct for value domain.
@@ -1218,6 +1212,5 @@ public class ExpressionStatisticCalculator {
             }
             return arrayStats.getDistinctValuesCount();
         }
->>>>>>> 76174eb50d ([Enhancement] Add stats propagation for binary `array_map` (#70372))
     }
 }

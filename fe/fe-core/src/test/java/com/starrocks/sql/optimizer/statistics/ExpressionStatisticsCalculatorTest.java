@@ -30,22 +30,14 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
-import com.starrocks.type.ArrayType;
-import com.starrocks.type.BooleanType;
-import com.starrocks.type.DateType;
-import com.starrocks.type.FloatType;
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.VarcharType;
->>>>>>> 76174eb50d ([Enhancement] Add stats propagation for binary `array_map` (#70372))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -857,14 +849,14 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testArrayMapWithDependentLambda() {
         // GIVEN
-        final var arrayCol = new ColumnRefOperator(1, ArrayType.ARRAY_INT, "arr", true);
-        final var lambdaArg = new ColumnRefOperator(10, IntegerType.INT, "x", true, true);
+        final var arrayCol = new ColumnRefOperator(1, Type.ARRAY_INT, "arr", true);
+        final var lambdaArg = new ColumnRefOperator(10, Type.INT, "x", true, true);
 
-        final var condition = new BinaryPredicateOperator(BinaryType.EQ, lambdaArg, ConstantOperator.createNull(IntegerType.INT));
-        final var nullConst = ConstantOperator.createNull(IntegerType.INT);
+        final var condition = new BinaryPredicateOperator(BinaryType.EQ, lambdaArg, ConstantOperator.createNull(Type.INT));
+        final var nullConst = ConstantOperator.createNull(Type.INT);
 
-        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.INT, Lists.newArrayList(condition, lambdaArg, nullConst));
-        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), ifOp, IntegerType.INT);
+        final var ifOp = new CallOperator(FunctionSet.IF, Type.INT, Lists.newArrayList(condition, lambdaArg, nullConst));
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), ifOp, Type.INT);
 
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(10_000) //
@@ -878,7 +870,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .build())
                 .build();
 
-        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
+        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, Type.ARRAY_INT,
                 Lists.newArrayList(lambda, arrayCol));
 
         // WHEN
@@ -897,14 +889,14 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testArrayMapWithIndependentLambda() {
         // GIVEN
-        final var arrayCol = new ColumnRefOperator(1, ArrayType.ARRAY_INT, "arr", true);
-        final var otherCol = new ColumnRefOperator(2, IntegerType.INT, "other", true);
+        final var arrayCol = new ColumnRefOperator(1, Type.ARRAY_INT, "arr", true);
+        final var otherCol = new ColumnRefOperator(2, Type.INT, "other", true);
         // Lambda argument 'x' is a separate ColumnRefOperator with isLambdaArgument=true.
-        final var lambdaArg = new ColumnRefOperator(10, IntegerType.INT, "x", true, true);
+        final var lambdaArg = new ColumnRefOperator(10, Type.INT, "x", true, true);
 
-        var addOp = new CallOperator(FunctionSet.ADD, IntegerType.INT,
-                Lists.newArrayList(otherCol, new ConstantOperator(1, IntegerType.INT)));
-        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), addOp, IntegerType.INT);
+        var addOp = new CallOperator(FunctionSet.ADD, Type.INT,
+                Lists.newArrayList(otherCol, new ConstantOperator(1, Type.INT)));
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArg), addOp, Type.INT);
 
         final var stats = Statistics.builder()
                 .setOutputRowCount(10_000) //
@@ -925,8 +917,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .build())
                 .build();
 
-
-        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
+        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, Type.ARRAY_INT,
                 Lists.newArrayList(lambda, arrayCol));
         // WHEN
         ColumnStatistic exprStats = ExpressionStatisticCalculator.calculate(arrayMap, stats);
@@ -946,15 +937,15 @@ public class ExpressionStatisticsCalculatorTest {
     @Test
     public void testArrayMapWithCaseWhenAndLambdaArgNotInStats() {
         // GIVEN
-        final var idCol = new ColumnRefOperator(3, IntegerType.INT, "ID", true);
-        final var arrayTestCol = new ColumnRefOperator(4, ArrayType.ARRAY_INT, "ARRAY_TEST", true);
-        final var lambdaArgX = new ColumnRefOperator(5, IntegerType.INT, "x", true, true);
+        final var idCol = new ColumnRefOperator(3, Type.INT, "ID", true);
+        final var arrayTestCol = new ColumnRefOperator(4, Type.ARRAY_INT, "ARRAY_TEST", true);
+        final var lambdaArgX = new ColumnRefOperator(5, Type.INT, "x", true, true);
 
         final var isNotNullPredicate = new IsNullPredicateOperator(true, idCol);
-        final var caseWhen = new CaseWhenOperator(IntegerType.INT, null, null,
+        final var caseWhen = new CaseWhenOperator(Type.INT, null, null,
                 Lists.newArrayList(isNotNullPredicate, lambdaArgX));
 
-        var lambda = new LambdaFunctionOperator(List.of(lambdaArgX), caseWhen, IntegerType.INT);
+        var lambda = new LambdaFunctionOperator(List.of(lambdaArgX), caseWhen, Type.INT);
 
         Statistics stats = Statistics.builder()
                 .setOutputRowCount(10_000)
@@ -975,7 +966,7 @@ public class ExpressionStatisticsCalculatorTest {
                         .build())
                 .build();
 
-        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, ArrayType.ARRAY_INT,
+        final var arrayMap = new CallOperator(FunctionSet.ARRAY_MAP, Type.ARRAY_INT,
                 Lists.newArrayList(lambda, arrayTestCol));
 
         // WHEN
