@@ -375,6 +375,15 @@ Status SchemaChangeHandler::process_alter_tablet(const TAlterTabletReqV2& reques
     // If the BE-side validation rejects (e.g. unsupported index column / type),
     // do_process_add_index_only falls back to the regular schema-change path
     // by calling do_process_alter_tablet from within itself.
+    //
+    // Guard against buggy callers setting both ADD and DROP flags on the
+    // same request. FE never does this, but silently preferring add over
+    // drop would hide the misuse; fail fast instead.
+    if (request.__isset.only_add_index && request.only_add_index && request.__isset.only_drop_index &&
+        request.only_drop_index) {
+        return Status::InvalidArgument(
+                "both only_add_index and only_drop_index are set on the same AlterTablet request");
+    }
     Status status;
     if (request.__isset.only_add_index && request.only_add_index) {
         status = do_process_add_index_only(request);
