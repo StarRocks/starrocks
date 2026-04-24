@@ -788,3 +788,72 @@ private:
 };
 
 } // namespace starrocks
+<<<<<<< HEAD:be/src/util/runtime_profile.h
+=======
+
+#if ENABLE_COUNTERS
+#define ADD_COUNTER(profile, name, type) \
+    (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type))
+#define ADD_COUNTER_SKIP_MERGE(profile, name, type, merge_type) \
+    (profile)->add_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type))
+#define ADD_TIMER(profile, name) \
+    (profile)->add_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS))
+#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) \
+    (profile)->add_counter(                                \
+            name, TUnit::TIME_NS,                          \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold))
+#define ADD_PEAK_COUNTER(profile, name, type) \
+    (profile)->AddHighWaterMarkCounter(name, type, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG))
+#define ADD_CHILD_COUNTER(profile, name, type, parent) \
+    (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type), parent)
+#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) \
+    (profile)->add_child_counter(name, type, RuntimeProfile::Counter::create_strategy(type, merge_type), parent)
+#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent)                                      \
+    (profile)->add_child_counter(                                                                                      \
+            name, type, RuntimeProfile::Counter::create_strategy(type, TCounterMergeType::MERGE_ALL, 0, min_max_type), \
+            parent)
+#define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) \
+    (profile)->add_child_counter(                                  \
+            name, TUnit::TIME_NS,                                  \
+            RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS, TCounterMergeType::MERGE_ALL, threshold), parent)
+#define ADD_CHILD_TIMER(profile, name, parent) \
+    (profile)->add_child_counter(name, TUnit::TIME_NS, RuntimeProfile::Counter::create_strategy(TUnit::TIME_NS), parent)
+#define ADD_DERIVED_COUNTER(profile, name, type, parent, ...) \
+    (profile)->add_derived_counter(name, type, __VA_ARGS__, parent)
+#define SCOPED_TIMER(c) ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c)
+#define CANCEL_SAFE_SCOPED_TIMER(c, is_cancelled) \
+    ScopedTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_TIMER, __COUNTER__)(c, is_cancelled)
+#define SCOPED_RAW_TIMER(c) ScopedRawTimer<MonotonicStopWatch> MACRO_CONCAT(SCOPED_RAW_TIMER, __COUNTER__)(c)
+#define COUNTER_UPDATE(c, v) CounterAccesser(c).update(v)
+#define COUNTER_SET(c, v) CounterAccesser(c).set(v)
+// this is only used for HighWaterMarkCounter
+#define COUNTER_ADD(c, v) CounterAccesser(c).add(v)
+#define COUNTER_VALUE(c) CounterAccesser(c).value()
+#define COUNTER_CURRENT_VALUE(c) (c)->current_value()
+#define ADD_THREAD_COUNTERS(profile, prefix) (profile)->add_thread_counters(prefix)
+#define SCOPED_THREAD_COUNTER_MEASUREMENT(c) \
+    /*ThreadCounterMeasurement                                        \
+      MACRO_CONCAT(SCOPED_THREAD_COUNTER_MEASUREMENT, __COUNTER__)(c)*/
+#else
+#define ADD_COUNTER(profile, name, type) (RuntimeProfile::Counter*)NULL
+#define ADD_TIMER(profile, name) (RuntimeProfile::Counter*)NULL
+#define ADD_TIMER_WITH_THRESHOLD(profile, name, threshold) (RuntimeProfile::Counter*)NULL
+#define SCOPED_TIMER(c)
+#define SCOPED_RAW_TIMER(c)
+#define COUNTER_UPDATE(c, v)
+#define COUNTER_SET(c, v)
+#define COUNTER_ADD(c, v)
+#define COUNTER_VALUE(c) 0
+#define COUNTER_CURRENT_VALUE(c) 0
+#define ADD_PEAK_COUNTER(profile, name, type) (RuntimeProfile::HighWaterMarkCounter*)NULL
+#define ADD_COUNTER_SKIP_MERGE(profile, name, type, merge_type) (RuntimeProfile::Counter*)NULL
+#define ADD_CHILD_COUNTER(profile, name, type, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_CHILD_COUNTER_SKIP_MERGE(profile, name, type, merge_type, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_CHILD_COUNTER_SKIP_MIN_MAX(profile, name, type, min_max_type, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_CHILD_TIMER(profile, name, parent) (RuntimeProfile::Counter*)NULL
+#define ADD_DERIVED_COUNTER(profile, name, type, parent, ...) (RuntimeProfile::DerivedCounter*)NULL
+#define ADD_THREAD_COUNTERS(profile, prefix) (RuntimeProfile::ThreadCounters*)NULL
+#define ADD_CHILD_TIMER_THESHOLD(profile, name, parent, threshold) (RuntimeProfile::Counter*)NULL
+#define SCOPED_THREAD_COUNTER_MEASUREMENT(c)
+#endif
+>>>>>>> bf13c46c37 ([Enhancement] Add `MemtableIOSpeed` metric (#69842)):be/src/common/runtime_profile.h
