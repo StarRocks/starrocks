@@ -654,8 +654,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
             // Mark this partition as coming from table deletion (also forces directory removal)
             recyclePartitionInfo.setFromTableDeletion(true);
 
-            // Add via helper to keep recycle-bin indexes (physicalPartitionIdToPartitionId) consistent
-            putPartitionToRecycleBin(recyclePartitionInfo);
+            idToPartition.put(partitionId, recyclePartitionInfo);
             // Use the table's recycle time to maintain consistency with ClusterSnapshot safety checks
             idToRecycleTime.put(partitionId, partitionRecycleTime);
             partitionIds.add(partitionId);
