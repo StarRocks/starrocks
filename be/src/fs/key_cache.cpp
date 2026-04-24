@@ -14,6 +14,7 @@
 
 #include "fs/key_cache.h"
 
+#include "base/format.h"
 #include "base/metrics.h"
 #include "base/url_coding.h"
 #include "base/utility/defer_op.h"

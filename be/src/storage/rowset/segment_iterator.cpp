@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
 #include "column/array_column.h"

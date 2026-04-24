@@ -41,6 +41,7 @@
 
 #include "base/bit/rle_encoding.h"
 #include "base/compression/block_compression.h"
+#include "base/format.h"
 #include "base/simd/simd.h"
 #include "base/string/faststring.h"
 #include "column/append_with_mask.h"

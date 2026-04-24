@@ -14,6 +14,7 @@
 
 #include "storage/binlog_file_writer.h"
 
+#include "base/format.h"
 #include "base/hash/crc32c.h"
 #include "base/path/filesystem_util.h"
 #include "fs/fs_factory.h"

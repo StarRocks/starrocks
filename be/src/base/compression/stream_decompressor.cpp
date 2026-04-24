@@ -35,6 +35,7 @@
 #include "base/compression/stream_decompressor.h"
 
 #include <bzlib.h>
+#include <fmt/compile.h>
 #include <glog/logging.h>
 #include <zlib.h>
 
@@ -46,7 +47,7 @@
 #include "base/compression/compression_context_pool_singletons.h"
 #include "base/compression/compression_headers.h"
 #include "base/compression/lzo_decompressor_registry.h"
-#include "fmt/compile.h"
+#include "base/format.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {

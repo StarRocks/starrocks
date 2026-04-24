@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/format.h"
+#include "base/format.h"
 
 
 auto fmt::formatter<starrocks::CompressionTypePB>::format(const starrocks::CompressionTypePB value, format_context& ctx) const -> format_context::iterator {
