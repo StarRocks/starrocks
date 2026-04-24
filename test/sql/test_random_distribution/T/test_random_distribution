@@ -52,7 +52,7 @@ select * from t join t2 on t.k = t2.k order by t.k, t2.v;
 create table t(k date, v int) partition by date_trunc('day', k);
 insert into t values('2023-02-14', 2),('2033-03-01',2);
 select * from t order by k;
-assert_query_contains("show create table t;", "PARTITION BY date_trunc('day', k)")
+function: assert_query_contains("show create table t;", "PARTITION BY date_trunc('day', k)")
 -- name: test_sync_mv
 create table t(k int, v int);
 create materialized view tv as select k, sum(v) from t group by k;

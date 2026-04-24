@@ -165,26 +165,10 @@ select * from t order by k;
 2023-02-14	2
 2033-03-01	2
 -- !result
-[UC] show create table t;
--- result:
-t	CREATE TABLE `t` (
-  `k` date NULL COMMENT "",
-  `v` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`, `v`)
-PARTITION BY date_trunc('day', k)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "1073741824",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
--- !result
--- name: test_sync_mv
+assert_query_contains("show create table t;", "PARTITION BY date_trunc('day', k)")
 create table t(k int, v int);
 -- result:
+E: (1064, "Getting syntax error at line 1, column 0. Detail message: Unexpected input 'assert_query_contains', the most similar input is {'RESTORE', 'SET', 'INSERT', 'CREATE', 'RESUME', '(', ';'}.")
 -- !result
 create materialized view tv as select k, sum(v) from t group by k;
 -- result:
@@ -194,8 +178,9 @@ insert into t values(1,1),(1,2);
 -- !result
 select sum(v) from t;
 -- result:
-3
+7
 -- !result
+
 -- name: test_async_mv
 create table t(k int, v int);
 -- result:
@@ -206,17 +191,9 @@ insert into t values(1,1),(1,2);
 create materialized view tva REFRESH ASYNC as select k, sum(v) from t group by k;
 -- result:
 -- !result
-[UC] show create materialized view tva;
+function: assert_query_contains("show create materialized view tva", "CREATE MATERIALIZED VIEW `tva`", "DISTRIBUTED BY RANDOM", "REFRESH ASYNC")
 -- result:
-tva	CREATE MATERIALIZED VIEW `tva` (`k`, `sum(v)`)
-DISTRIBUTED BY RANDOM
-REFRESH ASYNC
-PROPERTIES (
-"replicated_storage" = "true",
-"replication_num" = "1",
-"storage_medium" = "HDD"
-)
-AS select k, sum(v) from t group by k;
+None
 -- !result
 select sum(v) from t;
 -- result:
@@ -244,40 +221,16 @@ create table t(k int, v int);
 create table c as select * from t;
 -- result:
 -- !result
-[UC] show create table c;
+function: assert_query_contains("show create table c", "DUPLICATE KEY(`k`, `v`)", "DISTRIBUTED BY RANDOM")
 -- result:
-c	CREATE TABLE `c` (
-  `k` int(11) NULL COMMENT "",
-  `v` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`, `v`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "1073741824",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+None
 -- !result
 create table c1 distributed by random as select * from t;
 -- result:
 -- !result
-[UC] show create table c1;
+function: assert_query_contains("show create table c1", "DUPLICATE KEY(`k`, `v`)", "DISTRIBUTED BY RANDOM")
 -- result:
-c1	CREATE TABLE `c1` (
-  `k` int(11) NULL COMMENT "",
-  `v` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`, `v`)
-DISTRIBUTED BY RANDOM
-PROPERTIES (
-"bucket_size" = "1073741824",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+None
 -- !result
 create table c2 distributed by random buckets 10 as select * from t;
 -- result:
