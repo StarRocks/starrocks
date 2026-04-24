@@ -729,6 +729,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：LDAP サーバーがユーザーの認証情報の検索を開始する基底 DN。
 - 導入時期：-
 
+### `authentication_ldap_simple_bind_dn_pattern`
+
+- デフォルト：Empty string
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：直接バインド認証用の DN パターン。ユーザー名のプレースホルダーとして `${USER}` を使用します。パターンは有効な LDAP Distinguished Name（DN）を生成する必要があります。`${USER}@domain` のような UPN 形式はサポートされていません。例：`uid=${USER},ou=People,dc=example,dc=com`。複数のパターンをセミコロンで区切ることができ、システムは成功するまで順番に試行します。設定すると検索ステップがスキップされ、構築された DN で直接バインド認証が行われます。
+
 ### `authentication_ldap_simple_bind_root_dn`
 
 - デフォルト：Empty string

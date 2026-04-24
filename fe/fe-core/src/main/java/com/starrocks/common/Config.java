@@ -2183,6 +2183,17 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_root_pwd = "";
 
     /**
+     * The DN pattern for direct bind authentication for authentication_ldap_simple.
+     * Use ${USER} as a placeholder for the username.
+     * e.g. "uid=${USER},ou=People,dc=example,dc=com"
+     * Multiple patterns can be separated by semicolon, e.g. "uid=${USER},ou=A,dc=com;uid=${USER},ou=B,dc=com"
+     * When set, the system will skip the search step and directly bind with the constructed DN.
+     */
+    @ConfField(mutable = true, comment = "DN pattern for direct bind authentication; " +
+            "use ${USER} as username placeholder, multiple patterns separated by semicolon")
+    public static String authentication_ldap_simple_bind_dn_pattern = "";
+
+    /**
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
