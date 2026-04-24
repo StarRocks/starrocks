@@ -63,6 +63,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TResultSinkFormatType;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpUtil;
@@ -247,6 +248,25 @@ public class ExecuteSqlAction extends RestBaseAction {
         context.setRegistered(true);
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);
+
+        // Close the "channelInactive before registerContextOnce" race.
+        // HttpServerHandler.channelInactive reads the context from the channel attr
+        // and calls ConnectScheduler.unregisterConnection(ctx). That call uses an
+        // identity-aware remove keyed on ctx.getConnectionId(). If channelInactive
+        // fires before we assigned a connectionId (or before we inserted into
+        // connectionMap), the remove is a no-op — and after we finish registering
+        // there is no further lifecycle event that can evict the context, so it
+        // would be stranded in connectionMap. Detect that here and self-unregister.
+        //
+        // nettyChannel is null in tests that drive registerContextOnce without a
+        // real HTTP lifecycle; skip the check in that case. In production
+        // RestBaseAction#execute always calls setNettyChannel before this runs.
+        ChannelHandlerContext nettyChannel = context.getNettyChannel();
+        if (nettyChannel != null && !nettyChannel.channel().isActive()) {
+            connectScheduler.unregisterConnection(context);
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE,
+                    "http channel closed before request registration completed");
+        }
     }
 
     private void checkSessionVariable(Map<String, String> customVariable, HttpConnectContext context) {
