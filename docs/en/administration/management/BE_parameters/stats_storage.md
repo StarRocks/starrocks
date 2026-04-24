@@ -916,7 +916,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The maximum number of threads in the thread pool for lake partial update segment-level parallelism in a shared-data cluster. This thread pool is used by both row-mode and column-mode partial updates to parallelize I/O-heavy segment operations (load_segment + rewrite_segment for row-mode, DCG generation for column-mode). `0` means automatically set to the number of CPU cores. Runtime on/off is controlled by `enable_pk_index_parallel_execution`.
-- Introduced in: -
+- Introduced in: v4.1
 
 ### lake_partial_update_thread_pool_queue_size
 
@@ -925,7 +925,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The task queue size for the lake partial update thread pool.
-- Introduced in: -
+- Introduced in: v4.1
 
 ### pk_index_size_tiered_level_multiplier
 
