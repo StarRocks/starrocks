@@ -389,6 +389,7 @@ struct TQueryOptions {
   214: optional string http_request_ip_allowlist = "";
   215: optional string http_request_host_allowlist_regexp = "";
   216: optional bool http_request_allow_private_in_allowlist = false;
+  217: optional bool enable_cache_udaf = false;
 }
 
 // A scan range plus the parameters needed to execute that scan.

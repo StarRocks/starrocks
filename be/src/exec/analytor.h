@@ -319,6 +319,9 @@ private:
     RuntimeProfile::Counter* _column_resize_timer = nullptr;
     RuntimeProfile::Counter* _partition_search_timer = nullptr;
     RuntimeProfile::Counter* _peer_group_search_timer = nullptr;
+    RuntimeProfile::Counter* _udaf_load_timer = nullptr;
+    RuntimeProfile::Counter* _udaf_cache_hit_count = nullptr;
+    RuntimeProfile::Counter* _udaf_cache_populate_count = nullptr;
 
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit

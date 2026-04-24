@@ -1,0 +1,260 @@
+-- name: test_udaf_cache @no_arrow_flight_sql @sequential
+set enable_profile=true;
+-- result:
+-- !result
+set enable_async_profile=false;
+-- result:
+-- !result
+update information_schema.be_configs set value=false where name="enable_pipeline_driver_parallel_prepare";
+-- result:
+-- !result
+CREATE AGGREGATE FUNCTION sumbigint_cache_shared(bigint)
+RETURNS bigint
+PROPERTIES (
+  "symbol" = "Sumbigint",
+  "type" = "StarrocksJar",
+  "file" = "${udf_url}/starrocks-jdbc%2FSumbigint.jar",
+  "isolation" = "shared"
+);
+-- result:
+-- !result
+CREATE AGGREGATE FUNCTION sumbigint_cache_private(bigint)
+RETURNS bigint
+PROPERTIES (
+  "symbol" = "Sumbigint",
+  "type" = "StarrocksJar",
+  "file" = "${udf_url}/starrocks-jdbc%2FSumbigint.jar",
+  "isolation" = "private"
+);
+-- result:
+-- !result
+CREATE AGGREGATE FUNCTION sumbigint_window(bigint)
+RETURNS bigint
+PROPERTIES (
+  "analytic" = "true",
+  "symbol" = "Windowbigint",
+  "type" = "StarrocksJar",
+  "file" = "${udf_url}/starrocks-jdbc%2FWindowbigint.jar",
+  "isolation" = "shared"
+);
+-- result:
+-- !result
+CREATE AGGREGATE FUNCTION sumbigint_window_private(bigint)
+RETURNS bigint
+PROPERTIES (
+  "analytic" = "true",
+  "symbol" = "Windowbigint",
+  "type" = "StarrocksJar",
+  "file" = "${udf_url}/starrocks-jdbc%2FWindowbigint.jar",
+  "isolation" = "private"
+);
+-- result:
+-- !result
+CREATE TABLE t_udaf_cache (c0 int, c1 bigint, c2 bigint) distributed by hash(c0) buckets 4 properties("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO t_udaf_cache SELECT generate_series % 100, generate_series, cast(rand()*100 as int)  FROM table(generate_series(1, 10000));
+-- result:
+-- !result
+set enable_cache_udaf=false;
+-- result:
+-- !result
+with cte as (
+    SELECT sumbigint_cache_shared(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+-- result:
+1
+-- !result
+select assert_true(sumbigint_cache_shared(c1) = sum(c1)) from t_udaf_cache;
+-- result:
+1
+-- !result
+set enable_cache_udaf=true;
+-- result:
+-- !result
+with cte as (
+    SELECT sumbigint_cache_shared(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+-- result:
+1
+-- !result
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(populate_count > 0 and hit_count > 0), assert_true((select count(1) from t) > 0) from t;
+-- result:
+1	1
+-- !result
+with cte as (
+    SELECT sumbigint_cache_shared(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+-- result:
+1
+-- !result
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(hit_count > 0 and populate_count = 0), assert_true((select count(1) from t) > 0) from t;
+-- result:
+1	1
+-- !result
+select assert_true(sumbigint_cache_shared(c1) = sum(c1)) from t_udaf_cache;
+-- result:
+1
+-- !result
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(hit_count > 0 and populate_count = 0), assert_true((select count(1) from t) > 0) from t;
+-- result:
+1	1
+-- !result
+with cte as (
+    SELECT sumbigint_cache_private(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+-- result:
+1
+-- !result
+select assert_true(sumbigint_cache_private(c1) = sum(c1)) from t_udaf_cache;
+-- result:
+1
+-- !result
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true((hit_count is null or hit_count = 0) and (populate_count is null or populate_count = 0)) from t;
+-- result:
+1
+-- !result
+with cte as (
+    SELECT sumbigint_window(c1) OVER (PARTITION BY c2 ORDER BY c0) sum0, sum(c1) OVER (PARTITION BY c2 ORDER BY c0) sum1 FROM t_udaf_cache
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+-- result:
+1
+-- !result
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(populate_count > 0 and hit_count > 0), assert_true((select count(1) from t) > 0) from t;
+-- result:
+1	1
+-- !result
+with cte as (
+    SELECT sumbigint_window(c1) OVER (PARTITION BY c2 ORDER BY c0) sum0, sum(c1) OVER (PARTITION BY c2 ORDER BY c0) sum1 FROM t_udaf_cache
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+-- result:
+1
+-- !result
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true(hit_count > 0 and populate_count = 0), assert_true((select count(1) from t) > 0) from t;
+-- result:
+1	1
+-- !result
+with cte as (
+    SELECT sumbigint_window_private(c1) OVER (ORDER BY c0) sum0, sum(c1) OVER (ORDER BY c0) sum1 FROM t_udaf_cache
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+-- result:
+1
+-- !result
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true((hit_count is null or hit_count = 0) and (populate_count is null or populate_count = 0)) from t;
+-- result:
+1
+-- !result
+set enable_cache_udaf=false;
+-- result:
+-- !result
+with cte as (
+    SELECT sumbigint_cache_shared(c1) sum0, sum(c1) sum1 FROM t_udaf_cache GROUP BY c0
+)
+select assert_true(count(1) = sum(sum0 = sum1)) from cte;
+-- result:
+1
+-- !result
+with t as (
+    SELECT
+        MAX(CASE WHEN line LIKE '%HitCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as hit_count,
+        MAX(CASE WHEN line LIKE '%PopulateCount%' THEN CAST(trim(split_part(line, ':', 2)) AS INT) END) as populate_count
+    FROM (
+        SELECT line FROM table(unnest(split(get_query_profile(last_query_id()), '\n'))) t(line)
+    ) v
+    WHERE v.line LIKE '%- UdafCacheHitCount%' OR v.line LIKE '%- UdafCachePopulateCount%'
+)
+select assert_true((hit_count is null or hit_count = 0) and (populate_count is null or populate_count = 0)) from t;
+-- result:
+1
+-- !result
+DROP TABLE t_udaf_cache;
+-- result:
+-- !result
+DROP FUNCTION sumbigint_cache_shared(bigint);
+-- result:
+-- !result
+DROP FUNCTION sumbigint_cache_private(bigint);
+-- result:
+-- !result
+DROP FUNCTION sumbigint_window(bigint);
+-- result:
+-- !result
+DROP FUNCTION sumbigint_window_private(bigint);
+-- result:
+-- !result
+set enable_profile=false;
+-- result:
+-- !result
+set enable_cache_udaf=false;
+-- result:
+-- !result

@@ -96,13 +96,15 @@ public:
     Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
                        std::string* libpath, const TCloudConfiguration& cloud_configuration);
 
-    StatusOr<std::any> load_cacheable_java_udf(
+    // Returns {cache_hit, value}. cache_hit=false means the loader was called (cache miss/populate).
+    StatusOr<std::pair<bool, std::any>> load_cacheable_java_udf(
             const FunctionCacheDesc& desc, const std::function<StatusOr<std::any>(const std::string& entry)>& loader) {
         return load_cacheable_java_udf(desc.fid, desc.url, desc.checksum, desc.function_type, loader,
                                        desc.cloud_configuration);
     }
 
-    StatusOr<std::any> load_cacheable_java_udf(
+    // Returns {cache_hit, value}. cache_hit=false means the loader was called (cache miss/populate).
+    StatusOr<std::pair<bool, std::any>> load_cacheable_java_udf(
             int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
             const std::function<StatusOr<std::any>(const std::string& entry)>& loader,
             const TCloudConfiguration& cloud_configuration);
@@ -115,7 +117,7 @@ private:
     template <class Loader>
     Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
                             UserFunctionCacheEntryPtr* output_entry, Loader&& loader,
-                            const TCloudConfiguration& cloud_configuration);
+                            const TCloudConfiguration& cloud_configuration, bool* cache_hit = nullptr);
     template <class Loader>
     Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader,
                              const TCloudConfiguration& cloud_configuration);
