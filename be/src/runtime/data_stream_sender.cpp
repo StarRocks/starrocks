@@ -46,6 +46,7 @@
 #include "base/brpc/ref_count_closure.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
+#include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/logging.h"
 #include "common/system/backend_options.h"
@@ -668,12 +669,14 @@ Status DataStreamSender::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* i
     // try compress the ChunkPB data
     if (_compress_codec != nullptr && uncompressed_size > 0) {
         SCOPED_TIMER(_compress_timer);
+        BlockCompressionOptions compression_options;
+        compression_options.lz4_acceleration = config::lz4_acceleration;
 
         if (use_compression_pool(_compress_codec->type())) {
             Slice compressed_slice;
             Slice input(dst->data());
             RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
-                                                      &_compression_scratch));
+                                                      &_compression_scratch, compression_options));
         } else {
             int max_compressed_size = _compress_codec->max_compressed_len(uncompressed_size);
 
@@ -684,7 +687,7 @@ Status DataStreamSender::serialize_chunk(const Chunk* src, ChunkPB* dst, bool* i
             Slice compressed_slice{_compression_scratch.data(), _compression_scratch.size()};
 
             Slice input(dst->data());
-            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice));
+            RETURN_IF_ERROR(_compress_codec->compress(input, &compressed_slice, compression_options));
             _compression_scratch.resize(compressed_slice.size);
         }
 
