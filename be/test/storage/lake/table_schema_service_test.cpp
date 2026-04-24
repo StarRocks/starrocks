@@ -1050,7 +1050,7 @@ TEST_F(TableSchemaServiceTest, parse_shard_properties) {
 
     // Case 1: all fields present and valid
     {
-        std::map<std::string, std::string> properties;
+        std::unordered_map<std::string, std::string> properties;
         properties["tableId"] = "100";
         properties["partitionId"] = "200";
         properties["indexId"] = "300";
@@ -1063,7 +1063,7 @@ TEST_F(TableSchemaServiceTest, parse_shard_properties) {
 
     // Case 2: missing required property
     {
-        std::map<std::string, std::string> properties;
+        std::unordered_map<std::string, std::string> properties;
         properties["tableId"] = "100";
         properties["partitionId"] = "200";
         // missing indexId

@@ -308,7 +308,7 @@ private:
                                                        const TGetTabletInitialMetadataResponse& resp);
     // Parse (table_id, partition_id, index_id) from StarOS shard properties. Exposed for unit tests.
     static Status parse_shard_properties(int64_t tablet_id,
-                                          const std::map<std::string, std::string>& properties,
+                                          const std::unordered_map<std::string, std::string>& properties,
                                           int64_t* table_id, int64_t* partition_id, int64_t* index_id);
     StatusOr<TxnLogPtr> load_txn_log(const std::string& txn_log_location, bool fill_cache);
     StatusOr<CombinedTxnLogPtr> load_combined_txn_log(const std::string& path, bool fill_cache);

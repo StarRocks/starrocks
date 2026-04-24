@@ -280,7 +280,7 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
 // Parse (table_id, partition_id, index_id) from StarOS shard properties.
 // Extracted as a helper so it can be unit tested without a real g_worker.
 Status TabletManager::parse_shard_properties(int64_t tablet_id,
-                                               const std::map<std::string, std::string>& properties,
+                                               const std::unordered_map<std::string, std::string>& properties,
                                                int64_t* table_id, int64_t* partition_id, int64_t* index_id) {
     *table_id = -1;
     *partition_id = -1;
