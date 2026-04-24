@@ -1915,6 +1915,46 @@ TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first) {
     EXPECT_EQ("old.idx", v.entries(1).index_file());
 }
 
+TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first_multi) {
+    // Three or more sequential applies must preserve strict newest-first
+    // ordering: [v3, v2, v1]. Reader short-circuits on the first matching
+    // entry, so a regression here silently resolves a column against a
+    // stale .idx payload.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20013);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20013);
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op1;
+    push_segment_entry(&op1, /*seg_id=*/7, /*version=*/10, "v1.idx", /*index_id=*/100, BITMAP);
+    builder.apply_add_index(op1);
+
+    TxnLogPB_OpAddIndex op2;
+    push_segment_entry(&op2, /*seg_id=*/7, /*version=*/11, "v2.idx", /*index_id=*/101, BITMAP);
+    builder.apply_add_index(op2);
+
+    TxnLogPB_OpAddIndex op3;
+    push_segment_entry(&op3, /*seg_id=*/7, /*version=*/12, "v3.idx", /*index_id=*/102, BITMAP);
+    builder.apply_add_index(op3);
+
+    TxnLogPB_OpAddIndex op4;
+    push_segment_entry(&op4, /*seg_id=*/7, /*version=*/13, "v4.idx", /*index_id=*/103, BITMAP);
+    builder.apply_add_index(op4);
+
+    const auto& v = metadata->idg_meta().idgs().at(7);
+    ASSERT_EQ(4, v.entries_size());
+    EXPECT_EQ("v4.idx", v.entries(0).index_file());
+    EXPECT_EQ("v3.idx", v.entries(1).index_file());
+    EXPECT_EQ("v2.idx", v.entries(2).index_file());
+    EXPECT_EQ("v1.idx", v.entries(3).index_file());
+    // Verify per-entry versions stay strictly decreasing so the reader's
+    // version-based tie-breaker sees the same order as the array order.
+    EXPECT_EQ(13, v.entries(0).version());
+    EXPECT_EQ(12, v.entries(1).version());
+    EXPECT_EQ(11, v.entries(2).version());
+    EXPECT_EQ(10, v.entries(3).version());
+}
+
 TEST_F(MetaFileTest, test_apply_drop_index_populates_tombstone) {
     // Dropping an index from schema.table_indices must also copy the
     // TabletIndexPB into schema.dropped_table_indices so BE readers know
