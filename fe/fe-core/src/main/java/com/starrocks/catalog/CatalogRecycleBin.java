@@ -300,15 +300,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isDeletionSafeToExecute(originalRecycleTime);
     }
 
-    private synchronized long getAdjustedRecycleTimestamp(long id) {
-        Map<Long, RecycleTableInfo> idToRecycleTableInfo =  Maps.newHashMap();
-        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
-            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
-                idToRecycleTableInfo.put(entry.getKey(), entry.getValue());
-            }
-        }
-
-        RecycleTableInfo tableInfo = idToRecycleTableInfo.get(id);
+    private synchronized long getAdjustedRecycleTimestamp(long dbId, long id) {
+        RecycleTableInfo tableInfo = idToTableInfo.row(dbId).get(id);
         if (tableInfo != null && !tableInfo.isRecoverable()) {
             return 0;
         }
@@ -335,8 +328,8 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
      * if we can erase this instance, we should check if anyone enable erase later.
      * Only used by main loop.
      */
-    private synchronized boolean timeExpired(long id, long currentTimeMs) {
-        long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id);
+    private synchronized boolean timeExpired(long dbId, long id, long currentTimeMs) {
+        long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(dbId, id);
         long expireMs = max(Config.catalog_trash_expire_second * 1000L, Config.catalog_recycle_bin_erase_min_latency_ms);
         // customize expireMs for partition that need to be retained for a configurable period
         if (idToPartition.containsKey(id)) {
@@ -360,7 +353,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return false;
         }
 
-        if (timeExpired(databaseInfo.getDb().getId(), currentTimeMs)) {
+        if (timeExpired(databaseInfo.getDb().getId(), databaseInfo.getDb().getId(), currentTimeMs)) {
             return true;
         }
 
@@ -372,7 +365,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return false;
         }
 
-        if (timeExpired(tableInfo.getTable().getId(), currentTimeMs)) {
+        if (timeExpired(tableInfo.getDbId(), tableInfo.getTable().getId(), currentTimeMs)) {
             return true;
         }
 
@@ -388,7 +381,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return false;
         }
 
-        if (timeExpired(partitionInfo.getPartition().getId(), currentTimeMs)) {
+        if (timeExpired(partitionInfo.getDbId(), partitionInfo.getPartition().getId(), currentTimeMs)) {
             return true;
         }
 
@@ -410,13 +403,13 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     /**
      * make sure there are still some time before the subject is erased
      */
-    public synchronized boolean ensureEraseLater(long id, long currentTimeMs) {
+    public synchronized boolean ensureEraseLater(long dbId, long id, long currentTimeMs) {
         // 1. not in idToRecycleTime, maybe already erased, sorry it's too late!
         if (!idToRecycleTime.containsKey(id)) {
             return false;
         }
         // 2. will expire after quite a long time, don't worry
-        long latency = currentTimeMs - getAdjustedRecycleTimestamp(id);
+        long latency = currentTimeMs - getAdjustedRecycleTimestamp(dbId, id);
         if (latency < (Config.catalog_trash_expire_second - LATE_RECYCLE_INTERVAL_SECONDS) * 1000L) {
             return true;
         }
