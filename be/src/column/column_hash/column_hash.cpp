@@ -248,8 +248,8 @@ public:
                 auto len = offset_data[idx + 1] - offset_data[idx];
                 // For empty strings, don't modify the hash (hash with 0 bytes preserves the seed)
                 if (len > 0) {
-                    *slot_ptr = HashFunction::hash(bytes.data() + offset_data[idx], static_cast<int32_t>(len),
-                                                   *slot_ptr);
+                    *slot_ptr =
+                            HashFunction::hash(bytes.data() + offset_data[idx], static_cast<int32_t>(len), *slot_ptr);
                 }
             });
         });

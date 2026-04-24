@@ -44,8 +44,8 @@
 #include "exec/arrow_to_starrocks_converter.h"
 #include "exec/join/join_hash_table.h"
 #include "exec/sorting/sort_permute.h"
-#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/array_functions.h"
 #include "exprs/cast_expr.h"
 #include "exprs/expr.h"
@@ -680,8 +680,8 @@ static void bench_column_predicate_empty_ne(benchmark::State& state, size_t rows
     state.counters["input_bytes_per_iter"] = static_cast<double>(input_bytes);
 }
 
-static void bench_binary_plain_page_append_range(benchmark::State& state, size_t rows, size_t len, SparsePattern pattern,
-                                                 LenPattern len_pattern = LenPattern::FIXED) {
+static void bench_binary_plain_page_append_range(benchmark::State& state, size_t rows, size_t len,
+                                                 SparsePattern pattern, LenPattern len_pattern = LenPattern::FIXED) {
     auto fixture = make_binary_page(rows, len, len_pattern);
     BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(fixture.page.slice());
     auto st = decoder.init();
@@ -955,7 +955,8 @@ static void bench_binary_plain_page_zero_copy_offsets_reuse(benchmark::State& st
     state.SetBytesProcessed(static_cast<int64_t>(state.iterations() * offsets_bytes));
 }
 
-static void bench_binary_plain_page_zero_copy_column_hash_consumer_only(benchmark::State& state, size_t rows, size_t len) {
+static void bench_binary_plain_page_zero_copy_column_hash_consumer_only(benchmark::State& state, size_t rows,
+                                                                        size_t len) {
     const bool old_zero_copy_config = config::enable_zero_copy_from_page_cache;
     config::enable_zero_copy_from_page_cache = true;
 
@@ -1214,8 +1215,8 @@ static void bench_arrow_string_converter_impl(benchmark::State& state, size_t ro
             }
             state.ResumeTiming();
 
-            auto st =
-                    conv_func(array.get(), convert_start, rows, data_column.get(), 0, null_data, &filter, nullptr, nullptr);
+            auto st = conv_func(array.get(), convert_start, rows, data_column.get(), 0, null_data, &filter, nullptr,
+                                nullptr);
             CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(data_column.get());
             benchmark::DoNotOptimize(filter.data());
@@ -1326,7 +1327,8 @@ static void bench_arrow_fixed_size_binary_converter_impl(benchmark::State& state
             }
             state.ResumeTiming();
 
-            auto st = conv_func(array.get(), convert_start, rows, data_column.get(), 0, null_data, &filter, nullptr, nullptr);
+            auto st = conv_func(array.get(), convert_start, rows, data_column.get(), 0, null_data, &filter, nullptr,
+                                nullptr);
             CHECK(st.ok()) << st.to_string();
             benchmark::DoNotOptimize(data_column.get());
             benchmark::DoNotOptimize(filter.data());
@@ -1377,47 +1379,35 @@ static void bench_arrow_string_converter(benchmark::State& state, ArrowStringKin
                                          bool nullable, int64_t source_offset = 0, bool use_array_slice = false) {
     if (kind == ArrowStringKind::STRING) {
         if (nullable) {
-            bench_arrow_string_converter_impl<ArrowTypeId::STRING, arrow::StringType, true>(state, rows, len,
-                                                                                            source_offset,
-                                                                                            use_array_slice);
+            bench_arrow_string_converter_impl<ArrowTypeId::STRING, arrow::StringType, true>(
+                    state, rows, len, source_offset, use_array_slice);
         } else {
-            bench_arrow_string_converter_impl<ArrowTypeId::STRING, arrow::StringType, false>(state, rows, len,
-                                                                                             source_offset,
-                                                                                             use_array_slice);
+            bench_arrow_string_converter_impl<ArrowTypeId::STRING, arrow::StringType, false>(
+                    state, rows, len, source_offset, use_array_slice);
         }
     } else if (kind == ArrowStringKind::LARGE_STRING) {
         if (nullable) {
-            bench_arrow_string_converter_impl<ArrowTypeId::LARGE_STRING, arrow::LargeStringType, true>(state, rows,
-                                                                                                       len,
-                                                                                                       source_offset,
-                                                                                                       use_array_slice);
+            bench_arrow_string_converter_impl<ArrowTypeId::LARGE_STRING, arrow::LargeStringType, true>(
+                    state, rows, len, source_offset, use_array_slice);
         } else {
-            bench_arrow_string_converter_impl<ArrowTypeId::LARGE_STRING, arrow::LargeStringType, false>(state, rows,
-                                                                                                        len,
-                                                                                                        source_offset,
-                                                                                                        use_array_slice);
+            bench_arrow_string_converter_impl<ArrowTypeId::LARGE_STRING, arrow::LargeStringType, false>(
+                    state, rows, len, source_offset, use_array_slice);
         }
     } else if (kind == ArrowStringKind::BINARY) {
         if (nullable) {
-            bench_arrow_string_converter_impl<ArrowTypeId::BINARY, arrow::BinaryType, true>(state, rows, len,
-                                                                                            source_offset,
-                                                                                            use_array_slice);
+            bench_arrow_string_converter_impl<ArrowTypeId::BINARY, arrow::BinaryType, true>(
+                    state, rows, len, source_offset, use_array_slice);
         } else {
-            bench_arrow_string_converter_impl<ArrowTypeId::BINARY, arrow::BinaryType, false>(state, rows, len,
-                                                                                             source_offset,
-                                                                                             use_array_slice);
+            bench_arrow_string_converter_impl<ArrowTypeId::BINARY, arrow::BinaryType, false>(
+                    state, rows, len, source_offset, use_array_slice);
         }
     } else if (kind == ArrowStringKind::LARGE_BINARY) {
         if (nullable) {
-            bench_arrow_string_converter_impl<ArrowTypeId::LARGE_BINARY, arrow::LargeBinaryType, true>(state, rows,
-                                                                                                       len,
-                                                                                                       source_offset,
-                                                                                                       use_array_slice);
+            bench_arrow_string_converter_impl<ArrowTypeId::LARGE_BINARY, arrow::LargeBinaryType, true>(
+                    state, rows, len, source_offset, use_array_slice);
         } else {
-            bench_arrow_string_converter_impl<ArrowTypeId::LARGE_BINARY, arrow::LargeBinaryType, false>(state, rows,
-                                                                                                        len,
-                                                                                                        source_offset,
-                                                                                                        use_array_slice);
+            bench_arrow_string_converter_impl<ArrowTypeId::LARGE_BINARY, arrow::LargeBinaryType, false>(
+                    state, rows, len, source_offset, use_array_slice);
         }
     } else {
         if (nullable) {
@@ -1730,8 +1720,8 @@ static void add_join_tuple_descriptor(TDescriptorTableBuilder* table_desc_builde
                                       size_t num_columns, bool nullable) {
     TTupleDescriptorBuilder tuple_desc_builder;
     for (size_t i = 0; i < num_columns; ++i) {
-        tuple_desc_builder.add_slot(create_join_slot_descriptor("c" + std::to_string(i), column_type,
-                                                               static_cast<int32_t>(i), nullable));
+        tuple_desc_builder.add_slot(
+                create_join_slot_descriptor("c" + std::to_string(i), column_type, static_cast<int32_t>(i), nullable));
     }
     tuple_desc_builder.build(table_desc_builder);
 }
@@ -2427,8 +2417,8 @@ static Schema make_row_store_schema(size_t num_value_columns, bool nullable) {
     CHECK_GT(num_value_columns, 0);
     Fields fields;
     fields.reserve(num_value_columns + 1);
-    fields.emplace_back(std::make_shared<Field>(0, "k0", get_type_info(TYPE_INT), STORAGE_AGGREGATE_NONE, 0, true,
-                                                false));
+    fields.emplace_back(
+            std::make_shared<Field>(0, "k0", get_type_info(TYPE_INT), STORAGE_AGGREGATE_NONE, 0, true, false));
     for (size_t i = 0; i < num_value_columns; ++i) {
         fields.emplace_back(std::make_shared<Field>(static_cast<ColumnId>(i + 1), "v" + std::to_string(i),
                                                     get_type_info(TYPE_VARCHAR), STORAGE_AGGREGATE_NONE, 0, false,
@@ -2497,8 +2487,8 @@ static void bench_exchange_perf_update_external(benchmark::State& state, size_t 
     CHECK_GT(num_value_columns, 0);
 
     std::vector<TypeDescriptor> arg_types(num_value_columns, TypeDescriptor::from_logical_type(TYPE_VARCHAR));
-    auto ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context(
-            std::move(arg_types), TypeDescriptor::from_logical_type(TYPE_BIGINT)));
+    auto ctx = std::unique_ptr<FunctionContext>(
+            FunctionContext::create_test_context(std::move(arg_types), TypeDescriptor::from_logical_type(TYPE_BIGINT)));
     const auto* func = get_aggregate_function("exchange_bytes", TYPE_BIGINT, TYPE_BIGINT, false);
     CHECK(func != nullptr) << "aggregate function not found: exchange_bytes";
 
@@ -2608,12 +2598,11 @@ static void register_p0_core_cases() {
                   [](benchmark::State& state) {
                       bench_append_with_mask_external<true>(state, 65536, 32, FilterPattern::KEEP_NONE);
                   });
-    register_case(ext_case_name("P0", "append_with_mask",
-                                "rows:65536/len:128/dist:uniform/select:random50/positive:true"),
-                  [](benchmark::State& state) {
-                      bench_append_with_mask_external<true>(state, 65536, 128, FilterPattern::RANDOM_50,
-                                                            LenPattern::UNIFORM);
-                  });
+    register_case(
+            ext_case_name("P0", "append_with_mask", "rows:65536/len:128/dist:uniform/select:random50/positive:true"),
+            [](benchmark::State& state) {
+                bench_append_with_mask_external<true>(state, 65536, 128, FilterPattern::RANDOM_50, LenPattern::UNIFORM);
+            });
 
     for (size_t len : {4UL, 32UL, 128UL}) {
         register_case(ext_case_name("P0", "column_hash", "rows:65536/len:" + std::to_string(len) + "/mode:range"),
@@ -2686,12 +2675,12 @@ static void register_p0_core_cases() {
                           });
         }
     }
-    register_case(ext_case_name("P0", "binary_plain_page_next_batch",
-                                "rows:65536/len:128/dist:uniform/range:clustered50"),
-                  [](benchmark::State& state) {
-                      bench_binary_plain_page_append_range(state, 65536, 128, SparsePattern::CLUSTERED_50,
-                                                           LenPattern::UNIFORM);
-                  });
+    register_case(
+            ext_case_name("P0", "binary_plain_page_next_batch", "rows:65536/len:128/dist:uniform/range:clustered50"),
+            [](benchmark::State& state) {
+                bench_binary_plain_page_append_range(state, 65536, 128, SparsePattern::CLUSTERED_50,
+                                                     LenPattern::UNIFORM);
+            });
     register_case(ext_case_name("P0", "binary_plain_page_next_batch_with_filter",
                                 "rows:65535/len:128/dist:uniform/range:clustered50/nullable:true"),
                   [](benchmark::State& state) {
@@ -2768,11 +2757,9 @@ static void register_p0_boundary_cases() {
                           [=](benchmark::State& state) { bench_column_array_serde_deserialize(state, rows, len, 0); });
         }
     }
-    register_case(ext_case_name("P0B", "column_array_serde",
-                                "rows:262144/len:4/mode:serialize/encode:0"),
+    register_case(ext_case_name("P0B", "column_array_serde", "rows:262144/len:4/mode:serialize/encode:0"),
                   [](benchmark::State& state) { bench_column_array_serde_serialize(state, 262144, 4, 0); });
-    register_case(ext_case_name("P0B", "column_array_serde",
-                                "rows:262144/len:4/mode:deserialize/encode:0"),
+    register_case(ext_case_name("P0B", "column_array_serde", "rows:262144/len:4/mode:deserialize/encode:0"),
                   [](benchmark::State& state) { bench_column_array_serde_deserialize(state, 262144, 4, 0); });
 
     for (size_t len : {4UL, 32UL}) {
@@ -2781,11 +2768,10 @@ static void register_p0_boundary_cases() {
                       [=](benchmark::State& state) {
                           bench_binary_plain_page_zero_copy_offsets_with_alloc(state, 65536, len);
                       });
-        register_case(ext_case_name("P0B", "binary_plain_page_zero_copy_offsets_reuse",
-                                    "rows:65536/len:" + std::to_string(len)),
-                      [=](benchmark::State& state) {
-                          bench_binary_plain_page_zero_copy_offsets_reuse(state, 65536, len);
-                      });
+        register_case(
+                ext_case_name("P0B", "binary_plain_page_zero_copy_offsets_reuse",
+                              "rows:65536/len:" + std::to_string(len)),
+                [=](benchmark::State& state) { bench_binary_plain_page_zero_copy_offsets_reuse(state, 65536, len); });
     }
     register_case(ext_case_name("P0B", "binary_plain_page_zero_copy_column_hash_consumer_only", "rows:65536/len:32"),
                   [](benchmark::State& state) {
@@ -2802,58 +2788,51 @@ static void register_p0_boundary_cases() {
                               "rows:65536/len:32/mode:deserialize/encode:" + std::to_string(encode_level)),
                 [=](benchmark::State& state) { bench_column_array_serde_deserialize(state, 65536, 32, encode_level); });
     }
-    register_case(ext_case_name("P0B_EXTRA", "column_array_serde_encoded",
-                                "rows:65536/len:4/mode:serialize/encode:2"),
+    register_case(ext_case_name("P0B_EXTRA", "column_array_serde_encoded", "rows:65536/len:4/mode:serialize/encode:2"),
                   [](benchmark::State& state) { bench_column_array_serde_serialize(state, 65536, 4, 2); });
-    register_case(ext_case_name("P0B_EXTRA", "column_array_serde_encoded",
-                                "rows:65536/len:4/mode:deserialize/encode:2"),
-                  [](benchmark::State& state) { bench_column_array_serde_deserialize(state, 65536, 4, 2); });
-
+    register_case(
+            ext_case_name("P0B_EXTRA", "column_array_serde_encoded", "rows:65536/len:4/mode:deserialize/encode:2"),
+            [](benchmark::State& state) { bench_column_array_serde_deserialize(state, 65536, 4, 2); });
 }
 
 static void register_p1_cases() {
     // P1 includes integration/regression coverage. Treat P0/P0B no-promote cases as the primary performance signal.
     // Keep these cases module-level: they call real StarRocks components instead of open-coded scalar offset loops.
-    for (const auto& spec : {std::tuple<size_t, size_t, bool>{4, 1, false},
-                             std::tuple<size_t, size_t, bool>{32, 1, false},
-                             std::tuple<size_t, size_t, bool>{4, 4, false},
-                             std::tuple<size_t, size_t, bool>{4, 4, true}}) {
+    for (const auto& spec :
+         {std::tuple<size_t, size_t, bool>{4, 1, false}, std::tuple<size_t, size_t, bool>{32, 1, false},
+          std::tuple<size_t, size_t, bool>{4, 4, false}, std::tuple<size_t, size_t, bool>{4, 4, true}}) {
         const auto [len, value_columns, nullable] = spec;
         register_case(ext_case_name("P1_EXTRA", "row_store_encoder_simple_encode",
-                                    "rows:65536/len:" + std::to_string(len) +
-                                            "/value_cols:" + std::to_string(value_columns) +
-                                            "/nullable:" + bool_name(nullable)),
+                                    "rows:65536/len:" + std::to_string(len) + "/value_cols:" +
+                                            std::to_string(value_columns) + "/nullable:" + bool_name(nullable)),
                       [=](benchmark::State& state) {
                           bench_row_store_encoder_simple_encode(state, 65536, len, value_columns, nullable);
                       });
     }
 
-    for (const auto& spec : {std::tuple<size_t, size_t, bool>{4, 1, false},
-                             std::tuple<size_t, size_t, bool>{32, 1, false},
-                             std::tuple<size_t, size_t, bool>{128, 1, false},
-                             std::tuple<size_t, size_t, bool>{4, 4, false},
-                             std::tuple<size_t, size_t, bool>{32, 4, false},
-                             std::tuple<size_t, size_t, bool>{4, 4, true}}) {
+    for (const auto& spec :
+         {std::tuple<size_t, size_t, bool>{4, 1, false}, std::tuple<size_t, size_t, bool>{32, 1, false},
+          std::tuple<size_t, size_t, bool>{128, 1, false}, std::tuple<size_t, size_t, bool>{4, 4, false},
+          std::tuple<size_t, size_t, bool>{32, 4, false}, std::tuple<size_t, size_t, bool>{4, 4, true}}) {
         const auto [len, value_columns, nullable] = spec;
         register_case(ext_case_name("P1_EXTRA", "exchange_perf_update",
-                                    "rows:65536/len:" + std::to_string(len) +
-                                            "/value_cols:" + std::to_string(value_columns) +
-                                            "/nullable:" + bool_name(nullable)),
+                                    "rows:65536/len:" + std::to_string(len) + "/value_cols:" +
+                                            std::to_string(value_columns) + "/nullable:" + bool_name(nullable)),
                       [=](benchmark::State& state) {
                           bench_exchange_perf_update_external(state, 65536, len, value_columns, nullable);
                       });
     }
 
-    register_case(ext_case_name("P1_EXTRA", "column_predicate_in_branchless",
-                                "rows:65535/len:4/select:random50/hit:50"),
-                  [](benchmark::State& state) { bench_column_predicate_in_branchless_external(state, 65535, 4); });
-    register_case(ext_case_name("P1_EXTRA", "column_predicate_in_branchless",
-                                "rows:65535/len:32/select:random50/hit:50"),
-                  [](benchmark::State& state) { bench_column_predicate_in_branchless_external(state, 65535, 32); });
+    register_case(
+            ext_case_name("P1_EXTRA", "column_predicate_in_branchless", "rows:65535/len:4/select:random50/hit:50"),
+            [](benchmark::State& state) { bench_column_predicate_in_branchless_external(state, 65535, 4); });
+    register_case(
+            ext_case_name("P1_EXTRA", "column_predicate_in_branchless", "rows:65535/len:32/select:random50/hit:50"),
+            [](benchmark::State& state) { bench_column_predicate_in_branchless_external(state, 65535, 32); });
 
-    register_case(ext_case_name("P1_EXTRA", "binary_plain_page_dict_filter_selection",
-                                "rows:70000/len:8/predicate:ge_mid"),
-                  [](benchmark::State& state) { bench_binary_plain_page_dict_filter_selection(state, 70000, 8); });
+    register_case(
+            ext_case_name("P1_EXTRA", "binary_plain_page_dict_filter_selection", "rows:70000/len:8/predicate:ge_mid"),
+            [](benchmark::State& state) { bench_binary_plain_page_dict_filter_selection(state, 70000, 8); });
 
     for (size_t rows : {4096UL, 65536UL}) {
         for (size_t len : {4UL, 32UL, 128UL}) {
@@ -2881,8 +2860,8 @@ static void register_p1_cases() {
         }
     }
 
-    for (ArrowStringKind kind : {ArrowStringKind::STRING, ArrowStringKind::BINARY,
-                                 ArrowStringKind::FIXED_SIZE_BINARY}) {
+    for (ArrowStringKind kind :
+         {ArrowStringKind::STRING, ArrowStringKind::BINARY, ArrowStringKind::FIXED_SIZE_BINARY}) {
         for (size_t len : {4UL, 32UL}) {
             for (bool nullable : {false, true}) {
                 register_case(ext_case_name("P1", "arrow_string_converter",
@@ -2895,8 +2874,8 @@ static void register_p1_cases() {
             }
         }
     }
-    for (ArrowStringKind kind : {ArrowStringKind::STRING, ArrowStringKind::BINARY,
-                                 ArrowStringKind::FIXED_SIZE_BINARY}) {
+    for (ArrowStringKind kind :
+         {ArrowStringKind::STRING, ArrowStringKind::BINARY, ArrowStringKind::FIXED_SIZE_BINARY}) {
         for (bool nullable : {false, true}) {
             register_case(ext_case_name("P1", "arrow_string_converter_nonzero_source_offset",
                                         "rows:65536/len:32/arrow:" + std::string(arrow_string_kind_name(kind)) +
@@ -2931,17 +2910,14 @@ static void register_p1_cases() {
           std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 4, 2, false, JoinKeyMode::SERIALIZED_VARCHAR},
           std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 32, 2, false, JoinKeyMode::SERIALIZED_VARCHAR},
           std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 4, 2, true, JoinKeyMode::SERIALIZED_VARCHAR},
-          std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 4, 4, false,
-                                                                JoinKeyMode::SERIALIZED_VARCHAR}}) {
+          std::tuple<size_t, size_t, size_t, bool, JoinKeyMode>{65536, 4, 4, false, JoinKeyMode::SERIALIZED_VARCHAR}}) {
         const auto [rows, len, key_columns, nullable, key_mode] = spec;
         register_case(
                 ext_case_name("P1", "join_hash_table_binary_key_build_only",
                               "rows:" + std::to_string(rows) + "/len:" + std::to_string(len) +
-                                      "/key_cols:" + std::to_string(key_columns) +
-                                      "/nullable:" + bool_name(nullable) +
-                                      "/key_mode:" + join_key_mode_name(key_mode) +
-                                      "/fixed_size_opt:" + bool_name(key_mode == JoinKeyMode::FIXED_SIZE) +
-                                      "/cardinality:unique"),
+                                      "/key_cols:" + std::to_string(key_columns) + "/nullable:" + bool_name(nullable) +
+                                      "/key_mode:" + join_key_mode_name(key_mode) + "/fixed_size_opt:" +
+                                      bool_name(key_mode == JoinKeyMode::FIXED_SIZE) + "/cardinality:unique"),
                 [=](benchmark::State& state) {
                     bench_join_hash_table_binary_key_build_only(state, rows, len, nullable, key_mode, key_columns);
                 });

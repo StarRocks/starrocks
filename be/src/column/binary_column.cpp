@@ -862,9 +862,9 @@ size_t BinaryColumnBase<T>::filter_range(const Filter& filter, size_t from, size
                 // set offsets, try vectorized
                 for (int i = 0; i < batch_nums; ++i) {
                     // TODO: performance, all sub one same offset ?
-                    offset_data[result_offset + i + 1] =
-                            offset_data[result_offset + i] + offset_data[start_offset + i + 1] -
-                            offset_data[start_offset + i];
+                    offset_data[result_offset + i + 1] = offset_data[result_offset + i] +
+                                                         offset_data[start_offset + i + 1] -
+                                                         offset_data[start_offset + i];
                 }
 
                 result_offset += batch_nums;
@@ -1333,9 +1333,8 @@ Status BinaryColumnBase<T>::capacity_limit_reached() const {
     // AdaptiveOffsets can promote total byte offsets to uint64_t; row count remains limited by uint32_t APIs.
     if (_offsets.size() >= Column::MAX_CAPACITY_LIMIT) {
         const char* column_name = has_large_column() ? "large binary column" : "binary column";
-        return Status::CapacityLimitExceed(strings::Substitute("Total row count of $0 exceed the limit: $1",
-                                                               column_name,
-                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
+        return Status::CapacityLimitExceed(strings::Substitute(
+                "Total row count of $0 exceed the limit: $1", column_name, std::to_string(Column::MAX_CAPACITY_LIMIT)));
     }
     return Status::OK();
 }

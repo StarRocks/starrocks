@@ -570,14 +570,15 @@ public:
         offsets.resize_uninitialized(count + prev_offsets, final_offset);
         {
             // fill offset columns
-            offsets.visit_storage([prev_offsets, count, is_nulls, type_length = _type_length, offset](auto& offsets_buf) mutable {
-                using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
-                auto* dst_offsets = offsets_buf.data() + prev_offsets;
-                for (size_t i = 0; i < count; ++i) {
-                    offset += is_nulls[i] ? 0 : type_length;
-                    dst_offsets[i] = static_cast<OffsetValue>(offset);
-                }
-            });
+            offsets.visit_storage(
+                    [prev_offsets, count, is_nulls, type_length = _type_length, offset](auto& offsets_buf) mutable {
+                        using OffsetValue = typename std::decay_t<decltype(offsets_buf)>::value_type;
+                        auto* dst_offsets = offsets_buf.data() + prev_offsets;
+                        for (size_t i = 0; i < count; ++i) {
+                            offset += is_nulls[i] ? 0 : type_length;
+                            dst_offsets[i] = static_cast<OffsetValue>(offset);
+                        }
+                    });
         }
         DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
 

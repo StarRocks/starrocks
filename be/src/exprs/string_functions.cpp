@@ -275,8 +275,8 @@ static inline void ascii_substr(const BinaryColumn* src, Bytes* bytes, Offsets* 
             const uint64_t end = src_offset_data[i + 1];
             Slice s(src_base + begin, end - begin);
             ascii_substr_per_slice<off_is_negative, allow_out_of_left_bound>(
-                    &s, off, len, binary_column_empty_op_fast<DstOffset>,
-                    binary_column_non_empty_op_fast<DstOffset>, bytes, dst_offset_data, i);
+                    &s, off, len, binary_column_empty_op_fast<DstOffset>, binary_column_non_empty_op_fast<DstOffset>,
+                    bytes, dst_offset_data, i);
         }
     });
 }
