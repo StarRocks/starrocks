@@ -4373,8 +4373,9 @@ TEST_F(LakeTabletReshardTest, test_publish_resharding_tablet_slot_dedup) {
         txn_info.set_txn_id(next_id());
         std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        auto st = lake::publish_resharding_tablet(_tablet_manager.get(), info, 1, 2, txn_info,
-                                                  /*skip_write_tablet_metadata=*/false, tablet_metadatas, tablet_ranges);
+        auto st =
+                lake::publish_resharding_tablet(_tablet_manager.get(), info, 1, 2, txn_info,
+                                                /*skip_write_tablet_metadata=*/false, tablet_metadatas, tablet_ranges);
         EXPECT_TRUE(st.is_resource_busy()) << st;
         EXPECT_TRUE(tablet_metadatas.empty());
     }
@@ -4404,8 +4405,9 @@ TEST_F(LakeTabletReshardTest, test_publish_resharding_tablet_slot_dedup) {
         txn_info.set_txn_id(next_id());
         std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        auto st = lake::publish_resharding_tablet(_tablet_manager.get(), info, 1, 2, txn_info,
-                                                  /*skip_write_tablet_metadata=*/false, tablet_metadatas, tablet_ranges);
+        auto st =
+                lake::publish_resharding_tablet(_tablet_manager.get(), info, 1, 2, txn_info,
+                                                /*skip_write_tablet_metadata=*/false, tablet_metadatas, tablet_ranges);
         EXPECT_FALSE(st.is_resource_busy()) << st;
 
         // Now hold old0 — this IS the anchor, so ResourceBusy must fire.
@@ -4436,8 +4438,9 @@ TEST_F(LakeTabletReshardTest, test_publish_resharding_tablet_slot_dedup) {
         txn_info.set_txn_id(next_id());
         std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
-        auto st = lake::publish_resharding_tablet(_tablet_manager.get(), info, 1, 2, txn_info,
-                                                  /*skip_write_tablet_metadata=*/false, tablet_metadatas, tablet_ranges);
+        auto st =
+                lake::publish_resharding_tablet(_tablet_manager.get(), info, 1, 2, txn_info,
+                                                /*skip_write_tablet_metadata=*/false, tablet_metadatas, tablet_ranges);
         EXPECT_TRUE(st.is_resource_busy()) << st;
     }
 }
