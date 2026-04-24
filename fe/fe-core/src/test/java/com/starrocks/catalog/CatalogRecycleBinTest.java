@@ -795,8 +795,6 @@ public class CatalogRecycleBinTest {
         Assertions.assertEquals(0, adjustedTime2);
     }
 
-<<<<<<< HEAD
-=======
     @Test
     public void testNonRetryableTableErasure() {
         // This test verifies that non-retryable tables (shared-nothing mode) are erased synchronously
@@ -840,8 +838,6 @@ public class CatalogRecycleBinTest {
         Assertions.assertTrue(lakeTableToPartitions.isEmpty(),
                 "lakeTableToPartitions should be empty for non-retryable tables");
     }
-
->>>>>>> 748bf430ec ([Enhancement] Unified cloud native table drop process with partition (#68434))
     /**
      * Regression test for the bug where disableRecoverPartitionWithSameName() would unconditionally
      * reset idToRecycleTime for already-non-recoverable partitions with retention periods, causing

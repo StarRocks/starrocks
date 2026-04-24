@@ -215,17 +215,28 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     }
 
     public synchronized void recyclePartition(RecyclePartitionInfo recyclePartitionInfo) {
-        Preconditions.checkState(!idToPartition.containsKey(recyclePartitionInfo.getPartition().getId()));
+        long partitionId = recyclePartitionInfo.getPartition().getId();
+        String partitionName = recyclePartitionInfo.getPartition().getName();
 
+        Preconditions.checkState(!idToPartition.containsKey(partitionId));
+        disableRecoverPartitionWithSameName(
+                recyclePartitionInfo.getDbId(), recyclePartitionInfo.getTableId(), partitionName);
+
+        idToRecycleTime.put(partitionId, System.currentTimeMillis());
+        putPartitionToRecycleBin(recyclePartitionInfo);
+    }
+
+    /**
+     * Stores a partition entry in the recycle-bin map after the caller has completed any
+     * required bookkeeping for the recycle flow.
+     */
+    private void putPartitionToRecycleBin(RecyclePartitionInfo recyclePartitionInfo) {
         long dbId = recyclePartitionInfo.getDbId();
         long tableId = recyclePartitionInfo.getTableId();
         Partition partition = recyclePartitionInfo.getPartition();
         long partitionId = partition.getId();
         String partitionName = partition.getName();
 
-        disableRecoverPartitionWithSameName(dbId, tableId, partitionName);
-
-        idToRecycleTime.put(partitionId, System.currentTimeMillis());
         idToPartition.put(partitionId, recyclePartitionInfo);
         LOG.debug("Finished put partition '{}' to recycle bin. dbId: {} tableId: {} partitionId: {} recoverable: {}",
                 partitionName, dbId, tableId, partitionId, recyclePartitionInfo.isRecoverable());
@@ -591,7 +602,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                 if (olapTable.isCloudNativeTableOrMaterializedView()) {
                     for (Partition partition : olapTable.getAllPartitions()) {
                         long partitionId = partition.getId();
-                        RecyclePartitionInfo partitionInfo = removePartitionFromRecycleBinInternal(partitionId);
+                        RecyclePartitionInfo partitionInfo = idToPartition.remove(partitionId);
                         if (partitionInfo != null) {
                             asyncDeleteForPartitions.remove(partitionInfo);
                         }
@@ -808,16 +819,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
             }
 
             if (finished) {
-<<<<<<< HEAD
-                GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId, wal -> {
-                    iterator.remove();
-=======
                 // Check if this partition comes from table deletion
                 if (partitionInfo.isFromTableDeletion()) {
                     // Partition from table deletion: don't log individual partition erase
                     // The table's edit log will be recorded when all partitions are deleted
-                    removePartitionFromRecycleBinInternal(iterator, partitionInfo);
->>>>>>> 748bf430ec ([Enhancement] Unified cloud native table drop process with partition (#68434))
+                    iterator.remove();
                     asyncDeleteForPartitions.remove(partitionInfo);
                     removeRecycleMarkers(partitionId);
                     LOG.info("Removed partition '{}' related to table deletion from recycle bin."
@@ -826,7 +832,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
                 } else {
                     // Normal partition deletion: log individual partition erase
                     GlobalStateMgr.getCurrentState().getEditLog().logErasePartition(partitionId, wal -> {
-                        removePartitionFromRecycleBinInternal(iterator, partitionInfo);
+                        iterator.remove();
                         asyncDeleteForPartitions.remove(partitionInfo);
                         removeRecycleMarkers(partitionId);
                     });

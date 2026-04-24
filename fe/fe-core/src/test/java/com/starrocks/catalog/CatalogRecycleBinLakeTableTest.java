@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTableHelper;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
@@ -731,9 +732,6 @@ public class CatalogRecycleBinLakeTableTest {
         checkPartitionTablet(p1, false);
         checkPartitionTablet(p2, false);
     }
-<<<<<<< HEAD
-=======
-
     @Test
     public void testEraseLakeTableByPartitions(@Mocked LakeService lakeService) throws Exception {
         LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
@@ -1147,5 +1145,4 @@ public class CatalogRecycleBinLakeTableTest {
         Assertions.assertTrue(recoveredDataCacheInfo.isEnabled(),
                 "Recovered partition should still have datacache enabled since table property didn't change");
     }
->>>>>>> 748bf430ec ([Enhancement] Unified cloud native table drop process with partition (#68434))
 }
