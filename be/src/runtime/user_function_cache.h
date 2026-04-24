@@ -89,11 +89,15 @@ public:
     }
     Status get_libpath(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
                        std::string* libpath);
-    StatusOr<std::any> load_cacheable_java_udf(
+
+    // Returns {cache_hit, value}. cache_hit=false means the loader was called (cache miss/populate).
+    StatusOr<std::pair<bool, std::any>> load_cacheable_java_udf(
             const FunctionCacheDesc& desc, const std::function<StatusOr<std::any>(const std::string& entry)>& loader) {
         return load_cacheable_java_udf(desc.fid, desc.url, desc.checksum, desc.function_type, loader);
     }
-    StatusOr<std::any> load_cacheable_java_udf(
+
+    // Returns {cache_hit, value}. cache_hit=false means the loader was called (cache miss/populate).
+    StatusOr<std::pair<bool, std::any>> load_cacheable_java_udf(
             int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
             const std::function<StatusOr<std::any>(const std::string& entry)>& loader);
 
@@ -103,7 +107,7 @@ private:
     Status _load_entry_from_lib(const std::string& dir, const std::string& file);
     template <class Loader>
     Status _get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
-                            UserFunctionCacheEntryPtr* output_entry, Loader&& loader);
+                            UserFunctionCacheEntryPtr* output_entry, Loader&& loader, bool* cache_hit = nullptr);
     template <class Loader>
     Status _load_cache_entry(const std::string& url, UserFunctionCacheEntryPtr& entry, Loader&& loader);
     Status _download_lib(const std::string& url, UserFunctionCacheEntryPtr& entry);

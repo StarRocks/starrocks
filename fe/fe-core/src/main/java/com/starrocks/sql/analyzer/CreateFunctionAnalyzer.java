@@ -319,10 +319,12 @@ public class CreateFunctionAnalyzer {
         checkStarrocksJarUdafClass(stmt, mainClass, udafStateClass);
         AggregateFunction.AggregateFunctionBuilder builder =
                 AggregateFunction.AggregateFunctionBuilder.createUdfBuilder(TFunctionBinaryType.SRJAR);
+        String isolation = stmt.getProperties().get(CreateFunctionStmt.ISOLATION_KEY);
         builder.name(functionName).argsType(argsDef.getArgTypes()).retType(returnType.getType()).
                 hasVarArgs(argsDef.isVariadic()).intermediateType(intermediateType.getType()).objectFile(objectFile)
                 .isAnalyticFn(isAnalyticFn)
-                .symbolName(mainClass.getCanonicalName());
+                .symbolName(mainClass.getCanonicalName())
+                .setIsolationType(!"shared".equalsIgnoreCase(isolation));
         Function function = builder.build();
         function.setChecksum(checksum);
         return function;

@@ -237,7 +237,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
         auto function_cache = UserFunctionCache::instance();
         if (_fn.__isset.isolated && !_fn.isolated) {
             ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(func_cache_desc, get_func_desc));
-            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
+            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc.second);
         } else {
             std::string libpath;
             RETURN_IF_ERROR(function_cache->get_libpath(func_cache_desc, &libpath));
