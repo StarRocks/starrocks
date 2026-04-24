@@ -201,6 +201,23 @@ public:
 
     void unload_and_remove_primary_index(int64_t tablet_id);
 
+    // For a cloud-native PK tablet, flush its cached PK-index memtable into
+    // sstables on shared storage, then return a new metadata snapshot whose
+    // sstable_meta covers all live data of the tablet's rowsets at
+    // metadata->version(). Non-PK or non-cloud-native tablets pass through:
+    // the input |metadata| is returned unchanged.
+    //
+    // Used by tablet split/merge paths to establish the reshard invariant
+    // that every input tablet's sstable_meta covers all inherited rowsets'
+    // live data before any metadata-level restructuring.
+    //
+    // Locking mirrors PrimaryKeyTxnLogApplier: shard-level shared lock +
+    // per-index write_guard via prepare_primary_index. Assumes FE's mutual
+    // exclusion between publish_resharding_tablet and publish_version, so
+    // the cached _data_version cannot advance past metadata->version()
+    // during this call.
+    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata);
+
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
                                                 std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
