@@ -39,6 +39,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.planner.expression.ExprToNormalFormVisitor;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.AnalyticWindow;
@@ -174,6 +175,13 @@ public class AnalyticEvalNode extends PlanNode {
         }
         msg.analytic_node.setOrder_by_exprs(
                 ExprToThrift.treesToThrift(OrderByElement.getOrderByExprs(orderByElements)));
+        if (!orderByElements.isEmpty()) {
+            List<Boolean> orderByIsAsc = Lists.newArrayListWithCapacity(orderByElements.size());
+            for (OrderByElement element : orderByElements) {
+                orderByIsAsc.add(element.getIsAsc());
+            }
+            msg.analytic_node.setOrder_by_is_asc(orderByIsAsc);
+        }
         msg.analytic_node.setAnalytic_functions(ExprToThrift.treesToThrift(analyticFnCalls));
         StringBuilder sqlAggFuncBuilder = new StringBuilder();
         // only serialize agg exprs that are being materialized
@@ -193,11 +201,12 @@ public class AnalyticEvalNode extends PlanNode {
         if (analyticWindow == null) {
             if (!orderByElements.isEmpty()) {
                 msg.analytic_node.setWindow(
-                        ExprToThrift.analyticWindowToThrift(AnalyticWindow.DEFAULT_WINDOW));
+                        ExprToThrift.analyticWindowToThrift(AnalyticWindow.DEFAULT_WINDOW,
+                                orderByElements));
             }
         } else {
-            // TODO: Window boundaries should have range_offset_predicate set
-            msg.analytic_node.setWindow(ExprToThrift.analyticWindowToThrift(analyticWindow));
+            msg.analytic_node.setWindow(ExprToThrift.analyticWindowToThrift(
+                    analyticWindow, orderByElements));
         }
 
         if (partitionByEq != null) {
@@ -347,9 +356,18 @@ public class AnalyticEvalNode extends PlanNode {
         analyticNode.setPartition_exprs(normalizer.normalizeOrderedExprs(substitutedPartitionExprs));
         analyticNode.setOrder_by_exprs(
                 normalizer.normalizeOrderedExprs(OrderByElement.getOrderByExprs(orderByElements)));
+        if (!orderByElements.isEmpty()) {
+            List<Boolean> orderByIsAsc = Lists.newArrayListWithCapacity(orderByElements.size());
+            for (OrderByElement element : orderByElements) {
+                orderByIsAsc.add(element.getIsAsc());
+            }
+            analyticNode.setOrder_by_is_asc(orderByIsAsc);
+        }
         analyticNode.setAnalytic_functions(normalizer.normalizeExprs(analyticFnCalls));
         if (analyticWindow != null) {
-            analyticNode.setWindow(ExprToThrift.analyticWindowToThrift(analyticWindow));
+            analyticNode.setWindow(ExprToThrift.analyticWindowToThrift(
+                    analyticWindow, orderByElements,
+                    expr -> ExprToNormalFormVisitor.treeToNormalForm(expr, normalizer)));
         }
         if (intermediateTupleDesc != null) {
             analyticNode.setIntermediate_tuple_id(normalizer.remapTupleId(intermediateTupleDesc.getId()).asInt());

@@ -30,11 +30,15 @@ import com.starrocks.sql.ast.expression.ExprCastFunction;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.ast.expression.IntervalLiteral;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.UserVariableExpr;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.type.DateType;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
 import java.math.BigDecimal;
@@ -212,27 +216,18 @@ public class AnalyticAnalyzer {
             if (rightBoundary.getBoundaryType().isOffset()) {
                 checkRangeOffsetBoundaryExpr(analyticExpr, rightBoundary);
             }
-
-            // TODO: Remove when RANGE windows with offset boundaries are supported.
-            if (leftBoundary.getBoundaryType().isOffset() || (rightBoundary.getBoundaryType().isOffset()) ||
-                    (leftBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.CURRENT_ROW
-                            && rightBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.CURRENT_ROW)) {
-                throw new SemanticException("RANGE is only supported with both the lower and upper bounds UNBOUNDED or"
-                        + " one UNBOUNDED and the other CURRENT ROW.", windowFrame.getPos());
+        } else {
+            if (leftBoundary.getBoundaryType().isOffset()) {
+                checkOffsetExpr(windowFrame, leftBoundary);
             }
-        }
-
-        if (leftBoundary.getBoundaryType().isOffset()) {
-            checkOffsetExpr(windowFrame, leftBoundary);
-        }
-
-        if (rightBoundary.getBoundaryType().isOffset()) {
-            checkOffsetExpr(windowFrame, rightBoundary);
+            if (rightBoundary.getBoundaryType().isOffset()) {
+                checkOffsetExpr(windowFrame, rightBoundary);
+            }
         }
 
         if (leftBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) {
             if (rightBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.FOLLOWING) {
-                checkOffsetBoundaries(leftBoundary, rightBoundary);
+                checkOffsetBoundaries(windowFrame, leftBoundary, rightBoundary);
             } else if (rightBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_FOLLOWING) {
                 throw new SemanticException(
                         "A lower window bound of " + AnalyticWindowBoundary.BoundaryType.FOLLOWING
@@ -243,7 +238,7 @@ public class AnalyticAnalyzer {
 
         if (rightBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING) {
             if (leftBoundary.getBoundaryType() == AnalyticWindowBoundary.BoundaryType.PRECEDING) {
-                checkOffsetBoundaries(rightBoundary, leftBoundary);
+                checkOffsetBoundaries(windowFrame, rightBoundary, leftBoundary);
             } else if (leftBoundary.getBoundaryType() != AnalyticWindowBoundary.BoundaryType.UNBOUNDED_PRECEDING) {
                 throw new SemanticException(
                         "An upper window bound of " + AnalyticWindowBoundary.BoundaryType.PRECEDING
@@ -263,12 +258,108 @@ public class AnalyticAnalyzer {
                     + "a RANGE window with PRECEDING/FOLLOWING: " + ExprToSql.toSql(analyticExpr), analyticExpr.getPos());
         }
 
-        if (!TypeManager.isImplicitlyCastable(boundary.getExpr().getType(),
-                analyticExpr.getOrderByElements().get(0).getExpr().getType(), false)) {
-            throw new SemanticException("The value expression of a PRECEDING/FOLLOWING clause of a RANGE window "
-                    + "must be implicitly convertable to the ORDER BY expression's type: "
-                    + ExprToSql.toSql(boundary.getExpr()) + " cannot be implicitly converted to "
-                    + ExprToSql.toSql(analyticExpr.getOrderByElements().get(0).getExpr()), analyticExpr.getPos());
+        OrderByElement orderByElement = analyticExpr.getOrderByElements().get(0);
+        Expr orderByExpr = orderByElement.getExpr();
+        Expr offsetExpr = boundary.getExpr();
+        Type orderByType = orderByExpr.getType();
+
+        if (orderByType.isNumericType()) {
+            if (offsetExpr instanceof IntervalLiteral) {
+                throw new SemanticException("For numeric ORDER BY expression, RANGE PRECEDING/FOLLOWING offset "
+                        + "must be a constant non-negative number: " + ExprToSql.toSql(boundary), offsetExpr.getPos());
+            }
+            checkRangeNumericOffset(boundary);
+            Type rangeKeyType = getRangeNumericKeyType(orderByType, offsetExpr.getType());
+            if (rangeKeyType.isInvalid()) {
+                throw new SemanticException("The value expression of a PRECEDING/FOLLOWING clause of a RANGE window "
+                        + "must be compatible with the ORDER BY expression's type: "
+                        + ExprToSql.toSql(offsetExpr) + " cannot be used with "
+                        + ExprToSql.toSql(orderByExpr), analyticExpr.getPos());
+            }
+            orderByElement.setExpr(TypeManager.addCastExpr(orderByExpr, rangeKeyType));
+            return;
+        }
+
+        if (orderByType.isDateType()) {
+            if (!(offsetExpr instanceof IntervalLiteral intervalLiteral)) {
+                throw new SemanticException("For DATE/DATETIME ORDER BY expression, RANGE PRECEDING/FOLLOWING offset "
+                        + "must be a constant non-negative INTERVAL: " + ExprToSql.toSql(boundary), offsetExpr.getPos());
+            }
+            checkRangeIntervalOffset(intervalLiteral);
+            if (!orderByType.isDatetime()) {
+                orderByElement.setExpr(TypeManager.addCastExpr(orderByExpr, DateType.DATETIME));
+            }
+            return;
+        }
+
+        throw new SemanticException("RANGE PRECEDING/FOLLOWING requires a numeric ORDER BY expression with numeric "
+                + "offset, or a DATE/DATETIME ORDER BY expression with INTERVAL offset: "
+                + ExprToSql.toSql(analyticExpr), analyticExpr.getPos());
+    }
+
+    private static Type getRangeNumericKeyType(Type orderByType, Type offsetType) {
+        Type commonType = TypeManager.getCommonType(orderByType, offsetType);
+        if (commonType.isInvalid()) {
+            return commonType;
+        }
+        if (commonType.isFloatingPointType()) {
+            return FloatType.DOUBLE;
+        }
+        if (commonType.isDecimalOfAnyVersion()) {
+            return commonType;
+        }
+        if (commonType.isLargeint()) {
+            return IntegerType.LARGEINT;
+        }
+        if (commonType.isFixedPointType()) {
+            return IntegerType.BIGINT;
+        }
+        return commonType;
+    }
+
+    private static void checkRangeNumericOffset(AnalyticWindowBoundary boundary) {
+        Expr e = boundary.getExpr();
+        if (!e.isConstant() || !e.getType().isNumericType()) {
+            throw new SemanticException("For RANGE window, the value of a PRECEDING/FOLLOWING offset must be a "
+                    + "constant non-negative number: " + ExprToSql.toSql(boundary), e.getPos());
+        }
+        double val;
+        try {
+            val = ExprUtils.getConstFromExpr(e);
+        } catch (AnalysisException exc) {
+            throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(),
+                    e.getPos());
+        }
+        if (Double.isNaN(val) || val < 0) {
+            throw new SemanticException("For RANGE window, the value of a PRECEDING/FOLLOWING offset must be a "
+                    + "constant non-negative number: " + ExprToSql.toSql(boundary), e.getPos());
+        }
+        boundary.setOffsetValue(BigDecimal.valueOf(val));
+    }
+
+    private static void checkRangeIntervalOffset(IntervalLiteral intervalLiteral) {
+        Expr value = intervalLiteral.getValue();
+        if (!value.isConstant() || !value.getType().isNumericType()) {
+            throw new SemanticException("For RANGE window, the value of an INTERVAL PRECEDING/FOLLOWING offset "
+                    + "must be a constant non-negative number: " + ExprToSql.toSql(intervalLiteral), value.getPos());
+        }
+        double val;
+        try {
+            val = ExprUtils.getConstFromExpr(value);
+        } catch (AnalysisException exc) {
+            throw new SemanticException("Couldn't evaluate PRECEDING/FOLLOWING expression: " + exc.getMessage(),
+                    value.getPos());
+        }
+        if (Double.isNaN(val) || val < 0) {
+            throw new SemanticException("For RANGE window, the value of an INTERVAL PRECEDING/FOLLOWING offset "
+                    + "must be a constant non-negative number: " + ExprToSql.toSql(intervalLiteral), value.getPos());
+        }
+
+        String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
+        if (!ImmutableSet.of("YEAR", "QUARTER", "MONTH", "WEEK", "DAY", "HOUR", "MINUTE", "SECOND",
+                "MILLISECOND", "MICROSECOND").contains(unit)) {
+            throw new SemanticException("Unsupported INTERVAL unit for RANGE window: " + unit,
+                    intervalLiteral.getUnitIdentifier().getPos());
         }
     }
 
@@ -315,7 +406,12 @@ public class AnalyticAnalyzer {
     /**
      * Check that b1 <= b2.
      */
-    private static void checkOffsetBoundaries(AnalyticWindowBoundary b1, AnalyticWindowBoundary b2) {
+    private static void checkOffsetBoundaries(AnalyticWindow windowFrame, AnalyticWindowBoundary b1,
+                                              AnalyticWindowBoundary b2) {
+        if (windowFrame.getType() == AnalyticWindow.Type.RANGE &&
+                (b1.getExpr() instanceof IntervalLiteral || b2.getExpr() instanceof IntervalLiteral)) {
+            return;
+        }
         Preconditions.checkState(b1.getBoundaryType().isOffset());
         Preconditions.checkState(b2.getBoundaryType().isOffset());
         Expr e1 = b1.getExpr();

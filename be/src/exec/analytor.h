@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <queue>
 #include <string>
 
@@ -28,6 +29,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/descriptors.h"
+#include "types/datum.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -103,6 +105,21 @@ class Analytor final : public pipeline::ContextWithDependency {
         int64_t _count = 0;
         int64_t _cumulative_size = 0;
         int64_t _average_size = 0;
+    };
+
+    enum class RangeBoundaryType {
+        UNBOUNDED_PRECEDING,
+        UNBOUNDED_FOLLOWING,
+        CURRENT_ROW,
+        PRECEDING,
+        FOLLOWING
+    };
+
+    struct RangeBoundarySpec {
+        RangeBoundaryType type = RangeBoundaryType::CURRENT_ROW;
+        ExprContext* expr_ctx = nullptr;
+        MutableColumnPtr column;
+        bool has_offset = false;
     };
 
 public:
@@ -206,6 +223,7 @@ private:
     void _materializing_process_for_half_unbounded_range_frame(RuntimeState* state);
     // For window frame `ROWS BETWEEN N PRECEDING AND CURRENT ROW`
     void _materializing_process_for_sliding_frame(RuntimeState* state);
+    void _materializing_process_for_range_offset_frame(RuntimeState* state);
     ProcessByPartitionFunc _materializing_process_impl = nullptr;
 
     void _update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start, int64_t frame_end);
@@ -222,6 +240,12 @@ private:
     int64_t _find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end);
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();
+    void _compute_range_nonnull_segment();
+    FrameRange _get_range_offset_frame_range();
+    int64_t _resolve_range_offset_boundary(const RangeBoundarySpec& boundary, bool is_start, bool current_row_is_null);
+    int64_t _seek_range_frame_start_with_offset(const Datum& boundary_value);
+    int64_t _seek_range_frame_end_with_offset(const Datum& boundary_value);
+    void _reset_range_frame_cursors();
 
     bool _has_output() const { return _output_chunk_index < _input_chunks.size(); }
     int64_t _first_global_position_of_current_chunk() const {
@@ -234,7 +258,27 @@ private:
         return _get_global_position(_current_row_position) - _first_global_position_of_current_chunk();
     }
     FrameRange _get_frame_range() const {
-        if (_is_unbounded_preceding) {
+        if (_is_range_window) {
+            DCHECK(!_is_range_offset_window);
+            int64_t frame_start = _partition.start;
+            int64_t frame_end = _partition.end;
+            if (_range_start_boundary.type == RangeBoundaryType::CURRENT_ROW) {
+                frame_start = _peer_group.start;
+            } else {
+                DCHECK_EQ(_range_start_boundary.type, RangeBoundaryType::UNBOUNDED_PRECEDING);
+            }
+            if (_range_end_boundary.type == RangeBoundaryType::CURRENT_ROW) {
+                frame_end = _peer_group.end;
+            } else {
+                DCHECK_EQ(_range_end_boundary.type, RangeBoundaryType::UNBOUNDED_FOLLOWING);
+            }
+            frame_start = std::max<int64_t>(frame_start, _partition.start);
+            frame_end = std::min<int64_t>(frame_end, _partition.end);
+            if (frame_end < frame_start) {
+                frame_end = frame_start;
+            }
+            return {frame_start, frame_end};
+        } else if (_is_unbounded_preceding) {
             return {_partition.start, _current_row_position + _rows_end_offset + 1};
         } else {
             return {_current_row_position + _rows_start_offset, _current_row_position + _rows_end_offset + 1};
@@ -274,6 +318,17 @@ private:
     int64_t _rows_end_offset = 0;
 
     bool _is_unbounded_preceding = false;
+    bool _is_range_window = false;
+    bool _is_range_offset_window = false;
+    bool _range_order_is_asc = true;
+    TypeDescriptor _range_order_type;
+    RangeBoundarySpec _range_start_boundary;
+    RangeBoundarySpec _range_end_boundary;
+    bool _range_nonnull_segment_valid = false;
+    int64_t _range_nonnull_start = 0;
+    int64_t _range_nonnull_end = 0;
+    int64_t _range_start_frame_cursor = 0;
+    int64_t _range_end_frame_cursor = 0;
 
     // The offset of the n-th window function in a row of window functions.
     std::vector<size_t> _agg_states_offsets;

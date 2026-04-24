@@ -56,19 +56,21 @@ public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be co
     @Test
     public void testRange() {
         analyzeFail("select sum(v1) " +
-                        "over(partition by v2 order by v3 range between 1 preceding and unbounded following) from t0",
-                "RANGE is only supported with both the lower " +
-                        "and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
-
+                        "over(partition by v2 order by v3, v2 range between 1 preceding and current row) from t0",
+                "Only one ORDER BY expression allowed if used with a RANGE window with PRECEDING/FOLLOWING");
         analyzeFail("select sum(v1) " +
-                        "over(partition by v2 order by v3 range between unbounded preceding and 1 following) from t0",
-                "RANGE is only supported with both the lower " +
-                        "and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
-
+                        "over(partition by v2 order by v3 range between cast(v2 as varchar) preceding and current row) " +
+                        "from t0",
+                "must be a constant non-negative number");
+        analyzeFail("select sum(tc) " +
+                        "over(order by ti range between 1 preceding and current row) from tall",
+                "must be a constant non-negative INTERVAL");
         analyzeFail("select sum(v1) " +
-                        "over(partition by v2 order by v3 range between current row and current row) from t0",
-                "RANGE is only supported with both the lower " +
-                        "and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
+                        "over(order by v3 range between interval 1 day preceding and current row) from t0",
+                "must be a constant non-negative number");
+        analyzeFail("select sum(v1) " +
+                        "over(partition by v2 order by v3 range between -1 preceding and current row) from t0",
+                "must be a constant non-negative number");
 
         analyzeFail("select sum(v1) over(partition by v2 order by v3 range unbounded following) from t0",
                 "UNBOUNDED FOLLOWING is only allowed for upper bound of BETWEEN");
@@ -79,6 +81,20 @@ public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be co
                 "over(partition by v2 order by v3 range between current row and unbounded following) from t0");
         analyzeSuccess("select sum(v1) " +
                 "over(partition by v2 order by v3 range between unbounded preceding and current row) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between 1 preceding and unbounded following) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between unbounded preceding and 1 following) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between current row and current row) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between 1 preceding and 2 following) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between 0 preceding and current row) from t0");
+        analyzeSuccess("select sum(tc) " +
+                "over(order by ti range between interval 1 day preceding and current row) from tall");
+        analyzeSuccess("select sum(tc) " +
+                "over(order by th desc range between interval 3 month preceding and current row) from tall");
         analyzeSuccess("select sum(v1) over(partition by v2 order by v3 range unbounded preceding) from t0");
     }
 

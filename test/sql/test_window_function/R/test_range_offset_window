@@ -1,0 +1,103 @@
+-- name: test_range_offset_window
+CREATE TABLE `test_range_offset_window` (
+    `id` int NOT NULL,
+    `k` int NULL,
+    `d` date NULL,
+    `ts` datetime NULL,
+    `v` int NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `test_range_offset_window` VALUES
+    (1, NULL, NULL, NULL, 10),
+    (2, NULL, NULL, NULL, 20),
+    (3, 1, '2024-01-01', '2024-01-01 00:00:00', 1),
+    (4, 2, '2024-01-02', '2024-01-15 00:00:00', 2),
+    (5, 2, '2024-01-02', '2024-02-01 00:00:00', 3),
+    (6, 3, '2024-01-04', '2024-02-15 00:00:00', 4),
+    (7, 5, '2024-02-01', '2024-03-01 00:00:00', 5);
+-- result:
+-- !result
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS FIRST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	None	30
+2	None	30
+3	1	1
+4	2	6
+5	2	6
+6	3	9
+7	5	5
+-- !result
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k DESC NULLS LAST RANGE BETWEEN 1 PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	None	30
+2	None	30
+3	1	6
+4	2	9
+5	2	9
+6	3	4
+7	5	5
+-- !result
+SELECT id, k,
+       COUNT(v) OVER (ORDER BY k RANGE BETWEEN 0 PRECEDING AND 1 FOLLOWING) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	None	2
+2	None	2
+3	1	3
+4	2	3
+5	2	3
+6	3	1
+7	5	1
+-- !result
+SELECT id, d,
+       SUM(v) OVER (ORDER BY d RANGE BETWEEN INTERVAL 1 DAY PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	None	30
+2	None	30
+3	2024-01-01	1
+4	2024-01-02	6
+5	2024-01-02	6
+6	2024-01-04	4
+7	2024-02-01	5
+-- !result
+SELECT id, ts,
+       SUM(v) OVER (ORDER BY ts DESC RANGE BETWEEN INTERVAL 1 MONTH PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	None	30
+2	None	30
+3	2024-01-01 00:00:00	6
+4	2024-01-15 00:00:00	9
+5	2024-02-01 00:00:00	12
+6	2024-02-15 00:00:00	9
+7	2024-03-01 00:00:00	5
+-- !result
+SELECT id, k,
+       SUM(v) OVER (ORDER BY k ASC NULLS LAST RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS w
+FROM test_range_offset_window
+ORDER BY id;
+-- result:
+1	None	45
+2	None	45
+3	1	1
+4	2	6
+5	2	6
+6	3	10
+7	5	15
+-- !result
