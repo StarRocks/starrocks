@@ -867,9 +867,45 @@ TEST_F(TableSchemaServiceTest, get_tablet_initial_metadata_rpc_error) {
     ASSERT_TRUE(result.status().is_thrift_rpc_error());
 }
 
-TEST_F(TableSchemaServiceTest, construct_initial_metadata_fields_match_create_tablet) {
+TEST_F(TableSchemaServiceTest, get_tablet_initial_metadata_batch_error) {
     ScopedSyncPoint sync_point;
+
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
+                auto ctx = unpack_initial_metadata_hook_args(arg);
+                *ctx.mock_thrift_rpc = true;
+                *ctx.status = Status::OK();
+                // Batch-level status is not OK
+                TableSchemaServiceTest::set_status(&ctx.response->status, TStatusCode::INTERNAL_ERROR,
+                                                   "mocked batch error");
+            });
+
+    auto result = _schema_service->get_tablet_initial_metadata(next_id(), next_id(), next_id(), next_id());
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_internal_error());
+}
+
+TEST_F(TableSchemaServiceTest, get_tablet_initial_metadata_empty_response) {
+    ScopedSyncPoint sync_point;
+
+    SyncPoint::GetInstance()->SetCallBack(
+            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
+                auto ctx = unpack_initial_metadata_hook_args(arg);
+                *ctx.mock_thrift_rpc = true;
+                *ctx.status = Status::OK();
+                TableSchemaServiceTest::set_status(&ctx.response->status, TStatusCode::OK);
+                // No responses set, empty batch response
+            });
+
+    auto result = _schema_service->get_tablet_initial_metadata(next_id(), next_id(), next_id(), next_id());
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_internal_error());
+    ASSERT_TRUE(result.status().message().find("empty response") != std::string::npos);
+}
+
+TEST_F(TableSchemaServiceTest, construct_initial_metadata_fields_match_create_tablet) {
     auto tablet_id_a = next_id();
+    auto tablet_id_b = next_id();
     auto schema_id = next_id();
 
     // 1. Build TCreateTabletReq and create tablet A via create_tablet()
@@ -890,56 +926,22 @@ TEST_F(TableSchemaServiceTest, construct_initial_metadata_fields_match_create_ta
     ASSERT_OK(_tablet_manager->create_tablet(create_req));
     ASSIGN_OR_ABORT(auto metadata_a, _tablet_manager->get_tablet_metadata(tablet_id_a, 1));
 
-    // 2. Mock RPC to return the same fields, then call get_tablet_initial_metadata directly
-    SyncPoint::GetInstance()->SetCallBack(
-            "TableSchemaService::_fetch_initial_metadata_via_rpc::test_hook", [&](void* arg) {
-                auto ctx = unpack_initial_metadata_hook_args(arg);
-                *ctx.mock_thrift_rpc = true;
-                *ctx.status = Status::OK();
+    // 2. Build a mocked FE response with the same field values
+    TGetTabletInitialMetadataResponse resp;
+    set_status(&resp.status, TStatusCode::OK);
+    resp.__set_schema(thrift_schema);
+    resp.__set_enable_persistent_index(true);
+    resp.__set_persistent_index_type(TPersistentIndexType::CLOUD_NATIVE);
+    resp.__set_compaction_strategy(TCompactionStrategy::REAL_TIME);
+    resp.__set_compression_type(TCompressionType::LZ4_FRAME);
+    resp.__set_compression_level(5);
+    resp.__set_gtid(99999);
 
-                TableSchemaServiceTest::set_status(&ctx.response->status, TStatusCode::OK);
-                ctx.response->__set_responses(std::vector<TGetTabletInitialMetadataResponse>{});
-                auto& resp = ctx.response->responses.emplace_back();
-                TableSchemaServiceTest::set_status(&resp.status, TStatusCode::OK);
-                resp.__set_schema(thrift_schema);
-                resp.__set_enable_persistent_index(true);
-                resp.__set_persistent_index_type(TPersistentIndexType::CLOUD_NATIVE);
-                resp.__set_compaction_strategy(TCompactionStrategy::REAL_TIME);
-                resp.__set_compression_type(TCompressionType::LZ4_FRAME);
-                resp.__set_compression_level(5);
-                resp.__set_gtid(99999);
-            });
-
-    // 3. Get response and manually build metadata_b the same way construct_initial_metadata does
-    auto tablet_id_b = next_id();
-    auto resp_or = _schema_service->get_tablet_initial_metadata(tablet_id_b, next_id(), next_id(), next_id());
-    ASSERT_TRUE(resp_or.ok());
-    auto& resp = resp_or.value();
-
-    auto metadata_b = std::make_shared<TabletMetadataPB>();
-    metadata_b->set_id(tablet_id_b);
-    metadata_b->set_version(1);
-    metadata_b->set_next_rowset_id(1);
-    metadata_b->set_cumulative_point(0);
-    metadata_b->set_gtid(resp.gtid);
-    auto compress_type = resp.__isset.compression_type ? resp.compression_type : TCompressionType::LZ4_FRAME;
-    ASSERT_OK(convert_t_schema_to_pb_schema(resp.schema, compress_type, metadata_b->mutable_schema()));
-    metadata_b->mutable_schema()->set_compression_level(resp.__isset.compression_level ? resp.compression_level : -1);
-    if (resp.__isset.enable_persistent_index) {
-        metadata_b->set_enable_persistent_index(resp.enable_persistent_index);
-    }
-    if (resp.__isset.persistent_index_type) {
-        metadata_b->set_persistent_index_type(resp.persistent_index_type == TPersistentIndexType::LOCAL
-                                                      ? PersistentIndexTypePB::LOCAL
-                                                      : PersistentIndexTypePB::CLOUD_NATIVE);
-    }
-    if (resp.__isset.compaction_strategy) {
-        metadata_b->set_compaction_strategy(resp.compaction_strategy == TCompactionStrategy::DEFAULT
-                                                    ? CompactionStrategyPB::DEFAULT
-                                                    : CompactionStrategyPB::REAL_TIME);
-    }
+    // 3. Directly call build_initial_metadata to test field assembly
+    ASSIGN_OR_ABORT(auto metadata_b, _tablet_manager->build_initial_metadata(tablet_id_b, resp));
 
     // 4. Compare fields
+    ASSERT_EQ(tablet_id_b, metadata_b->id());
     ASSERT_EQ(metadata_a->version(), metadata_b->version());
     ASSERT_EQ(metadata_a->next_rowset_id(), metadata_b->next_rowset_id());
     ASSERT_EQ(metadata_a->cumulative_point(), metadata_b->cumulative_point());
@@ -949,6 +951,126 @@ TEST_F(TableSchemaServiceTest, construct_initial_metadata_fields_match_create_ta
     ASSERT_EQ(metadata_a->compaction_strategy(), metadata_b->compaction_strategy());
     ASSERT_EQ(metadata_a->schema().id(), metadata_b->schema().id());
     ASSERT_EQ(metadata_a->schema().compression_level(), metadata_b->schema().compression_level());
+}
+
+TEST_F(TableSchemaServiceTest, build_initial_metadata) {
+    auto schema_id = next_id();
+
+    // Case 1: defaults (only schema set)
+    {
+        auto tablet_id = next_id();
+        TGetTabletInitialMetadataResponse resp;
+        set_status(&resp.status, TStatusCode::OK);
+        resp.__set_schema(make_thrift_schema(schema_id));
+
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->build_initial_metadata(tablet_id, resp));
+        ASSERT_EQ(tablet_id, metadata->id());
+        ASSERT_EQ(1, metadata->version());
+        ASSERT_EQ(1, metadata->next_rowset_id());
+        ASSERT_EQ(0, metadata->cumulative_point());
+        ASSERT_FALSE(metadata->has_range());
+        ASSERT_FALSE(metadata->has_flat_json_config());
+        // compaction_strategy defaults to DEFAULT when not set
+        ASSERT_EQ(CompactionStrategyPB::DEFAULT, metadata->compaction_strategy());
+        // compression_level defaults to -1
+        ASSERT_EQ(-1, metadata->schema().compression_level());
+    }
+
+    // Case 2: LOCAL persistent index type
+    {
+        auto tablet_id = next_id();
+        TGetTabletInitialMetadataResponse resp;
+        set_status(&resp.status, TStatusCode::OK);
+        resp.__set_schema(make_thrift_schema(schema_id));
+        resp.__set_enable_persistent_index(true);
+        resp.__set_persistent_index_type(TPersistentIndexType::LOCAL);
+
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->build_initial_metadata(tablet_id, resp));
+        ASSERT_TRUE(metadata->enable_persistent_index());
+        ASSERT_EQ(PersistentIndexTypePB::LOCAL, metadata->persistent_index_type());
+    }
+
+    // Case 3: tablet_ranges contains this tablet's range
+    {
+        auto tablet_id = next_id();
+        auto other_tablet_id = next_id();
+        TGetTabletInitialMetadataResponse resp;
+        set_status(&resp.status, TStatusCode::OK);
+        resp.__set_schema(make_thrift_schema(schema_id));
+
+        std::map<int64_t, TTabletRange> tablet_ranges;
+        TTabletRange range;
+        range.__set_lower_bound_included(true);
+        range.__set_upper_bound_included(false);
+        tablet_ranges[tablet_id] = range;
+        tablet_ranges[other_tablet_id] = TTabletRange();
+        resp.__set_tablet_ranges(tablet_ranges);
+
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->build_initial_metadata(tablet_id, resp));
+        ASSERT_TRUE(metadata->has_range());
+        ASSERT_TRUE(metadata->range().lower_bound_included());
+        ASSERT_FALSE(metadata->range().upper_bound_included());
+    }
+
+    // Case 4: tablet_ranges set but does not contain this tablet
+    {
+        auto tablet_id = next_id();
+        TGetTabletInitialMetadataResponse resp;
+        set_status(&resp.status, TStatusCode::OK);
+        resp.__set_schema(make_thrift_schema(schema_id));
+        std::map<int64_t, TTabletRange> tablet_ranges;
+        tablet_ranges[next_id()] = TTabletRange();
+        resp.__set_tablet_ranges(tablet_ranges);
+
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->build_initial_metadata(tablet_id, resp));
+        ASSERT_FALSE(metadata->has_range());
+    }
+
+    // Case 5: flat_json_config is set
+    {
+        auto tablet_id = next_id();
+        TGetTabletInitialMetadataResponse resp;
+        set_status(&resp.status, TStatusCode::OK);
+        resp.__set_schema(make_thrift_schema(schema_id));
+        TFlatJsonConfig flat_json;
+        flat_json.__set_flat_json_enable(true);
+        flat_json.__set_flat_json_null_factor(0.3);
+        flat_json.__set_flat_json_sparsity_factor(0.9);
+        flat_json.__set_flat_json_column_max(100);
+        resp.__set_flat_json_config(flat_json);
+
+        ASSIGN_OR_ABORT(auto metadata, _tablet_manager->build_initial_metadata(tablet_id, resp));
+        ASSERT_TRUE(metadata->has_flat_json_config());
+        ASSERT_TRUE(metadata->flat_json_config().flat_json_enable());
+    }
+}
+
+TEST_F(TableSchemaServiceTest, parse_shard_properties) {
+    int64_t tablet_id = next_id();
+
+    // Case 1: all fields present and valid
+    {
+        std::map<std::string, std::string> properties;
+        properties["tableId"] = "100";
+        properties["partitionId"] = "200";
+        properties["indexId"] = "300";
+        int64_t table_id = 0, partition_id = 0, index_id = 0;
+        ASSERT_OK(TabletManager::parse_shard_properties(tablet_id, properties, &table_id, &partition_id, &index_id));
+        ASSERT_EQ(100, table_id);
+        ASSERT_EQ(200, partition_id);
+        ASSERT_EQ(300, index_id);
+    }
+
+    // Case 2: missing required property
+    {
+        std::map<std::string, std::string> properties;
+        properties["tableId"] = "100";
+        properties["partitionId"] = "200";
+        // missing indexId
+        int64_t table_id = 0, partition_id = 0, index_id = 0;
+        auto st = TabletManager::parse_shard_properties(tablet_id, properties, &table_id, &partition_id, &index_id);
+        ASSERT_TRUE(st.is_internal_error());
+    }
 }
 
 TEST_F(TableSchemaServiceTest, cn_free_fallback_not_triggered_for_version_gt_1) {

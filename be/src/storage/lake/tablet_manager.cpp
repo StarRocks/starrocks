@@ -277,8 +277,34 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     return put_tablet_metadata(std::move(tablet_metadata_pb));
 }
 
-// NOTE: if you add a new field to create_tablet(), also update this method and
-// TGetTabletInitialMetadataResponse in FrontendService.thrift to keep them in sync.
+// Parse (table_id, partition_id, index_id) from StarOS shard properties.
+// Extracted as a helper so it can be unit tested without a real g_worker.
+Status TabletManager::parse_shard_properties(int64_t tablet_id,
+                                               const std::map<std::string, std::string>& properties,
+                                               int64_t* table_id, int64_t* partition_id, int64_t* index_id) {
+    *table_id = -1;
+    *partition_id = -1;
+    *index_id = -1;
+    auto table_id_iter = properties.find("tableId");
+    if (table_id_iter != properties.end()) {
+        *table_id = std::atol(table_id_iter->second.data());
+    }
+    auto partition_id_iter = properties.find("partitionId");
+    if (partition_id_iter != properties.end()) {
+        *partition_id = std::atol(partition_id_iter->second.data());
+    }
+    auto index_id_iter = properties.find("indexId");
+    if (index_id_iter != properties.end()) {
+        *index_id = std::atol(index_id_iter->second.data());
+    }
+    if (*table_id <= 0 || *partition_id <= 0 || *index_id <= 0) {
+        return Status::InternalError(
+                fmt::format("incomplete shard properties, tablet_id: {}, table_id: {}, partition_id: {}, index_id: {}",
+                            tablet_id, *table_id, *partition_id, *index_id));
+    }
+    return Status::OK();
+}
+
 StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t tablet_id) {
     TEST_ERROR_POINT("TabletManager::construct_initial_metadata");
 #ifdef BE_TEST
@@ -293,42 +319,30 @@ StatusOr<TabletMetadataPtr> TabletManager::construct_initial_metadata(int64_t ta
     int64_t partition_id = -1;
     int64_t index_id = -1;
 #if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-    if (g_worker != nullptr) {
-        auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
-        if (shard_info_or.ok()) {
-            const auto& properties = shard_info_or.value().properties;
-            auto table_id_iter = properties.find("tableId");
-            if (table_id_iter != properties.end()) {
-                table_id = std::atol(table_id_iter->second.data());
-            }
-            auto partition_id_iter = properties.find("partitionId");
-            if (partition_id_iter != properties.end()) {
-                partition_id = std::atol(partition_id_iter->second.data());
-            }
-            auto index_id_iter = properties.find("indexId");
-            if (index_id_iter != properties.end()) {
-                index_id = std::atol(index_id_iter->second.data());
-            }
-        } else {
-            return Status::InternalError(
-                    fmt::format("fail to get shard info, tablet_id: {}, error: {}",
-                                tablet_id, shard_info_or.status().message()));
-        }
-    } else {
+    if (g_worker == nullptr) {
         return Status::InternalError(fmt::format("starlet worker not initialized, tablet_id: {}", tablet_id));
     }
-    if (table_id <= 0 || partition_id <= 0 || index_id <= 0) {
+    auto shard_info_or = g_worker->retrieve_shard_info(tablet_id);
+    if (!shard_info_or.ok()) {
         return Status::InternalError(
-                fmt::format("incomplete shard properties, tablet_id: {}, table_id: {}, partition_id: {}, index_id: {}",
-                            tablet_id, table_id, partition_id, index_id));
+                fmt::format("fail to get shard info, tablet_id: {}, error: {}",
+                            tablet_id, shard_info_or.status().message()));
     }
+    RETURN_IF_ERROR(parse_shard_properties(tablet_id, shard_info_or.value().properties,
+                                             &table_id, &partition_id, &index_id));
 #else
     return Status::InternalError("cn-free tablet creation requires USE_STAROS");
 #endif
 
     ASSIGN_OR_RETURN(auto resp,
                      _table_schema_service->get_tablet_initial_metadata(tablet_id, table_id, partition_id, index_id));
+    return build_initial_metadata(tablet_id, resp);
+}
 
+// NOTE: if you add a new field to create_tablet(), also update this method and
+// TGetTabletInitialMetadataResponse in FrontendService.thrift to keep them in sync.
+StatusOr<TabletMetadataPtr> TabletManager::build_initial_metadata(
+        int64_t tablet_id, const TGetTabletInitialMetadataResponse& resp) {
     auto metadata = std::make_shared<TabletMetadataPB>();
     metadata->set_id(tablet_id);
     metadata->set_version(kInitialVersion);
