@@ -1306,6 +1306,9 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(1, ifStat.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(42, ifStat.getMinValue(), 0.001);
         Assertions.assertEquals(42, ifStat.getMaxValue(), 0.001);
+        Assertions.assertNotNull(ifStat.getHistogram());
+        Assertions.assertNotNull(ifStat.getHistogram().getMCV());
+        Assertions.assertTrue(ifStat.getHistogram().getMCV().containsKey("42"));
     }
 }
 

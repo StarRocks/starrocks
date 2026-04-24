@@ -819,8 +819,7 @@ public class ExpressionStatisticCalculator {
         private Histogram buildIfMcv(ColumnStatistic condStat,
                                      ColumnStatistic thenStat,
                                      ColumnStatistic elseStat) {
-            if (condStat.getHistogram() == null || condStat.getHistogram().getMCV() == null || thenStat.getHistogram() == null
-                    || elseStat.getHistogram() == null) {
+            if (condStat.getHistogram() == null || condStat.getHistogram().getMCV() == null) {
                 return null;
             }
 
@@ -828,6 +827,26 @@ public class ExpressionStatisticCalculator {
 
             long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
             long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
+
+            final boolean thenHasHist = thenStat.getHistogram() != null && thenStat.getHistogram().getMCV() != null;
+            final boolean elseHasHist = elseStat.getHistogram() != null && elseStat.getHistogram().getMCV() != null;
+
+            // If neither branch has a histogram, nothing to propagate.
+            if (!thenHasHist && !elseHasHist) {
+                return null;
+            }
+
+            // If one branch is unreachable, return the other branch MCV.
+            if (trueRows == 0 && elseHasHist) {
+                return elseStat.getHistogram();
+            } else if (falseRows == 0 && thenHasHist) {
+                return thenStat.getHistogram();
+            }
+
+            // Both branches are reachable; require both to have histograms for merging.
+            if (!thenHasHist || !elseHasHist) {
+                return null;
+            }
 
             Map<String, Long> mcvs = new HashMap<>();
             scaleBranchMcvAndMerge(thenStat.getHistogram().getMCV(), trueRows, mcvs);
