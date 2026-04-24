@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/rowset/metadata_cache.h"
-
 #include <gtest/gtest.h>
+
+#define private public
+#include "storage/rowset/metadata_cache.h"
+#undef private
 
 #include "runtime/starrocks_metrics.h"
 #include "storage/chunk_helper.h"
@@ -29,6 +31,74 @@
 #include "storage/tablet_schema_helper.h"
 
 namespace starrocks {
+
+class RecordingCache final : public Cache {
+public:
+    Handle* insert(const CacheKey& /*key*/, void* /*value*/, size_t /*value_size*/,
+                   void (*/*deleter*/)(const CacheKey& key, void* value),
+                   CachePriority /*priority*/ = CachePriority::NORMAL) override {
+        return nullptr;
+    }
+
+    Handle* lookup(const CacheKey& key) override {
+        ++lookup_calls;
+        last_lookup_key = key.to_string();
+        return &_handle;
+    }
+
+    void release(Handle* /*handle*/) override { ++release_calls; }
+
+    void touch(const CacheKey& key) override {
+        ++touch_calls;
+        last_touch_key = key.to_string();
+    }
+
+    void* value(Handle* /*handle*/) override { return nullptr; }
+
+    Slice value_slice(Handle* /*handle*/) override { return {}; }
+
+    void erase(const CacheKey& /*key*/) override {}
+
+    uint64_t new_id() override { return 0; }
+
+    void get_cache_status(rapidjson::Document* /*document*/) override {}
+
+    void set_capacity(size_t capacity) override { _capacity = capacity; }
+
+    size_t get_capacity() const override { return _capacity; }
+
+    size_t get_memory_usage() const override { return 0; }
+
+    size_t get_lookup_count() const override { return lookup_calls; }
+
+    size_t get_hit_count() const override { return 0; }
+
+    size_t get_insert_count() const override { return 0; }
+
+    size_t get_insert_evict_count() const override { return 0; }
+
+    size_t get_release_evict_count() const override { return 0; }
+
+    bool adjust_capacity(int64_t delta, size_t min_capacity = 0) override {
+        int64_t new_capacity = static_cast<int64_t>(_capacity) + delta;
+        if (new_capacity < static_cast<int64_t>(min_capacity)) {
+            return false;
+        }
+        _capacity = static_cast<size_t>(new_capacity);
+        return true;
+    }
+
+    size_t lookup_calls = 0;
+    size_t release_calls = 0;
+    size_t touch_calls = 0;
+    std::string last_lookup_key;
+    std::string last_touch_key;
+
+private:
+    size_t _capacity = 0;
+    Handle _handle;
+};
+
 class MetadataCacheTest : public ::testing::Test {
 public:
     void SetUp() override {}
@@ -176,6 +246,19 @@ TEST_F(MetadataCacheTest, test_warmup) {
         metadata_cache_ptr->set_capacity(rowsets[0]->segment_memory_usage() * 64);
         ASSERT_TRUE(rowsets[0]->segment_memory_usage() > 0);
     }
+}
+
+TEST_F(MetadataCacheTest, test_warmup_uses_touch_without_releasing_handle) {
+    MetadataCache metadata_cache(1);
+    auto* recording_cache = new RecordingCache();
+    metadata_cache._cache.reset(recording_cache);
+
+    metadata_cache._warmup("rowset_warmup_key");
+
+    ASSERT_EQ(1, recording_cache->touch_calls);
+    ASSERT_EQ("rowset_warmup_key", recording_cache->last_touch_key);
+    ASSERT_EQ(0, recording_cache->lookup_calls);
+    ASSERT_EQ(0, recording_cache->release_calls);
 }
 
 TEST_F(MetadataCacheTest, test_concurrency_issue) {
