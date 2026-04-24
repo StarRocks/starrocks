@@ -237,19 +237,7 @@ None
 create table c2 distributed by random buckets 10 as select * from t;
 -- result:
 -- !result
-[UC] show create table c2;
+function: assert_query_contains("show create table c2", "DUPLICATE KEY(`k`, `v`)", "DISTRIBUTED BY RANDOM BUCKETS 10")
 -- result:
-c2	CREATE TABLE `c2` (
-  `k` int(11) NULL COMMENT "",
-  `v` int(11) NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`, `v`)
-DISTRIBUTED BY RANDOM BUCKETS 10
-PROPERTIES (
-"bucket_size" = "1073741824",
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "1"
-);
+None
 -- !result
