@@ -56,6 +56,20 @@ import java.util.List;
  * future commit introduces a {@code has_table_privilege()} scalar SQL
  * function, only the body of {@link #buildPolicy} changes; callers still
  * get the same {@link Expr} shape back.
+ *
+ * <p><b>Performance note:</b> {@link #buildPolicy} enumerates every
+ * table in every database in the default internal catalog and runs an
+ * {@link Authorizer#checkTableAction} per candidate. Cost is therefore
+ * O(#databases &times; #tables) per query against
+ * {@code _statistics_.rejected_records}, and the resulting predicate
+ * is a left-linear chain of {@code (db = 'x' AND table = 'y') OR ...}
+ * whose depth scales with the number of SELECT-privileged tables.
+ * Clusters with tens of thousands of user-owned tables should use a
+ * dedicated reporting role whose grants are narrowed to only the
+ * target tables, or else expect multi-second latency on the
+ * rejected-records query and watch for expression-analysis stack usage
+ * on the hot path. A cached enumeration + balanced OR tree is tracked
+ * as follow-up work.
  */
 public final class RejectedRecordsRowAccessPolicy {
 
