@@ -311,4 +311,30 @@ public class StorageVolumeAccessCheckerTest {
         // Should handle gracefully
         Assertions.assertTrue(ex.getMessage().contains("Storage volume accessibility check failed"));
     }
+
+    /**
+     * When checkPathExist returns false (path doesn't exist but credentials/network are valid),
+     * the precheck should still pass — accessibility check, not existence check.
+     */
+    @Test
+    public void testCheckSuccessWhenPathDoesNotExist() {
+        String svName = "test_sv";
+        String svType = "S3";
+        List<String> locations = Collections.singletonList("s3://bucket/nonexistent-path");
+        Map<String, String> params = new HashMap<>();
+        params.put("AWS_S3_REGION", "us-east-1");
+
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public boolean checkPathExist(String path, Map<String, String> properties) throws StarRocksException {
+                // Path doesn't exist but credentials/network are valid
+                return false;
+            }
+        };
+
+        // Should not throw: we check accessibility (credentials + network), not path existence.
+        // A storage volume may legitimately point to a path that doesn't exist yet.
+        Assertions.assertDoesNotThrow(() ->
+                StorageVolumeAccessChecker.check(svName, svType, locations, params));
+    }
 }

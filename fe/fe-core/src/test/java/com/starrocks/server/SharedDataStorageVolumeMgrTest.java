@@ -1139,6 +1139,41 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
+    public void testUpdateLocationsOnlyTriggersAccessCheck() throws DdlException, AlreadyExistsException {
+        String svName = "test";
+        StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
+        List<String> locations = Arrays.asList("s3://abc");
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        AtomicInteger callCount = new AtomicInteger(0);
+
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        // Allow creation
+        new MockUp<StorageVolumeAccessChecker>() {
+            @Mock
+            public void check(String name, String svType, List<String> checkedLocations, Map<String, String> params) {
+                callCount.incrementAndGet();
+            }
+        };
+
+        svm.createStorageVolume(svName, "S3", locations, storageParams, Optional.empty(), "");
+        Assertions.assertEquals(1, callCount.get()); // check fired once during CREATE
+
+        // ALTER with only locations changed — connectivityChanged = true, check must fire
+        List<String> newLocations = Arrays.asList("s3://abc", "s3://def");
+        svm.updateStorageVolume(svName, null, newLocations, new HashMap<>(), Optional.empty(), "");
+        Assertions.assertEquals(2, callCount.get()); // check fired again for locations change
+    }
+
+    @Test
     public void testUpgrade() throws IOException, SRMetaBlockException, SRMetaBlockEOFException,
             DdlException, AlreadyExistsException {
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
