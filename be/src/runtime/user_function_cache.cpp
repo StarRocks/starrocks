@@ -145,12 +145,13 @@ Status UserFunctionCache::get_libpath(int64_t fid, const std::string& url, const
     return Status::OK();
 }
 
-StatusOr<std::any> UserFunctionCache::load_cacheable_java_udf(
+StatusOr<std::pair<bool, std::any>> UserFunctionCache::load_cacheable_java_udf(
         int64_t fid, const std::string& url, const std::string& checksum, FuncType function_type,
         const std::function<StatusOr<std::any>(const std::string& path)>& loader) {
     UserFunctionCacheEntryPtr entry;
-    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry, loader));
-    return entry->cache_handle;
+    bool cache_hit = false;
+    RETURN_IF_ERROR(_get_cache_entry(fid, url, checksum, function_type, &entry, loader, &cache_hit));
+    return std::make_pair(cache_hit, entry->cache_handle);
 }
 
 auto UserFunctionCache::_get_function_type(const std::string& url) -> FuncType {
@@ -212,7 +213,8 @@ Status UserFunctionCache::_load_cached_lib() {
 }
 template <class Loader>
 Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, const std::string& checksum,
-                                           FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader) {
+                                           FuncType type, UserFunctionCacheEntryPtr* output_entry, Loader&& loader,
+                                           bool* cache_hit) {
     std::string suffix = ".unk";
     if (type == UDF_TYPE_JAVA) {
         suffix = JAVA_UDF_SUFFIX;
@@ -234,6 +236,11 @@ Status UserFunctionCache::_get_cache_entry(int64_t fid, const std::string& url, 
             _entry_map.emplace(fid, entry);
         }
     }
+
+    if (cache_hit != nullptr) {
+        *cache_hit = entry->is_loaded.load();
+    }
+
     auto st = _load_cache_entry(url, entry, loader);
     if (!st.ok()) {
         LOG(WARNING) << "fail to load cache entry, fid=" << fid;
@@ -297,7 +304,14 @@ Status UserFunctionCache::_load_cache_entry_internal(const std::string& url, Use
         return Status::NotSupported(fmt::format("unsupport udf type: {}, url: {}. url suffix must be '{}' or '{}'",
                                                 entry->function_type, url, JAVA_UDF_SUFFIX, PY_UDF_SUFFIX));
     }
-    entry->is_loaded.store(true);
+    // Only mark loaded when the loader populated a real cache handle.
+    // get_libpath uses a trivial loader that returns empty std::any{}; if we mark
+    // is_loaded=true there, a subsequent load_cacheable_java_udf for the same fid
+    // would skip building the shared context and return an empty handle, causing
+    // bad_any_cast at the call site.
+    if (entry->cache_handle.has_value()) {
+        entry->is_loaded.store(true);
+    }
     return Status::OK();
 }
 

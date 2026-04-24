@@ -468,6 +468,14 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
+### enable_cache_udaf
+
+* **描述**: 设置为 `true` 时，启用 Java UDAF 类级初始化的内存缓存（包括类加载、方法内省和批量更新 stub 类生成）。缓存在首次使用时填充，并在同一 BE 进程内的所有 aggregator/analytor 实例之间复用，从而消除原本与 pipeline DOP 成线性比例的重复每实例初始化开销。缓存仅适用于创建时指定 `"isolation" = "shared"` 的 UDAF 和窗口函数；使用 `"isolation" = "private"` 创建的函数无论此设置如何，始终走非缓存路径。默认为 `false`；在确认 shared 隔离模式的 UDAF 可安全跨并发查询共享类级状态后再启用。运行时 Profile 中提供 `UdafCacheHitCount`、`UdafCachePopulateCount` 和 `UdafLoadTime` 计数器用于观测缓存行为。
+* **范围**: Session
+* **默认值**: `false`
+* **数据类型**: boolean
+* **引入版本**: v3.4.0
+
 ### enable_color_explain_output
 
 * **范围**: Session

@@ -299,6 +299,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String INSERT_MAX_FILTER_RATIO = "insert_max_filter_ratio";
     public static final String INSERT_TIMEOUT = "insert_timeout";
     public static final String DYNAMIC_OVERWRITE = "dynamic_overwrite";
+    public static final String ENABLE_CACHE_UDAF = "enable_cache_udaf";
     public static final String ENABLE_SPILL = "enable_spill";
     public static final String ENABLE_SPILL_TO_REMOTE_STORAGE = "enable_spill_to_remote_storage";
     public static final String DISABLE_SPILL_TO_LOCAL_DISK = "disable_spill_to_local_disk";
@@ -1628,6 +1629,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = INSERT_TIMEOUT)
     private int insertTimeoutS = 14400;
+
+    @VariableMgr.VarAttr(name = ENABLE_CACHE_UDAF)
+    private boolean enableCacheUdaf = false;
 
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
@@ -3982,6 +3986,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.insertTimeoutS = insertTimeoutS;
     }
 
+    public boolean isEnableCacheUdaf() {
+        return enableCacheUdaf;
+    }
+
+    public void setEnableCacheUdaf(boolean enableCacheUdaf) {
+        this.enableCacheUdaf = enableCacheUdaf;
+    }
+
     public boolean isEnableSpill() {
         return enableSpill;
     }
@@ -6088,6 +6100,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setError_for_division_by_zero(true);
         }
 
+        tResult.setEnable_cache_udaf(enableCacheUdaf);
         tResult.setEnable_spill(enableSpill);
         if (enableSpill) {
             TSpillOptions spillOptions = new TSpillOptions();
