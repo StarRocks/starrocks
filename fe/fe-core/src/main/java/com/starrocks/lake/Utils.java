@@ -31,6 +31,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
@@ -119,8 +120,14 @@ public class Utils {
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                       long newVersion, ComputeResource computeResource, boolean useAggregatePublish)
             throws NoAliveBackendException, RpcException {
+        // Collect async vector index build infos reported by BE and enqueue them into the
+        // scheduler. Callers of this simplified overload (lake alter/rollup/schema-change
+        // paths) would otherwise drop those infos and the newly published versions would
+        // stay unbuilt until the next normal publish or leader recoveryScan.
+        List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
         publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
-                null, useAggregatePublish, null);
+                null, useAggregatePublish, vectorIndexBuildInfos);
+        VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos);
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
