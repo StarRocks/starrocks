@@ -740,6 +740,51 @@ public class CreateLakeTableTest {
             Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
         }
 
+        // table_id not exist (tablet_id valid but table dropped): returns NOT_FOUND
+        {
+            TGetTabletInitialMetadataRequest req = new TGetTabletInitialMetadataRequest();
+            req.setTable_id(999999999L);
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tabletId);
+            TBatchGetTabletInitialMetadataRequest batchReq = new TBatchGetTabletInitialMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletInitialMetadataResponse batchResp = impl.getTabletInitialMetadata(batchReq);
+
+            TGetTabletInitialMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
+        }
+
+        // partition_id not exist: returns NOT_FOUND
+        {
+            TGetTabletInitialMetadataRequest req = new TGetTabletInitialMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(999999999L);
+            req.setIndex_id(index.getId());
+            req.setTablet_id(tabletId);
+            TBatchGetTabletInitialMetadataRequest batchReq = new TBatchGetTabletInitialMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletInitialMetadataResponse batchResp = impl.getTabletInitialMetadata(batchReq);
+
+            TGetTabletInitialMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
+        }
+
+        // index_id not exist: returns NOT_FOUND
+        {
+            TGetTabletInitialMetadataRequest req = new TGetTabletInitialMetadataRequest();
+            req.setTable_id(lakeTable.getId());
+            req.setPartition_id(partition.getDefaultPhysicalPartition().getId());
+            req.setIndex_id(999999999L);
+            req.setTablet_id(tabletId);
+            TBatchGetTabletInitialMetadataRequest batchReq = new TBatchGetTabletInitialMetadataRequest();
+            batchReq.addToRequests(req);
+            TBatchGetTabletInitialMetadataResponse batchResp = impl.getTabletInitialMetadata(batchReq);
+
+            TGetTabletInitialMetadataResponse resp = batchResp.getResponses().get(0);
+            Assertions.assertEquals(TStatusCode.NOT_FOUND, resp.getStatus().getStatus_code());
+        }
+
         // empty request
         {
             TBatchGetTabletInitialMetadataRequest batchReq = new TBatchGetTabletInitialMetadataRequest();
