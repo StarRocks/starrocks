@@ -202,10 +202,9 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                 opts.standalone_index_file_paths.emplace(IndexType::VECTOR, it->second);
             } else {
                 opts.standalone_index_file_paths.emplace(
-                        IndexType::VECTOR,
-                        IndexDescriptor::vector_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
-                                                                _opts.segment_file_mark.rowset_id, _segment_id,
-                                                                index_id));
+                        IndexType::VECTOR, IndexDescriptor::vector_index_file_path(
+                                                   _opts.segment_file_mark.rowset_path_prefix,
+                                                   _opts.segment_file_mark.rowset_id, _segment_id, index_id));
             }
         }
 
@@ -349,11 +348,11 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_vector_index(&standalone_index_size));
         *index_size += _wfile->size() - index_offset + standalone_index_size;
 
-        // Track vector index storage type for footer.
+        // The footer's vector_index_storage_type is a segment-level flag: any column that
+        // produced a standalone .vi file makes the whole segment STANDALONE. Only upgrade
+        // to STANDALONE here; never reset back to NONE for subsequent non-vector columns.
         if (standalone_index_size > 0) {
             _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_STANDALONE);
-        } else {
-            _footer.set_vector_index_storage_type(VECTOR_INDEX_STORAGE_NONE);
         }
 
         // check global dict valid

@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include "fs/fs.h"
 #include "storage/variant_tuple.h"
 
@@ -23,7 +25,8 @@ struct SegmentFileInfo : public FileInfo {
     VariantTuple sort_key_min;
     VariantTuple sort_key_max;
     int64_t num_rows = 0;
-    std::vector<int64_t> vector_index_ids; // IDs of vector indexes that actually generated .vi files
+    // IDs of vector indexes configured for this segment (one .vi file per id).
+    std::vector<int64_t> vector_index_ids;
 };
 
 } // namespace starrocks

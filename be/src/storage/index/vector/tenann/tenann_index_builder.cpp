@@ -172,7 +172,8 @@ void TenAnnIndexBuilderProxy::close() const {
     }
     // TenANN's IndexBuilder::Close() does NOT call IndexFileWriter::Close().
     // For S3, objects are only visible after close(), so we must explicitly
-    // close the file writer to finalize the upload.
+    // close the file writer to finalize the upload. VectorIndexFileWriter::Close()
+    // is idempotent, so the destructor path can safely re-enter.
     if (_file_writer) {
         _file_writer->Close();
     }

@@ -40,7 +40,6 @@ public:
 
 protected:
     void SetUp() override {
-        srand(GetCurrentTimeMicros());
         _test_dir = "shared_data_vector_index_test_" + std::to_string(GetCurrentTimeMicros());
         CHECK_OK(fs::remove_all(_test_dir));
         CHECK_OK(fs::create_directories(lake::join_path(_test_dir, lake::kSegmentDirectoryName)));
@@ -142,11 +141,14 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_filename_for_shared_data_seg
     // Verify full path from LocationProvider matches expected layout
     const int64_t tablet_id = 1;
     std::string full_path = _location_provider->segment_location(tablet_id, vi_name);
-    std::string expected = _test_dir + "/data/0000000000000001_6bc1edf0-fba6-4aa1-b0d4-ee5b88ef156b_123.vi";
+    std::string expected = lake::join_path(lake::join_path(_test_dir, lake::kSegmentDirectoryName), vi_name);
     ASSERT_EQ(full_path, expected);
 }
 
-// Test VectorIndexWriter skips file generation when build threshold is not met (shared-data path).
+// Test VectorIndexWriter writes an empty-mark file when the build threshold is not met
+// (shared-data path). finish() goes through VectorIndexBuilder::flush_empty(), which
+// writes IndexDescriptor::mark_word so the reader can distinguish "threshold not met"
+// from a missing segment.
 TEST_F(SharedDataVectorIndexTest, test_vector_index_empty_mark_shared_data_path) {
     ConfigResetGuard<int32_t> threshold_guard(&config::config_vector_index_default_build_threshold, 100);
 
@@ -169,10 +171,13 @@ TEST_F(SharedDataVectorIndexTest, test_vector_index_empty_mark_shared_data_path)
     uint64_t index_size = 0;
     ASSERT_OK(vector_index_writer->finish(&index_size));
 
-    // With threshold 100 and only 3 rows, threshold is not met,
-    // so no index file is generated and index_size remains 0
-    ASSERT_EQ(index_size, 0);
-    ASSERT_TRUE(_fs->path_exists(vector_index_path).is_not_found());
+    // Threshold not met -> flush_empty() writes IndexDescriptor::mark_word.
+    ASSERT_OK(_fs->path_exists(vector_index_path));
+    ASSERT_EQ(index_size, IndexDescriptor::mark_word.size());
+
+    ASSIGN_OR_ABORT(auto index_file, _fs->new_random_access_file(vector_index_path));
+    ASSIGN_OR_ABORT(auto data, index_file->read_all());
+    ASSERT_EQ(data, IndexDescriptor::mark_word);
 }
 
 } // namespace starrocks::lake

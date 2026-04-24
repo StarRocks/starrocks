@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include <unordered_map>
+
 #include "column/chunk.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -38,21 +40,25 @@ namespace {
 // For each column with a vector index, resolve a full segment-level path for the
 // upcoming .vi file and stash it in |opts.vector_index_file_paths|. The SegmentWriter
 // picks these up to direct tenann's writer at object storage.
-void fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tablet_id, std::string_view segment_name,
-                                  TabletManager* tablet_mgr, LocationProvider* location_provider, FileSystem* fs,
-                                  SegmentWriterOptions& opts) {
+//
+// Errors from schema lookups are surfaced; silently skipping them would leave the
+// map empty and make SegmentWriter fall back to the IndexDescriptor-based path,
+// which in shared-data mode is not reachable via the location provider.
+Status fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t tablet_id, std::string_view segment_name,
+                                    TabletManager* tablet_mgr, LocationProvider* location_provider, FileSystem* fs,
+                                    SegmentWriterOptions& opts) {
     for (uint32_t i = 0; i < schema->num_columns(); ++i) {
         const auto& column = schema->column(i);
         if (!schema->has_index(column.unique_id(), IndexType::VECTOR)) {
             continue;
         }
         std::unordered_map<IndexType, TabletIndex> tablet_index;
-        if (!schema->get_indexes_for_column(column.unique_id(), &tablet_index).ok()) {
-            continue;
-        }
+        RETURN_IF_ERROR(schema->get_indexes_for_column(column.unique_id(), &tablet_index));
         auto it = tablet_index.find(IndexType::VECTOR);
         if (it == tablet_index.end()) {
-            continue;
+            return Status::InternalError(
+                    fmt::format("schema reports VECTOR index on column uid={} but get_indexes_for_column returned none",
+                                column.unique_id()));
         }
         int64_t index_id = it->second.index_id();
         std::string vi_name = gen_vector_index_filename(segment_name, index_id);
@@ -64,6 +70,7 @@ void fill_vector_index_file_paths(const TabletSchemaCSPtr& schema, int64_t table
         }
         opts.vector_index_file_paths[index_id] = std::move(full_path);
     }
+    return Status::OK();
 }
 } // namespace
 
@@ -211,7 +218,8 @@ Status HorizontalGeneralTabletWriter::reset_segment_writer(bool eos) {
     } else {
         ASSIGN_OR_RETURN(of, create_file_fn());
     }
-    fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
+    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                 _fs.get(), opts));
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);
@@ -236,9 +244,14 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer(SegmentPB* segment) {
         segment_file_info.sort_key_min = _seg_writer->get_sort_key_min();
         segment_file_info.sort_key_max = _seg_writer->get_sort_key_max();
         segment_file_info.num_rows = _seg_writer->num_rows();
-        // Record which vector indexes actually generated .vi files
-        for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
-            segment_file_info.vector_index_ids.push_back(index_id);
+        // Record the vector index IDs configured for this segment. For non-empty segments
+        // VectorIndexWriter::finish() always produces a .vi file (real index or empty-mark)
+        // for every configured VI column; a zero-row segment short-circuits and produces
+        // no .vi file, so we must not advertise non-existent files downstream.
+        if (segment_file_info.num_rows > 0) {
+            for (const auto& [index_id, _] : _seg_writer->vector_index_file_paths()) {
+                segment_file_info.vector_index_ids.push_back(index_id);
+            }
         }
         _data_size += segment_size;
         collect_writer_stats(_stats, _seg_writer.get());
@@ -381,9 +394,13 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
         segment_file_info.sort_key_min = segment_writer->get_sort_key_min();
         segment_file_info.sort_key_max = segment_writer->get_sort_key_max();
         segment_file_info.num_rows = segment_writer->num_rows();
-        // Record which vector indexes actually generated .vi files
-        for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
-            segment_file_info.vector_index_ids.push_back(index_id);
+        // Record the vector index IDs configured for this segment. See the matching
+        // comment in HorizontalGeneralTabletWriter: a zero-row segment writes no .vi
+        // file, so we must not advertise non-existent files downstream.
+        if (segment_file_info.num_rows > 0) {
+            for (const auto& [index_id, _] : segment_writer->vector_index_file_paths()) {
+                segment_file_info.vector_index_ids.push_back(index_id);
+            }
         }
         _data_size += segment_size;
         collect_writer_stats(_stats, segment_writer.get());
@@ -462,7 +479,8 @@ StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_seg
         ASSIGN_OR_RETURN(of, fs::new_writable_file(wopts, _tablet_mgr->segment_location(_tablet_id, name)));
     }
 
-    fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(), _fs.get(), opts);
+    RETURN_IF_ERROR(fill_vector_index_file_paths(_schema, _tablet_id, name, _tablet_mgr, _location_provider.get(),
+                                                 _fs.get(), opts));
 
     auto w = std::make_shared<SegmentWriter>(std::move(of), _seg_id++, _schema, opts);
     RETURN_IF_ERROR(w->init(column_indexes, is_key));

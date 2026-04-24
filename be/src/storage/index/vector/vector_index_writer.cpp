@@ -99,6 +99,14 @@ Status VectorIndexWriter::finish(uint64_t* index_size) {
             // Close the builder to finalize the underlying file.
             // S3 objects are only visible/readable after close().
             _index_builder->close();
+#ifdef WITH_TENANN
+            // Surface any error from the bridged WritableFile: tenann's IndexFileWriter
+            // interface is void, so failures during flush/close would otherwise be dropped
+            // silently and leave an incomplete/missing object on remote storage.
+            if (_file_writer_holder != nullptr) {
+                RETURN_IF_ERROR(_file_writer_holder->status());
+            }
+#endif
         } else {
             // flush with empty mark
             RETURN_IF_ERROR(VectorIndexBuilder::flush_empty(_vector_index_file_path));
