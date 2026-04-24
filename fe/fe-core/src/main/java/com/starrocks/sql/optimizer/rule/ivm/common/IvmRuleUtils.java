@@ -19,6 +19,8 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
+import java.util.Arrays;
+
 public class IvmRuleUtils {
     public static final String ACTION_COLUMN_NAME = "__ACTION__";
     public static final Type ACTION_COLUMN_TYPE = IntegerType.TINYINT;
@@ -48,5 +50,29 @@ public class IvmRuleUtils {
             }
         }
         return false;
+    }
+
+    public static String structureDigest(OptExpression root) {
+        StringBuilder sb = new StringBuilder();
+        buildStructureDigest(root, sb);
+        return sb.toString();
+    }
+
+    private static void buildStructureDigest(OptExpression node, StringBuilder sb) {
+        sb.append(node.getOp().getOpType())
+                .append('[')
+                .append(node.getOp())
+                .append(']');
+        if (node.getLogicalProperty() != null) {
+            int[] outputColumnIds = node.getOutputColumns().getColumnIds();
+            Arrays.sort(outputColumnIds);
+            sb.append("out=").append(Arrays.toString(outputColumnIds));
+        }
+        sb.append('(');
+        for (OptExpression child : node.getInputs()) {
+            buildStructureDigest(child, sb);
+            sb.append(',');
+        }
+        sb.append(')');
     }
 }
