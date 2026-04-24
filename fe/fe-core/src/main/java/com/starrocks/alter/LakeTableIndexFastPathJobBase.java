@@ -284,9 +284,25 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             if (table == null) {
                 throw new AlterCancelException("table does not exist, tableId: " + tableId);
             }
+            // Advance each partition's visibleVersion to the commit version
+            // that publishVersion() just committed. Without this, a subsequent
+            // alter on the same table captures a stale visibleVersion when
+            // building its AlterReplicaTask, sends it as request.alter_version
+            // to BE, and when BE falls back to the legacy schema-change path
+            // (e.g. on a checksum retry) its op_schema_change carries that
+            // stale alter_version — the publish-time replay loop in
+            // lake/transactions.cpp then tries to read a now-vacuumed
+            // {tablet}_{v}.vlog and fails with 404. LakeTableSchemaChangeJob
+            // does this setVisibleVersion update for the same reason.
+            this.finishedTimeMs = System.currentTimeMillis();
+            for (Map.Entry<Long, Long> e : commitVersionMap.entrySet()) {
+                PhysicalPartition pp = table.getPhysicalPartition(e.getKey());
+                if (pp != null) {
+                    pp.setVisibleVersion(e.getValue(), finishedTimeMs);
+                }
+            }
             applyCatalogMutation(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
-            this.finishedTimeMs = System.currentTimeMillis();
             persistStateChange(this, JobState.FINISHED);
             LOG.info("index fast-path job {} finished", jobId);
         } finally {
