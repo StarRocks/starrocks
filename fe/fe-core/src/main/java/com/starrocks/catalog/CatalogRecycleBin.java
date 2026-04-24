@@ -333,71 +333,89 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isDeletionSafeToExecute(originalRecycleTime);
     }
 
-    private synchronized long getAdjustedRecycleTimestamp(long id) {
-        Map<Long, RecycleTableInfo> idToRecycleTableInfo =  Maps.newHashMap();
-        for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
-            for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
-                idToRecycleTableInfo.put(entry.getKey(), entry.getValue());
-            }
+    private synchronized long getAdjustedRecycleTimestampForDb(long dbId) {
+        RecycleDatabaseInfo databaseInfo = idToDatabase.get(dbId);
+        if (databaseInfo != null && !databaseInfo.isRecoverable()) {
+            return 0;
         }
+        return idToRecycleTime.get(dbId);
+    }
 
-        RecycleTableInfo tableInfo = idToRecycleTableInfo.get(id);
+    private synchronized long getAdjustedRecycleTimestampForTable(long dbId, long tableId) {
+        RecycleTableInfo tableInfo = idToTableInfo.get(dbId, tableId);
         if (tableInfo != null && !tableInfo.isRecoverable()) {
             return 0;
         }
+        return idToRecycleTime.get(tableId);
+    }
 
-        RecyclePartitionInfo partitionInfo = idToPartition.get(id);
+    private synchronized long getAdjustedRecycleTimestampForPartition(long partitionId) {
+        RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
         if (partitionInfo != null && !partitionInfo.isRecoverable()) {
             if (partitionInfo.getRetentionPeriod() > 0) {
                 // partition retention period is set, return the original recycle timestamp
-                return idToRecycleTime.get(id);
+                return idToRecycleTime.get(partitionId);
             } else {
                 return 0;
             }
         }
+        return idToRecycleTime.get(partitionId);
+    }
 
-        RecycleDatabaseInfo databaseInfo = idToDatabase.get(id);
-        if (databaseInfo != null && !databaseInfo.isRecoverable()) {
-            return 0;
-        }
-
-        return idToRecycleTime.get(id);
+    private long defaultExpireMs() {
+        return max(Config.catalog_trash_expire_second * 1000L, Config.catalog_recycle_bin_erase_min_latency_ms);
     }
 
     /**
      * if we can erase this instance, we should check if anyone enable erase later.
      * Only used by main loop.
      */
-    private synchronized boolean timeExpired(long id, long currentTimeMs) {
-        long latencyMs = currentTimeMs - getAdjustedRecycleTimestamp(id);
-        long expireMs = max(Config.catalog_trash_expire_second * 1000L, Config.catalog_recycle_bin_erase_min_latency_ms);
-        // customize expireMs for partition that need to be retained for a configurable period
-        if (idToPartition.containsKey(id)) {
-            RecyclePartitionInfo recyclePartitionInfo = idToPartition.get(id);
-            if (recyclePartitionInfo.getRetentionPeriod() > 0) {
-                // retain the partition alive for `tabletReservePeriod` seconds
-                // while retention period is set, `catalog_trash_expire_second` will not take effect and the partition
-                // is assumed to have been set un-recoverable (i.e. partition is not recoverable)
-                expireMs = max(recyclePartitionInfo.getRetentionPeriod() * 1000, Config.catalog_recycle_bin_erase_min_latency_ms);
-            }
+    private synchronized boolean timeExpiredForDb(long dbId, long currentTimeMs) {
+        long latencyMs = currentTimeMs - getAdjustedRecycleTimestampForDb(dbId);
+        long expireMs = defaultExpireMs();
+        if (enableEraseLater.contains(dbId)) {
+            expireMs += LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
         }
-        if (enableEraseLater.contains(id)) {
-            // if enableEraseLater is set, extend the timeout by LATE_RECYCLE_INTERVAL_SECONDS
+        return latencyMs > expireMs;
+    }
+
+    private synchronized boolean timeExpiredForTable(long dbId, long tableId, long currentTimeMs) {
+        long latencyMs = currentTimeMs - getAdjustedRecycleTimestampForTable(dbId, tableId);
+        long expireMs = defaultExpireMs();
+        if (enableEraseLater.contains(tableId)) {
+            expireMs += LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
+        }
+        return latencyMs > expireMs;
+    }
+
+    private synchronized boolean timeExpiredForPartition(long partitionId, long currentTimeMs) {
+        long latencyMs = currentTimeMs - getAdjustedRecycleTimestampForPartition(partitionId);
+        long expireMs = defaultExpireMs();
+        // customize expireMs for partition that need to be retained for a configurable period
+        RecyclePartitionInfo recyclePartitionInfo = idToPartition.get(partitionId);
+        if (recyclePartitionInfo != null && recyclePartitionInfo.getRetentionPeriod() > 0) {
+            // retain the partition alive for `tabletReservePeriod` seconds
+            // while retention period is set, `catalog_trash_expire_second` will not take effect and the partition
+            // is assumed to have been set un-recoverable (i.e. partition is not recoverable)
+            expireMs = max(recyclePartitionInfo.getRetentionPeriod() * 1000, Config.catalog_recycle_bin_erase_min_latency_ms);
+        }
+        if (enableEraseLater.contains(partitionId)) {
             expireMs += LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
         }
         return latencyMs > expireMs;
     }
 
     private synchronized boolean canEraseDatabase(RecycleDatabaseInfo databaseInfo, long currentTimeMs) {
+        long dbId = databaseInfo.getDb().getId();
         if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                            .isDbInClusterSnapshotInfo(databaseInfo.getDb().getId())) {
+                            .isDbInClusterSnapshotInfo(dbId)) {
             return false;
         }
-        if (!checkValidDeletionByClusterSnapshot(databaseInfo.getDb().getId())) {
+        if (!checkValidDeletionByClusterSnapshot(dbId)) {
             return false;
         }
 
-        if (timeExpired(databaseInfo.getDb().getId(), currentTimeMs)) {
+        if (timeExpiredForDb(dbId, currentTimeMs)) {
             return true;
         }
 
@@ -405,38 +423,41 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
     }
 
     private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
+        long dbId = tableInfo.getDbId();
+        long tableId = tableInfo.getTable().getId();
         if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                            .isTableInClusterSnapshotInfo(tableInfo.getDbId(), tableInfo.getTable().getId())) {
+                            .isTableInClusterSnapshotInfo(dbId, tableId)) {
             return false;
         }
 
-        if (!checkValidDeletionByClusterSnapshot(tableInfo.getTable().getId())) {
+        if (!checkValidDeletionByClusterSnapshot(tableId)) {
             return false;
         }
 
-        if (timeExpired(tableInfo.getTable().getId(), currentTimeMs)) {
+        if (timeExpiredForTable(dbId, tableId, currentTimeMs)) {
             return true;
         }
 
         // database is force dropped, the table can not be recovered, erase it.
-        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(tableInfo.getDbId()) == null) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(dbId) == null) {
             return true;
         }
         return false;
     }
 
     private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
+        long partitionId = partitionInfo.getPartition().getId();
         if (RunMode.isSharedDataMode() && GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
                             .isPartitionInClusterSnapshotInfo(partitionInfo.getDbId(),
-                                    partitionInfo.getTableId(), partitionInfo.getPartition().getId())) {
+                                    partitionInfo.getTableId(), partitionId)) {
             return false;
         }
 
-        if (!checkValidDeletionByClusterSnapshot(partitionInfo.getPartition().getId())) {
+        if (!checkValidDeletionByClusterSnapshot(partitionId)) {
             return false;
         }
 
-        if (timeExpired(partitionInfo.getPartition().getId(), currentTimeMs)) {
+        if (timeExpiredForPartition(partitionId, currentTimeMs)) {
             return true;
         }
 
@@ -455,29 +476,53 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable, Memor
         return false;
     }
 
-    /**
-     * make sure there are still some time before the subject is erased
-     */
-    public synchronized boolean ensureEraseLater(long id, long currentTimeMs) {
-        // 1. not in idToRecycleTime, maybe already erased, sorry it's too late!
-        if (!idToRecycleTime.containsKey(id)) {
-            return false;
-        }
-        // 2. will expire after quite a long time, don't worry
-        long latency = currentTimeMs - getAdjustedRecycleTimestamp(id);
+    private boolean ensureEraseLaterCommon(long id, long currentTimeMs, long adjustedRecycleTimestamp) {
+        // will expire after quite a long time, don't worry
+        long latency = currentTimeMs - adjustedRecycleTimestamp;
         if (latency < (Config.catalog_trash_expire_second - LATE_RECYCLE_INTERVAL_SECONDS) * 1000L) {
             return true;
         }
-        // 3. check valid by cluster snapshot
+        // check valid by cluster snapshot
         if (!checkValidDeletionByClusterSnapshot(id)) {
             return true;
-        } 
-        // 4. already expired, sorry.
+        }
+        // already expired, sorry.
         if (latency > Config.catalog_trash_expire_second * 1000L) {
             return false;
         }
         enableEraseLater.add(id);
         return true;
+    }
+
+    /**
+     * make sure there are still some time before the database is erased
+     */
+    public synchronized boolean ensureDatabaseEraseLater(long dbId, long currentTimeMs) {
+        // not in idToRecycleTime, maybe already erased, sorry it's too late!
+        if (!idToRecycleTime.containsKey(dbId)) {
+            return false;
+        }
+        return ensureEraseLaterCommon(dbId, currentTimeMs, getAdjustedRecycleTimestampForDb(dbId));
+    }
+
+    /**
+     * make sure there are still some time before the table is erased
+     */
+    public synchronized boolean ensureTableEraseLater(long dbId, long tableId, long currentTimeMs) {
+        if (!idToRecycleTime.containsKey(tableId)) {
+            return false;
+        }
+        return ensureEraseLaterCommon(tableId, currentTimeMs, getAdjustedRecycleTimestampForTable(dbId, tableId));
+    }
+
+    /**
+     * make sure there are still some time before the partition is erased
+     */
+    public synchronized boolean ensurePartitionEraseLater(long partitionId, long currentTimeMs) {
+        if (!idToRecycleTime.containsKey(partitionId)) {
+            return false;
+        }
+        return ensureEraseLaterCommon(partitionId, currentTimeMs, getAdjustedRecycleTimestampForPartition(partitionId));
     }
 
     protected synchronized void eraseDatabase(long currentTimeMs) {

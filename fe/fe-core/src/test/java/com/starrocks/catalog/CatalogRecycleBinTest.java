@@ -469,21 +469,21 @@ public class CatalogRecycleBinTest {
 
         // no need to set enable erase later if there are a lot of time left
         long now = System.currentTimeMillis();
-        Assertions.assertTrue(recycleBin.ensureEraseLater(db.getId(), now));
+        Assertions.assertTrue(recycleBin.ensureDatabaseEraseLater(db.getId(), now));
         Assertions.assertFalse(recycleBin.enableEraseLater.contains(db.getId()));
 
         // no need to set enable erase later if already exipre
         long moreThanTenMinutesLater = now + 620 * 1000L;
-        Assertions.assertFalse(recycleBin.ensureEraseLater(db.getId(), moreThanTenMinutesLater));
+        Assertions.assertFalse(recycleBin.ensureDatabaseEraseLater(db.getId(), moreThanTenMinutesLater));
         Assertions.assertFalse(recycleBin.enableEraseLater.contains(db.getId()));
 
         // now we should set enable erase later because we are about to expire
         long moreThanNineMinutesLater = now + 550 * 1000L;
-        Assertions.assertTrue(recycleBin.ensureEraseLater(db.getId(), moreThanNineMinutesLater));
+        Assertions.assertTrue(recycleBin.ensureDatabaseEraseLater(db.getId(), moreThanNineMinutesLater));
         Assertions.assertTrue(recycleBin.enableEraseLater.contains(db.getId()));
 
         // if already expired, we should return false but won't erase the flag
-        Assertions.assertFalse(recycleBin.ensureEraseLater(db.getId(), moreThanTenMinutesLater));
+        Assertions.assertFalse(recycleBin.ensureDatabaseEraseLater(db.getId(), moreThanTenMinutesLater));
         Assertions.assertTrue(recycleBin.enableEraseLater.contains(db.getId()));
     }
 
@@ -550,11 +550,11 @@ public class CatalogRecycleBinTest {
 
         // 3. set recyle later, check if recycle now
         CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
-        Assertions.assertFalse(recycleBin.ensureEraseLater(db1.getId(), now));  // already erased
-        Assertions.assertTrue(recycleBin.ensureEraseLater(db2.getId(), now));
+        Assertions.assertFalse(recycleBin.ensureDatabaseEraseLater(db1.getId(), now));  // already erased
+        Assertions.assertTrue(recycleBin.ensureDatabaseEraseLater(db2.getId(), now));
         Assertions.assertEquals(0, recycleBin.enableEraseLater.size());
         recycleBin.idToRecycleTime.put(db2.getId(), expireFromNow + 1000);
-        Assertions.assertTrue(recycleBin.ensureEraseLater(db2.getId(), now));
+        Assertions.assertTrue(recycleBin.ensureDatabaseEraseLater(db2.getId(), now));
         Assertions.assertEquals(1, recycleBin.enableEraseLater.size());
         Assertions.assertTrue(recycleBin.enableEraseLater.contains(db2.getId()));
 
@@ -566,7 +566,7 @@ public class CatalogRecycleBinTest {
 
         // 5. will erase after expire time + latency time
         recycleBin.idToRecycleTime.put(db2.getId(), expireFromNow - 11000);
-        Assertions.assertFalse(recycleBin.ensureEraseLater(db2.getId(), now));
+        Assertions.assertFalse(recycleBin.ensureDatabaseEraseLater(db2.getId(), now));
         recycleBin.eraseDatabase(now);
         Assertions.assertNull(recycleBin.getDatabase(db2.getId()));
         Assertions.assertEquals(0, recycleBin.idToRecycleTime.size());
@@ -618,11 +618,11 @@ public class CatalogRecycleBinTest {
 
         // 3. set recyle later, check if recycle now
         CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
-        Assertions.assertFalse(recycleBin.ensureEraseLater(table1.getId(), now));  // already erased
-        Assertions.assertTrue(recycleBin.ensureEraseLater(table2.getId(), now));
+        Assertions.assertFalse(recycleBin.ensureTableEraseLater(dbId, table1.getId(), now));  // already erased
+        Assertions.assertTrue(recycleBin.ensureTableEraseLater(dbId, table2.getId(), now));
         Assertions.assertEquals(0, recycleBin.enableEraseLater.size());
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow + 1000);
-        Assertions.assertTrue(recycleBin.ensureEraseLater(table2.getId(), now));
+        Assertions.assertTrue(recycleBin.ensureTableEraseLater(dbId, table2.getId(), now));
         Assertions.assertEquals(1, recycleBin.enableEraseLater.size());
         Assertions.assertTrue(recycleBin.enableEraseLater.contains(table2.getId()));
 
@@ -635,7 +635,7 @@ public class CatalogRecycleBinTest {
 
         // 5. will erase after expire time + latency time
         recycleBin.idToRecycleTime.put(table2.getId(), expireFromNow - 11000);
-        Assertions.assertFalse(recycleBin.ensureEraseLater(table2.getId(), now));
+        Assertions.assertFalse(recycleBin.ensureTableEraseLater(dbId, table2.getId(), now));
         recycleBin.eraseTable(now);
         waitPartitionClearFinished(recycleBin, table2.getId(), now);
         Assertions.assertNull(recycleBin.getTable(dbId, table2.getId()));
@@ -678,11 +678,11 @@ public class CatalogRecycleBinTest {
 
         // 3. set recyle later, check if recycle now
         CatalogRecycleBin.LATE_RECYCLE_INTERVAL_SECONDS = 10;
-        Assertions.assertFalse(recycleBin.ensureEraseLater(p1.getId(), now));  // already erased
-        Assertions.assertTrue(recycleBin.ensureEraseLater(p2.getId(), now));
+        Assertions.assertFalse(recycleBin.ensurePartitionEraseLater(p1.getId(), now));  // already erased
+        Assertions.assertTrue(recycleBin.ensurePartitionEraseLater(p2.getId(), now));
         Assertions.assertEquals(0, recycleBin.enableEraseLater.size());
         recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow + 1000);
-        Assertions.assertTrue(recycleBin.ensureEraseLater(p2.getId(), now));
+        Assertions.assertTrue(recycleBin.ensurePartitionEraseLater(p2.getId(), now));
         Assertions.assertEquals(1, recycleBin.enableEraseLater.size());
         Assertions.assertTrue(recycleBin.enableEraseLater.contains(p2.getId()));
 
@@ -695,7 +695,7 @@ public class CatalogRecycleBinTest {
 
         // 5. will erase after expire time + latency time
         recycleBin.idToRecycleTime.put(p2.getId(), expireFromNow - 11000);
-        Assertions.assertFalse(recycleBin.ensureEraseLater(p2.getId(), now));
+        Assertions.assertFalse(recycleBin.ensurePartitionEraseLater(p2.getId(), now));
         recycleBin.erasePartition(now);
         waitPartitionClearFinished(recycleBin, p2.getId(), now);
         Assertions.assertEquals(recycleBin.getPartition(p2.getId()), null);
@@ -871,11 +871,11 @@ public class CatalogRecycleBinTest {
         recycleBin.recyclePartition(info2);
 
         // With retention period: should return original recycle timestamp
-        long adjustedTime1 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestamp", p1.getId());
+        long adjustedTime1 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestampForPartition", p1.getId());
         Assertions.assertEquals(recycleBin.idToRecycleTime.get(p1.getId()), adjustedTime1);
 
         // Without retention period: should return 0 for non-recoverable partition
-        long adjustedTime2 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestamp", p2.getId());
+        long adjustedTime2 = Deencapsulation.invoke(recycleBin, "getAdjustedRecycleTimestampForPartition", p2.getId());
         Assertions.assertEquals(0, adjustedTime2);
     }
 

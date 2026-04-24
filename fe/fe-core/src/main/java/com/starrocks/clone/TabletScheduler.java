@@ -587,19 +587,20 @@ public class TabletScheduler extends LeaderDaemon {
     protected boolean checkIfTabletExpired(TabletSchedCtx ctx, CatalogRecycleBin recycleBin, long currentTimeMs) {
         // check if about to erase
         long dbId = ctx.getDbId();
-        if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureEraseLater(dbId, currentTimeMs)) {
+        if (recycleBin.getDatabase(dbId) != null && !recycleBin.ensureDatabaseEraseLater(dbId, currentTimeMs)) {
             LOG.warn("discard ctx because db {} will erase soon: {}", dbId, ctx);
             return true;
         }
         long tableId = ctx.getTblId();
-        if (recycleBin.getTable(dbId, tableId) != null && !recycleBin.ensureEraseLater(tableId, currentTimeMs)) {
+        if (recycleBin.getTable(dbId, tableId) != null
+                && !recycleBin.ensureTableEraseLater(dbId, tableId, currentTimeMs)) {
             LOG.warn("discard ctx because table {} will erase soon: {}", tableId, ctx);
             return true;
         }
         long partitionId = ctx.getPhysicalPartitionId();
         PhysicalPartition physicalPartition = recycleBin.getPhysicalPartition(partitionId);
         if (physicalPartition != null
-                && !recycleBin.ensureEraseLater(physicalPartition.getParentId(), currentTimeMs)) {
+                && !recycleBin.ensurePartitionEraseLater(physicalPartition.getParentId(), currentTimeMs)) {
             LOG.warn("discard ctx because partition {} will erase soon: {}", partitionId, ctx);
             return true;
         }
