@@ -758,7 +758,25 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：行
 - 是否动态：是
-- 描述：单次 merge-commit Stream Load 批次包含的软上限行数。超出上限的回写量会在多个 tick 间拆分。该上限用于限制 Stream Load 事务规模，避免一次过大的 flush 反压影响无关的 load。
+- 描述：单次 merge-commit Stream Load 批次的行数上限。在守护线程拼装文件内容的过程中按行强制执行，因此一个超大单文件也会被拆分；超出上限的回写量会在连续 tick 间拆分。该上限用于限制 Stream Load 事务规模，避免一次过大的 flush 反压影响无关的 load。
+- 引入版本：-
+
+### rejected_record_sync_max_batch_bytes
+
+- 默认值：33554432（32 MiB）
+- 类型：Int64
+- 单位：字节
+- 是否动态：是
+- 描述：守护线程每次 POST 拼装的 Stream Load payload 字节上限。与 `rejected_record_sync_max_batch_rows` 同时生效，确保即使列很宽或 `error_message` 很长的 load 也不会在内存里组装出 GB 级 payload。当上限在文件中途被触发时，守护线程会提交当前批次并开启新的 payload；该文件保留到其全部行都已发送为止。建议不超过 FE 的 `streaming_load_max_mb`，以避免 FE 侧拒收。
+- 引入版本：-
+
+### rejected_record_sync_max_backoff_sec
+
+- 默认值：600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：当 `post_to_stream_load` 持续失败时 tick 间隔的上限。守护线程每次失败后将休眠时间翻倍（`rejected_record_sync_interval_sec << 连续失败次数`），直到达到该上限；一次成功后立即回到基础间隔。避免长时间 FE 宕机时每 `rejected_record_sync_interval_sec` 秒都产生一条 WARN 日志 + 一次 `_sync_failures` 计数。`Uninitialized` 状态（"master FE 尚未就绪"）不计入失败连续数。
 - 引入版本：-
 
 ### rejected_record_local_retention_hours

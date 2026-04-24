@@ -764,7 +764,25 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Type: Int
 - Unit: Rows
 - Is mutable: Yes
-- Description: Soft upper bound on rows shipped in a single merge-commit Stream Load batch. Larger backlogs are split across consecutive daemon ticks. The cap bounds Stream Load transaction size so a single oversized flush cannot back-pressure unrelated loads.
+- Description: Row cap on a single merge-commit Stream Load batch. Enforced per-line while the daemon concatenates files, so a single giant file still obeys the cap; larger backlogs are split across consecutive ticks. The cap bounds Stream Load transaction size so one oversized flush cannot back-pressure unrelated loads.
+- Introduced in: -
+
+### rejected_record_sync_max_batch_bytes
+
+- Default: 33554432 (32 MiB)
+- Type: Int64
+- Unit: Bytes
+- Is mutable: Yes
+- Description: Byte cap on the Stream Load payload the daemon assembles per post. Enforced together with `rejected_record_sync_max_batch_rows` so loads with very wide rows or very long error messages cannot build a multi-gigabyte payload in memory. When the cap is hit mid-file the daemon commits the current batch and starts a fresh payload; the file is retained until all of its rows have shipped. Keep at or below the FE's `streaming_load_max_mb` to avoid FE-side rejection.
+- Introduced in: -
+
+### rejected_record_sync_max_backoff_sec
+
+- Default: 600
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: Upper bound on the tick interval when `post_to_stream_load` has been failing persistently. The daemon doubles its sleep after every failed tick (`rejected_record_sync_interval_sec << consecutive_failures`) until this cap is reached, then holds there until a tick succeeds. Prevents a multi-hour FE outage from producing one log line + one `_sync_failures` increment every `rejected_record_sync_interval_sec` seconds. A `Uninitialized` status ("master FE not yet known") never advances the backoff counter.
 - Introduced in: -
 
 ### rejected_record_local_retention_hours
