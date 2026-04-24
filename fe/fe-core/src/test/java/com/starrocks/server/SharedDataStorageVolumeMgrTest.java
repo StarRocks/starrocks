@@ -1139,7 +1139,7 @@ public class SharedDataStorageVolumeMgrTest {
     }
 
     @Test
-    public void testUpdateLocationsOnlyTriggersAccessCheck() throws DdlException, AlreadyExistsException {
+    public void testUpdateLocationsOnlyTriggersAccessCheck() throws DdlException, AlreadyExistsException, MetaNotFoundException {
         String svName = "test";
         StorageVolumeMgr svm = new SharedDataStorageVolumeMgr();
         List<String> locations = Arrays.asList("s3://abc");
