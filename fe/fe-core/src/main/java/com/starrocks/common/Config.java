@@ -4084,6 +4084,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int lake_remove_partition_thread_num = 8;
 
+    /**
+     * The remove process of lake table has been unified with partition erase process.
+     * So this config is not needed, will be removed in the future.
+     */
+    @Deprecated
     @ConfField(mutable = false)
     public static int lake_remove_table_thread_num = 4;
 
