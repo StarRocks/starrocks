@@ -414,7 +414,8 @@
                         "integrations/IDE_integrations/DataGrip",
                         "integrations/IDE_integrations/Dataphin",
                         "integrations/IDE_integrations/DBeaver",
-                        "integrations/IDE_integrations/jupysql"
+                        "integrations/IDE_integrations/jupysql",
+                        "integrations/IDE_integrations/marimo"
                     ]
                 },
                 {
