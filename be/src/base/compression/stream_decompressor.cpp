@@ -1150,7 +1150,7 @@ StatusOr<std::unique_ptr<StreamDecompressor>> StreamDecompressor::create_decompr
         decompressor = std::make_unique<LzoStreamDecompressor>();
         break;
     default:
-        return Status::InternalError(fmt::format("Unknown compress type: {}", static_cast<int>(type)));
+        return Status::InternalError(fmt::format("Unknown compress type: {}", type));
     }
 
     RETURN_IF_ERROR(decompressor->init());
