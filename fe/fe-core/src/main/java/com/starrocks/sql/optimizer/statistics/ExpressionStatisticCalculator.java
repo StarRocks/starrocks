@@ -819,7 +819,8 @@ public class ExpressionStatisticCalculator {
         private Histogram buildIfMcv(ColumnStatistic condStat,
                                      ColumnStatistic thenStat,
                                      ColumnStatistic elseStat) {
-            if (condStat.getHistogram() == null || thenStat.getHistogram() == null || elseStat.getHistogram() == null) {
+            if (condStat.getHistogram() == null || condStat.getHistogram().getMCV() == null || thenStat.getHistogram() == null
+                    || elseStat.getHistogram() == null) {
                 return null;
             }
 
