@@ -741,14 +741,15 @@ public class ExpressionStatisticCalculator {
                     final var condStat = childColumnStatisticList.get(0);
                     final var thenStat = childColumnStatisticList.get(1);
                     final var elseStat = childColumnStatisticList.get(2);
+
+                    // As a base case, assume both branches are reachable and equally weighted.
                     distinctValues = thenStat.getDistinctValuesCount() + elseStat.getDistinctValuesCount();
                     double minValue = Math.min(thenStat.getMinValue(), elseStat.getMinValue());
                     double maxValue = Math.max(thenStat.getMaxValue(), elseStat.getMaxValue());
-
-                    // Assume 50/50 distribution of true/false path
                     nullsFraction = (thenStat.getNullsFraction() + elseStat.getNullsFraction()) / 2;
 
-                    // If there are MCVs, we can compute null fractions weighted by condition's true/false distribution
+                    // If condition MCVs are available, use branch row weights and collapse
+                    // stats to the surviving branch when one side is unreachable.
                     final var conditionHistogram = condStat.getHistogram();
                     if (conditionHistogram != null && conditionHistogram.getMCV() != null) {
                         final var conditionMcv = conditionHistogram.getMCV();
@@ -760,6 +761,18 @@ public class ExpressionStatisticCalculator {
                             final double falseWeight = (double) falseRows / totalRows;
                             nullsFraction = thenStat.getNullsFraction() * trueWeight
                                     + elseStat.getNullsFraction() * falseWeight;
+
+                            if (trueRows == 0) {
+                                // Only ELSE branch is reachable
+                                distinctValues = elseStat.getDistinctValuesCount();
+                                minValue = elseStat.getMinValue();
+                                maxValue = elseStat.getMaxValue();
+                            } else if (falseRows == 0) {
+                                // Only THEN branch is reachable
+                                distinctValues = thenStat.getDistinctValuesCount();
+                                minValue = thenStat.getMinValue();
+                                maxValue = thenStat.getMaxValue();
+                            }
                         }
                     }
 

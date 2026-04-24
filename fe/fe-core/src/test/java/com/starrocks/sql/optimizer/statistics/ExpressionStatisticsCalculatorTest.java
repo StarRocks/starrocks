@@ -1211,9 +1211,9 @@ public class ExpressionStatisticsCalculatorTest {
 
         // THEN
         Assertions.assertFalse(ifStat.isUnknown());
-        Assertions.assertEquals(2, ifStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(1, ifStat.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(0, ifStat.getMinValue(), 0.001);
-        Assertions.assertEquals(1, ifStat.getMaxValue(), 0.001);
+        Assertions.assertEquals(0, ifStat.getMaxValue(), 0.001);
     }
 
     @Test
@@ -1299,8 +1299,13 @@ public class ExpressionStatisticsCalculatorTest {
         final var ifStat = ExpressionStatisticCalculator.calculate(ifOp, statistics);
 
         // THEN
+        // Condition is always false (0% nulls), so only ELSE branch is reachable.
+        // NDV, min/max, and nullsFraction should collapse to the ELSE branch only.
         Assertions.assertFalse(ifStat.isUnknown());
         Assertions.assertEquals(0.0, ifStat.getNullsFraction(), 0.001);
+        Assertions.assertEquals(1, ifStat.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(42, ifStat.getMinValue(), 0.001);
+        Assertions.assertEquals(42, ifStat.getMaxValue(), 0.001);
     }
 }
 
