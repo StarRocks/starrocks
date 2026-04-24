@@ -193,7 +193,9 @@ TEXT-formatted Hive table does not support MAP and STRUCT types.
 
 StarRocks supports querying Hive views from v3.1.0 onwards.
 
-:::note While StarRocks executes queries against a Hive view, it will try to parse the definition of the view using the syntax of StarRocks and Trino. An error will be returned if StarRocks cannot parse the definition of the view. There is a possibility that StarRocks failed to parse the Hive views created with functions exclusive to Hive or Spark.
+:::note
+
+While StarRocks executes queries against a Hive view, it will try to parse the definition of the view using the syntax of StarRocks and Trino. An error will be returned if StarRocks cannot parse the definition of the view. There is a possibility that StarRocks failed to parse the Hive views created with functions exclusive to Hive or Spark.
 
 :::
 
