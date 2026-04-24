@@ -122,6 +122,11 @@ public class RestoreClusterSnapshotMgrTest {
                     throws StarRocksException {
                 return;
             }
+
+            @Mock
+            public boolean checkPathExist(String remotePath, Map<String, String> properties) throws StarRocksException {
+                return true;
+            }
         };
 
         new MockUp<Storage>() {
