@@ -47,6 +47,9 @@ public class VectorIndexBuildTask {
 
     public BuildVectorIndexResponse getResponse() throws Exception {
         BuildVectorIndexResponse response = future.get();
+        if (response == null) {
+            throw new RuntimeException("Build vector index returned null response");
+        }
         if (response.status != null && response.status.statusCode != 0) {
             throw new RuntimeException("Build vector index failed: " + response.status.errorMsgs);
         }
@@ -64,7 +67,7 @@ public class VectorIndexBuildTask {
         }
         try {
             BuildVectorIndexResponse response = future.get();
-            return response.status != null
+            return response != null && response.status != null
                     && response.status.statusCode == TStatusCode.RESOURCE_BUSY.getValue();
         } catch (Exception e) {
             return false;

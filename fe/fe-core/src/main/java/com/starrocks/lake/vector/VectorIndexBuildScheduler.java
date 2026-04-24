@@ -194,7 +194,7 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
             long tabletId = task.getTabletId();
             long targetVersion = task.getVersion();
 
-            // Check dedup rejection (SERVICE_UNAVAILABLE) before getResponse()
+            // Check dedup rejection (RESOURCE_BUSY) before getResponse()
             // which throws for non-zero status codes.
             if (task.isAlreadyBuilding()) {
                 // CN is still building this tablet. Re-enqueue with cooldown
@@ -219,8 +219,10 @@ public class VectorIndexBuildScheduler extends FrontendDaemon {
                 }
 
                 if (newBuiltVersion < targetVersion) {
-                    // Not all rowsets built yet (batch_limit), re-enqueue for next round
+                    // Not all rowsets built yet (batch_limit), re-enqueue for next round.
+                    // Keep CN affinity so the next round reuses the same CN's cache warmup.
                     pendingTablets.merge(tabletId, targetVersion, Math::max);
+                    preferredNodes.put(tabletId, task.getNode());
                     LOG.info("Async vector index build partial: tablet={}, newBuiltVersion={}, "
                                     + "targetVersion={}, re-enqueued",
                             tabletId, newBuiltVersion, targetVersion);

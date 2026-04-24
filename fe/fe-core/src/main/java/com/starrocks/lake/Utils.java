@@ -19,15 +19,10 @@ import com.staros.proto.ShardInfo;
 import com.starrocks.alter.reshard.PublishTabletsInfo;
 import com.starrocks.alter.reshard.ReshardingTablet;
 import com.starrocks.alter.reshard.TabletReshardJobMgr;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.StarRocksException;
@@ -45,7 +40,6 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -162,7 +156,10 @@ public class Utils {
         List<Long> rebuildPindexTabletIds = new ArrayList<>();
         Map<ComputeNode, PublishTabletsInfo> nodeToPublishTabletsInfo = processTablets(tablets, computeResource,
                 warehouseManager, rebuildPindexTabletIds, baseVersion, newVersion);
-        
+
+        // Pre-compute once per batch so per-node requests can slice cheaply.
+        Map<Long, Long> batchBuiltVersions = buildTabletBuiltVersionsFromTablets(tablets);
+
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToPublishTabletsInfo.size());
         List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToPublishTabletsInfo.size());
         for (Map.Entry<ComputeNode, PublishTabletsInfo> entry : nodeToPublishTabletsInfo.entrySet()) {
@@ -178,7 +175,8 @@ public class Utils {
                 request.rebuildPindexTabletIds = rebuildPindexTabletIds;
             }
             request.reshardingTabletInfos = publishTabletInfo.getReshardingTablets();
-            request.tabletBuiltVersions = getTabletBuiltVersions(publishTabletInfo.getTabletIds());
+            request.tabletBuiltVersions = sliceTabletBuiltVersions(batchBuiltVersions,
+                    publishTabletInfo.getTabletIds());
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             Future<PublishVersionResponse> future = lakeService.publishVersion(request);
@@ -312,6 +310,9 @@ public class Utils {
         Map<ComputeNode, PublishTabletsInfo> nodeToPublishTabletsInfo = processTablets(tablets, computeResource,
                 warehouseManager, rebuildPindexTabletIds, baseVersion, newVersion);
 
+        // Pre-compute once per batch so per-node requests can slice cheaply.
+        Map<Long, Long> batchBuiltVersions = buildTabletBuiltVersionsFromTablets(tablets);
+
         List<ComputeNodePB> computeNodes = new ArrayList<>();
         List<PublishVersionRequest> publishReqs = new ArrayList<>();
         for (Map.Entry<ComputeNode, PublishTabletsInfo> entry : nodeToPublishTabletsInfo.entrySet()) {
@@ -329,7 +330,8 @@ public class Utils {
             }
 
             singleReq.setReshardingTabletInfos(publishTabletInfo.getReshardingTablets());
-            singleReq.setTabletBuiltVersions(getTabletBuiltVersions(publishTabletInfo.getTabletIds()));
+            singleReq.setTabletBuiltVersions(sliceTabletBuiltVersions(batchBuiltVersions,
+                    publishTabletInfo.getTabletIds()));
 
             ComputeNodePB computeNodePB = new ComputeNodePB();
             computeNodePB.setHost(entry.getKey().getHost());
@@ -560,40 +562,36 @@ public class Utils {
         return Optional.of(node.getWarehouseId());
     }
 
-    private static Map<Long, Long> getTabletBuiltVersions(List<Long> tabletIds) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        if (invertedIndex == null) {
-            return null;
-        }
-        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+    // Build a per-batch map of tabletId -> vectorIndexBuiltVersion from the Tablet objects
+    // already in hand. Avoids a TabletInvertedIndex + db + table + partition + index
+    // traversal per tablet on the publish hot path.
+    private static Map<Long, Long> buildTabletBuiltVersionsFromTablets(List<Tablet> tablets) {
         Map<Long, Long> result = null;
-        for (Long tabletId : tabletIds) {
-            TabletMeta meta = invertedIndex.getTabletMeta(tabletId);
-            if (meta == null) {
-                continue;
-            }
-            Database db = metastore.getDb(meta.getDbId());
-            if (db == null) {
-                continue;
-            }
-            Table table = db.getTable(meta.getTableId());
-            if (!(table instanceof OlapTable)) {
-                continue;
-            }
-            PhysicalPartition partition = ((OlapTable) table).getPhysicalPartition(meta.getPhysicalPartitionId());
-            if (partition == null) {
-                continue;
-            }
-            MaterializedIndex index = partition.getIndex(meta.getIndexId());
-            if (index == null) {
-                continue;
-            }
-            Tablet tablet = index.getTablet(tabletId);
+        for (Tablet tablet : tablets) {
             if (!(tablet instanceof LakeTablet)) {
                 continue;
             }
             long bv = ((LakeTablet) tablet).getVectorIndexBuiltVersion();
             if (bv > 0) {
+                if (result == null) {
+                    result = new HashMap<>();
+                }
+                result.put(tablet.getId(), bv);
+            }
+        }
+        return result;
+    }
+
+    // Slice a batch-wide built-versions map for a single sub-request's tablet id set.
+    // Returns null when no entry matches so the request field stays unset.
+    private static Map<Long, Long> sliceTabletBuiltVersions(Map<Long, Long> all, List<Long> tabletIds) {
+        if (all == null || all.isEmpty()) {
+            return null;
+        }
+        Map<Long, Long> result = null;
+        for (Long tabletId : tabletIds) {
+            Long bv = all.get(tabletId);
+            if (bv != null) {
                 if (result == null) {
                     result = new HashMap<>();
                 }

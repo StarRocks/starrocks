@@ -817,6 +817,7 @@ public class GlobalStateMgr {
             this.storageVolumeMgr = new SharedDataStorageVolumeMgr();
             this.autovacuumDaemon = new AutovacuumDaemon();
             this.fullVacuumDaemon = new FullVacuumDaemon();
+            this.vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
@@ -1614,7 +1615,6 @@ public class GlobalStateMgr {
             autovacuumDaemon.start();
             fullVacuumDaemon.start();
 
-            vectorIndexBuildScheduler = new VectorIndexBuildScheduler();
             vectorIndexBuildScheduler.start();
         }
 
