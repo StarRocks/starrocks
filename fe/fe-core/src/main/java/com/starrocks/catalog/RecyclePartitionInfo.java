@@ -46,6 +46,22 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
     @SerializedName(value = "retentionPeriod")
     protected long retentionPeriod = 0L;
 
+    /**
+     * Whether this partition is generated from table-level deletion flow.
+     * Used to skip partition-level erase edit log because table-level erase log
+     * will be recorded after all related partitions are deleted.
+     * When true, also force remove the partition directory even if it's a shared directory.
+     *
+     * Persisted so that after FE restart, partitions mid-way through table deletion still
+     * have forceRemoveDirectory=true (avoiding missed shared-dir cleanup) and still suppress
+     * per-partition WAL logs (avoiding spurious individual erase logs).
+     *
+     * Marked volatile because it is written in synchronized eraseTable() but read by
+     * async delete tasks submitted in erasePartition() on a different thread.
+     */
+    @SerializedName(value = "fromTableDeletion")
+    protected volatile boolean fromTableDeletion = false;
+
     public RecyclePartitionInfo() {
         recoverable = true;
     }
@@ -99,6 +115,20 @@ public abstract class RecyclePartitionInfo extends JsonWriter {
 
     public long getRetentionPeriod() {
         return retentionPeriod;
+    }
+
+    public boolean isForceRemoveDirectory() {
+        // `fromTableDeletion` here indicate whether the partition is generated from table-level deletion flow
+        // if true, force remove the partition directory even if it's a shared directory
+        return fromTableDeletion;
+    }
+
+    public boolean isFromTableDeletion() {
+        return fromTableDeletion;
+    }
+
+    public void setFromTableDeletion(boolean fromTableDeletion) {
+        this.fromTableDeletion = fromTableDeletion;
     }
 
     public boolean delete() {
