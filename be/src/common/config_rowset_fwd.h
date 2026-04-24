@@ -88,6 +88,11 @@ CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");
 
+// Whether to pass the current SparseRange down to page-level zonemap filtering, so child morsels only inspect the
+// pages overlapping their exact split ranges. Disable this to A/B compare against the historical coarse begin/end
+// envelope behavior.
+CONF_mBool(enable_index_page_level_zonemap_filter_scan_range_pushdown, "true");
+
 CONF_mBool(enable_index_bloom_filter, "true");
 
 CONF_mBool(enable_index_bitmap_filter, "true");

@@ -117,6 +117,7 @@ public:
     ~SegmentIterator() override = default;
 
     void close() override;
+    Status reset(const SegmentReadOptions& options);
 
 protected:
     Status do_get_next(Chunk* chunk) override;
@@ -127,6 +128,10 @@ protected:
                        std::vector<uint64_t>* rssid_rowids) override {
         return do_get_next(chunk, rssid_rowids);
     }
+
+    friend StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_ptr<Segment>& segment,
+                                                                        const std::vector<SeekRange>& ranges,
+                                                                        const LakeIOOptions& lake_io_opts);
 
 private:
     struct ScanContext {
@@ -169,6 +174,7 @@ private:
 
         // Release all chunk resources to free memory
         void close();
+        void reset();
         // Seek all column iterators to the specified ordinal position
         Status seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read);
         // Read column data from the specified range into the chunk
@@ -313,6 +319,7 @@ private:
 
     Status _init();
     Status _init_internal();
+    Status _reset_for_reuse();
     Status _try_to_update_ranges_by_runtime_filter();
     Status _do_get_next(Chunk* result, vector<rowid_t>* rowid);
 
@@ -519,6 +526,8 @@ private:
     int _reserve_chunk_size = 0;
 
     bool _inited = false;
+    bool _prepared_once = false;
+    bool _global_dict_decoder_inited = false;
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
@@ -539,6 +548,41 @@ void SegmentIterator::ScanContext::close() {
     _dict_chunk.reset();
     _final_chunk.reset();
     _adapt_global_dict_chunk.reset();
+}
+
+void SegmentIterator::ScanContext::reset() {
+    close();
+    stats = nullptr;
+    runtime_filters_by_column = nullptr;
+    _read_schema.clear();
+    _dict_decode_schema.clear();
+    _is_dict_column.clear();
+    _column_iterators.clear();
+    _subfield_columns.clear();
+    _subfield_iterators.clear();
+    _column_iterators_for_predicate_late_materialize.clear();
+    _column_id_for_predicate_late_materialize.clear();
+    _column_ids_to_column_iterators.clear();
+    _column_ids_to_index.clear();
+    _row_id_column_id = -1;
+    _next = nullptr;
+    _skip_dict_decode_indexes.clear();
+    _read_index_map.clear();
+    _has_dict_column = false;
+    _late_materialize = false;
+    _has_force_dict_encode = false;
+    _prune_cols.clear();
+    _prune_column_after_index_filter = false;
+    _enable_predicate_col_late_materialize = false;
+    _only_output_one_predicate_col_with_filter_push_down = false;
+    _support_push_down_predicate = false;
+    _predicate_order.clear();
+    _column_predicate_map.clear();
+    _is_filtered = false;
+    _predicate_selectivity_map.clear();
+    _evaluated_chunk_nums = 0;
+    _first_column_total_rows_read = 0;
+    _first_column_total_rows_passed = 0;
 }
 
 Status SegmentIterator::ScanContext::seek_columns(ordinal_t pos, bool predicate_col_late_materialize_read) {
@@ -829,6 +873,19 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
     }
 }
 
+Status SegmentIterator::reset(const SegmentReadOptions& options) {
+    _opts.rowid_range_option = options.rowid_range_option;
+    _opts.shared_key_pruned_scan_range = options.shared_key_pruned_scan_range;
+    _opts.is_first_split_of_segment = options.is_first_split_of_segment;
+    _opts.ranges = options.ranges;
+    _opts.runtime_range_pruner = options.runtime_range_pruner;
+    _opts.short_key_ranges = options.short_key_ranges;
+    _opts.chunk_size = options.chunk_size;
+    _chunk_size = options.chunk_size;
+    _inited = false;
+    return Status::OK();
+}
+
 Status SegmentIterator::_init() {
     auto st = _init_internal();
     if (st.is_not_found()) {
@@ -866,6 +923,10 @@ Status SegmentIterator::_init_internal() {
     _selected_idx.resize(_reserve_chunk_size);
 
     StarRocksMetrics::instance()->segment_read_total.increment(1);
+
+    if (_prepared_once) {
+        return _reset_for_reuse();
+    }
 
     /// the calling order matters, do not change unless you know why.
 
@@ -916,6 +977,58 @@ Status SegmentIterator::_init_internal() {
         RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
     }
 
+    _prepared_once = true;
+    return Status::OK();
+}
+
+Status SegmentIterator::_reset_for_reuse() {
+    _scan_range.clear();
+    _range_iter = SparseRangeIterator<>();
+    _non_expr_pred_tree = PredicateTree{};
+    _expr_pred_tree = PredicateTree{};
+    _runtime_filter_preds = RuntimeFilterPredicates{};
+    _column_to_runtime_filters_map.clear();
+    _context_list[0].reset();
+    _context_list[1].reset();
+    _context = nullptr;
+    _context_switch_count = 0;
+    _cur_rowid = 0;
+    if (_vector_index_ctx) {
+        _vector_index_ctx->id2distance_map.clear();
+    }
+    if (_inverted_index_ctx) {
+        _inverted_index_ctx->cleanup();
+    }
+    _bitmap_index_evaluator.reset();
+
+    RETURN_IF_ERROR(_get_row_ranges_by_rowid_range());
+    RETURN_IF_ERROR(_get_row_ranges_by_keys());
+    RETURN_IF_ERROR(_apply_tablet_range());
+    bool apply_del_vec_after_all_index_filter = config::apply_del_vec_after_all_index_filter;
+    if (!apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+    RETURN_IF_ERROR(_apply_bitmap_index());
+    RETURN_IF_ERROR(_get_row_ranges_by_zone_map());
+    RETURN_IF_ERROR(_get_row_ranges_by_bloom_filter());
+    RETURN_IF_ERROR(_apply_inverted_index());
+    if (apply_del_vec_after_all_index_filter) {
+        RETURN_IF_ERROR(_apply_del_vector());
+    }
+    RETURN_IF_ERROR(_get_row_ranges_by_vector_index());
+    RETURN_IF_ERROR(_apply_data_sampling());
+
+    _init_column_predicates();
+    RETURN_IF_ERROR(_init_context());
+
+    if (!_opts.asc_hint && config::desc_hint_split_range > 0) {
+        _scan_range.split_and_reverse(config::desc_hint_split_range, config::vector_chunk_size);
+    }
+    _range_iter = _scan_range.new_iterator();
+
+    for (auto column_index : _io_coalesce_column_index) {
+        RETURN_IF_ERROR(_column_iterators[column_index]->convert_sparse_range_to_io_range(_scan_range));
+    }
     return Status::OK();
 }
 
@@ -1540,7 +1653,9 @@ Status SegmentIterator::_get_row_ranges_by_keys() {
     const bool is_logical_split = !_opts.short_key_ranges.empty();
 
     SparseRange<> scan_range_by_keys;
-    if (is_logical_split) {
+    if (!is_logical_split && _opts.shared_key_pruned_scan_range != nullptr) {
+        scan_range_by_keys = *_opts.shared_key_pruned_scan_range;
+    } else if (is_logical_split) {
         ASSIGN_OR_RETURN(scan_range_by_keys, _get_row_ranges_by_short_key_ranges());
         _opts.stats->rows_key_range_num += _opts.short_key_ranges.size();
     } else {
@@ -1687,7 +1802,7 @@ struct ZoneMapFilterEvaluator {
 
             SparseRange<> cur_row_ranges;
             RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map(col_preds, del_pred, &cur_row_ranges,
-                                                                              Type, &src_range));
+                                                                              Type, scan_range));
             _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
         }
 
@@ -1708,7 +1823,7 @@ struct ZoneMapFilterEvaluator {
 
                     SparseRange<> cur_row_ranges;
                     RETURN_IF_ERROR(column_iterators[cid]->get_row_ranges_by_zone_map({}, del_pred, &cur_row_ranges,
-                                                                                      Type, &src_range));
+                                                                                      Type, scan_range));
                     _merge_row_ranges<Type>(row_ranges, cur_row_ranges);
                 }
             }
@@ -1742,7 +1857,7 @@ struct ZoneMapFilterEvaluator {
 
     const std::map<ColumnId, ColumnOrPredicate>& del_preds;
     const std::set<ColumnId>& del_columns;
-    const Range<> src_range;
+    const SparseRange<>* scan_range;
     bool has_apply_only_del_columns = false;
 };
 
@@ -1775,9 +1890,16 @@ Status SegmentIterator::_get_row_ranges_by_zone_map() {
     // prune data pages by zone map index.
     // -------------------------------------------------------------
 
+    SparseRange<> coarse_scan_range;
+    const SparseRange<>* zonemap_scan_range = &_scan_range;
+    if (!config::enable_index_page_level_zonemap_filter_scan_range_pushdown) {
+        coarse_scan_range.add(Range<>{_scan_range.begin(), _scan_range.end()});
+        zonemap_scan_range = &coarse_scan_range;
+    }
+
     ASSIGN_OR_RETURN(auto hit_row_ranges, _opts.pred_tree_for_zone_map.visit(ZoneMapFilterEvaluator{
                                                   _opts.pred_tree_for_zone_map, _column_iterators, _del_predicates,
-                                                  del_columns, Range<>{_scan_range.begin(), _scan_range.end()}}));
+                                                  del_columns, zonemap_scan_range}));
     if (hit_row_ranges.has_value()) {
         zm_range &= hit_row_ranges.value();
     }
@@ -2798,7 +2920,10 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
 Status SegmentIterator::_init_context() {
     _late_materialization_ratio = config::late_materialization_ratio;
-    RETURN_IF_ERROR(_init_global_dict_decoder());
+    if (!_global_dict_decoder_inited) {
+        RETURN_IF_ERROR(_init_global_dict_decoder());
+        _global_dict_decoder_inited = true;
+    }
 
     if (_predicate_columns == 0 || _opts.pred_tree.empty() ||
         (_predicate_columns >= _schema.num_fields() && _predicate_column_access_paths.empty() &&
@@ -3625,6 +3750,9 @@ void SegmentIterator::close() {
     if (_inverted_index_ctx) {
         _inverted_index_ctx->cleanup();
     }
+    _prepared_once = false;
+    _global_dict_decoder_inited = false;
+    _inited = false;
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late
@@ -3646,16 +3774,58 @@ inline Schema reorder_schema(const Schema& input, const PredicateTree& pred_tree
     return output;
 }
 
-ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
-                                      const SegmentReadOptions& options) {
+ChunkIteratorPtr new_raw_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
+                                          const SegmentReadOptions& options) {
     if (options.pred_tree.empty() || options.pred_tree.num_columns() >= schema.num_fields()) {
         return std::make_shared<SegmentIterator>(segment, schema, options);
     } else {
-        // _check_low_cardinality_optimization() implementation counts on this schema reorder
-        Schema ordered_schema = reorder_schema(schema, options.pred_tree);
-        auto seg_iter = std::make_shared<SegmentIterator>(segment, ordered_schema, options);
-        return new_projection_iterator(schema, seg_iter);
+        return std::make_shared<SegmentIterator>(segment, reorder_schema(schema, options.pred_tree), options);
     }
+}
+
+ChunkIteratorPtr new_segment_iterator(const std::shared_ptr<Segment>& segment, const Schema& schema,
+                                      const SegmentReadOptions& options) {
+    auto seg_iter = new_raw_segment_iterator(segment, schema, options);
+    if (seg_iter->schema().num_fields() == schema.num_fields()) {
+        bool same_schema = true;
+        for (int i = 0; i < schema.num_fields(); ++i) {
+            if (seg_iter->schema().field(i)->id() != schema.field(i)->id()) {
+                same_schema = false;
+                break;
+            }
+        }
+        if (same_schema) {
+            return seg_iter;
+        }
+    }
+    return new_projection_iterator(schema, seg_iter);
+}
+
+Status reset_raw_segment_iterator(const ChunkIteratorPtr& iter, const SegmentReadOptions& options) {
+    auto* seg_iter = dynamic_cast<SegmentIterator*>(iter.get());
+    if (seg_iter == nullptr) {
+        return Status::NotSupported("iterator is not a reusable raw segment iterator");
+    }
+    return seg_iter->reset(options);
+}
+
+StatusOr<SparseRange<>> get_segment_scan_range_by_key_ranges(const std::shared_ptr<Segment>& segment,
+                                                             const std::vector<SeekRange>& ranges,
+                                                             const LakeIOOptions& lake_io_opts) {
+    if (lake_io_opts.fs == nullptr) {
+        return Status::InvalidArgument("lake_io_opts.fs is null");
+    }
+
+    SegmentReadOptions options;
+    OlapReaderStatistics stats;
+    options.fs = lake_io_opts.fs;
+    options.stats = &stats;
+    options.chunk_size = 1;
+    options.ranges = ranges;
+    options.lake_io_opts = lake_io_opts;
+
+    SegmentIterator iter(segment, Schema(), options);
+    return iter._get_row_ranges_by_key_ranges();
 }
 
 } // namespace starrocks

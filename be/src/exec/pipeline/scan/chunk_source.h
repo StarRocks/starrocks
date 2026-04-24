@@ -47,6 +47,12 @@ public:
     virtual Status prepare(RuntimeState* state);
 
     virtual void close(RuntimeState* state) = 0;
+    virtual bool can_reuse_with(const Morsel& morsel) const { return false; }
+    virtual bool can_reuse_after_finish() const { return false; }
+    virtual Status reset_morsel(RuntimeState* state, MorselPtr&& morsel) {
+        return Status::NotSupported("chunk source reuse is not supported");
+    }
+    virtual void release_for_reuse(RuntimeState* state) {}
 
     // Start the ChunkSource for some heavy operations like RPC calls
     // The difference between prepare() is, the start() is executed in IO-ThreadPool instead of Exec-ThreadPool,
