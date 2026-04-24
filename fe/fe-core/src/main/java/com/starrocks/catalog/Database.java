@@ -399,14 +399,19 @@ public class Database extends MetaObject implements Writable {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns an unmodifiable view of the table names in this database.
+     *
+     * <p>NOTE: despite the "WithLock" suffix, this method acquires <b>no</b>
+     * database lock. The name is retained for API compatibility with
+     * existing callers. {@code nameToTable} is a {@link ConcurrentHashMap},
+     * and its {@code keySet()} is already a thread-safe weakly-consistent
+     * view, so no locking is required to read it safely. Callers that need
+     * a stable snapshot must copy the returned set themselves (e.g.
+     * {@code new HashSet<>(db.getTableNamesViewWithLock())}).
+     */
     public Set<String> getTableNamesViewWithLock() {
-        Locker locker = new Locker();
-        locker.lockDatabase(id, LockType.READ);
-        try {
-            return Collections.unmodifiableSet(this.nameToTable.keySet());
-        } finally {
-            locker.unLockDatabase(id, LockType.READ);
-        }
+        return Collections.unmodifiableSet(this.nameToTable.keySet());
     }
 
     /**
