@@ -418,7 +418,7 @@ public class SkewJoinTest extends PlanTestBase {
             // In this case, the MCV should be selected since:
             //  - 0.3 null fractions * 1337 rows < 400 rows (a) + 300 rows (b)
             assertCContains(plan, """
-                      5:Project
+                      6:Project
                       |  <slot 9> : ['a','b']
                     """);
         } finally {
