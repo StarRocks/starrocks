@@ -48,14 +48,7 @@ public:
     void doRun() {
         auto self = shared_from_this();
         Run();
-<<<<<<< HEAD
-        _finished.store(true, std::memory_order_seq_cst);
-        if (_has_consumer.load(std::memory_order_acquire)) {
-            _cv.notify_one();
-        }
-=======
         _latch.count_down();
->>>>>>> 9db4424d96 ([BugFix] Fix PipelineTimerTask stuck in waitUtilFinished (#72058))
     }
 
     void unschedule(PipelineTimer* timer);
