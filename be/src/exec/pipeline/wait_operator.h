@@ -79,12 +79,7 @@ private:
     MonotonicStopWatch* _mono_timer = nullptr;
     WaitContext* _wait_context = nullptr;
     int64_t _wait_time_ns = 0;
-<<<<<<< HEAD
-    std::unique_ptr<PipelineTimerTask> _wait_timer_task;
-=======
-    EnumDebugAction _action = EnumDebugAction::WAIT;
     std::shared_ptr<PipelineTimerTask> _wait_timer_task;
->>>>>>> 9db4424d96 ([BugFix] Fix PipelineTimerTask stuck in waitUtilFinished (#72058))
 };
 
 class WaitSinkOperator final : public Operator {
