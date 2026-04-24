@@ -38,9 +38,6 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(BUILD_FORMAT_LIB)
-    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
-#endif
     return ctx;
 }
 
@@ -54,9 +51,6 @@ FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* p
     ctx->_mem_pool = pool;
     ctx->_return_type = return_type;
     ctx->_arg_types = arg_types;
-#if !defined(BUILD_FORMAT_LIB)
-    ctx->_jvm_udaf_ctxs = std::make_unique<JavaUDAFContext>();
-#endif
     ctx->_is_distinct = is_distinct;
     ctx->_is_asc_order = is_asc_order;
     ctx->_nulls_first = nulls_first;
@@ -78,6 +72,14 @@ FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& ar
 
 FunctionContext::FunctionContext() = default;
 FunctionContext::~FunctionContext() = default;
+
+JavaUDAFUniqueContext* FunctionContext::udaf_ctxs() {
+#if !defined(BUILD_FORMAT_LIB)
+    return get_java_udaf_context(this);
+#else
+    return nullptr;
+#endif
+}
 
 FunctionContext* FunctionContext::clone(MemPool* pool) {
     FunctionContext* new_context = create_context(_state, pool, _return_type, _arg_types);
@@ -137,10 +139,9 @@ void* FunctionContext::get_function_state(FunctionStateScope scope) const {
 }
 
 void FunctionContext::release_mems() {
-    if (_jvm_udaf_ctxs != nullptr && _jvm_udaf_ctxs->states) {
-        auto env = JVMFunctionHelper::getInstance().getEnv();
-        _jvm_udaf_ctxs->states->clear(this, env);
-    }
+#if !defined(BUILD_FORMAT_LIB)
+    clear_java_udaf_states(this);
+#endif
 }
 
 void FunctionContext::set_error(const char* error_msg, const bool is_udf) {
