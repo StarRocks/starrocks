@@ -135,9 +135,15 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     auto func_cache = UserFunctionCache::instance();
 
     if (use_cache) {
+        //assuming id is unique and num_args is small (less than 4096);
+        //user defined function is negative.
+        CHECK(num_args < 4096 && (-id) < (1L << 52));
+        // we adopt the cache key consisting of the function id and the number of arguments, since for non-group-by aggregation,
+        // AggBatchCallStub instance in cached JavaUDAFUniqueContext instance depends on the number of arguments.
+        int64_t cache_key = (-id) | (static_cast<int64_t>(num_args) << 52);
         ASSIGN_OR_RETURN(auto result,
                          func_cache->load_cacheable_java_udf(
-                                 id, url, checksum, TFunctionBinaryType::SRJAR,
+                                 cache_key, url, checksum, TFunctionBinaryType::SRJAR,
                                  [&symbol, num_args](const std::string& libpath) -> StatusOr<std::any> {
                                      ASSIGN_OR_RETURN(auto ctx, build_udaf_shared_context(libpath, symbol, num_args));
                                      return std::any(std::move(ctx));
