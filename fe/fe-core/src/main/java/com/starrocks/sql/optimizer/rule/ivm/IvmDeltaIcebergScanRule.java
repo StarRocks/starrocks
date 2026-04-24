@@ -46,7 +46,7 @@ import java.util.Optional;
  * set by {@code MVIVMBasedRefreshProcessor.buildInsertPlan()} via {@code RelationTransformer}.
  * This rule reads that same data source as {@code TvrTableScanRule}.
  *
- * <p>For append-only Iceberg tables, the {@code __ACTION__} column is a constant {@code 1} (INSERT).
+ * <p>For append-only Iceberg tables, {@code __ACTION__} is a constant {@code 0} (INSERT = UPSERT).
  */
 public class IvmDeltaIcebergScanRule extends TransformationRule {
     public IvmDeltaIcebergScanRule() {
@@ -80,14 +80,14 @@ public class IvmDeltaIcebergScanRule extends TransformationRule {
                     new LogicalValuesOperator(outputColumns, Collections.emptyList())));
         }
 
-        // Build a project on top of the scan that adds __ACTION__ = 1 (INSERT, append-only)
+        // Build a project on top of the scan that adds __ACTION__ = 0 (append-only INSERT).
         ColumnRefOperator actionColumn = delta.getActionColumn();
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         for (ColumnRefOperator col : scan.getOutputColumns()) {
             projectMap.put(col, col);
         }
         if (actionColumn != null) {
-            projectMap.put(actionColumn, ConstantOperator.createTinyInt((byte) 1));
+            projectMap.put(actionColumn, ConstantOperator.createTinyInt((byte) 0));
         }
 
         // Keep the scan with its tvrVersionRange intact — the physical layer (IcebergMetadata)

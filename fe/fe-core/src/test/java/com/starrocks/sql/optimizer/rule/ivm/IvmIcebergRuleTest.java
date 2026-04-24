@@ -75,15 +75,15 @@ public class IvmIcebergRuleTest {
 
         List<OptExpression> result = new IvmDeltaIcebergScanRule().transform(deltaExpr, context);
 
-        // Should produce: Project(id, data, __ACTION__=1) → IcebergScan
+        // Should produce: Project(id, data, __ACTION__=0) → IcebergScan
         Assertions.assertEquals(1, result.size());
         Assertions.assertTrue(result.get(0).getOp() instanceof LogicalProjectOperator);
         LogicalProjectOperator project = (LogicalProjectOperator) result.get(0).getOp();
-        // Project should contain __ACTION__ = 1 (constant)
+        // __ACTION__ = 0 (constant)
         Assertions.assertTrue(project.getColumnRefMap().containsKey(actionRef));
         ScalarOperator actionExpr = project.getColumnRefMap().get(actionRef);
         Assertions.assertTrue(actionExpr instanceof ConstantOperator);
-        Assertions.assertEquals((byte) 1, ((ConstantOperator) actionExpr).getTinyInt());
+        Assertions.assertEquals((byte) 0, ((ConstantOperator) actionExpr).getTinyInt());
         // Project should pass through original columns
         Assertions.assertTrue(project.getColumnRefMap().containsKey(idRef));
         Assertions.assertTrue(project.getColumnRefMap().containsKey(dataRef));
@@ -385,11 +385,11 @@ public class IvmIcebergRuleTest {
         Assertions.assertFalse(IvmRuleUtils.containsLogicalDelta(afterScan.get(0)));
         Assertions.assertFalse(IvmRuleUtils.containsLogicalVersion(afterScan.get(0)));
 
-        // Verify __ACTION__ = 1 (constant INSERT)
+        // __ACTION__ = 0 (constant)
         LogicalProjectOperator scanProject = (LogicalProjectOperator) afterScan.get(0).getOp();
         ScalarOperator actionValue = scanProject.getColumnRefMap().get(actionRef);
         Assertions.assertTrue(actionValue instanceof ConstantOperator);
-        Assertions.assertEquals((byte) 1, ((ConstantOperator) actionValue).getTinyInt());
+        Assertions.assertEquals((byte) 0, ((ConstantOperator) actionValue).getTinyInt());
     }
 
     // ==================== Helpers ====================

@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rule.ivm;
 
 import com.google.common.base.Strings;
-import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.JsonSyntaxException;
 import com.starrocks.catalog.Database;
@@ -27,7 +26,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -38,8 +36,6 @@ import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -143,11 +139,8 @@ public class IvmRewriter {
 
         ColumnRefOperator loadOpColumn = rootTaskContext.getOptimizerContext().getColumnRefFactory()
                 .create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false);
-        ScalarOperator isDeleteAction = new BinaryPredicateOperator(BinaryType.LT, actionColumn,
-                ConstantOperator.createTinyInt((byte) 0));
-        ScalarOperator loadOpExpr = new CaseWhenOperator(IntegerType.TINYINT, null,
-                ConstantOperator.createTinyInt((byte) 0),
-                Lists.newArrayList(isDeleteAction, ConstantOperator.createTinyInt((byte) 1)));
+        // __op shares __ACTION__'s domain (0 = UPSERT, 1 = DELETE) — direct alias.
+        ScalarOperator loadOpExpr = actionColumn;
 
         Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
         for (ColumnRefOperator outputColumn : rootOutputColumns) {
@@ -161,7 +154,11 @@ public class IvmRewriter {
         rootTaskContext.getRequiredColumns().union(loadOpColumn);
 
         OptExpression projectExpr = OptExpression.create(new LogicalProjectOperator(projectMap), root);
-        // DELETE must come first: __op=1 for DELETE, __op=0 for INSERT.
+        // TopN orders DELETEs before UPSERTs for same-PK batches. Skip it when __ACTION__
+        // is provably constant (e.g. append-only Iceberg) — there are no DELETEs to order.
+        if (isActionColumnConstant(root, actionColumn)) {
+            return projectExpr;
+        }
         List<Ordering> orderings = List.of(new Ordering(loadOpColumn, false, false));
         LogicalTopNOperator.Builder topNBuilder = LogicalTopNOperator.builder()
                 .withOperator(
@@ -171,6 +168,45 @@ public class IvmRewriter {
                 .setPerPipeline(true);
         LogicalTopNOperator topN = topNBuilder.build();
         return OptExpression.create(topN, projectExpr);
+    }
+
+    /**
+     * Walks down the plan tracing {@code target} through aliasing projections (including
+     * projections attached to non-Project operators like Filter). Returns true if the trace
+     * lands on a {@link ConstantOperator}; bails at multi-input operators (join/union/set op)
+     * or any non-constant, non-alias expression.
+     */
+    private static boolean isActionColumnConstant(OptExpression root, ColumnRefOperator actionColumn) {
+        OptExpression current = root;
+        ColumnRefOperator target = actionColumn;
+        for (int i = 0; current != null && i < 64; i++) {
+            Map<ColumnRefOperator, ScalarOperator> colMap = extractColumnRefMap(current.getOp());
+            if (colMap != null && colMap.containsKey(target)) {
+                ScalarOperator expr = colMap.get(target);
+                if (expr instanceof ConstantOperator) {
+                    return true;
+                }
+                if (!(expr instanceof ColumnRefOperator)) {
+                    return false;
+                }
+                target = (ColumnRefOperator) expr;
+            }
+            if (current.getInputs().size() != 1) {
+                return false;
+            }
+            current = current.inputAt(0);
+        }
+        return false;
+    }
+
+    private static Map<ColumnRefOperator, ScalarOperator> extractColumnRefMap(Operator op) {
+        if (op instanceof LogicalProjectOperator) {
+            return ((LogicalProjectOperator) op).getColumnRefMap();
+        }
+        if (op.getProjection() != null) {
+            return op.getProjection().getColumnRefMap();
+        }
+        return null;
     }
 
     static MaterializedView loadTargetMv(OptimizerContext optimizerContext) {
