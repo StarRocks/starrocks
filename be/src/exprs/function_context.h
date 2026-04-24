@@ -34,7 +34,6 @@ class RuntimeState;
 
 class Column;
 class Slice;
-struct JavaUDAFContext;
 struct NgramBloomFilterState;
 
 class FunctionContext {
@@ -164,8 +163,6 @@ public:
     bool has_error() const;
     const char* error_msg() const;
 
-    JavaUDAFContext* udaf_ctxs() { return _jvm_udaf_ctxs.get(); }
-
     void release_mems();
 
     ssize_t get_group_concat_max_len() { return group_concat_max_len; }
@@ -216,9 +213,6 @@ private:
     // If it is not explicitly set externally (e.g. AggFuncBasedValueAggregator),
     // it will point to the internal _mem_usage
     int64_t* _mem_usage_counter = &_mem_usage;
-
-    // UDAF Context
-    std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;
 
     std::vector<bool> _is_asc_order;
     std::vector<bool> _nulls_first;

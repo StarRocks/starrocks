@@ -452,6 +452,63 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: false
 * **Introduced in**: v3.4.0
 
+### enable_adaptive_sink_dop
+
+* **Description**: Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
+* **Default**: false
+* **Introduced in**: v2.5
+
+### enable_bucket_aware_execution_on_lake
+
+* **Description**: Whether to enable bucket-aware execution for queries against data lakes (such as Iceberg tables). When this feature is enabled, the system optimizes query execution by leveraging bucketing information to reduce data shuffling and improve performance. This optimization is particularly effective for join operations and aggregations on bucketed tables.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v4.0
+
+### enable_cbo_based_mv_rewrite
+
+* **Description**: Whether to enable materialized view rewrite in CBO phase which can maximize the likelihood of successful query rewriting (e.g., when the join order differs between materialized views and queries), but it will increase the execution time of the optimizer phase.
+* **Default**: true
+* **Introduced in**: v3.5.5, v4.0.1
+
+### enable_cbo_table_prune
+
+* **Description**: When enabled, the optimizer will add the CBO table pruning rule (CboTablePruneRule) during memo optimization to perform cost-based table pruning for cardinality-preserving joins. The rule is conditionally added in the optimizer (see QueryOptimizer.memoOptimize and SPMOptimizer.memoOptimize) only when the join-node count in the join tree is small (fewer than 10 join nodes). This option complements the rule-based pruning toggle `enable_rbo_table_prune` and lets the Cost-Based Optimizer try to remove unnecessary tables or inputs from join processing to reduce planning and execution complexity. Default is off because pruning can change plan shape; enable it only after validating on representative workloads.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.2.0
+
+### enable_cache_udaf
+
+* **Description**: When set to `true`, enables in-memory caching of the class-level Java UDAF initialization (class loading, method introspection, and batch-update stub generation). The cache is populated on first use and reused across all aggregator/analytor instances within the same BE process, eliminating the repeated per-instance initialization overhead that is otherwise proportional to pipeline DOP. Caching only applies to UDAFs and window functions that were created with `"isolation" = "shared"`. Functions created with `"isolation" = "private"` always go through the uncached path regardless of this setting. Default is `false`; enable after verifying that shared-isolation UDAFs are safe to share their class-level state across concurrent queries. The runtime profile exposes `UdafCacheHitCount`, `UdafCachePopulateCount`, and `UdafLoadTime` counters to observe cache behavior.
+* **Scope**: Session
+* **Default**: `false`
+* **Data Type**: boolean
+* **Introduced in**: v3.4.0
+
+### enable_color_explain_output
+
+* **Scope**: Session
+* **Description**: Controls whether ANSI color escape sequences are included in textual EXPLAIN / PROFILE outputs. When enabled (`true`), StmtExecutor passes the session setting into the explain/profile pipeline (via calls to ExplainAnalyzer) so explain, EXPLAIN ANALYZE and analyze-profile outputs contain colored highlighting for readability in ANSI-capable terminals. When disabled (`false`), the output is produced without ANSI sequences (plain text), which is appropriate for logging, clients that do not support ANSI, or when piping output to files. This is a per-session toggle and does not change execution semantics—only the presentation of explain/profile text.
+* **Default**: `true`
+* **Data type**: boolean
+* **Introduced in**: v3.5.0
+
+### enable_connector_adaptive_io_tasks
+
+* **Description**: Whether to adaptively adjust the number of concurrent I/O tasks when querying external tables. Default value is `true`. If this feature is not enabled, you can manually set the number of concurrent I/O tasks using the variable `connector_io_tasks_per_scan_operator`.
+* **Default**: true
+* **Introduced in**: v2.5
+
+### enable_cost_based_multi_stage_agg
+
+* **Description**: Controls whether the new planner uses cost-based decisions to generate and compare multi-stage aggregation plans for queries with DISTINCT aggregates. When enabled, the optimizer may produce alternative 3-stage and 4-stage aggregation candidates and rely on cost estimates to pick the better plan. It also enables post-processing in `PruneAggregateNodeRule` to merge or prune split aggregate nodes when beneficial (that is, reducing unnecessary serialization or deserialization). Note that the effective check in code is gated by `new_planner_agg_stage` — the helper `isEnableCostBasedMultiStageAgg()` returns true only when `new_planner_agg_stage` is set to `AUTO` and this parameter is set to `true`; if `new_planner_agg_stage` is non-`AUTO`, this parameter will not enable cost-based multi-stage behavior. Disabling this flag forces the planner to prefer the simpler 3-stage transformation for distinct aggregations and skips cost-driven candidate generation and certain aggregate-node merges.
+* **Scope**: Session
+* **Default**: `true`
+* **Data Type**: boolean
+* **Introduced in**: -
+
 ### enable_datacache_async_populate_mode
 
 * **Description**: Whether to populate the data cache in asynchronous mode. By default, the system uses the synchronous mode to populate data cache, that is, populating the cache while querying data.
