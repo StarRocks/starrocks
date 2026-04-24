@@ -1190,6 +1190,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_hits_counter, total);
+        StarRocksMetrics::instance()->flat_json_access_hit_total.increment(total);
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         RuntimeProfile::Counter* _access_path_unhits_counter =
@@ -1206,6 +1207,7 @@ void LakeDataSource::update_counter(RuntimeState* state) {
             COUNTER_UPDATE(path_counter, v);
         }
         COUNTER_UPDATE(_access_path_unhits_counter, total);
+        StarRocksMetrics::instance()->flat_json_access_miss_total.increment(total);
     }
     if (_reader->stats().extract_json_hits.size() > 0) {
         const std::string counter_name = "AccessPathExtract";
@@ -1231,14 +1233,17 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     if (_reader->stats().json_cast_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonCast", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_cast_ns);
+        StarRocksMetrics::instance()->flat_json_cast_duration_ns_total.increment(_reader->stats().json_cast_ns);
     }
     if (_reader->stats().json_merge_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonMerge", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_merge_ns);
+        StarRocksMetrics::instance()->flat_json_merge_duration_ns_total.increment(_reader->stats().json_merge_ns);
     }
     if (_reader->stats().json_flatten_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "FlatJsonFlatten", parent_name);
         COUNTER_UPDATE(c, _reader->stats().json_flatten_ns);
+        StarRocksMetrics::instance()->flat_json_flatten_duration_ns_total.increment(_reader->stats().json_flatten_ns);
     }
     if (state && state->query_ctx()) {
         state->query_ctx()->incr_read_stats(_reader->stats().io_count_local_disk, _reader->stats().io_count_remote);

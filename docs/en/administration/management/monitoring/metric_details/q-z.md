@@ -317,6 +317,72 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Number of valid rows read (excluding rows with invalid format). Labels: `file_format`, `scan_type`.
 
+## `starrocks_be_flat_json_access_hit_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of flat JSON sub-column access hits observed during scan. Aggregated from the per-scan `flat_json_hits` and `merge_json_hits` statistics.
+
+## `starrocks_be_flat_json_access_miss_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of flat JSON sub-column access misses observed during scan. Aggregated from the per-scan `dynamic_json_hits` statistics (paths not materialized as flat columns).
+
+## `starrocks_be_flat_json_cast_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent casting flat JSON sub-column values during scan.
+
+## `starrocks_be_flat_json_compaction_schema_change_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of times `HyperJsonTransformer` is re-initialized for compaction input with a different flat JSON schema than the previous input. A high rate indicates schema churn across segments being compacted.
+
+## `starrocks_be_flat_json_compaction_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of compaction invocations that flatten JSON columns via `FlatJsonColumnCompactor`.
+
+## `starrocks_be_flat_json_flatten_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent flattening JSON values during scan.
+
+## `starrocks_be_flat_json_merge_duration_ns_total`
+
+- Unit: Nanosecond
+- Type: Cumulative
+- Description: Total time spent merging flat JSON sub-columns back to full JSON during scan.
+
+## `starrocks_be_flat_json_paths_discovered_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON paths discovered by `JsonPathDeriver` during flat JSON segment writes.
+
+## `starrocks_be_flat_json_paths_extracted_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of JSON paths materialized as sub-columns by `FlatJsonColumnWriter` (includes the synthetic null/remain columns).
+
+## `starrocks_be_flat_json_segment_write_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of segment writes that invoke flat JSON column extraction.
+
+## `starrocks_be_flat_json_write_rows_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Total number of rows appended to `FlatJsonColumnWriter` (counted at `append()`, before actual flattening).
+
 ## `starrocks_be_mem_pool_mem_limit_bytes`
 
 - Unit: Bytes
