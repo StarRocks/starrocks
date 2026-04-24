@@ -40,6 +40,8 @@
 #include <string_view>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include "base/uid_util.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -424,3 +426,8 @@ bool operator==(const TabletMeta& a, const TabletMeta& b);
 bool operator!=(const TabletMeta& a, const TabletMeta& b);
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::TabletState> : formatter<std::underlying_type_t<starrocks::TabletState>> {
+  auto format(starrocks::TabletState value, format_context& ctx) const -> format_context::iterator;
+};

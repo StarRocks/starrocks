@@ -17,6 +17,8 @@
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/stubs/common.h>
 
+#include <fmt/format.h>
+
 #include <cstdint>
 #include <memory_resource>
 #include <optional>
@@ -293,3 +295,8 @@ protected:
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::RowPositionDescriptor::Type> : formatter<std::underlying_type_t<starrocks::RowPositionDescriptor::Type>> {
+  auto format(starrocks::RowPositionDescriptor::Type value, format_context& ctx) const -> format_context::iterator;
+};

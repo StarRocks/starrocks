@@ -16,6 +16,8 @@
 
 #include <ostream>
 
+#include <fmt/format.h>
+
 #include "base/utility/guard.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
@@ -387,3 +389,8 @@ inline std::ostream& operator<<(std::ostream& os, starrocks::LogicalType type) {
     os << starrocks::logical_type_to_string(type);
     return os;
 }
+
+template <>
+struct fmt::formatter<starrocks::LogicalType> : formatter<std::string_view> {
+  auto format(starrocks::LogicalType value, format_context& ctx) const -> format_context::iterator;
+};

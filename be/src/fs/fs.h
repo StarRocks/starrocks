@@ -16,6 +16,8 @@
 #include <string_view>
 #include <utility>
 
+#include <fmt/format.h>
+
 #include "base/string/slice.h"
 #include "common/statusor.h"
 #include "fs/encryption.h"
@@ -409,3 +411,8 @@ public:
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::FileSystem::OpenMode> : formatter<std::underlying_type_t<starrocks::FileSystem::OpenMode>> {
+  auto format(starrocks::FileSystem::OpenMode value, format_context& ctx) const -> format_context::iterator;
+};

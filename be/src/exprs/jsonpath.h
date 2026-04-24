@@ -16,6 +16,8 @@
 
 #include <utility>
 
+#include <fmt/format.h>
+
 #include "exprs/function_helper.h"
 #include "gutil/casts.h"
 #include "velocypack/vpack.h"
@@ -161,3 +163,8 @@ struct JsonPath {
 };
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::ArraySelectorType> : formatter<std::underlying_type_t<starrocks::ArraySelectorType>> {
+	auto format(starrocks::ArraySelectorType value, format_context& ctx) const -> format_context::iterator;
+};

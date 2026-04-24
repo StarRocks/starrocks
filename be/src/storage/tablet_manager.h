@@ -43,6 +43,8 @@
 #include <unordered_set>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include "agent/status.h"
 #include "base/concurrency/spinlock.h"
 #include "base/statusor.h"
@@ -332,3 +334,8 @@ inline bool TabletManager::LockTable::unlock(int64_t tablet_id) {
 }
 
 } // namespace starrocks
+
+template <>
+struct fmt::formatter<starrocks::TabletDropFlag> : formatter<std::underlying_type_t<starrocks::TabletDropFlag>> {
+  auto format(starrocks::TabletDropFlag value, format_context& ctx) const -> format_context::iterator;
+};
