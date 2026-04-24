@@ -45,6 +45,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.ivm.common.IvmRuleUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.type.IntegerType;
@@ -91,32 +92,68 @@ public class IvmRewriter {
             return;
         }
 
-        OptExpression originalPlan = tree.getInputs().get(0);
+        OptExpression originalPlan = tree.inputAt(0);
+        ColumnRefSet requiredColumnsBefore = requiredColumns.clone();
+        ColumnRefSet taskRequiredColumnsBefore = rootTaskContext.getRequiredColumns().clone();
+        String originalPlanDigest = IvmRuleUtils.structureDigest(originalPlan);
+        boolean committed = false;
+        Throwable failure = null;
 
-        // Phase 1: Wrap with LogicalDeltaOperator and apply delta/version rules iteratively
-        ColumnRefOperator actionColumn = optimizerContext.getColumnRefFactory()
-                .create(IvmRuleUtils.ACTION_COLUMN_NAME, IvmRuleUtils.ACTION_COLUMN_TYPE, false);
-        tree.setChild(0, OptExpression.create(
-                new LogicalDeltaOperator(true, actionColumn), originalPlan));
-        deriveLogicalProperty(tree);
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.IVM_DELTA_REWRITE_RULES);
-
-        // Phase 2: Convergence check — if any markers remain, fall back to original plan
-        if (IvmRuleUtils.containsLogicalDelta(tree.getInputs().get(0))
-                || IvmRuleUtils.containsLogicalVersion(tree.getInputs().get(0))) {
-            tree.setChild(0, originalPlan);
+        try {
+            // Phase 1: Rewrite a cloned trial plan so fallback cannot corrupt the original plan.
+            ColumnRefOperator actionColumn = optimizerContext.getColumnRefFactory()
+                    .create(IvmRuleUtils.ACTION_COLUMN_NAME, IvmRuleUtils.ACTION_COLUMN_TYPE, false);
+            OptExpression trialPlan = MvUtils.cloneExpression(originalPlan);
+            tree.setChild(0, OptExpression.create(
+                    new LogicalDeltaOperator(true, actionColumn), trialPlan));
             deriveLogicalProperty(tree);
+            scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.IVM_DELTA_REWRITE_RULES);
+
+            // Phase 2: Convergence check — if any markers remain, fall back to original plan.
+            if (IvmRuleUtils.containsLogicalDelta(tree.inputAt(0))
+                    || IvmRuleUtils.containsLogicalVersion(tree.inputAt(0))) {
+                return;
+            }
+
+            // Phase 3: For PK target MVs, append __op column for UPSERT/DELETE semantics.
+            OptExpression rewrittenRoot = tree.inputAt(0);
+            deriveLogicalProperty(rewrittenRoot);
+            if (isPrimaryKeyTargetMv(optimizerContext)) {
+                rewrittenRoot = appendPkLoadOpColumn(rewrittenRoot, rootTaskContext, requiredColumns, actionColumn);
+            }
+            tree.setChild(0, rewrittenRoot);
+            deriveLogicalProperty(tree);
+            committed = true;
+        } catch (RuntimeException | Error t) {
+            failure = t;
+            throw t;
+        } finally {
+            if (!committed) {
+                tree.setChild(0, originalPlan);
+                restoreColumnRefSet(requiredColumns, requiredColumnsBefore);
+                restoreColumnRefSet(rootTaskContext.getRequiredColumns(), taskRequiredColumnsBefore);
+                deriveLogicalProperty(tree);
+            }
+            checkOriginalPlanNotMutated(originalPlanDigest, originalPlan, failure);
+        }
+    }
+
+    private static void restoreColumnRefSet(ColumnRefSet target, ColumnRefSet source) {
+        target.clear();
+        target.union(source);
+    }
+
+    private static void checkOriginalPlanNotMutated(String digestBefore, OptExpression originalPlan, Throwable failure) {
+        String digestAfter = IvmRuleUtils.structureDigest(originalPlan);
+        if (digestBefore.equals(digestAfter)) {
             return;
         }
-
-        // Phase 3: For PK target MVs, append __op column for UPSERT/DELETE semantics
-        OptExpression rewrittenRoot = tree.getInputs().get(0);
-        deriveLogicalProperty(rewrittenRoot);
-        if (isPrimaryKeyTargetMv(optimizerContext)) {
-            rewrittenRoot = appendPkLoadOpColumn(rewrittenRoot, rootTaskContext, requiredColumns, actionColumn);
+        IllegalStateException leak = new IllegalStateException("IVM rewrite leaked mutation into originalPlan");
+        if (failure != null) {
+            failure.addSuppressed(leak);
+        } else {
+            throw leak;
         }
-        tree.setChild(0, rewrittenRoot);
-        deriveLogicalProperty(tree);
     }
 
     private static boolean isPrimaryKeyTargetMv(OptimizerContext optimizerContext) {

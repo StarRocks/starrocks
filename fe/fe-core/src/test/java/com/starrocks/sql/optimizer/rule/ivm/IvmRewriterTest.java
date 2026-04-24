@@ -71,6 +71,7 @@ public class IvmRewriterTest {
         // Wrap in LogicalTreeAnchorOperator (required by RewriteTreeTask)
         OptExpression root = OptExpression.create(new LogicalTreeAnchorOperator(), scan);
         deriveLogicalProperty(root);
+        String originalPlanDigest = IvmRuleUtils.structureDigest(scan);
 
         TaskContext taskContext = newTaskContext(context);
         TaskScheduler scheduler = new TaskScheduler();
@@ -81,6 +82,7 @@ public class IvmRewriterTest {
         // Plan should be unchanged — no Delta operator injected
         Assertions.assertFalse(IvmRuleUtils.containsLogicalDelta(root));
         Assertions.assertSame(scan, root.inputAt(0));
+        Assertions.assertEquals(originalPlanDigest, IvmRuleUtils.structureDigest(scan));
     }
 
     // ==================== Convergence: success ====================
@@ -100,6 +102,7 @@ public class IvmRewriterTest {
         // Wrap: root → scan (simulating INSERT target → query)
         OptExpression root = OptExpression.create(new LogicalTreeAnchorOperator(), scan);
         deriveLogicalProperty(root);
+        String originalPlanDigest = IvmRuleUtils.structureDigest(scan);
 
         TaskContext taskContext = newTaskContext(context);
         TaskScheduler scheduler = new TaskScheduler();
@@ -112,6 +115,7 @@ public class IvmRewriterTest {
         Assertions.assertFalse(IvmRuleUtils.containsLogicalVersion(root));
         // Root child should no longer be the original scan (plan was rewritten)
         Assertions.assertNotSame(scan, root.inputAt(0));
+        Assertions.assertEquals(originalPlanDigest, IvmRuleUtils.structureDigest(scan));
     }
 
     // ==================== Convergence: failure → fallback ====================
@@ -132,16 +136,63 @@ public class IvmRewriterTest {
         OptExpression root = OptExpression.create(new LogicalTreeAnchorOperator(), scan);
         deriveLogicalProperty(root);
         OptExpression originalChild = root.inputAt(0);
+        String originalPlanDigest = IvmRuleUtils.structureDigest(originalChild);
 
         TaskContext taskContext = newTaskContext(context);
         TaskScheduler scheduler = new TaskScheduler();
         ColumnRefSet requiredColumns = new ColumnRefSet();
+        ColumnRefSet requiredColumnsBefore = requiredColumns.clone();
+        ColumnRefSet taskRequiredColumnsBefore = taskContext.getRequiredColumns().clone();
 
         IvmRewriter.rewrite(root, taskContext, scheduler, requiredColumns);
 
         // Convergence failed → original plan restored
         Assertions.assertFalse(IvmRuleUtils.containsLogicalDelta(root));
         Assertions.assertSame(originalChild, root.inputAt(0));
+        Assertions.assertEquals(originalPlanDigest, IvmRuleUtils.structureDigest(originalChild));
+        Assertions.assertEquals(requiredColumnsBefore, requiredColumns);
+        Assertions.assertEquals(taskRequiredColumnsBefore, taskContext.getRequiredColumns());
+    }
+
+    @Test
+    public void testRewriteRestoresOriginalPlanWhenRewriteThrows(@Mocked IcebergTable table) {
+        mockIcebergTable(table);
+        ColumnRefFactory factory = new ColumnRefFactory();
+        OptimizerContext context = OptimizerFactory.mockContext(factory);
+        context.getSessionVariable().setEnableIVMRefresh(true);
+
+        ColumnRefOperator idRef = factory.create("id", IntegerType.INT, false);
+        ColumnRefOperator dataRef = factory.create("data", StringType.STRING, true);
+        OptExpression scan = newIcebergScan(factory, table, idRef, dataRef,
+                TvrTableDelta.of(TvrVersion.of(100L), TvrVersion.of(200L)));
+
+        OptExpression root = OptExpression.create(new LogicalTreeAnchorOperator(), scan);
+        deriveLogicalProperty(root);
+        OptExpression originalChild = root.inputAt(0);
+        String originalPlanDigest = IvmRuleUtils.structureDigest(originalChild);
+
+        TaskContext taskContext = newTaskContext(context);
+        ColumnRefSet requiredColumns = new ColumnRefSet();
+        requiredColumns.union(idRef);
+        taskContext.getRequiredColumns().union(dataRef);
+        ColumnRefSet requiredColumnsBefore = requiredColumns.clone();
+        ColumnRefSet taskRequiredColumnsBefore = taskContext.getRequiredColumns().clone();
+        TaskScheduler throwingScheduler = new TaskScheduler() {
+            @Override
+            public void rewriteIterative(OptExpression rewriteTree, TaskContext rewriteTaskContext,
+                                         com.starrocks.sql.optimizer.rule.Rule rule) {
+                throw new RuntimeException("injected IVM rewrite failure");
+            }
+        };
+
+        RuntimeException exception = Assertions.assertThrows(RuntimeException.class,
+                () -> IvmRewriter.rewrite(root, taskContext, throwingScheduler, requiredColumns));
+        Assertions.assertEquals("injected IVM rewrite failure", exception.getMessage());
+
+        Assertions.assertSame(originalChild, root.inputAt(0));
+        Assertions.assertEquals(originalPlanDigest, IvmRuleUtils.structureDigest(originalChild));
+        Assertions.assertEquals(requiredColumnsBefore, requiredColumns);
+        Assertions.assertEquals(taskRequiredColumnsBefore, taskContext.getRequiredColumns());
     }
 
     // ==================== appendPkLoadOpColumn ====================
