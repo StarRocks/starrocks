@@ -7,7 +7,7 @@ create table t(k int, v int);
 create table t1(k int, v int) duplicate key(k);
 create table t2(k int, v int) duplicate key(k) distributed by random;
 create table t3(k int, v int) duplicate key(k) distributed by random buckets 10;
-[UC] show create table t3;
+function: assert_query_contains("show create table t3;", "DISTRIBUTED BY RANDOM BUCKETS 10")
 create table t4(k int, v int) distributed by random;
 create table t5(k int, v int) distributed by random buckets 10;
 [UC] show create table t5;
