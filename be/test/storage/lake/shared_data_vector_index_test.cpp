@@ -441,8 +441,7 @@ TEST_F(SharedDataTabletWriterVITest, test_segment_writer_vi_fallback_to_index_de
     uint64_t seg_size = 0, idx_size = 0, footer_pos = 0;
     ASSERT_OK(writer->finalize(&seg_size, &idx_size, &footer_pos));
 
-    std::string expected_vi =
-            fmt::format("{}/{}_{}_{}.vi", rowset_dir, opts.segment_file_mark.rowset_id, 0, kIndexId);
+    std::string expected_vi = fmt::format("{}/{}_{}_{}.vi", rowset_dir, opts.segment_file_mark.rowset_id, 0, kIndexId);
     EXPECT_TRUE(fs::path_exist(expected_vi));
 }
 
