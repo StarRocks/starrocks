@@ -43,7 +43,8 @@ public:
     AlwaysOverflowCodec() : BlockCompressionCodec(LZ4) {}
 
     Status compress(const Slice& input, Slice* output, bool use_compression_buffer, size_t uncompressed_size,
-                    faststring* compressed_body1, raw::RawString* compressed_body2) const override {
+                    faststring* compressed_body1, raw::RawString* compressed_body2,
+                    const BlockCompressionOptions& /*options*/) const override {
         return Status::NotSupported("mock");
     }
 

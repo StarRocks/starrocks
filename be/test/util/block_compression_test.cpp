@@ -157,6 +157,27 @@ TEST_F(BlockCompressionTest, single) {
     test_single_slice(starrocks::CompressionTypePB::LZ4_HADOOP);
 }
 
+TEST_F(BlockCompressionTest, lz4_explicit_options) {
+    const BlockCompressionCodec* codec = nullptr;
+    ASSERT_TRUE(get_block_compression_codec(starrocks::CompressionTypePB::LZ4, &codec).ok());
+
+    std::string orig = random_string(1024);
+    std::string compressed;
+    compressed.resize(codec->max_compressed_len(orig.size()));
+
+    BlockCompressionOptions options;
+    options.lz4_acceleration = 4;
+
+    Slice compressed_slice(compressed);
+    ASSERT_TRUE(codec->compress(orig, &compressed_slice, options).ok());
+
+    std::string uncompressed;
+    uncompressed.resize(orig.size());
+    Slice uncompressed_slice(uncompressed);
+    ASSERT_TRUE(codec->decompress(compressed_slice, &uncompressed_slice).ok());
+    ASSERT_EQ(orig, uncompressed);
+}
+
 void test_multi_slices(starrocks::CompressionTypePB type) {
     const BlockCompressionCodec* codec = nullptr;
     auto st = get_block_compression_codec(type, &codec);

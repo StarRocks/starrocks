@@ -35,6 +35,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <vector>
 
 #include "base/container/raw_container.h"
@@ -43,6 +44,10 @@
 #include "gen_cpp/segment.pb.h"
 
 namespace starrocks {
+
+struct BlockCompressionOptions {
+    int32_t lz4_acceleration = 1;
+};
 
 // This class is used to encapsulate Compression/Decompression algorithm.
 // This class only used to compress a block data, which means all data
@@ -65,7 +70,12 @@ public:
     // This optimization is only used in LZ4F and ZSTD.
     virtual Status compress(const Slice& input, Slice* output, bool use_compression_buffer = false,
                             size_t uncompressed_size = -1, faststring* compressed_body1 = nullptr,
-                            raw::RawString* compressed_body2 = nullptr) const = 0;
+                            raw::RawString* compressed_body2 = nullptr,
+                            const BlockCompressionOptions& options = BlockCompressionOptions()) const = 0;
+
+    Status compress(const Slice& input, Slice* output, const BlockCompressionOptions& options) const {
+        return compress(input, output, false, -1, nullptr, nullptr, options);
+    }
 
     // Default implementation will merge input list into a big buffer and call
     // compress(Slice) to finish compression. If compression type support
@@ -77,7 +87,12 @@ public:
     // This optimization is only used in LZ4F and ZSTD.
     virtual Status compress(const std::vector<Slice>& input, Slice* output, bool use_compression_buffer = false,
                             size_t uncompressed_size = -1, faststring* compressed_body1 = nullptr,
-                            raw::RawString* compressed_body2 = nullptr) const;
+                            raw::RawString* compressed_body2 = nullptr,
+                            const BlockCompressionOptions& options = BlockCompressionOptions()) const;
+
+    Status compress(const std::vector<Slice>& input, Slice* output, const BlockCompressionOptions& options) const {
+        return compress(input, output, false, -1, nullptr, nullptr, options);
+    }
 
     // Decompress input data into output, output's capacity should be large
     // enough for decompressed data. Size of decompressed data will be set in
