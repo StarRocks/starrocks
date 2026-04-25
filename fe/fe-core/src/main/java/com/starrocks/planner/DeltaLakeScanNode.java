@@ -82,10 +82,17 @@ public class DeltaLakeScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-        CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
-        Preconditions.checkState(connector != null,
-                String.format("connector of catalog %s should not be null", catalog));
-        cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        // Prefer per-table cloud configuration (e.g. Unity Catalog vended credentials) and fall
+        // back to the catalog connector's shared configuration when none is attached.
+        CloudConfiguration tableCloudConfiguration = deltaLakeTable.getCloudConfiguration();
+        if (tableCloudConfiguration != null) {
+            cloudConfiguration = tableCloudConfiguration;
+        } else {
+            CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
+            Preconditions.checkState(connector != null,
+                    String.format("connector of catalog %s should not be null", catalog));
+            cloudConfiguration = connector.getMetadata().getCloudConfiguration();
+        }
         Preconditions.checkState(cloudConfiguration != null,
                 String.format("cloudConfiguration of catalog %s should not be null", catalog));
     }

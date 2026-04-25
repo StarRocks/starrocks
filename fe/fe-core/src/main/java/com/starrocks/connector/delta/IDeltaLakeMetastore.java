@@ -16,12 +16,37 @@ package com.starrocks.connector.delta;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.metastore.IMetastore;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.memory.MemoryTrackable;
 
 import java.util.List;
 
 public interface IDeltaLakeMetastore extends IMetastore, MemoryTrackable {
     String getCatalogName();
+
+    default boolean isVendedCredentialsEnabled() {
+        return false;
+    }
+
+    /**
+     * Per-table cloud configuration to attach to the SRTable. Implementations that vend
+     * per-table credentials (e.g. {@link com.starrocks.connector.delta.unity.UnityBackedDeltaMetastore})
+     * override this to return short-lived credentials minted from the upstream metastore. The
+     * default returns {@code null}, meaning "use the catalog-level configuration".
+     */
+    default CloudConfiguration resolveTableCloudConfiguration(String dbName, String tableName) {
+        return null;
+    }
+
+    /**
+     * Drop any per-table state the implementation holds for {@code (dbName, tableName)}.
+     * Invoked from the catalog-level cache layer so that {@code REFRESH EXTERNAL TABLE} also
+     * flushes downstream caches (e.g. Unity Catalog vended credentials, Unity client
+     * {@code TableInfo} entries). The default is a no-op for backends that do not maintain
+     * their own per-table cache.
+     */
+    default void refreshTable(String dbName, String tableName) {
+    }
 
     Table getTable(String dbName, String tableName);
 

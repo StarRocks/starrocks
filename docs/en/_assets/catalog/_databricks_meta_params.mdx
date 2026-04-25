@@ -1,0 +1,62 @@
+##### Databricks Unity Catalog
+
+StarRocks adds support for Databricks Unity Catalog (UC) as a Delta Lake metastore. When enabled, the FE talks to the UC REST API to list schemas/tables, resolve storage locations, and (optionally) request short-lived per-table vended credentials that are used by the BE to read storage without relying on catalog-level credentials.
+
+Configure `MetastoreParams` as follows:
+
+```SQL
+"hive.metastore.type" = "unity",
+"unity.catalog.host" = "https://<workspace-host>",
+"unity.catalog.token" = "<databricks-pat>",
+"unity.catalog.name" = "<uc-catalog-name>",
+"unity.catalog.vended-credentials-enabled" = "true"
+```
+
+The following table describes the parameters you configure for Unity Catalog:
+
+| Parameter | Required | Description |
+| --------- | -------- | ----------- |
+| hive.metastore.type | Yes | Set to `unity` to use Unity Catalog as the metastore. |
+| unity.catalog.host | Yes | Databricks workspace URL, e.g. `https://dbc-1234.cloud.databricks.com`. Trailing slashes are stripped. |
+| unity.catalog.token | Yes | Databricks PAT or service-principal token with USE CATALOG/SCHEMA and SELECT on the tables. |
+| unity.catalog.name | Yes | Name of the UC catalog to expose as the StarRocks external catalog. |
+| unity.catalog.vended-credentials-enabled | No | Default `true`. When enabled, the FE calls `POST /api/2.1/unity-catalog/temporary-table-credentials` per table and passes the resulting short-lived credentials to the BE. |
+| unity.catalog.request-timeout-ms | No | Default `30000`. Per-request timeout for UC control plane calls. |
+| unity.catalog.max-retries | No | Default `3`. Number of retries for transient UC errors. |
+| unity.catalog.aws.region | No | Optional AWS region override for vended credentials. When unset (the default), StarRocks infers the region from Unity Catalog's `metastore_summary` endpoint on first use (see *Region inference* below). Set this explicitly to skip that REST call -- useful when the workspace token does not have access to `metastore_summary`, when running against an OSS Unity Catalog deployment that does not expose the endpoint, or when you simply want to avoid the extra round-trip on cold start. Has no effect on Azure or GCP metastores. |
+
+When `unity.catalog.vended-credentials-enabled` is `true` you can usually omit `StorageCredentialParams`; the vended credentials minted by UC are used instead. AWS S3 and Azure ADLS Gen2 are supported in v1; GCS falls back to catalog-level credentials.
+
+**Example: AWS S3 with vended credentials**
+
+```SQL
+CREATE EXTERNAL CATALOG unity_aws
+PROPERTIES (
+    "type" = "deltalake",
+    "hive.metastore.type" = "unity",
+    "unity.catalog.host" = "https://dbc-1234.cloud.databricks.com",
+    "unity.catalog.token" = "<databricks-pat>",
+    "unity.catalog.name" = "main",
+    "unity.catalog.vended-credentials-enabled" = "true"
+);
+```
+
+**Example: Azure ADLS Gen2 with vended credentials**
+
+```SQL
+CREATE EXTERNAL CATALOG unity_azure
+PROPERTIES (
+    "type" = "deltalake",
+    "hive.metastore.type" = "unity",
+    "unity.catalog.host" = "https://adb-1234.azuredatabricks.net",
+    "unity.catalog.token" = "<databricks-pat>",
+    "unity.catalog.name" = "main",
+    "unity.catalog.vended-credentials-enabled" = "true"
+);
+```
+
+###### Region inference
+
+The FE issues a single `GET /api/2.1/unity-catalog/metastore_summary` per catalog the first time vended credentials are translated, and stamps the returned `region` on every AWS credential so the BE's S3 client targets the correct region without any operator configuration. Region is immutable for the lifetime of a UC metastore, so the call is memoized on the catalog handle for the lifetime of the FE process — there is no TTL refresh. On non-AWS metastores (Azure, GCP) or OSS Unity Catalog the call returns no region and credential translation simply omits it, falling back to the BE's default behavior. Transient lookup failures are not memoized, so a 5xx on first attempt simply re-tries on the next query.
+
+If you would rather skip the inference call entirely you can set `unity.catalog.aws.region` on the catalog. When this property is set, StarRocks trusts it as-is and never calls `metastore_summary`; the inferred value (and its memoization) is bypassed. This is the recommended escape hatch for tokens without `metastore_summary` access and for OSS UC deployments that do not expose the endpoint.

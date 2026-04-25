@@ -24,6 +24,7 @@ import com.starrocks.connector.DatabaseTableName;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.CachingMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
@@ -138,8 +139,28 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
 
     @Override
     public Table getTable(String dbName, String tableName) {
+        // With per-table vended credentials, the snapshot cache embeds a short-lived
+        // CloudConfiguration in its DeltaLakeEngine; a cache hit would hand a stale credential
+        // to the planner. Bypass the snapshot cache and re-resolve credentials on every call.
+        if (delegate.isVendedCredentialsEnabled()) {
+            return delegate.getTable(dbName, tableName);
+        }
         DeltaLakeSnapshot snapshot = getCachedSnapshot(DatabaseTableName.of(dbName, tableName));
         return DeltaUtils.convertDeltaSnapshotToSRTable(getCatalogName(), snapshot);
+    }
+
+    @Override
+    public boolean isVendedCredentialsEnabled() {
+        return delegate.isVendedCredentialsEnabled();
+    }
+
+    @Override
+    public CloudConfiguration resolveTableCloudConfiguration(String dbName, String tableName) {
+        // Delta lake catalogs typically nest a query-level CachingDeltaLakeMetastore around a
+        // catalog-level CachingDeltaLakeMetastore around the real metastore (e.g. UnityBacked).
+        // Without this passthrough, the new interface method's default would return null at the
+        // outermost layer and per-table vended credentials would never reach the planner.
+        return delegate.resolveTableCloudConfiguration(dbName, tableName);
     }
 
     @Override

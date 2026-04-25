@@ -33,32 +33,49 @@ public class DeltaLakeEngine extends DefaultEngine {
     private final LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache;
     // Cache for json metadata, key is file path, value is list of JsonNode
     private final LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache;
+    // When true, skip the catalog-level json/checkpoint caches and read directly with this
+    // engine's hadoopConf. Required when per-table vended credentials are in use; the cache
+    // loaders close over the catalog-level Configuration (no vended creds) and would otherwise
+    // bypass the per-table credentials. Also prevents cross-tenant leaks of short-lived creds
+    // between tables that happen to point at the same metadata file path.
+    private final boolean bypassMetaCache;
 
     protected DeltaLakeEngine(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
                               LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
-                              LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
+                              LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache,
+                              boolean bypassMetaCache) {
         super(hadoopConf);
         this.hadoopConf = hadoopConf;
         this.properties = properties;
         this.checkpointCache = checkpointCache;
         this.jsonCache = jsonCache;
+        this.bypassMetaCache = bypassMetaCache;
     }
 
     @Override
     public JsonHandler getJsonHandler() {
-        return properties.isEnableDeltaLakeJsonMetaCache() ? new DeltaLakeJsonHandler(hadoopConf, jsonCache) :
-                new TraceDefaultJsonHandler(hadoopConf);
+        return (properties.isEnableDeltaLakeJsonMetaCache() && !bypassMetaCache)
+                ? new DeltaLakeJsonHandler(hadoopConf, jsonCache)
+                : new TraceDefaultJsonHandler(hadoopConf);
     }
 
     @Override
     public ParquetHandler getParquetHandler() {
-        return properties.isEnableDeltaLakeCheckpointMetaCache() ? new DeltaLakeParquetHandler(hadoopConf, checkpointCache) :
-                new TraceDefaultParquetHandler(hadoopConf);
+        return (properties.isEnableDeltaLakeCheckpointMetaCache() && !bypassMetaCache)
+                ? new DeltaLakeParquetHandler(hadoopConf, checkpointCache)
+                : new TraceDefaultParquetHandler(hadoopConf);
     }
 
     public static DeltaLakeEngine create(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
                                          LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
                                          LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache) {
-        return new DeltaLakeEngine(hadoopConf, properties, checkpointCache, jsonCache);
+        return create(hadoopConf, properties, checkpointCache, jsonCache, false);
+    }
+
+    public static DeltaLakeEngine create(Configuration hadoopConf, DeltaLakeCatalogProperties properties,
+                                         LoadingCache<Pair<DeltaLakeFileStatus, StructType>, List<ColumnarBatch>> checkpointCache,
+                                         LoadingCache<DeltaLakeFileStatus, List<JsonNode>> jsonCache,
+                                         boolean bypassMetaCache) {
+        return new DeltaLakeEngine(hadoopConf, properties, checkpointCache, jsonCache, bypassMetaCache);
     }
 }

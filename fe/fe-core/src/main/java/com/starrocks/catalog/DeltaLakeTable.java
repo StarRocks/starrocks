@@ -49,6 +49,12 @@ public class DeltaLakeTable extends Table {
     private SnapshotImpl deltaSnapshot;
     private Engine deltaEngine;
     private MetastoreTable metastoreTable;
+    // Per-table cloud configuration set by the connector after snapshot loading. Used when the
+    // catalog-level snapshot cache returns a hit and the per-table credentials baked into
+    // {@link #metastoreTable} are stale (e.g. Unity Catalog vended credentials are re-vended
+    // out of band by {@link com.starrocks.connector.delta.CachingDeltaLakeMetastore#getTable}).
+    // When non-null, takes precedence over {@code metastoreTable.getCloudConfiguration()}.
+    private CloudConfiguration cloudConfigurationOverride;
 
     public static final String PARTITION_NULL_VALUE = "null";
 
@@ -117,7 +123,13 @@ public class DeltaLakeTable extends Table {
     }
 
     public CloudConfiguration getCloudConfiguration() {
-        return metastoreTable.getCloudConfiguration();
+        return cloudConfigurationOverride != null
+                ? cloudConfigurationOverride
+                : metastoreTable.getCloudConfiguration();
+    }
+
+    public void setCloudConfiguration(CloudConfiguration cloudConfiguration) {
+        this.cloudConfigurationOverride = cloudConfiguration;
     }
 
     public void clearMetadata() {

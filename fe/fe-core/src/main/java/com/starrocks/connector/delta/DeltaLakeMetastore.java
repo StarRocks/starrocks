@@ -27,6 +27,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.metastore.IMetastore;
 import com.starrocks.connector.metastore.MetastoreTable;
+import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.sql.analyzer.SemanticException;
 import io.delta.kernel.Scan;
@@ -128,6 +129,17 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
 
     @Override
     public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+        return getLatestSnapshot(dbName, tableName, resolveTableCloudConfiguration(dbName, tableName));
+    }
+
+    /**
+     * Variant that uses a pre-resolved per-table {@link CloudConfiguration} instead of calling
+     * {@link #resolveTableCloudConfiguration(String, String)} again. Lets subclasses that already
+     * have the value (e.g. {@link com.starrocks.connector.delta.unity.UnityBackedDeltaMetastore#getTable})
+     * avoid a second round-trip through the credential-vending pipeline.
+     */
+    protected DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName,
+                                                  CloudConfiguration tableCloudConfiguration) {
         MetastoreTable metastoreTable = getMetastoreTable(dbName, tableName);
         if (metastoreTable == null) {
             LOG.error("get metastore table failed. dbName: {}, tableName: {}", dbName, tableName);
@@ -135,10 +147,24 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         }
 
         String path = metastoreTable.getTableLocation();
-        if (metastoreTable.getCloudConfiguration() != null) {
-            metastoreTable.getCloudConfiguration().applyToConfiguration(hdfsConfiguration);
+        // Prefer the per-table cloud configuration resolved through the new
+        // resolveTableCloudConfiguration hook (Unity Catalog vended creds). Fall back to the
+        // CloudConfiguration historically carried on MetastoreTable for compatibility with
+        // metastore impls that bake credentials into the MetastoreTable directly.
+        CloudConfiguration effectiveCc = tableCloudConfiguration != null
+                ? tableCloudConfiguration : metastoreTable.getCloudConfiguration();
+        Configuration effectiveConfiguration = hdfsConfiguration;
+        boolean usePerTableConfig = effectiveCc != null;
+        if (usePerTableConfig) {
+            // Copy so we never mutate the catalog-level shared Configuration.
+            effectiveConfiguration = new Configuration(hdfsConfiguration);
+            effectiveCc.applyToConfiguration(effectiveConfiguration);
         }
-        DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(hdfsConfiguration, properties, checkpointCache, jsonCache);
+        // When per-table vended credentials are active, the catalog-level json/checkpoint
+        // caches must be bypassed: their CacheLoaders close over the credential-less
+        // hdfsConfiguration and would ignore the table-scoped config we just built.
+        DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(effectiveConfiguration, properties,
+                checkpointCache, jsonCache, usePerTableConfig);
         SnapshotImpl snapshot;
 
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
