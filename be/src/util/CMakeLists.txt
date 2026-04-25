@@ -24,6 +24,7 @@ set(UTIL_FILES
   block_split_bloom_filter.cpp
   brpc_stub_cache.cpp
   compression/block_compression.cpp
+  compression/compression_context_pool_metrics.cpp
   compression/compression_context_pool_singletons.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
