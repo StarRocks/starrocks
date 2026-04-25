@@ -914,8 +914,7 @@ TEST_F(PersistentIndexSstableTest, test_multi_get_preserves_tombstones_with_shar
     // decodes to NullIndexValue.
     KeyIndexSet found_versioned;
     std::vector<IndexValue> values_versioned(kNumTombstones, IndexValue(NullIndexValue));
-    ASSERT_OK(sst->multi_get(keys.data(), key_indexes, kSharedVersion, values_versioned.data(),
-                             &found_versioned));
+    ASSERT_OK(sst->multi_get(keys.data(), key_indexes, kSharedVersion, values_versioned.data(), &found_versioned));
     ASSERT_EQ(found_versioned.size(), static_cast<size_t>(kNumTombstones));
     for (int i = 0; i < kNumTombstones; i++) {
         ASSERT_EQ(NullIndexValue, values_versioned[i].get_value());
