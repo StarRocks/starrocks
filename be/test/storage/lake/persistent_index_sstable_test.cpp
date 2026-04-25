@@ -905,6 +905,21 @@ TEST_F(PersistentIndexSstableTest, test_multi_get_preserves_tombstones_with_shar
         ASSERT_EQ(NullIndexValue, values[i].get_value())
                 << "shared_rssid tombstone at key " << key_str[i] << " leaked non-null";
     }
+
+    // shared_version must still be projected onto tombstones so the time-travel
+    // multi_get path (`version >= 0`) matches them. Without the version projection,
+    // a versioned lookup walks past the tombstone and resurrects a stale live entry
+    // from an older sstable — exactly the ordering bug Codex flagged. Verify by
+    // querying at exactly shared_version and confirming each tombstone is found and
+    // decodes to NullIndexValue.
+    KeyIndexSet found_versioned;
+    std::vector<IndexValue> values_versioned(kNumTombstones, IndexValue(NullIndexValue));
+    ASSERT_OK(sst->multi_get(keys.data(), key_indexes, kSharedVersion, values_versioned.data(),
+                             &found_versioned));
+    ASSERT_EQ(found_versioned.size(), static_cast<size_t>(kNumTombstones));
+    for (int i = 0; i < kNumTombstones; i++) {
+        ASSERT_EQ(NullIndexValue, values_versioned[i].get_value());
+    }
 }
 
 } // namespace starrocks::lake
