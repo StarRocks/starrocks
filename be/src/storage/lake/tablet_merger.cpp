@@ -1251,6 +1251,33 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
         }
     }
 
+    // The merge above appends sstables in source-child iteration order. The post-projection
+    // max_rss_rowid is what LakePersistentIndex::commit() and the size-tiered compaction
+    // strategy use to enforce the index-wide ordering invariant. If different children
+    // contributed sstables whose projected (rssid<<32|rowid) values interleave — for
+    // example, when a tombstone-bearing delete-only sstable in one child has its low
+    // word saturated near UINT32_MAX and a freshly-written sstable in the next child
+    // has a smaller projected high word — the source-order output would carry the
+    // disorder forward and any later commit/compaction on the merged tablet would
+    // refuse to publish with "sstables are not ordered". Sort defensively by
+    // max_rss_rowid here so the merged metadata always satisfies the invariant.
+    //
+    // Compare as `int64_t` rather than `uint64_t` to match the downstream invariant
+    // check: LakePersistentIndex::commit() (lake_persistent_index.cpp:880-881) fetches
+    // max_rss_rowid into an `int64_t` and does a signed `>` comparison. When the
+    // encoded (rssid<<32|rowid) sets the high bit — e.g. an ingest_sst entry with
+    // rssid >= 2^31, or a delete-only sstable whose memtable max_rss_rowid was set to
+    // (rowset_id<<32|UINT32_MAX) (persistent_index_memtable.cpp:110, 131) —
+    // unsigned ordering is the reverse of signed ordering against any low-rssid
+    // sibling. Sorting unsigned here while commit() compares signed would itself
+    // turn previously-passing metadata into "sstables are not ordered". Stable sort
+    // preserves shared_dedup's first-occurrence pick for equal keys.
+    std::stable_sort(dest->begin(), dest->end(),
+                     [](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
+                         return static_cast<int64_t>(a.max_rss_rowid()) <
+                                static_cast<int64_t>(b.max_rss_rowid());
+                     });
+
     return Status::OK();
 }
 

@@ -5360,4 +5360,199 @@ TEST_F(LakeTabletReshardTest, test_publish_resharding_tablet_slot_dedup) {
     }
 }
 
+// LakePersistentIndex::commit() and the size-tiered compaction strategy iterate
+// the tablet's sstable_meta in stored order and reject any out-of-order
+// max_rss_rowid as "sstables are not ordered". The merger appends sstables in
+// source-child iteration order, so projection across children can interleave
+// non-monotonically — for example, a delete-only sstable in one child has its
+// low word saturated near UINT32_MAX, and a freshly-written sstable in the
+// next child has a smaller projected high word. Without a defensive sort the
+// merged metadata would carry the disorder forward and any post-merge commit
+// or compaction would refuse to publish.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sorted_by_max_rss_rowid) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    // Child A contributes a tombstone-bearing sstable with high word = 20 and
+    // low word = UINT32_MAX-1, exactly the encoding PersistentIndexMemtable::erase
+    // / LakePersistentIndex::ingest_sst use for delete-only entries
+    // (storage/lake/persistent_index_memtable.cpp:110, 131,
+    //  storage/lake/lake_persistent_index.cpp:258).
+    // Child B's local sstable has high=3, low=50; with rssid_offset = 10 - 1 = 9
+    // it projects to high = 12 — well below child A's high=20. Source-iteration
+    // order would emit [child_a (20), child_b_proj (12)] in dest, which is the
+    // disorder this fix prevents.
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(10);
+    set_primary_key_schema(meta_a.get(), 1001);
+    auto* rowset_a = meta_a->add_rowsets();
+    rowset_a->set_id(1);
+    rowset_a->set_version(1);
+    rowset_a->set_num_rows(10);
+    rowset_a->set_data_size(100);
+    rowset_a->add_segments("seg_a.dat");
+    rowset_a->add_segment_size(100);
+    auto* sst_a_tombstone = meta_a->mutable_sstable_meta()->add_sstables();
+    sst_a_tombstone->set_filename("a_tombstone.sst");
+    sst_a_tombstone->set_filesize(256);
+    sst_a_tombstone->set_max_rss_rowid((static_cast<uint64_t>(20) << 32) |
+                                        (std::numeric_limits<uint32_t>::max() - 1));
+
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(5);
+    set_primary_key_schema(meta_b.get(), 1001);
+    auto* rowset_b = meta_b->add_rowsets();
+    rowset_b->set_id(1);
+    rowset_b->set_version(1);
+    rowset_b->set_num_rows(10);
+    rowset_b->set_data_size(100);
+    rowset_b->add_segments("seg_b.dat");
+    rowset_b->add_segment_size(100);
+    auto* sst_b_local = meta_b->mutable_sstable_meta()->add_sstables();
+    sst_b_local->set_filename("b_local.sst");
+    sst_b_local->set_filesize(128);
+    sst_b_local->set_max_rss_rowid((static_cast<uint64_t>(3) << 32) | 50);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(2, merged->sstable_meta().sstables_size());
+
+    uint64_t prev_max = 0;
+    for (const auto& sst : merged->sstable_meta().sstables()) {
+        EXPECT_LE(prev_max, sst.max_rss_rowid())
+                << "post-merge sstables must be in non-decreasing max_rss_rowid order";
+        prev_max = sst.max_rss_rowid();
+    }
+    EXPECT_EQ("b_local.sst", merged->sstable_meta().sstables(0).filename());
+    EXPECT_EQ("a_tombstone.sst", merged->sstable_meta().sstables(1).filename());
+}
+
+// LakePersistentIndex::commit() (lake_persistent_index.cpp:880-881) implicitly
+// converts max_rss_rowid (uint64) to int64_t and does a signed `>` comparison.
+// For an sstable whose encoded (rssid<<32|rowid) sets the high bit — for
+// example a delete-only memtable at rowset_id >= 2^31 (persistent_index_memtable.cpp
+// line 110/131 sets max_rss_rowid = (rowset_id<<32)|UINT32_MAX), or the
+// boundary case where a fresh ingest_sst lands at rssid >= 2^31 — unsigned
+// ordering is the reverse of signed ordering against any low-rssid sibling.
+// merge_sstables() must sort by the SAME signed semantics commit() uses; if
+// it sorts unsigned the merged metadata that previously satisfied commit()
+// would itself begin failing.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sort_uses_signed_comparison) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    // child_a contributes one sstable with the high bit of the uint64 encoding
+    // set (rssid=2^31|1). After source-order append + projection the merged
+    // metadata would hold both a "very large uint64" (high bit set, thus
+    // negative as int64) and a small positive int64.
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(static_cast<uint32_t>(1) << 31 | 2);
+    set_primary_key_schema(meta_a.get(), 1001);
+    auto* rowset_a = meta_a->add_rowsets();
+    rowset_a->set_id(static_cast<uint32_t>(1) << 31 | 1);
+    rowset_a->set_version(1);
+    rowset_a->set_num_rows(10);
+    rowset_a->set_data_size(100);
+    rowset_a->add_segments("seg_a.dat");
+    rowset_a->add_segment_size(100);
+    auto* sst_a_high = meta_a->mutable_sstable_meta()->add_sstables();
+    sst_a_high->set_filename("a_high.sst");
+    sst_a_high->set_filesize(256);
+    // (rssid<<32|0) with rssid >= 2^31 sets bit 63, so as int64_t this is
+    // a large negative number — int64 less than any positive sibling.
+    sst_a_high->set_max_rss_rowid((static_cast<uint64_t>(1) << 63) | 100);
+
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(5);
+    set_primary_key_schema(meta_b.get(), 1001);
+    auto* rowset_b = meta_b->add_rowsets();
+    rowset_b->set_id(1);
+    rowset_b->set_version(1);
+    rowset_b->set_num_rows(10);
+    rowset_b->set_data_size(100);
+    rowset_b->add_segments("seg_b.dat");
+    rowset_b->add_segment_size(100);
+    auto* sst_b_low = meta_b->mutable_sstable_meta()->add_sstables();
+    sst_b_low->set_filename("b_low.sst");
+    sst_b_low->set_filesize(128);
+    sst_b_low->set_max_rss_rowid((static_cast<uint64_t>(7) << 32) | 50);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    ASSERT_EQ(2, merged->sstable_meta().sstables_size());
+
+    // Signed-int64 non-decreasing across the merged sstables — matching the
+    // invariant LakePersistentIndex::commit() enforces.
+    int64_t prev_max = std::numeric_limits<int64_t>::min();
+    for (const auto& sst : merged->sstable_meta().sstables()) {
+        const int64_t cur = static_cast<int64_t>(sst.max_rss_rowid());
+        EXPECT_LE(prev_max, cur)
+                << "post-merge sstables must be in non-decreasing int64 max_rss_rowid order";
+        prev_max = cur;
+    }
+    // a_high's encoded max_rss_rowid is "negative" int64, so signed sort puts
+    // it first; b_low (positive int64) comes second. A naive uint64 sort
+    // would swap them and break commit().
+    EXPECT_EQ("a_high.sst", merged->sstable_meta().sstables(0).filename());
+    EXPECT_EQ("b_low.sst", merged->sstable_meta().sstables(1).filename());
+}
+
 } // namespace starrocks
