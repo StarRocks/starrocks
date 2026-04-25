@@ -1304,18 +1304,6 @@ StatusOr<std::optional<VariantRowValue>> VariantColumnReader::build_variant_bind
     return std::optional<VariantRowValue>(std::move(built));
 }
 
-static const ShreddedFieldNode* find_node_by_path(const std::vector<ShreddedFieldNode>& nodes,
-                                                  const std::string& target_path) {
-    for (const auto& node : nodes) {
-        if (node.full_path == target_path) return &node;
-        if (!node.children.empty()) {
-            auto* found = find_node_by_path(node.children, target_path);
-            if (found != nullptr) return found;
-        }
-    }
-    return nullptr;
-}
-
 // Auto-discover binding paths from the shredded_fields tree when no explicit shredded_paths are
 // provided.  Stops at ARRAY boundaries (does not recurse into array element children) and at SCALAR
 // leaves.  Struct-like NONE nodes are recursed.

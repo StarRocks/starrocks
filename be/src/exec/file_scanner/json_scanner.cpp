@@ -589,7 +589,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
                 DCHECK(_envelope_type != TEnvelopeType::DEBEZIUM || _cdc_op != 0xFF);
                 uint8_t op_val = _envelope_type != TEnvelopeType::NONE ? _cdc_op : 0;
                 if (column->is_binary()) {
-                    column->append_strings(&kCdcOpSlices[op_val], 1);
+                    (void)column->append_strings(&kCdcOpSlices[op_val], 1);
                 } else {
                     column->append_datum(Datum(op_val));
                 }
@@ -619,7 +619,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
                 DCHECK(_envelope_type != TEnvelopeType::DEBEZIUM || _cdc_op != 0xFF);
                 uint8_t op_val = _envelope_type != TEnvelopeType::NONE ? _cdc_op : 0;
                 if (column->is_binary()) {
-                    column->append_strings(&kCdcOpSlices[op_val], 1);
+                    (void)column->append_strings(&kCdcOpSlices[op_val], 1);
                 } else {
                     column->append_datum(Datum(op_val));
                 }
@@ -654,7 +654,7 @@ Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row,
                     DCHECK(_envelope_type != TEnvelopeType::DEBEZIUM || _cdc_op != 0xFF);
                     uint8_t op_val = _envelope_type != TEnvelopeType::NONE ? _cdc_op : 0;
                     if (column->is_binary()) {
-                        column->append_strings(&kCdcOpSlices[op_val], 1);
+                        (void)column->append_strings(&kCdcOpSlices[op_val], 1);
                     } else {
                         column->append_datum(Datum(op_val));
                     }
