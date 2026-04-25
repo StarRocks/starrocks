@@ -39,6 +39,7 @@
 #include <utility>
 
 #include "base/coding.h"
+#include "base/compression/block_compression.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
 #include "fs/fs.h"
@@ -51,7 +52,6 @@
 #include "storage/rowset/page_pointer.h"
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 

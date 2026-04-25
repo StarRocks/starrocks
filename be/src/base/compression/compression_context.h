@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include "base/compression/compression_headers.h"
 #include "base/string/faststring.h"
-#include "util/compression/compression_headers.h"
 
 namespace starrocks::compression {
 

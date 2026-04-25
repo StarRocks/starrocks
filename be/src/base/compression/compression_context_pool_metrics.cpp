@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/compression/compression_context_pool_metrics.h"
+#include "base/compression/compression_context_pool_metrics.h"
 
 #include <memory>
 #include <mutex>

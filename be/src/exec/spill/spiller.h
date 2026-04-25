@@ -21,6 +21,7 @@
 #include <queue>
 #include <vector>
 
+#include "base/compression/block_compression.h"
 #include "base/concurrency/blocking_queue.hpp"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
@@ -39,7 +40,6 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state_fwd.h"
-#include "util/compression/block_compression.h"
 #include "util/metrics/spill_metrics.h"
 
 #define GET_METRICS(remote, metrics, key) (remote ? metrics.remote_##key : metrics.local_##key)

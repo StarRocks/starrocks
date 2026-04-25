@@ -61,6 +61,7 @@
 #include "storage/index/inverted/inverted_plugin_factory.h"
 #endif
 #include "base/bit/rle_encoding.h"
+#include "base/compression/block_compression.h"
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
@@ -80,7 +81,6 @@
 #include "storage/types.h"
 #include "types/logical_type.h"
 #include "util/bloom_filter.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 

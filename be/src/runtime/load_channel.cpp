@@ -36,6 +36,7 @@
 
 #include <memory>
 
+#include "base/compression/block_compression.h"
 #include "base/container/lru_cache.h"
 #include "base/string/faststring.h"
 #include "base/testutil/sync_point.h"
@@ -53,7 +54,6 @@
 #include "runtime/local_tablets_channel.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/starrocks_metrics.h"
-#include "util/compression/block_compression.h"
 
 #define RETURN_RESPONSE_IF_ERROR(stmt, response)                                      \
     do {                                                                              \

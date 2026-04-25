@@ -20,6 +20,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "base/compression/block_compression.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
 #include "column/chunk.h"
@@ -47,7 +48,6 @@
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/storage_engine.h"
-#include "util/compression/block_compression.h"
 #include "util/global_metrics_registry.h"
 
 namespace starrocks {

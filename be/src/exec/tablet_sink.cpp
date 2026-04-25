@@ -40,6 +40,7 @@
 #include <utility>
 
 #include "agent/utils.h"
+#include "base/compression/compression_utils.h"
 #include "base/simd/simd.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
@@ -72,7 +73,6 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression/compression_utils.h"
 #include "util/stack_util.h"
 #include "util/thrift_rpc_helper.h"
 

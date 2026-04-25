@@ -17,8 +17,8 @@
 #include <cstdint>
 #include <exception>
 
+#include "base/compression/lzo_decompressor_registry.h"
 #include "common/statusor.h"
-#include "util/compression/lzo_decompressor_registry.h"
 
 namespace orc {
 uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);

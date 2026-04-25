@@ -40,11 +40,11 @@
 #include <utility>
 
 #include "base/bit/bit_util.h"
+#include "base/compression/stream_decompressor.h"
 #include "gen_cpp/Types_types.h"
 #include "io/core/input_stream.h"
 #include "runtime/message_body_sink.h"
 #include "util/byte_buffer.h"
-#include "util/compression/stream_decompressor.h"
 
 namespace starrocks {
 

@@ -18,8 +18,8 @@
 #include <cstring>
 
 #include "base/coding.h"
+#include "base/compression/compression_headers.h"
 #include "fmt/format.h"
-#include "util/compression/compression_headers.h"
 
 namespace starrocks::io {
 

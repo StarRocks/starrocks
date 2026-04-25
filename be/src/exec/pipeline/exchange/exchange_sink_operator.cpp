@@ -21,6 +21,8 @@
 #include <random>
 #include <utility>
 
+#include "base/compression/block_compression.h"
+#include "base/compression/compression_utils.h"
 #include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
@@ -40,8 +42,6 @@
 #include "serde/compress_strategy.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression/block_compression.h"
-#include "util/compression/compression_utils.h"
 #include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks::pipeline {

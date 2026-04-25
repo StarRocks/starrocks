@@ -22,6 +22,7 @@
 #include <limits>
 
 #include "base/coding.h"
+#include "base/compression/compression_headers.h"
 #include "base/status.h"
 #include "base/statusor.h"
 #include "column/array_column.h"
@@ -41,7 +42,6 @@
 #include "serde/protobuf_serde.h"
 #include "types/json_value.h"
 #include "types/percentile_value.h"
-#include "util/compression/compression_headers.h"
 
 namespace starrocks::serde {
 

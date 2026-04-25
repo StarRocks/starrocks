@@ -35,10 +35,10 @@
 #include <string>
 #include <utility>
 
+#include "base/compression/compression_context_pool_metrics.h"
 #include "base/concurrency/moodycamel/concurrentqueue.h"
-#include "common/status.h"
-#include "common/statusor.h"
-#include "util/compression/compression_context_pool_metrics.h"
+#include "base/status.h"
+#include "base/statusor.h"
 
 namespace starrocks::compression {
 

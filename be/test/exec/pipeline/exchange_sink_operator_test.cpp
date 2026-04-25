@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "base/compression/block_compression.h"
 #include "base/testutil/assert.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
@@ -33,7 +34,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "testutil/column_test_helper.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks::pipeline {
 

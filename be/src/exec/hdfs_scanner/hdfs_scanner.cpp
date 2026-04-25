@@ -14,6 +14,8 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner.h"
 
+#include "base/compression/compression_utils.h"
+#include "base/compression/stream_decompressor.h"
 #include "cache/data_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
 #include "column/datum_convert.h"
@@ -33,8 +35,6 @@
 #include "storage/type_info_allocator_adapter.h"
 #include "storage/types.h"
 #include "types/timestamp_value.h"
-#include "util/compression/compression_utils.h"
-#include "util/compression/stream_decompressor.h"
 namespace starrocks {
 
 static const std::string kCountOptColumnName = "___count___";
