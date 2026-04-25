@@ -14,6 +14,10 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <chrono>
+#include <tuple>
+#include <unordered_set>
+
 #include "base/debug/trace.h"
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
@@ -28,6 +32,7 @@
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/lake_persistent_index_size_tiered_compaction_strategy.h"
+#include "storage/lake/lake_persistent_index_snapshot.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
@@ -1045,22 +1050,135 @@ std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const Tablet
 }
 
 Status LakePersistentIndex::try_restore_from_local_snapshot(TabletManager* /*tablet_mgr*/,
-                                                            const TabletMetadataPtr& /*metadata*/,
-                                                            int64_t /*base_version*/) {
+                                                            const TabletMetadataPtr& metadata,
+                                                            int64_t base_version) {
     if (!config::enable_pk_index_snapshot_persistence) {
         return Status::NotFound("pk-index snapshot persistence disabled");
     }
-    // The on-disk format and validity rules land in follow-up PRs. Until then, always fall
-    // back to the full rebuild path so callers see no behavior change.
-    return Status::NotFound("pk-index snapshot restore not implemented");
+    if (metadata == nullptr) {
+        return Status::InvalidArgument("metadata is null");
+    }
+    // LakePrimaryIndex::load_from_lake_tablet calls `init(metadata)` immediately before
+    // `load_from_lake_tablet`, so on entry _sstable_filesets is already populated and
+    // _memtable is a fresh empty memtable. The restore's job is to skip the rowset-scan
+    // + load_dels stage by directly populating _memtable from the captured entries.
+
+    std::string snapshot_path;
+    RETURN_IF_ERROR(get_lake_persistent_index_snapshot_path(_tablet_id, base_version, &snapshot_path));
+
+    LakePersistentIndexSnapshotMetaPB snapshot_meta;
+    Status read_st = read_lake_persistent_index_snapshot(snapshot_path, &snapshot_meta);
+    if (!read_st.ok()) {
+        // NotFound is the expected miss path; treat any other failure (Corruption, IOError)
+        // the same way so the caller falls through to cold rebuild.
+        return Status::NotFound(read_st.to_string());
+    }
+
+    const int64_t now_sec = std::chrono::duration_cast<std::chrono::seconds>(
+                                    std::chrono::system_clock::now().time_since_epoch())
+                                    .count();
+    RETURN_IF_ERROR(validate_lake_persistent_index_snapshot(snapshot_meta, _tablet_id, base_version,
+                                                            metadata->schema().id(), now_sec,
+                                                            config::pk_index_snapshot_max_age_sec));
+
+    // Cheap pre-flight: every SST recorded in the snapshot must still appear in the current
+    // tablet metadata's sstable_meta. If not, the underlying SSTs were rewritten by a
+    // compaction we missed and the snapshot is stale.
+    std::unordered_set<std::string> live_ssts;
+    for (const auto& sst : metadata->sstable_meta().sstables()) {
+        live_ssts.insert(sst.filename());
+    }
+    for (const auto& fs_ref : snapshot_meta.filesets()) {
+        for (const auto& fname : fs_ref.sst_filenames()) {
+            if (live_ssts.find(fname) == live_ssts.end()) {
+                return Status::NotFound("snapshot SST no longer present in tablet metadata");
+            }
+        }
+    }
+
+    // Bulk-insert the captured memtable entries. The fast path on a post-flush snapshot
+    // is empty memtable_entries — the caller's init() already produced the correct
+    // post-rebuild state.
+    if (snapshot_meta.memtable_entries_size() > 0) {
+        if (_memtable == nullptr) {
+            return Status::InternalError("init() did not create _memtable before restore");
+        }
+        if (_memtable->size() != 0) {
+            return Status::InternalError("restore expects an empty memtable from init()");
+        }
+        std::vector<std::tuple<std::string, int64_t, IndexValue>> entries;
+        entries.reserve(snapshot_meta.memtable_entries_size());
+        for (const auto& e : snapshot_meta.memtable_entries()) {
+            entries.emplace_back(e.key(), e.version(), IndexValue(static_cast<uint64_t>(e.value())));
+        }
+        RETURN_IF_ERROR(_memtable->bulk_insert_from_snapshot(entries));
+    }
+
+    // load_from_lake_tablet would normally compute _key_size and _need_rebuild_* during
+    // its rebuild loop. Skipping that loop means we set them here ourselves.
+    auto schema_for_keys = std::make_shared<TabletSchema>(metadata->schema());
+    std::vector<ColumnId> pk_columns(schema_for_keys->num_key_columns());
+    for (auto i = 0; i < schema_for_keys->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(schema_for_keys, pk_columns);
+    ASSIGN_OR_RETURN(auto pk_encoding_type, schema_for_keys->primary_key_encoding_type_or_error());
+    _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema, pk_encoding_type);
+    _need_rebuild_file_cnt = 0;
+    _need_rebuild_row_cnt = 0;
+
+    TRACE_COUNTER_INCREMENT("pindex_snapshot_restore_entries", snapshot_meta.memtable_entries_size());
+    return Status::OK();
 }
 
 Status LakePersistentIndex::try_serialize_to_local_snapshot(TabletManager* /*tablet_mgr*/,
-                                                            const TabletMetadataPtr& /*metadata*/) {
+                                                            const TabletMetadataPtr& metadata) {
     if (!config::enable_pk_index_snapshot_persistence) {
         return Status::OK();
     }
-    return Status::NotSupported("pk-index snapshot persist not implemented");
+    if (metadata == nullptr) {
+        return Status::InvalidArgument("metadata is null");
+    }
+
+    LakePersistentIndexSnapshotMetaPB snapshot_meta;
+    snapshot_meta.set_format_version(kSnapshotFormatVersion);
+    snapshot_meta.set_tablet_id(_tablet_id);
+    snapshot_meta.set_captured_version(static_cast<int64_t>(metadata->version()));
+    snapshot_meta.set_schema_id(metadata->schema().id());
+    snapshot_meta.set_captured_at_unix_sec(std::chrono::duration_cast<std::chrono::seconds>(
+                                                   std::chrono::system_clock::now().time_since_epoch())
+                                                   .count());
+
+    if (_memtable != nullptr) {
+        _memtable->for_each_entry([&](const std::string& key, const IndexValueWithVer& v) {
+            auto* entry = snapshot_meta.add_memtable_entries();
+            entry->set_key(key);
+            entry->set_version(v.first);
+            entry->set_value(static_cast<int64_t>(v.second.get_value()));
+        });
+    }
+
+    // Record fileset SST references so the restore-time pre-flight can detect SSTs
+    // that have been rewritten away.
+    for (const auto& sst_meta : metadata->sstable_meta().sstables()) {
+        // Group by fileset_id; for the format-version-1 layout we keep one ref per SST,
+        // which is the simplest and most conservative pre-flight. PR-4 may compact this.
+        auto* fs_ref = snapshot_meta.add_filesets();
+        fs_ref->set_fileset_version(static_cast<int64_t>(metadata->version()));
+        fs_ref->add_sst_filenames(sst_meta.filename());
+        fs_ref->set_max_rss_rowid(static_cast<int64_t>(sst_meta.max_rss_rowid()));
+    }
+
+    std::string snapshot_path;
+    RETURN_IF_ERROR(get_lake_persistent_index_snapshot_path(_tablet_id, snapshot_meta.captured_version(),
+                                                            &snapshot_path));
+    // Ensure the per-tablet directory exists.
+    const auto last_slash = snapshot_path.find_last_of('/');
+    if (last_slash != std::string::npos) {
+        const std::string dir = snapshot_path.substr(0, last_slash);
+        RETURN_IF_ERROR(fs::create_directories(dir));
+    }
+    return write_lake_persistent_index_snapshot(snapshot_path, snapshot_meta);
 }
 
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,

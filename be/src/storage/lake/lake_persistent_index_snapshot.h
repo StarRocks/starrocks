@@ -59,5 +59,21 @@ Status write_lake_persistent_index_snapshot(const std::string& path, const LakeP
 // filesystem failures.
 Status read_lake_persistent_index_snapshot(const std::string& path, LakePersistentIndexSnapshotMetaPB* meta);
 
+// Derive the on-disk path for the snapshot of `tablet_id` at `captured_version`.
+// Layout: `<root>/lake_pk_snapshot/<tablet_id>/v<captured_version>.snapshot` where
+// `<root>` is `config::pk_index_snapshot_local_dir` if non-empty, or the first
+// `config::storage_root_path` entry otherwise. Returns InvalidArgument when no
+// usable root path can be derived.
+Status get_lake_persistent_index_snapshot_path(int64_t tablet_id, int64_t captured_version, std::string* path);
+
+// Pure helper that decides whether a previously captured snapshot is safe to use
+// for a load at `expected_version` on `expected_tablet_id` with `expected_schema_id`.
+// `now_unix_sec` and `max_age_sec` drive the age check (set `max_age_sec <= 0` to
+// disable). Returns OK on a usable snapshot; NotFound on any incompatibility so
+// the caller falls back to the full cold-rebuild path.
+Status validate_lake_persistent_index_snapshot(const LakePersistentIndexSnapshotMetaPB& meta, int64_t expected_tablet_id,
+                                               int64_t expected_version, int64_t expected_schema_id,
+                                               int64_t now_unix_sec, int64_t max_age_sec);
+
 } // namespace lake
 } // namespace starrocks

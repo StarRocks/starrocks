@@ -20,6 +20,7 @@
 
 #include "base/coding.h"
 #include "base/hash/crc32c.h"
+#include "common/config.h"
 #include "fs/fs.h"
 
 namespace starrocks {
@@ -102,6 +103,59 @@ Status read_lake_persistent_index_snapshot(const std::string& path, LakePersiste
 
     if (!meta->ParseFromString(payload)) {
         return Status::Corruption("failed to parse LakePersistentIndexSnapshotMetaPB");
+    }
+    return Status::OK();
+}
+
+Status get_lake_persistent_index_snapshot_path(int64_t tablet_id, int64_t captured_version, std::string* path) {
+    if (path == nullptr) {
+        return Status::InvalidArgument("path out-param is null");
+    }
+    std::string root = config::pk_index_snapshot_local_dir;
+    if (root.empty()) {
+        const std::string& roots = config::storage_root_path;
+        if (roots.empty()) {
+            return Status::InvalidArgument("no storage_root_path configured for pk-index snapshot");
+        }
+        size_t semi = roots.find(';');
+        root = (semi == std::string::npos) ? roots : roots.substr(0, semi);
+        // Trim a trailing comma-suffix used by some deployments (e.g. "/data;medium:HDD").
+        size_t comma = root.find(',');
+        if (comma != std::string::npos) {
+            root = root.substr(0, comma);
+        }
+    }
+    if (root.empty()) {
+        return Status::InvalidArgument("derived snapshot root path is empty");
+    }
+    if (root.back() == '/') {
+        root.pop_back();
+    }
+    *path = root + "/lake_pk_snapshot/" + std::to_string(tablet_id) + "/v" + std::to_string(captured_version) +
+            ".snapshot";
+    return Status::OK();
+}
+
+Status validate_lake_persistent_index_snapshot(const LakePersistentIndexSnapshotMetaPB& meta, int64_t expected_tablet_id,
+                                               int64_t expected_version, int64_t expected_schema_id,
+                                               int64_t now_unix_sec, int64_t max_age_sec) {
+    if (meta.format_version() > kSnapshotFormatVersion) {
+        return Status::NotFound("snapshot format_version newer than reader supports");
+    }
+    if (meta.tablet_id() != expected_tablet_id) {
+        return Status::NotFound("snapshot tablet_id mismatch");
+    }
+    if (meta.captured_version() != expected_version) {
+        return Status::NotFound("snapshot captured_version does not match base_version");
+    }
+    if (meta.schema_id() != expected_schema_id) {
+        return Status::NotFound("snapshot schema_id mismatch");
+    }
+    if (max_age_sec > 0 && now_unix_sec > 0) {
+        const int64_t age = now_unix_sec - meta.captured_at_unix_sec();
+        if (age < 0 || age > max_age_sec) {
+            return Status::NotFound("snapshot is older than max_age_sec");
+        }
     }
     return Status::OK();
 }

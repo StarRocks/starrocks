@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <tuple>
+#include <vector>
+
 #include "base/phmap/btree.h"
 #include "common/thread/threadpool.h"
 #include "storage/lake/types_fwd.h"
@@ -77,6 +80,25 @@ public:
                int64_t version) const;
 
     size_t memory_usage() const;
+
+    // Snapshot-export hook used by LakePersistentIndex::try_serialize_to_local_snapshot.
+    // Invokes |fn| once per (key, IndexValueWithVer) pair currently in the in-memory map.
+    // Iteration order matches the underlying btree_map (lexicographic on key bytes).
+    template <typename F>
+    void for_each_entry(F&& fn) const {
+        for (const auto& kv : _map) {
+            fn(kv.first, kv.second);
+        }
+    }
+
+    // Snapshot-restore hook: bulk-load (key, version, value) triples directly into
+    // the underlying map, preserving per-entry versions. Intended for restoring from
+    // a previously captured local-disk snapshot; not safe to mix with concurrent
+    // upsert/erase. Returns InternalError if any duplicate key is encountered (the
+    // snapshot must already be merge-resolved at capture time).
+    Status bulk_insert_from_snapshot(const std::vector<std::tuple<std::string, int64_t, IndexValue>>& entries);
+
+    size_t size() const { return _map.size(); }
 
     Status flush();
 
