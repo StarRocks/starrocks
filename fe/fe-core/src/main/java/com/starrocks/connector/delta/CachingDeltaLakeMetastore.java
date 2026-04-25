@@ -18,6 +18,7 @@ import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.connector.DatabaseTableName;
@@ -139,14 +140,26 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
 
     @Override
     public Table getTable(String dbName, String tableName) {
-        // With per-table vended credentials, the snapshot cache embeds a short-lived
-        // CloudConfiguration in its DeltaLakeEngine; a cache hit would hand a stale credential
-        // to the planner. Bypass the snapshot cache and re-resolve credentials on every call.
-        if (delegate.isVendedCredentialsEnabled()) {
+        // The delegate decides whether the snapshot cache is safe to use. Vended credentials
+        // alone are not a reason to bypass; with a TTL bounded well inside the credential
+        // safety margin, the cached snapshot's baked-in Engine remains usable for the entry's
+        // lifetime. Operators that explicitly disable caching (or set TTL=0) still bypass.
+        if (delegate.isSnapshotCacheBypassed()) {
             return delegate.getTable(dbName, tableName);
         }
         DeltaLakeSnapshot snapshot = getCachedSnapshot(DatabaseTableName.of(dbName, tableName));
-        return DeltaUtils.convertDeltaSnapshotToSRTable(getCatalogName(), snapshot);
+        DeltaLakeTable table = DeltaUtils.convertDeltaSnapshotToSRTable(getCatalogName(), snapshot);
+        // Snapshot cache hits skip the delegate's getTable() entirely, so per-table vended
+        // credentials would otherwise never reach the planner -> the BE ends up with only
+        // the catalog-level config (which has no AWS creds for UC vended-creds catalogs)
+        // and S3 returns 403. Re-attach the per-table cloud config here.
+        if (table != null) {
+            CloudConfiguration tableCloudConfiguration = delegate.resolveTableCloudConfiguration(dbName, tableName);
+            if (tableCloudConfiguration != null) {
+                table.setCloudConfiguration(tableCloudConfiguration);
+            }
+        }
+        return table;
     }
 
     @Override
@@ -178,6 +191,13 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tblName);
         tableNameLockMap.putIfAbsent(databaseTableName, dbName + "_" + tblName + "_lock");
         synchronized (tableNameLockMap.get(databaseTableName)) {
+            // Drop the delegate's per-table state (e.g. UnityBacked vended-credential cache and
+            // CachingUnityCatalogClient TableInfo + credentials entries) BEFORE reloading the
+            // snapshot. Otherwise the reload below would re-populate the snapshot cache from
+            // stale upstream metadata and the manual REFRESH would be a no-op for callers that
+            // wanted to invalidate vended credentials.
+            delegate.refreshTable(dbName, tblName);
+
             DeltaLakeSnapshot newSnapshot;
             try {
                 newSnapshot = getLatestSnapshot(dbName, tblName);
@@ -243,6 +263,17 @@ public class CachingDeltaLakeMetastore extends CachingMetastore implements IDelt
         DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
         tableSnapshotCache.invalidate(databaseTableName);
         lastAccessTimeMap.remove(databaseTableName);
+    }
+
+    /**
+     * Used when this metastore is the delegate of an outer {@link CachingDeltaLakeMetastore}
+     * (the typical query-level-around-catalog-level layering): drop our cached snapshot for the
+     * table and propagate to whatever sits underneath.
+     */
+    @Override
+    public void refreshTable(String dbName, String tableName) {
+        invalidateTable(dbName, tableName);
+        delegate.refreshTable(dbName, tableName);
     }
 
     @Override

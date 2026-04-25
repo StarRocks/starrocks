@@ -106,8 +106,23 @@ public class DeltaLakeInternalMgr {
             refreshHiveMetastoreExecutor = Executors.newCachedThreadPool(
                     new ThreadFactoryBuilder().setNameFormat("deltalake-metastore-refresh-%d").build());
             Executor executor = new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum());
-            deltaLakeMetastore = CachingDeltaLakeMetastore.createCatalogLevelInstance(unityBackedDeltaMetastore,
-                    executor, hmsConf.getCacheTtlSec(), hmsConf.getCacheRefreshIntervalSec(), hmsConf.getCacheMaxNum());
+            // When vended credentials are active, the cached snapshot embeds the per-table
+            // cloud credentials inside its DeltaLakeEngine. To make sure we never hand a stale
+            // credential to a query, clamp the snapshot cache TTL/refresh to the Unity client
+            // cache TTL: that cache already guarantees credentials are evicted well inside the
+            // server-side expiration_time minus safety_margin window. Operators that disable
+            // the Unity client cache (or set its TTL=0) take the bypass path in
+            // UnityBackedDeltaMetastore#isSnapshotCacheBypassed() and never reach this branch.
+            long snapshotTtlSec = hmsConf.getCacheTtlSec();
+            long snapshotRefreshSec = hmsConf.getCacheRefreshIntervalSec();
+            if (unityCatalogProperties.isVendedCredentialsEnabled()
+                    && unityCatalogProperties.isCacheEnabled()) {
+                long unityTtlSec = unityCatalogProperties.getCacheTtlSec();
+                snapshotTtlSec = Math.min(snapshotTtlSec, unityTtlSec);
+                snapshotRefreshSec = Math.min(snapshotRefreshSec, unityTtlSec);
+            }
+            deltaLakeMetastore = CachingDeltaLakeMetastore.createCatalogLevelInstance(unityBackedDeltaMetastore, executor,
+                    snapshotTtlSec, snapshotRefreshSec, hmsConf.getCacheMaxNum());
         }
         return deltaLakeMetastore;
     }

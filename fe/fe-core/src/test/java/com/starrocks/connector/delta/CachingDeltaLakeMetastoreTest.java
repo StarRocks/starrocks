@@ -464,4 +464,73 @@ public class CachingDeltaLakeMetastoreTest {
         Assertions.assertTrue(count.containsKey("tableCache"));
         Assertions.assertEquals(0L, count.get("tableCache"));
     }
+
+    @Test
+    public void testGetTableUsesSnapshotCacheWhenDelegateAllows() {
+        // The default IDeltaLakeMetastore returns false for isSnapshotCacheBypassed(), so the
+        // CachingDeltaLakeMetastore should populate its tableSnapshotCache via getCachedSnapshot.
+        Assertions.assertFalse(metastore.isSnapshotCacheBypassed(),
+                "HMSBackedDeltaMetastore should not bypass the snapshot cache by default");
+
+        new MockUp<DeltaLakeMetastore>() {
+            @mockit.Mock
+            public DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName) {
+                return new DeltaLakeSnapshot(dbName, tableName, null, null,
+                        new MetastoreTable(dbName, tableName, "s3://bucket/path/to/table", 123));
+            }
+        };
+        new MockUp<DeltaUtils>() {
+            @mockit.Mock
+            public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
+                return new DeltaLakeTable(1, "delta0", snapshot.getDbName(), snapshot.getTableName(),
+                        Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
+                        new MetastoreTable(snapshot.getDbName(), snapshot.getTableName(),
+                                "s3://bucket/path/to/table", 123));
+            }
+        };
+
+        CachingDeltaLakeMetastore caching = CachingDeltaLakeMetastore.createCatalogLevelInstance(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 100);
+        Table table = caching.getTable("db1", "table1");
+
+        Assertions.assertNotNull(table);
+        // Cache should be populated since the delegate did not opt out.
+        Map<String, Long> count = caching.estimateCount();
+        Assertions.assertTrue(count.containsKey("tableCache"));
+        Assertions.assertEquals(1L, count.get("tableCache"));
+    }
+
+    @Test
+    public void testGetTableBypassesSnapshotCacheWhenDelegateOptsOut() {
+        // Subclass HMSBackedDeltaMetastore so isSnapshotCacheBypassed() returns true and
+        // getTable() returns a sentinel value. CachingDeltaLakeMetastore should hand the
+        // request straight through and never populate its tableSnapshotCache.
+        IHiveMetastore hiveMetastore = new HiveMetastore(client, "delta0", MetastoreType.HMS);
+        DeltaLakeTable sentinel = new DeltaLakeTable(42, "delta0", "db1", "table1",
+                Lists.newArrayList(), Lists.newArrayList("ts"), null, null,
+                new MetastoreTable("db1", "table1", "s3://bucket/path/to/table", 123));
+        HMSBackedDeltaMetastore bypassDelegate = new HMSBackedDeltaMetastore(
+                "delta0", hiveMetastore, new Configuration(),
+                new DeltaLakeCatalogProperties(Maps.newHashMap())) {
+            @Override
+            public boolean isSnapshotCacheBypassed() {
+                return true;
+            }
+
+            @Override
+            public DeltaLakeTable getTable(String dbName, String tableName) {
+                return sentinel;
+            }
+        };
+
+        CachingDeltaLakeMetastore caching = CachingDeltaLakeMetastore.createCatalogLevelInstance(
+                bypassDelegate, executor, expireAfterWriteSec, refreshAfterWriteSec, 100);
+        Table table = caching.getTable("db1", "table1");
+
+        Assertions.assertSame(sentinel, table, "bypass path must return the delegate's value");
+        // tableSnapshotCache must be untouched.
+        Map<String, Long> count = caching.estimateCount();
+        Assertions.assertTrue(count.containsKey("tableCache"));
+        Assertions.assertEquals(0L, count.get("tableCache"));
+    }
 }

@@ -30,6 +30,11 @@ import org.apache.logging.log4j.Logger;
  * {@link UnityMetastore}. The parent class continues to handle Delta Kernel snapshot loading,
  * partition-key extraction, and checkpoint/JSON caching; this class only re-attaches per-table
  * vended cloud credentials to the {@link DeltaLakeTable} that the planner sees.
+ *
+ * <p>Per-table caching of {@code TableInfo} and vended {@code TemporaryTableCredentials} is the
+ * job of {@link CachingUnityCatalogClient}, not this class. We resolve through
+ * {@link UnityMetastore} on every call and rely on the client decorator to absorb the REST
+ * traffic.</p>
  */
 public class UnityBackedDeltaMetastore extends DeltaLakeMetastore {
     private static final Logger LOG = LogManager.getLogger(UnityBackedDeltaMetastore.class);
@@ -80,6 +85,21 @@ public class UnityBackedDeltaMetastore extends DeltaLakeMetastore {
     @Override
     public boolean isVendedCredentialsEnabled() {
         return unityProperties != null && unityProperties.isVendedCredentialsEnabled();
+    }
+
+    /**
+     * Bypass the catalog-level snapshot cache when vended credentials are active and the
+     * Unity client cache is effectively off (disabled or TTL=0). When the client cache is
+     * configured, the snapshot cache TTL is clamped (in {@code DeltaLakeInternalMgr}) to the
+     * Unity cache TTL so a cached snapshot's baked-in credentials never outlive the cache
+     * entry; in that mode we keep the snapshot cache in play.
+     */
+    @Override
+    public boolean isSnapshotCacheBypassed() {
+        if (!isVendedCredentialsEnabled()) {
+            return false;
+        }
+        return unityProperties == null || !unityProperties.isCacheEnabled() || unityProperties.getCacheTtlSec() == 0L;
     }
 
     /**
