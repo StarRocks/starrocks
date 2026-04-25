@@ -26,6 +26,8 @@ enum MEM_RESOURCE {
 
 class OperatorMemoryResourceManager {
 public:
+    ~OperatorMemoryResourceManager() noexcept { close(); }
+
     class ResGuard {
     public:
         explicit ResGuard(OperatorMemoryResourceManager& manager) : _manager(manager) {}

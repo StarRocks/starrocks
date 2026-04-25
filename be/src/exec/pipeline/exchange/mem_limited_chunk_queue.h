@@ -21,6 +21,7 @@
 #include "base/concurrency/spinlock.h"
 #include "base/phmap/phmap.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
+#include "exec/spill/block_manager.h"
 #include "serde/encode_context.h"
 
 namespace starrocks::pipeline {
