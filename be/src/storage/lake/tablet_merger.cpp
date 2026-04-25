@@ -1331,6 +1331,31 @@ void update_next_rowset_id(TabletMetadataPB* metadata) {
     for (const auto& rowset : metadata->rowsets()) {
         max_end = std::max(max_end, rowset.id() + get_rowset_id_step(rowset));
     }
+    // Also consider sstable_meta projected max_rss_rowid. merge_sstables advances
+    // each shared sstable's high word by ctx.rssid_offset (tablet_merger.cpp ~615),
+    // and the legacy non-shared_rssid branch can produce projected high words
+    // larger than any surviving rowset.id (e.g. when a delete-only sstable from a
+    // child contributes a high rssid that has no corresponding rowset in the merged
+    // metadata). If next_rowset_id is set from rowset.id alone, future writes on
+    // this tablet — and on SPLIT children that inherit this metadata — will assign
+    // rssids smaller than the projected sstable highs, producing sstables whose
+    // max_rss_rowid is LESS than existing entries and violating the ascending-order
+    // invariant that LakePersistentIndex::commit() (lake_persistent_index.cpp:881)
+    // enforces. The downstream symptom is the compaction publish failing with
+    // "sstables are not ordered, last_max_rss_rowid=A : max_rss_rowid=B" and the
+    // next reshard job parking in PREPARING because visibleVersion never catches
+    // up. Bound next_rowset_id by (max projected high word) + 1 so any new rssid
+    // is strictly greater than every projected sstable rssid.
+    if (metadata->has_sstable_meta()) {
+        for (const auto& sst : metadata->sstable_meta().sstables()) {
+            uint64_t projected_high = sst.max_rss_rowid() >> 32;
+            // Clamp the projected high to uint32 range; rssids are uint32 elsewhere
+            // and any saturated high word would already break the rssid encoding.
+            if (projected_high < std::numeric_limits<uint32_t>::max()) {
+                max_end = std::max(max_end, static_cast<uint32_t>(projected_high) + 1);
+            }
+        }
+    }
     metadata->set_next_rowset_id(max_end);
 }
 

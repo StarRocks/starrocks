@@ -5155,6 +5155,105 @@ TEST_F(LakeTabletReshardTest, test_publish_resharding_tablet_slot_dedup) {
     }
 }
 
+// merge_sstables projects each child's sstable.max_rss_rowid by adding the
+// child's rssid_offset to the high word (tablet_merger.cpp:615-618). The
+// projected high word can exceed every rowset.id in the merged metadata —
+// e.g. a delete-only sstable from a child contributes a high rssid that has
+// no matching rowset. update_next_rowset_id must consider the projected
+// sstable highs; otherwise next_rowset_id is set too low and a SPLIT child
+// inheriting this metadata will write new sstables whose max_rss_rowid is
+// LESS than existing inherited sstables' projected max_rss_rowid, breaking
+// the ascending-order invariant that LakePersistentIndex::commit() enforces.
+// Downstream symptom: COMPACTION publish on the SPLIT child fails with
+// "sstables are not ordered, last_max_rss_rowid=A : max_rss_rowid=B" and
+// the next reshard job parks in PREPARING.
+TEST_F(LakeTabletReshardTest, test_tablet_merging_next_rowset_id_covers_projected_sstable_high) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    // Child A: tiny rowsets/sstables, modest next_rowset_id.
+    auto meta_a = std::make_shared<TabletMetadataPB>();
+    meta_a->set_id(child_a);
+    meta_a->set_version(base_version);
+    meta_a->set_next_rowset_id(3);
+    set_primary_key_schema(meta_a.get(), 1001);
+    auto* rowset_a = meta_a->add_rowsets();
+    rowset_a->set_id(1);
+    rowset_a->set_version(1);
+    rowset_a->set_num_rows(10);
+    rowset_a->set_data_size(100);
+    rowset_a->add_segments("a_seg.dat");
+    rowset_a->add_segment_size(100);
+    auto* sst_a = meta_a->mutable_sstable_meta()->add_sstables();
+    sst_a->set_filename("a.sst");
+    sst_a->set_filesize(256);
+    sst_a->set_max_rss_rowid((static_cast<uint64_t>(1) << 32) | 50);
+
+    // Child B: also small rowsets, but its sstable's max_rss_rowid encodes a
+    // HIGH high word — well beyond next_rowset_id. This simulates the legacy
+    // path where a delete-only sstable carries a saturated rssid ahead of any
+    // surviving rowset.id (PersistentIndexMemtable::erase et al.).
+    auto meta_b = std::make_shared<TabletMetadataPB>();
+    meta_b->set_id(child_b);
+    meta_b->set_version(base_version);
+    meta_b->set_next_rowset_id(3);
+    set_primary_key_schema(meta_b.get(), 1001);
+    auto* rowset_b = meta_b->add_rowsets();
+    rowset_b->set_id(1);
+    rowset_b->set_version(1);
+    rowset_b->set_num_rows(10);
+    rowset_b->set_data_size(100);
+    rowset_b->add_segments("b_seg.dat");
+    rowset_b->add_segment_size(100);
+    auto* sst_b = meta_b->mutable_sstable_meta()->add_sstables();
+    sst_b->set_filename("b.sst");
+    sst_b->set_filesize(256);
+    sst_b->set_max_rss_rowid((static_cast<uint64_t>(200) << 32) | 99);
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+    // After projection, child_b's sstable carries max_rss_rowid with high =
+    // 200 + rssid_offset_b; rssid_offset_b for the second child is at least
+    // child_a's next_rowset_id (== 3), so the projected high is >= 200.
+    // Find the max projected high across all sstables.
+    uint64_t max_projected_high = 0;
+    for (const auto& sst : merged->sstable_meta().sstables()) {
+        max_projected_high = std::max(max_projected_high, sst.max_rss_rowid() >> 32);
+    }
+    ASSERT_GE(max_projected_high, 200u);
+    // next_rowset_id must be strictly greater than every projected sstable
+    // high; otherwise a future write would produce a sstable with a smaller
+    // max_rss_rowid than these existing ones.
+    EXPECT_GT(merged->next_rowset_id(), max_projected_high)
+            << "next_rowset_id=" << merged->next_rowset_id()
+            << " must exceed max projected sstable rssid=" << max_projected_high;
+}
+
 // Shared rowset with identical .cols filenames across children collapses to
 // a single DCG entry via exact dedup — no rebuild.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup_preserves_passthrough) {
