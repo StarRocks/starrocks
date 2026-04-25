@@ -87,16 +87,28 @@ UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider
 }
 
 UpdateManager::~UpdateManager() {
-    if (config::enable_pk_index_snapshot_persistence && config::pk_index_snapshot_capture_on_shutdown) {
-        // Capture all currently-cached PK indexes before they are torn down so the next
-        // BE start can skip cold rebuild for them. At shutdown there is no concurrent
-        // upsert traffic, so try_fetch_guard inside try_snapshot_to_local should succeed
-        // for every entry.
-        _capture_index_cache_snapshots("shutdown");
+    // Best-effort fallback. pre_shutdown_hook() called from the BE shutdown
+    // sequence is the load-bearing capture path; this destructor copy only
+    // fires if the process actually reaches storage-engine teardown without
+    // aborting earlier (e.g. on threadpool destruction with allocated tokens).
+    // Guarded by _pre_shutdown_capture_done so the cache is not walked twice.
+    if (config::enable_pk_index_snapshot_persistence && config::pk_index_snapshot_capture_on_shutdown &&
+        !_pre_shutdown_capture_done.load(std::memory_order_relaxed)) {
+        _capture_index_cache_snapshots("shutdown-dtor");
     }
     _index_cache.clear();
     _update_state_cache.clear();
     _compaction_cache.clear();
+}
+
+void UpdateManager::pre_shutdown_hook() {
+    if (!config::enable_pk_index_snapshot_persistence || !config::pk_index_snapshot_capture_on_shutdown) {
+        return;
+    }
+    if (_pre_shutdown_capture_done.exchange(true, std::memory_order_relaxed)) {
+        return;
+    }
+    _capture_index_cache_snapshots("pre-shutdown");
 }
 
 UpdateManager::PkIndexShard& UpdateManager::_get_pk_index_shard(int64_t tabletId) {
@@ -1582,8 +1594,14 @@ void UpdateManager::_capture_index_cache_snapshots(const char* reason) {
         _index_cache.release(entry);
     }
     if (!entries.empty()) {
-        VLOG(2) << "pk-index snapshot capture (" << reason << ") walked=" << entries.size() << " ok=" << ok_count
-                << " skipped=" << skipped_count << " failed=" << failed_count;
+        // Promoted from VLOG(2) to LOG(INFO): without an unconditional log line
+        // there is no way for an operator to confirm the capture path actually
+        // ran during BE shutdown, which made this 4-PR series unobservable in
+        // production for several iterations. Log volume is bounded by the
+        // number of capture sites (`shutdown`, `pre-shutdown`, `ttl-eviction`,
+        // `memory-pressure-eviction`) and by the cache size.
+        LOG(INFO) << "pk-index snapshot capture (" << reason << ") walked=" << entries.size() << " ok=" << ok_count
+                  << " skipped=" << skipped_count << " failed=" << failed_count;
     }
 }
 

@@ -45,6 +45,7 @@
 #ifndef __APPLE__
 #include "service/service_be/lake_service.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
 #endif
 #include "cache/datacache_metrics.h"
 #include "common/system/mem_info.h"
@@ -298,6 +299,22 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     exec_env->wait_for_finish();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": wait exec engine tasks finish successfully";
+
+#ifdef USE_STAROS
+    // Capture cached PK indexes BEFORE further teardown stages so the snapshot
+    // path runs while threadpools, tablet manager and storage engine are still
+    // alive. The destructor-based hook in `~UpdateManager` is unreachable in
+    // practice — earlier stages (e.g. cloud_native_pk_index_compact threadpool
+    // destruction with allocated tokens) abort the process before any
+    // destructor would run, so a "shutdown" capture from the destructor never
+    // produces files. This is the first opportunity that survives.
+    if (auto* lake_tablet_mgr = exec_env->lake_tablet_manager()) {
+        if (auto* update_mgr = lake_tablet_mgr->update_mgr()) {
+            update_mgr->pre_shutdown_hook();
+        }
+    }
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": pk-index snapshot capture complete";
+#endif
 
     heartbeat_server->stop();
     heartbeat_server->join();

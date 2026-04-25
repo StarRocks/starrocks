@@ -174,6 +174,16 @@ public:
     // `pk_index_snapshot_max_age_sec`. Best-effort. Called periodically by the
     // update_cache_expire background thread when snapshot persistence is enabled.
     void gc_stale_pk_index_snapshots();
+
+    // Called from the BE shutdown sequence (after `exec_env->wait_for_finish()`,
+    // before `exec_env->stop()` and threadpool teardown) so the snapshot capture
+    // path runs while the cache contents are still intact AND while the lake
+    // tablet manager / threadpools are still alive. The destructor-based hook in
+    // `~UpdateManager` is unreachable in practice because earlier teardown stages
+    // (e.g. threadpool destruction with allocated tokens) abort the process
+    // before destructors run; this pre-shutdown hook is the first opportunity at
+    // which a clean capture can complete.
+    void pre_shutdown_hook();
     void preload_update_state(const TxnLog& op_write, Tablet* tablet);
     void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
@@ -302,6 +312,9 @@ private:
     DynamicCache<string, CompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
     std::atomic<int64_t> _last_pk_snapshot_gc_millis = 0;
+    // Set true once pre_shutdown_hook() has captured the cache, so the
+    // destructor-time fallback in `~UpdateManager` does not double-walk.
+    std::atomic<bool> _pre_shutdown_capture_done{false};
     std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
 
