@@ -378,9 +378,9 @@ TEST(LakePersistentIndexSnapshotStubTest, write_then_read_roundtrip) {
     // The stub must be accepted by the read-side validity rule when version /
     // schema match — otherwise it would never produce a restore HIT in
     // production. Pure helper, so we can call it directly here.
-    int64_t now_sec = std::chrono::duration_cast<std::chrono::seconds>(
-                              std::chrono::system_clock::now().time_since_epoch())
-                              .count();
+    int64_t now_sec =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
     Status ok_st = validate_lake_persistent_index_snapshot(read_back, kStubTabletId, kStubVersion, kStubSchemaId,
                                                            now_sec, /*max_age_sec=*/3600);
     EXPECT_TRUE(ok_st.ok()) << ok_st.to_string();
