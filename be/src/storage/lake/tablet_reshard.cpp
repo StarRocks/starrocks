@@ -351,8 +351,35 @@ Status convert_txn_log_for_merging(TxnLogPB* txn_log) {
 }
 
 // Transform |txn_log| for publish on one of the split child tablets.
+//
+// Compaction ops are dropped on cross-publish, mirroring the merging-side
+// handling (see convert_txn_log_for_merging above). The reason is the same in
+// the other direction: a compaction transaction committed on the parent before
+// the split has its rows-mapper file (.lcrm) and output rowset built against
+// the parent tablet's full key range. Each split child only owns a subrange,
+// so when the conflict resolver runs for its op_compaction publish on the
+// child it iterates fewer segment rows than the mapper's stored row_count and
+// `RowsMapperIterator::status()` rejects the publish with
+//   "Chunk vs rows mapper's row count mismatch. <N> vs <total>"
+// (see storage/rows_mapper.cpp:155, storage/primary_key_compaction_conflict_resolver.cpp:124,175).
+// Because the compaction's input rowsets are still present in every child's
+// metadata (shared via set_all_data_files_shared), it is safe to drop the
+// compaction here — background compaction on the child will rerun it. The
+// compaction's output files were written under the parent tablet's path and
+// are deleted async so they do not leak. The async cleanup is gated to a
+// single child (split_index == 0) because publish runs convert_txn_log once
+// per split child against the same parent txn_log; without the gate the
+// identical output paths would be queued for deletion split_count times.
 Status convert_txn_log_for_splitting(TxnLogPB* txn_log, const TabletMetadataPtr& base_tablet_metadata,
                                      const PublishTabletInfo& publish_tablet_info) {
+    if (txn_log->has_op_compaction() || txn_log->has_op_parallel_compaction()) {
+        if (publish_tablet_info.get_split_index() == 0) {
+            delete_files_async(tablet_reshard_helper::collect_compaction_output_file_paths(
+                    *txn_log, ExecEnv::GetInstance()->lake_tablet_manager()));
+        }
+        txn_log->clear_op_compaction();
+        txn_log->clear_op_parallel_compaction();
+    }
     tablet_reshard_helper::set_all_data_files_shared(txn_log);
     RETURN_IF_ERROR(tablet_reshard_helper::update_rowset_ranges(txn_log, base_tablet_metadata->range()));
     tablet_reshard_helper::update_txn_log_data_stats(txn_log, publish_tablet_info.get_split_count(),
