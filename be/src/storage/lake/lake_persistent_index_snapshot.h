@@ -43,7 +43,7 @@ namespace lake {
 // `try_restore_from_local_snapshot` and adds the validity-rule checks.
 
 static constexpr char kSnapshotMagic[] = "SRPISNP1";
-static constexpr size_t kSnapshotMagicLen = 8;          // strlen("SRPISNP1"), no NUL
+static constexpr size_t kSnapshotMagicLen = 8; // strlen("SRPISNP1"), no NUL
 static constexpr uint32_t kSnapshotFormatVersion = 1;
 static constexpr size_t kSnapshotHeaderLen = kSnapshotMagicLen + sizeof(uint32_t) + sizeof(uint32_t);
 static constexpr size_t kSnapshotChecksumLen = sizeof(uint32_t);
@@ -51,15 +51,13 @@ static constexpr size_t kSnapshotChecksumLen = sizeof(uint32_t);
 // Write `meta` to `path` using the format above. Truncates an existing file.
 // Returns IOError on filesystem failure; the file is fsynced before return so
 // readers cannot observe a partial blob after a crash.
-Status write_lake_persistent_index_snapshot(const std::string& path,
-                                            const LakePersistentIndexSnapshotMetaPB& meta);
+Status write_lake_persistent_index_snapshot(const std::string& path, const LakePersistentIndexSnapshotMetaPB& meta);
 
 // Read and validate a snapshot file produced by `write_lake_persistent_index_snapshot`.
 // On success, `meta` is populated. Returns Corruption on magic / format_version /
 // CRC / parse mismatch; NotFound when the file does not exist; IOError on other
 // filesystem failures.
-Status read_lake_persistent_index_snapshot(const std::string& path,
-                                           LakePersistentIndexSnapshotMetaPB* meta);
+Status read_lake_persistent_index_snapshot(const std::string& path, LakePersistentIndexSnapshotMetaPB* meta);
 
 } // namespace lake
 } // namespace starrocks

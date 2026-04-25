@@ -36,8 +36,7 @@ void encode_header(uint32_t format_version, uint32_t meta_pb_size, char buf[kSna
 
 } // namespace
 
-Status write_lake_persistent_index_snapshot(const std::string& path,
-                                            const LakePersistentIndexSnapshotMetaPB& meta) {
+Status write_lake_persistent_index_snapshot(const std::string& path, const LakePersistentIndexSnapshotMetaPB& meta) {
     std::string payload;
     if (!meta.SerializeToString(&payload)) {
         return Status::InternalError("failed to serialise LakePersistentIndexSnapshotMetaPB");
@@ -64,8 +63,7 @@ Status write_lake_persistent_index_snapshot(const std::string& path,
     return wf->close();
 }
 
-Status read_lake_persistent_index_snapshot(const std::string& path,
-                                           LakePersistentIndexSnapshotMetaPB* meta) {
+Status read_lake_persistent_index_snapshot(const std::string& path, LakePersistentIndexSnapshotMetaPB* meta) {
     if (meta == nullptr) {
         return Status::InvalidArgument("meta out-param is null");
     }
@@ -80,13 +78,12 @@ Status read_lake_persistent_index_snapshot(const std::string& path,
     if (std::memcmp(header, kSnapshotMagic, kSnapshotMagicLen) != 0) {
         return Status::Corruption("snapshot magic mismatch");
     }
-    const uint32_t format_version =
-            decode_fixed32_le(reinterpret_cast<const uint8_t*>(header + kSnapshotMagicLen));
+    const uint32_t format_version = decode_fixed32_le(reinterpret_cast<const uint8_t*>(header + kSnapshotMagicLen));
     if (format_version > kSnapshotFormatVersion) {
         return Status::Corruption("snapshot format_version newer than reader supports");
     }
-    const uint32_t meta_pb_size = decode_fixed32_le(
-            reinterpret_cast<const uint8_t*>(header + kSnapshotMagicLen + sizeof(uint32_t)));
+    const uint32_t meta_pb_size =
+            decode_fixed32_le(reinterpret_cast<const uint8_t*>(header + kSnapshotMagicLen + sizeof(uint32_t)));
     if (file_size != kSnapshotHeaderLen + meta_pb_size + kSnapshotChecksumLen) {
         return Status::Corruption("snapshot file size does not match declared meta_pb_size");
     }
