@@ -25,6 +25,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/lake_types.pb.h"
 
 namespace starrocks {
 namespace lake {
@@ -218,6 +219,44 @@ Status gc_stale_lake_persistent_index_snapshots(const std::string& snapshot_root
             LOG(WARNING) << "gc_stale_lake_persistent_index_snapshots: iterate_dir2 failed for " << tablet_dir << ": "
                          << per_tablet_iter.to_string();
         }
+    }
+    return Status::OK();
+}
+
+Status write_stub_lake_persistent_index_snapshot(int64_t tablet_id, const TabletMetadataPB& metadata,
+                                                 std::string* path_out) {
+    // Snapshot the metadata-derived state without instantiating LakePersistentIndex.
+    // This is the cheapest possible capture for an evicted tablet: no SST opens,
+    // no rowset reads — just protobuf assembly + a single local file write.
+    LakePersistentIndexSnapshotMetaPB meta;
+    meta.set_format_version(kSnapshotFormatVersion);
+    meta.set_tablet_id(tablet_id);
+    meta.set_captured_version(static_cast<int64_t>(metadata.version()));
+    meta.set_schema_id(metadata.schema().id());
+    meta.set_captured_at_unix_sec(
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count());
+    // memtable_entries: intentionally empty. The restore-side bulk_insert path
+    // is gated on `memtable_entries_size() > 0`, so an empty list translates to
+    // "the freshly-init()'d empty memtable is the correct post-restore state".
+    // Caller's need_rebuild_counts == (0, 0) gate is what guarantees correctness.
+    for (const auto& sst_meta : metadata.sstable_meta().sstables()) {
+        auto* fs_ref = meta.add_filesets();
+        fs_ref->set_fileset_version(static_cast<int64_t>(metadata.version()));
+        fs_ref->add_sst_filenames(sst_meta.filename());
+        fs_ref->set_max_rss_rowid(static_cast<int64_t>(sst_meta.max_rss_rowid()));
+    }
+
+    std::string snapshot_path;
+    RETURN_IF_ERROR(get_lake_persistent_index_snapshot_path(tablet_id, meta.captured_version(), &snapshot_path));
+    const auto last_slash = snapshot_path.find_last_of('/');
+    if (last_slash != std::string::npos) {
+        const std::string dir = snapshot_path.substr(0, last_slash);
+        RETURN_IF_ERROR(fs::create_directories(dir));
+    }
+    RETURN_IF_ERROR(write_lake_persistent_index_snapshot(snapshot_path, meta));
+    if (path_out != nullptr) {
+        *path_out = snapshot_path;
     }
     return Status::OK();
 }

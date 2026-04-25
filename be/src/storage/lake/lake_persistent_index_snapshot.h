@@ -19,6 +19,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/persistent_index.pb.h"
+#include "storage/lake/tablet_metadata.h"
 
 namespace starrocks {
 namespace lake {
@@ -87,6 +88,24 @@ Status gc_stale_lake_persistent_index_snapshots(const std::string& snapshot_root
 Status validate_lake_persistent_index_snapshot(const LakePersistentIndexSnapshotMetaPB& meta,
                                                int64_t expected_tablet_id, int64_t expected_version,
                                                int64_t expected_schema_id, int64_t now_unix_sec, int64_t max_age_sec);
+
+// Construct and write a "stub" snapshot for a tablet that is NOT currently in
+// `_index_cache` but whose recent metadata is still tracked. The stub records:
+//   - the tablet metadata version and schema id (validity-rule inputs)
+//   - the SST filenames from `metadata.sstable_meta()` (pre-flight inputs)
+//   - an empty `memtable_entries` repeated field
+// Restoring from this stub at the same version produces an empty memtable while
+// keeping `_sstable_filesets` (populated by `init(metadata)`) intact, which is
+// the correct state ONLY when the tablet has no rowsets pending merge into the
+// SSTs. The caller is therefore REQUIRED to gate the stub write on
+// `LakePersistentIndex::need_rebuild_counts(metadata, metadata.sstable_meta())`
+// returning `{0, 0}` — otherwise the stub would silently elide the rowset
+// rebuild and lose data on next load.
+//
+// `path_out` (optional) reports the on-disk path that was written to; useful
+// for test assertions and the operator-visible LOG(INFO) tally.
+Status write_stub_lake_persistent_index_snapshot(int64_t tablet_id, const TabletMetadataPB& metadata,
+                                                 std::string* path_out = nullptr);
 
 } // namespace lake
 } // namespace starrocks

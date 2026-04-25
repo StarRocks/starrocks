@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <unordered_map>
 
@@ -184,6 +186,13 @@ public:
     // before destructors run; this pre-shutdown hook is the first opportunity at
     // which a clean capture can complete.
     void pre_shutdown_hook();
+
+    // Record the latest TabletMetadataPtr seen for `tablet_id` so that — if the
+    // tablet is later evicted from `_index_cache` — shutdown can still write a
+    // stub snapshot referencing the SST list at this version. Called from
+    // `prepare_primary_index` (where we know we have valid metadata + the index
+    // entry was successfully prepared). No-op when snapshot persistence is off.
+    void note_pk_tablet_metadata(int64_t tablet_id, const TabletMetadataPtr& metadata);
     void preload_update_state(const TxnLog& op_write, Tablet* tablet);
     void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
@@ -295,6 +304,22 @@ private:
     // "memory-pressure-eviction").
     void _capture_index_cache_snapshots(const char* reason);
 
+    // Walk `_last_seen_pk_metadata` and write a stub snapshot for every tablet
+    // whose latest tracked metadata is still on this CN but is NOT currently in
+    // `_index_cache` (i.e. evicted by TTL or memory pressure since it was last
+    // touched). Each stub references the SSTs in the tracked metadata; restore
+    // from a stub at the same version produces the correct empty-memtable state
+    // ONLY when the tablet has no rowsets pending merge. The walk enforces this
+    // via `LakePersistentIndex::need_rebuild_counts(*meta, meta->sstable_meta())
+    // == {0, 0}`; tablets failing the gate are skipped silently.
+    //
+    // This complements `_capture_index_cache_snapshots`: that walk covers
+    // currently-cached tablets (full memtable capture); this walk covers
+    // recently-loaded-but-evicted tablets (stub capture from metadata only).
+    // Together they raise the post-restart restore HIT rate for workloads where
+    // the active set exceeds `_index_cache` capacity.
+    void _capture_evicted_tablet_snapshots(const char* reason);
+
     // decide whether use light publish compaction stategy or not
     bool _use_light_publish_primary_compaction(TabletManager* mgr, const TxnLogPB_OpCompaction& op_compaction,
                                                int64_t tablet_id, int64_t txn_id);
@@ -315,6 +340,13 @@ private:
     // Set true once pre_shutdown_hook() has captured the cache, so the
     // destructor-time fallback in `~UpdateManager` does not double-walk.
     std::atomic<bool> _pre_shutdown_capture_done{false};
+    // Latest TabletMetadataPtr seen per tablet whose PK index has been loaded on
+    // this CN. Persists past `_index_cache` evictions so shutdown can still
+    // write a stub snapshot for evicted tablets. Bounded by the number of
+    // distinct tablets ever served on this CN; for the realtime-benchmark
+    // template (10 K tablets) the steady-state cost is ~MB-scale.
+    std::mutex _last_seen_pk_metadata_mu;
+    std::unordered_map<int64_t, TabletMetadataPtr> _last_seen_pk_metadata;
     std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
 

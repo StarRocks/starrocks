@@ -20,13 +20,16 @@
 #include <utime.h>
 
 #include <atomic>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 
+#include "base/utility/defer_op.h"
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/lake_types.pb.h"
 
 namespace starrocks::lake {
 
@@ -324,6 +327,69 @@ TEST_F(LakePersistentIndexSnapshotGcTest, non_snapshot_files_ignored) {
     EXPECT_EQ(1, removed);
     EXPECT_FALSE(fs::path_exist(stale));
     EXPECT_TRUE(fs::path_exist(stray));
+}
+
+// Stub-snapshot helper: validates that `write_stub_lake_persistent_index_snapshot`
+// produces a file readable by `read_lake_persistent_index_snapshot`, with empty
+// `memtable_entries`, populated `filesets`, and consistent (tablet_id,
+// captured_version, schema_id) fields. Used by the shutdown evicted-tablet
+// capture path; correctness on restore depends on the read path being able to
+// round-trip what we wrote.
+TEST(LakePersistentIndexSnapshotStubTest, write_then_read_roundtrip) {
+    const auto previous_dir = config::pk_index_snapshot_local_dir;
+    auto root = make_temp_path("stub_root");
+    config::pk_index_snapshot_local_dir = root;
+    DeferOp restore_dir([&] { config::pk_index_snapshot_local_dir = previous_dir; });
+
+    constexpr int64_t kStubTabletId = 4242;
+    constexpr int64_t kStubVersion = 17;
+    constexpr int64_t kStubSchemaId = 77;
+
+    TabletMetadataPB metadata;
+    metadata.set_id(kStubTabletId);
+    metadata.set_version(kStubVersion);
+    metadata.mutable_schema()->set_id(kStubSchemaId);
+    metadata.set_enable_persistent_index(true);
+    metadata.set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    auto* sst1 = metadata.mutable_sstable_meta()->add_sstables();
+    sst1->set_filename("sst-aaa.sst");
+    sst1->set_max_rss_rowid(0x100000001ULL);
+    auto* sst2 = metadata.mutable_sstable_meta()->add_sstables();
+    sst2->set_filename("sst-bbb.sst");
+    sst2->set_max_rss_rowid(0x200000002ULL);
+
+    std::string out_path;
+    Status write_st = write_stub_lake_persistent_index_snapshot(kStubTabletId, metadata, &out_path);
+    ASSERT_TRUE(write_st.ok()) << write_st.to_string();
+    ASSERT_FALSE(out_path.empty());
+    EXPECT_TRUE(fs::path_exist(out_path));
+
+    LakePersistentIndexSnapshotMetaPB read_back;
+    Status read_st = read_lake_persistent_index_snapshot(out_path, &read_back);
+    ASSERT_TRUE(read_st.ok()) << read_st.to_string();
+    EXPECT_EQ(kStubTabletId, read_back.tablet_id());
+    EXPECT_EQ(kStubVersion, read_back.captured_version());
+    EXPECT_EQ(kStubSchemaId, read_back.schema_id());
+    EXPECT_EQ(0, read_back.memtable_entries_size());
+    ASSERT_EQ(2, read_back.filesets_size());
+    EXPECT_EQ("sst-aaa.sst", read_back.filesets(0).sst_filenames(0));
+    EXPECT_EQ("sst-bbb.sst", read_back.filesets(1).sst_filenames(0));
+
+    // The stub must be accepted by the read-side validity rule when version /
+    // schema match — otherwise it would never produce a restore HIT in
+    // production. Pure helper, so we can call it directly here.
+    int64_t now_sec = std::chrono::duration_cast<std::chrono::seconds>(
+                              std::chrono::system_clock::now().time_since_epoch())
+                              .count();
+    Status ok_st = validate_lake_persistent_index_snapshot(read_back, kStubTabletId, kStubVersion, kStubSchemaId,
+                                                           now_sec, /*max_age_sec=*/3600);
+    EXPECT_TRUE(ok_st.ok()) << ok_st.to_string();
+
+    // A version-mismatched lookup (e.g. workload advanced after eviction) must
+    // be rejected so the caller falls through to a cold rebuild.
+    Status mismatch_st = validate_lake_persistent_index_snapshot(read_back, kStubTabletId, kStubVersion + 1,
+                                                                 kStubSchemaId, now_sec, /*max_age_sec=*/3600);
+    EXPECT_TRUE(mismatch_st.is_not_found()) << mismatch_st.to_string();
 }
 
 } // namespace starrocks::lake
