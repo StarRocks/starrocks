@@ -23,8 +23,8 @@
 #include "base/hash/crc32c.h"
 #include "common/config.h"
 #include "fs/fs.h"
-#include "fs/fs_util.h"
 #include "fs/fs_factory.h"
+#include "fs/fs_util.h"
 
 namespace starrocks {
 namespace lake {
