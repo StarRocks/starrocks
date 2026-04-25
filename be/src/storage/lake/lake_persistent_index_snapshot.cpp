@@ -136,9 +136,9 @@ Status get_lake_persistent_index_snapshot_path(int64_t tablet_id, int64_t captur
     return Status::OK();
 }
 
-Status validate_lake_persistent_index_snapshot(const LakePersistentIndexSnapshotMetaPB& meta, int64_t expected_tablet_id,
-                                               int64_t expected_version, int64_t expected_schema_id,
-                                               int64_t now_unix_sec, int64_t max_age_sec) {
+Status validate_lake_persistent_index_snapshot(const LakePersistentIndexSnapshotMetaPB& meta,
+                                               int64_t expected_tablet_id, int64_t expected_version,
+                                               int64_t expected_schema_id, int64_t now_unix_sec, int64_t max_age_sec) {
     if (meta.format_version() > kSnapshotFormatVersion) {
         return Status::NotFound("snapshot format_version newer than reader supports");
     }

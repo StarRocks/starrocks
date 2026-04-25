@@ -15,12 +15,12 @@
 #include "storage/lake/lake_persistent_index_snapshot.h"
 
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
-#include <unistd.h>
 
 #include "common/config.h"
 #include "fs/fs.h"

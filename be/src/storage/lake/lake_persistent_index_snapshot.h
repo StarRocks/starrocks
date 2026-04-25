@@ -71,9 +71,9 @@ Status get_lake_persistent_index_snapshot_path(int64_t tablet_id, int64_t captur
 // `now_unix_sec` and `max_age_sec` drive the age check (set `max_age_sec <= 0` to
 // disable). Returns OK on a usable snapshot; NotFound on any incompatibility so
 // the caller falls back to the full cold-rebuild path.
-Status validate_lake_persistent_index_snapshot(const LakePersistentIndexSnapshotMetaPB& meta, int64_t expected_tablet_id,
-                                               int64_t expected_version, int64_t expected_schema_id,
-                                               int64_t now_unix_sec, int64_t max_age_sec);
+Status validate_lake_persistent_index_snapshot(const LakePersistentIndexSnapshotMetaPB& meta,
+                                               int64_t expected_tablet_id, int64_t expected_version,
+                                               int64_t expected_schema_id, int64_t now_unix_sec, int64_t max_age_sec);
 
 } // namespace lake
 } // namespace starrocks

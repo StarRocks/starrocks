@@ -1050,8 +1050,7 @@ std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const Tablet
 }
 
 Status LakePersistentIndex::try_restore_from_local_snapshot(TabletManager* /*tablet_mgr*/,
-                                                            const TabletMetadataPtr& metadata,
-                                                            int64_t base_version) {
+                                                            const TabletMetadataPtr& metadata, int64_t base_version) {
     if (!config::enable_pk_index_snapshot_persistence) {
         return Status::NotFound("pk-index snapshot persistence disabled");
     }
@@ -1074,9 +1073,9 @@ Status LakePersistentIndex::try_restore_from_local_snapshot(TabletManager* /*tab
         return Status::NotFound(read_st.to_string());
     }
 
-    const int64_t now_sec = std::chrono::duration_cast<std::chrono::seconds>(
-                                    std::chrono::system_clock::now().time_since_epoch())
-                                    .count();
+    const int64_t now_sec =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
     RETURN_IF_ERROR(validate_lake_persistent_index_snapshot(snapshot_meta, _tablet_id, base_version,
                                                             metadata->schema().id(), now_sec,
                                                             config::pk_index_snapshot_max_age_sec));
@@ -1145,9 +1144,9 @@ Status LakePersistentIndex::try_serialize_to_local_snapshot(TabletManager* /*tab
     snapshot_meta.set_tablet_id(_tablet_id);
     snapshot_meta.set_captured_version(static_cast<int64_t>(metadata->version()));
     snapshot_meta.set_schema_id(metadata->schema().id());
-    snapshot_meta.set_captured_at_unix_sec(std::chrono::duration_cast<std::chrono::seconds>(
-                                                   std::chrono::system_clock::now().time_since_epoch())
-                                                   .count());
+    snapshot_meta.set_captured_at_unix_sec(
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count());
 
     if (_memtable != nullptr) {
         _memtable->for_each_entry([&](const std::string& key, const IndexValueWithVer& v) {
@@ -1170,8 +1169,8 @@ Status LakePersistentIndex::try_serialize_to_local_snapshot(TabletManager* /*tab
     }
 
     std::string snapshot_path;
-    RETURN_IF_ERROR(get_lake_persistent_index_snapshot_path(_tablet_id, snapshot_meta.captured_version(),
-                                                            &snapshot_path));
+    RETURN_IF_ERROR(
+            get_lake_persistent_index_snapshot_path(_tablet_id, snapshot_meta.captured_version(), &snapshot_path));
     // Ensure the per-tablet directory exists.
     const auto last_slash = snapshot_path.find_last_of('/');
     if (last_slash != std::string::npos) {
