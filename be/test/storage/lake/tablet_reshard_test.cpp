@@ -5404,8 +5404,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sorted_by_max_rss_row
     auto* sst_a_tombstone = meta_a->mutable_sstable_meta()->add_sstables();
     sst_a_tombstone->set_filename("a_tombstone.sst");
     sst_a_tombstone->set_filesize(256);
-    sst_a_tombstone->set_max_rss_rowid((static_cast<uint64_t>(20) << 32) |
-                                        (std::numeric_limits<uint32_t>::max() - 1));
+    sst_a_tombstone->set_max_rss_rowid((static_cast<uint64_t>(20) << 32) | (std::numeric_limits<uint32_t>::max() - 1));
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
     meta_b->set_id(child_b);
@@ -5448,8 +5447,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sorted_by_max_rss_row
 
     uint64_t prev_max = 0;
     for (const auto& sst : merged->sstable_meta().sstables()) {
-        EXPECT_LE(prev_max, sst.max_rss_rowid())
-                << "post-merge sstables must be in non-decreasing max_rss_rowid order";
+        EXPECT_LE(prev_max, sst.max_rss_rowid()) << "post-merge sstables must be in non-decreasing max_rss_rowid order";
         prev_max = sst.max_rss_rowid();
     }
     EXPECT_EQ("b_local.sst", merged->sstable_meta().sstables(0).filename());
@@ -5544,8 +5542,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_sstables_sort_uses_signed_comp
     int64_t prev_max = std::numeric_limits<int64_t>::min();
     for (const auto& sst : merged->sstable_meta().sstables()) {
         const int64_t cur = static_cast<int64_t>(sst.max_rss_rowid());
-        EXPECT_LE(prev_max, cur)
-                << "post-merge sstables must be in non-decreasing int64 max_rss_rowid order";
+        EXPECT_LE(prev_max, cur) << "post-merge sstables must be in non-decreasing int64 max_rss_rowid order";
         prev_max = cur;
     }
     // a_high's encoded max_rss_rowid is "negative" int64, so signed sort puts

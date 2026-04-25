@@ -1274,8 +1274,7 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
     // preserves shared_dedup's first-occurrence pick for equal keys.
     std::stable_sort(dest->begin(), dest->end(),
                      [](const PersistentIndexSstablePB& a, const PersistentIndexSstablePB& b) {
-                         return static_cast<int64_t>(a.max_rss_rowid()) <
-                                static_cast<int64_t>(b.max_rss_rowid());
+                         return static_cast<int64_t>(a.max_rss_rowid()) < static_cast<int64_t>(b.max_rss_rowid());
                      });
 
     return Status::OK();
