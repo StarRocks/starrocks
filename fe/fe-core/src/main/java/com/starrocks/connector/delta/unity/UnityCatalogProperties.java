@@ -31,6 +31,16 @@ public class UnityCatalogProperties {
     // SDK does not default to us-east-1 and hit a 301 PermanentRedirect on buckets in other
     // regions. UC's temporary-credentials API does not return the region itself.
     public static final String UNITY_AWS_REGION = "unity.catalog.aws.region";
+    // Client-side cache in front of the UC REST client. Shared TTL across schema/table metadata
+    // and credentials; credentials additionally honor the server-side expiration_time minus a
+    // safety margin.
+    public static final String UNITY_CACHE_ENABLED = "unity.catalog.cache.enabled";
+    public static final String UNITY_CACHE_TTL_SEC = "unity.catalog.cache.ttl-sec";
+    public static final String UNITY_CACHE_CREDENTIALS_SAFETY_MARGIN_SEC =
+            "unity.catalog.cache.credentials.safety-margin-sec";
+
+    private static final long DEFAULT_CACHE_TTL_SEC = 60L;
+    private static final long DEFAULT_CREDENTIALS_SAFETY_MARGIN_SEC = 600L;
 
     private final String host;
     private final String token;
@@ -39,6 +49,9 @@ public class UnityCatalogProperties {
     private final long requestTimeoutMs;
     private final int maxRetries;
     private final String awsRegion;
+    private final boolean cacheEnabled;
+    private final long cacheTtlSec;
+    private final long credentialsSafetyMarginSec;
 
     public UnityCatalogProperties(Map<String, String> properties) {
         String hostValue = properties.get(UNITY_CATALOG_HOST);
@@ -62,6 +75,16 @@ public class UnityCatalogProperties {
 
         String region = properties.get(UNITY_AWS_REGION);
         this.awsRegion = Strings.isNullOrEmpty(region) ? null : region.trim();
+
+        String cacheEnabledRaw = properties.getOrDefault(UNITY_CACHE_ENABLED, "true");
+        this.cacheEnabled = Boolean.parseBoolean(cacheEnabledRaw);
+        this.cacheTtlSec = parseLong(properties, UNITY_CACHE_TTL_SEC, DEFAULT_CACHE_TTL_SEC);
+        Preconditions.checkArgument(this.cacheTtlSec >= 0,
+                "%s must be >= 0", UNITY_CACHE_TTL_SEC);
+        this.credentialsSafetyMarginSec = parseLong(properties,
+                UNITY_CACHE_CREDENTIALS_SAFETY_MARGIN_SEC, DEFAULT_CREDENTIALS_SAFETY_MARGIN_SEC);
+        Preconditions.checkArgument(this.credentialsSafetyMarginSec >= 0,
+                "%s must be >= 0", UNITY_CACHE_CREDENTIALS_SAFETY_MARGIN_SEC);
     }
 
     public String getHost() {
@@ -91,6 +114,20 @@ public class UnityCatalogProperties {
     /** Optional AWS region hint used when translating UC-vended S3 credentials; may be null. */
     public String getAwsRegion() {
         return awsRegion;
+    }
+
+    public boolean isCacheEnabled() {
+        return cacheEnabled;
+    }
+
+    /** TTL applied to every Guava cache that sits in front of the UC REST client. */
+    public long getCacheTtlSec() {
+        return cacheTtlSec;
+    }
+
+    /** Seconds subtracted from each credential's {@code expirationTime} before re-vending. */
+    public long getCredentialsSafetyMarginSec() {
+        return credentialsSafetyMarginSec;
     }
 
     private static String stripTrailingSlash(String value) {

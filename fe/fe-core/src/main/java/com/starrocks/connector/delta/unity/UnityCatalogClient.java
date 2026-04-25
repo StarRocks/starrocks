@@ -41,7 +41,7 @@ import java.util.concurrent.TimeUnit;
  * {@code Authorization: Bearer <pat>}. The client paginates list endpoints transparently and
  * retries on 429 / 5xx with exponential backoff.</p>
  */
-public class UnityCatalogClient {
+public class UnityCatalogClient implements UnityCatalogApi {
     private static final Logger LOG = LogManager.getLogger(UnityCatalogClient.class);
     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -78,6 +78,7 @@ public class UnityCatalogClient {
                 .build();
     }
 
+    @Override
     public List<UnityCatalogTypes.Schema> listSchemas(String ucCatalog) {
         List<UnityCatalogTypes.Schema> result = new ArrayList<>();
         String pageToken = null;
@@ -98,6 +99,7 @@ public class UnityCatalogClient {
         return result;
     }
 
+    @Override
     public List<UnityCatalogTypes.TableSummary> listTables(String ucCatalog, String schemaName) {
         List<UnityCatalogTypes.TableSummary> result = new ArrayList<>();
         String pageToken = null;
@@ -119,11 +121,13 @@ public class UnityCatalogClient {
         return result;
     }
 
+    @Override
     public UnityCatalogTypes.TableInfo getTable(String fullName) {
         HttpUrl url = resolve(PATH_TABLES + "/" + encodePathSegment(fullName));
         return executeGet(url, UnityCatalogTypes.TableInfo.class);
     }
 
+    @Override
     public boolean tableExists(String fullName) {
         HttpUrl url = resolve(PATH_TABLES + "/" + encodePathSegment(fullName));
         Request request = baseRequest(url).get().build();
@@ -141,6 +145,7 @@ public class UnityCatalogClient {
         }
     }
 
+    @Override
     public UnityCatalogTypes.TemporaryTableCredentials getTemporaryTableCredentials(String tableId, String operation) {
         HttpUrl url = resolve(PATH_TEMP_CREDS);
         UnityCatalogTypes.TemporaryTableCredentialsRequest payload =

@@ -40,10 +40,10 @@ public class UnityMetastore implements IMetastore {
     private static final Logger LOG = LogManager.getLogger(UnityMetastore.class);
     private static final String DELTA_FORMAT = "DELTA";
 
-    private final UnityCatalogClient client;
+    private final UnityCatalogApi client;
     private final UnityCatalogProperties properties;
 
-    public UnityMetastore(UnityCatalogClient client, UnityCatalogProperties properties) {
+    public UnityMetastore(UnityCatalogApi client, UnityCatalogProperties properties) {
         this.client = Objects.requireNonNull(client, "client");
         this.properties = Objects.requireNonNull(properties, "properties");
     }
@@ -148,5 +148,10 @@ public class UnityMetastore implements IMetastore {
     // Visible for testing.
     static CloudConfiguration emptyCloudConfigurationForTest() {
         return CloudConfigurationFactory.buildCloudConfigurationForStorage(Collections.unmodifiableMap(new HashMap<>()));
+    }
+
+    // Visible for testing: lets wiring tests assert which UnityCatalogApi impl was injected.
+    UnityCatalogApi getClientForTest() {
+        return client;
     }
 }

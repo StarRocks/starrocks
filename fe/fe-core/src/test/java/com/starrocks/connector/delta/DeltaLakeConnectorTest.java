@@ -19,11 +19,19 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorFactory;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
+import com.starrocks.connector.delta.unity.CachingUnityCatalogClient;
+import com.starrocks.connector.delta.unity.UnityBackedDeltaMetastore;
+import com.starrocks.connector.delta.unity.UnityCatalogApi;
+import com.starrocks.connector.delta.unity.UnityCatalogClient;
+import com.starrocks.connector.delta.unity.UnityMetastore;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Map;
 
 public class DeltaLakeConnectorTest {
@@ -142,6 +150,53 @@ public class DeltaLakeConnectorTest {
             Assertions.assertTrue(e.getMessage().contains("unity.catalog.token"),
                     "Expected error about unity.catalog.token, got: " + e.getMessage());
         }
+    }
+
+    @Test
+    public void testUnityCatalogCachingClientWiredByDefault() throws Exception {
+        Map<String, String> properties = ImmutableMap.<String, String>builder()
+                .put("type", "deltalake")
+                .put("hive.metastore.type", "unity")
+                .put("unity.catalog.host", "https://example.cloud.databricks.com")
+                .put("unity.catalog.token", "dapiTEST")
+                .put("unity.catalog.name", "main")
+                .build();
+        UnityCatalogApi client = extractUnityClient(properties);
+        Assertions.assertInstanceOf(CachingUnityCatalogClient.class, client,
+                "unity.catalog.cache.enabled defaults to true, so the REST client should be wrapped");
+    }
+
+    @Test
+    public void testUnityCatalogCachingClientBypassedWhenDisabled() throws Exception {
+        Map<String, String> properties = ImmutableMap.<String, String>builder()
+                .put("type", "deltalake")
+                .put("hive.metastore.type", "unity")
+                .put("unity.catalog.host", "https://example.cloud.databricks.com")
+                .put("unity.catalog.token", "dapiTEST")
+                .put("unity.catalog.name", "main")
+                .put("unity.catalog.cache.enabled", "false")
+                .build();
+        UnityCatalogApi client = extractUnityClient(properties);
+        Assertions.assertInstanceOf(UnityCatalogClient.class, client,
+                "when the cache is disabled the raw REST client must be handed to UnityMetastore");
+        Assertions.assertFalse(client instanceof CachingUnityCatalogClient);
+    }
+
+    private static UnityCatalogApi extractUnityClient(Map<String, String> properties) throws Exception {
+        DeltaLakeInternalMgr mgr = new DeltaLakeInternalMgr("uc_delta", properties, new HdfsEnvironment());
+        IDeltaLakeMetastore metastore = mgr.createUnityBackedDeltaLakeMetastore();
+        // Strip the CachingDeltaLakeMetastore wrapper if present (it's enabled by default).
+        if (metastore instanceof CachingDeltaLakeMetastore) {
+            metastore = ((CachingDeltaLakeMetastore) metastore).delegate;
+        }
+        Assertions.assertInstanceOf(UnityBackedDeltaMetastore.class, metastore);
+        Field delegateField = DeltaLakeMetastore.class.getDeclaredField("delegate");
+        delegateField.setAccessible(true);
+        Object imetastore = delegateField.get(metastore);
+        Assertions.assertInstanceOf(UnityMetastore.class, imetastore);
+        Method accessor = UnityMetastore.class.getDeclaredMethod("getClientForTest");
+        accessor.setAccessible(true);
+        return (UnityCatalogApi) accessor.invoke(imetastore);
     }
 
     @Test

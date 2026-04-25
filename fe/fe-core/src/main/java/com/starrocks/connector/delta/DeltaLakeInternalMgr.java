@@ -21,7 +21,9 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
+import com.starrocks.connector.delta.unity.CachingUnityCatalogClient;
 import com.starrocks.connector.delta.unity.UnityBackedDeltaMetastore;
+import com.starrocks.connector.delta.unity.UnityCatalogApi;
 import com.starrocks.connector.delta.unity.UnityCatalogClient;
 import com.starrocks.connector.delta.unity.UnityCatalogProperties;
 import com.starrocks.connector.delta.unity.UnityMetastore;
@@ -86,7 +88,10 @@ public class DeltaLakeInternalMgr {
     public IDeltaLakeMetastore createUnityBackedDeltaLakeMetastore() {
         Preconditions.checkState(unityCatalogProperties != null,
                 "Unity Catalog properties must be initialized before building the metastore");
-        UnityCatalogClient client = new UnityCatalogClient(unityCatalogProperties);
+        UnityCatalogApi client = new UnityCatalogClient(unityCatalogProperties);
+        if (unityCatalogProperties.isCacheEnabled()) {
+            client = new CachingUnityCatalogClient(client, unityCatalogProperties);
+        }
         UnityMetastore unityMetastore = new UnityMetastore(client, unityCatalogProperties);
         UnityBackedDeltaMetastore unityBacked = new UnityBackedDeltaMetastore(
                 catalogName,

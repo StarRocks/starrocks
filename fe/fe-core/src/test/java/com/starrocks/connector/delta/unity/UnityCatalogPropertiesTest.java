@@ -119,4 +119,52 @@ public class UnityCatalogPropertiesTest {
         props.put("unity.catalog.request-timeout-ms", "not-a-number");
         Assertions.assertThrows(SemanticException.class, () -> new UnityCatalogProperties(props));
     }
+
+    @Test
+    public void testCachingDefaults() {
+        Map<String, String> props = ImmutableMap.of(
+                "unity.catalog.host", "https://example.cloud.databricks.com",
+                "unity.catalog.token", "dapiXYZ",
+                "unity.catalog.name", "main");
+        UnityCatalogProperties p = new UnityCatalogProperties(props);
+        Assertions.assertTrue(p.isCacheEnabled(), "cache should default to enabled");
+        Assertions.assertEquals(60L, p.getCacheTtlSec());
+        Assertions.assertEquals(600L, p.getCredentialsSafetyMarginSec());
+    }
+
+    @Test
+    public void testCachingOverrides() {
+        Map<String, String> props = ImmutableMap.<String, String>builder()
+                .put("unity.catalog.host", "https://example.cloud.databricks.com")
+                .put("unity.catalog.token", "dapiXYZ")
+                .put("unity.catalog.name", "main")
+                .put("unity.catalog.cache.enabled", "false")
+                .put("unity.catalog.cache.ttl-sec", "300")
+                .put("unity.catalog.cache.credentials.safety-margin-sec", "30")
+                .build();
+        UnityCatalogProperties p = new UnityCatalogProperties(props);
+        Assertions.assertFalse(p.isCacheEnabled());
+        Assertions.assertEquals(300L, p.getCacheTtlSec());
+        Assertions.assertEquals(30L, p.getCredentialsSafetyMarginSec());
+    }
+
+    @Test
+    public void testNegativeTtlRejected() {
+        Map<String, String> props = new HashMap<>();
+        props.put("unity.catalog.host", "https://example.cloud.databricks.com");
+        props.put("unity.catalog.token", "dapiXYZ");
+        props.put("unity.catalog.name", "main");
+        props.put("unity.catalog.cache.ttl-sec", "-1");
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new UnityCatalogProperties(props));
+    }
+
+    @Test
+    public void testNegativeSafetyMarginRejected() {
+        Map<String, String> props = new HashMap<>();
+        props.put("unity.catalog.host", "https://example.cloud.databricks.com");
+        props.put("unity.catalog.token", "dapiXYZ");
+        props.put("unity.catalog.name", "main");
+        props.put("unity.catalog.cache.credentials.safety-margin-sec", "-5");
+        Assertions.assertThrows(IllegalArgumentException.class, () -> new UnityCatalogProperties(props));
+    }
 }
