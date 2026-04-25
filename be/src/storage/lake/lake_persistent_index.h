@@ -126,6 +126,23 @@ public:
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
 
+    // Try to restore the in-memory state from a previously-captured local snapshot for the
+    // tablet+version pair currently being loaded. Returns Status::OK() on a successful restore;
+    // any other status (NotFound, version mismatch, corruption, etc.) means the caller must
+    // fall back to the full rebuild path. Gated by config::enable_pk_index_snapshot_persistence;
+    // when the flag is false this is a no-op that always returns NotFound.
+    //
+    // NOTE: this is a stub in the initial scaffolding PR — the on-disk format, serialisation,
+    // and validity rules will land in follow-up PRs. The signature is fixed here so callers
+    // can be wired before the implementation is complete.
+    Status try_restore_from_local_snapshot(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                           int64_t base_version);
+
+    // Persist a local snapshot capturing the current in-memory state. Caller is responsible
+    // for choosing the right moment (typically pre-eviction or BE shutdown). Gated by the
+    // same config flag; no-op when disabled. Stub in this scaffolding PR.
+    Status try_serialize_to_local_snapshot(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata);
+
     size_t memory_usage() const override;
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }

@@ -467,6 +467,18 @@ CONF_mDouble(pk_index_compaction_score_ratio, "1.5");
 CONF_mInt32(pk_index_early_sst_compaction_threshold, "5");
 // Whether enable parallel compaction for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_compaction, "true");
+// Whether to persist a local-disk snapshot of the in-memory PK index so that BE-restart,
+// memory-pressure eviction, and tablet rebalance scenarios can skip the full cold rebuild
+// from rowsets and SSTs. Disabled by default — when off, the snapshot save / restore code
+// paths are no-ops. Enabling this requires the follow-up PRs in the snapshot-persistence
+// series to be in place; in the scaffolding PR the methods are stubs that always miss.
+CONF_mBool(enable_pk_index_snapshot_persistence, "false");
+// Local directory used to store PK-index snapshots. Empty (default) means derive from the
+// first storage_root_path entry. Honoured only when enable_pk_index_snapshot_persistence is true.
+CONF_String(pk_index_snapshot_local_dir, "");
+// Maximum age in seconds of a snapshot before it is considered stale and ignored at
+// restore time. Default 7 days.
+CONF_mInt64(pk_index_snapshot_max_age_sec, "604800");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.

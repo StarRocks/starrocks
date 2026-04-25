@@ -1044,9 +1044,36 @@ std::pair<size_t, int64_t> LakePersistentIndex::need_rebuild_counts(const Tablet
     return {file_cnt, row_cnt};
 }
 
+Status LakePersistentIndex::try_restore_from_local_snapshot(TabletManager* /*tablet_mgr*/,
+                                                            const TabletMetadataPtr& /*metadata*/,
+                                                            int64_t /*base_version*/) {
+    if (!config::enable_pk_index_snapshot_persistence) {
+        return Status::NotFound("pk-index snapshot persistence disabled");
+    }
+    // The on-disk format and validity rules land in follow-up PRs. Until then, always fall
+    // back to the full rebuild path so callers see no behavior change.
+    return Status::NotFound("pk-index snapshot restore not implemented");
+}
+
+Status LakePersistentIndex::try_serialize_to_local_snapshot(TabletManager* /*tablet_mgr*/,
+                                                            const TabletMetadataPtr& /*metadata*/) {
+    if (!config::enable_pk_index_snapshot_persistence) {
+        return Status::OK();
+    }
+    return Status::NotSupported("pk-index snapshot persist not implemented");
+}
+
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_load_from_lake_tablet_us");
+    if (config::enable_pk_index_snapshot_persistence) {
+        Status restore_st = try_restore_from_local_snapshot(tablet_mgr, metadata, base_version);
+        if (restore_st.ok()) {
+            TRACE_COUNTER_INCREMENT("pindex_snapshot_restore_hit", 1);
+            return Status::OK();
+        }
+        TRACE_COUNTER_INCREMENT("pindex_snapshot_restore_miss", 1);
+    }
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
     vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
