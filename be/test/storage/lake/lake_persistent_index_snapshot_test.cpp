@@ -15,7 +15,9 @@
 #include "storage/lake/lake_persistent_index_snapshot.h"
 
 #include <gtest/gtest.h>
+#include <sys/stat.h>
 #include <unistd.h>
+#include <utime.h>
 
 #include <atomic>
 #include <cstdio>
@@ -208,6 +210,120 @@ TEST(LakePersistentIndexSnapshotPath, falls_back_to_storage_root_path) {
     config::storage_root_path = saved_root;
     ASSERT_TRUE(st.ok()) << st.to_string();
     EXPECT_NE(out.find("/tmp/storage_root_a/lake_pk_snapshot/456/v11.snapshot"), std::string::npos);
+}
+
+TEST(LakePersistentIndexSnapshotRoot, derives_with_trailing_slash) {
+    const std::string saved_local_dir = config::pk_index_snapshot_local_dir;
+    config::pk_index_snapshot_local_dir = "/tmp/derives_with_trailing_slash";
+    std::string root;
+    Status st = get_lake_persistent_index_snapshot_root(&root);
+    config::pk_index_snapshot_local_dir = saved_local_dir;
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(root, "/tmp/derives_with_trailing_slash/lake_pk_snapshot/");
+}
+
+class LakePersistentIndexSnapshotGcTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        _root_dir = make_temp_path("gc_root") + "/";
+        _saved_local_dir = config::pk_index_snapshot_local_dir;
+        // Strip trailing slash for the config; the helper appends lake_pk_snapshot/ itself.
+        std::string parent = _root_dir;
+        while (!parent.empty() && parent.back() == '/') parent.pop_back();
+        config::pk_index_snapshot_local_dir = parent;
+        ASSERT_TRUE(get_lake_persistent_index_snapshot_root(&_snapshot_root).ok());
+        ASSERT_TRUE(fs::create_directories(_snapshot_root).ok());
+    }
+    void TearDown() override {
+        config::pk_index_snapshot_local_dir = _saved_local_dir;
+        // Best-effort recursive cleanup of the test root.
+        std::string parent = _root_dir;
+        while (!parent.empty() && parent.back() == '/') parent.pop_back();
+        (void)fs::remove_all(parent);
+    }
+
+    // Write a snapshot file at <snapshot_root>/<tablet>/v<version>.snapshot, then back-date
+    // its mtime by `age_sec` seconds. Returns the full path.
+    std::string write_snapshot_with_age(int64_t tablet_id, int64_t version, int64_t age_sec) {
+        const std::string tablet_dir = _snapshot_root + std::to_string(tablet_id);
+        EXPECT_TRUE(fs::create_directories(tablet_dir).ok());
+        const std::string path = tablet_dir + "/v" + std::to_string(version) + ".snapshot";
+        // Empty file is fine — GC only looks at mtime + name.
+        std::ofstream f(path);
+        f.put('x');
+        f.close();
+        if (age_sec > 0) {
+            struct stat st_buf;
+            EXPECT_EQ(0, ::stat(path.c_str(), &st_buf));
+            struct utimbuf utb;
+            utb.actime = st_buf.st_atime;
+            utb.modtime = st_buf.st_mtime - age_sec;
+            EXPECT_EQ(0, ::utime(path.c_str(), &utb));
+        }
+        return path;
+    }
+
+    std::string _root_dir;
+    std::string _snapshot_root;
+    std::string _saved_local_dir;
+};
+
+TEST_F(LakePersistentIndexSnapshotGcTest, removes_only_stale_files) {
+    auto stale1 = write_snapshot_with_age(1001, 5, /*age_sec=*/3700);
+    auto stale2 = write_snapshot_with_age(1002, 7, /*age_sec=*/86400);
+    auto fresh1 = write_snapshot_with_age(1001, 6, /*age_sec=*/30);
+    auto fresh2 = write_snapshot_with_age(1003, 1, /*age_sec=*/0);
+
+    int64_t removed = 0;
+    Status st = gc_stale_lake_persistent_index_snapshots(_snapshot_root, /*max_age_sec=*/3600, &removed);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(2, removed);
+    EXPECT_FALSE(fs::path_exist(stale1));
+    EXPECT_FALSE(fs::path_exist(stale2));
+    EXPECT_TRUE(fs::path_exist(fresh1));
+    EXPECT_TRUE(fs::path_exist(fresh2));
+}
+
+TEST_F(LakePersistentIndexSnapshotGcTest, max_age_zero_is_no_op) {
+    auto very_stale = write_snapshot_with_age(2001, 1, /*age_sec=*/99999999);
+    int64_t removed = -1;
+    Status st = gc_stale_lake_persistent_index_snapshots(_snapshot_root, /*max_age_sec=*/0, &removed);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, removed);
+    EXPECT_TRUE(fs::path_exist(very_stale));
+}
+
+TEST_F(LakePersistentIndexSnapshotGcTest, missing_root_is_ok) {
+    // GC against a directory that was never created — should return OK without error.
+    int64_t removed = -1;
+    Status st = gc_stale_lake_persistent_index_snapshots(_snapshot_root + "definitely_missing_subdir/",
+                                                         /*max_age_sec=*/3600, &removed);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(0, removed);
+}
+
+TEST_F(LakePersistentIndexSnapshotGcTest, non_snapshot_files_ignored) {
+    auto stale = write_snapshot_with_age(3001, 1, /*age_sec=*/86400);
+    // Drop a stray file in the tablet dir that does NOT end in .snapshot — must not be deleted.
+    const std::string tablet_dir = _snapshot_root + "3001";
+    const std::string stray = tablet_dir + "/scratch.txt";
+    {
+        std::ofstream f(stray);
+        f << "leftover";
+    }
+    struct stat st_buf;
+    ASSERT_EQ(0, ::stat(stray.c_str(), &st_buf));
+    struct utimbuf utb;
+    utb.actime = st_buf.st_atime;
+    utb.modtime = st_buf.st_mtime - 86400;
+    ASSERT_EQ(0, ::utime(stray.c_str(), &utb));
+
+    int64_t removed = 0;
+    Status st = gc_stale_lake_persistent_index_snapshots(_snapshot_root, /*max_age_sec=*/3600, &removed);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    EXPECT_EQ(1, removed);
+    EXPECT_FALSE(fs::path_exist(stale));
+    EXPECT_TRUE(fs::path_exist(stray));
 }
 
 } // namespace starrocks::lake

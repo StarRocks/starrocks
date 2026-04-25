@@ -34,6 +34,7 @@
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_persistent_index_snapshot.h"
 #include "storage/lake/lake_primary_key_compaction_conflict_resolver.h"
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
@@ -86,6 +87,13 @@ UpdateManager::UpdateManager(std::shared_ptr<LocationProvider> location_provider
 }
 
 UpdateManager::~UpdateManager() {
+    if (config::enable_pk_index_snapshot_persistence && config::pk_index_snapshot_capture_on_shutdown) {
+        // Capture all currently-cached PK indexes before they are torn down so the next
+        // BE start can skip cold rebuild for them. At shutdown there is no concurrent
+        // upsert traffic, so try_fetch_guard inside try_snapshot_to_local should succeed
+        // for every entry.
+        _capture_index_cache_snapshots("shutdown");
+    }
     _index_cache.clear();
     _update_state_cache.clear();
     _compaction_cache.clear();
@@ -1502,6 +1510,13 @@ void UpdateManager::expire_cache() {
 
         ssize_t index_orig_size = _index_cache.size();
         ssize_t index_orig_obj_size = _index_cache.object_size();
+        if (config::enable_pk_index_snapshot_persistence && config::pk_index_snapshot_capture_on_eviction) {
+            // Snapshot before clear_expired so the entries that are about to be dropped by
+            // TTL leave a local copy behind for the next cold load. Pre-walk via
+            // get_all_entries holds an extra ref on each entry; release returns them to
+            // ref==1 so clear_expired can then reap the ones whose expire_ms has passed.
+            _capture_index_cache_snapshots("ttl-eviction");
+        }
         _index_cache.clear_expired();
         ssize_t index_size = _index_cache.size();
         ssize_t index_obj_size = _index_cache.object_size();
@@ -1531,6 +1546,9 @@ void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high
     int64_t memory_high = capacity * memory_high_level / 100;
 
     if (size > memory_urgent) {
+        if (config::enable_pk_index_snapshot_persistence && config::pk_index_snapshot_capture_on_eviction) {
+            _capture_index_cache_snapshots("memory-pressure-eviction");
+        }
         _index_cache.try_evict(memory_urgent);
     }
 
@@ -1540,6 +1558,69 @@ void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high
         _index_cache.try_evict(target_memory);
     }
     return;
+}
+
+void UpdateManager::_capture_index_cache_snapshots(const char* reason) {
+    auto entries = _index_cache.get_all_entries();
+    int64_t ok_count = 0;
+    int64_t skipped_count = 0;
+    int64_t failed_count = 0;
+    for (auto* entry : entries) {
+        Status st = entry->value().try_snapshot_to_local(_tablet_mgr);
+        if (st.ok()) {
+            ok_count++;
+        } else if (st.is_not_found() || st.is_invalid_argument()) {
+            // Expected misses (snapshot disabled, no metadata at this version, no usable
+            // root). Counted separately so an eviction storm does not flood WARNING with
+            // benign messages.
+            skipped_count++;
+        } else {
+            failed_count++;
+            LOG_EVERY_N(WARNING, 100) << "pk-index snapshot capture (" << reason
+                                      << ") failed for tablet=" << entry->key() << ": " << st.to_string();
+        }
+        _index_cache.release(entry);
+    }
+    if (!entries.empty()) {
+        VLOG(2) << "pk-index snapshot capture (" << reason << ") walked=" << entries.size() << " ok=" << ok_count
+                << " skipped=" << skipped_count << " failed=" << failed_count;
+    }
+}
+
+void UpdateManager::gc_stale_pk_index_snapshots() {
+    if (!config::enable_pk_index_snapshot_persistence) {
+        return;
+    }
+    const int64_t max_age = config::pk_index_snapshot_max_age_sec;
+    if (max_age <= 0) {
+        return;
+    }
+    const int64_t interval_sec = config::pk_index_snapshot_gc_interval_sec;
+    if (interval_sec <= 0) {
+        return;
+    }
+    const int64_t now_millis = MonotonicMillis();
+    const int64_t last = _last_pk_snapshot_gc_millis.load(std::memory_order_relaxed);
+    if (last != 0 && now_millis - last < interval_sec * 1000) {
+        return;
+    }
+    _last_pk_snapshot_gc_millis.store(now_millis, std::memory_order_relaxed);
+
+    std::string root;
+    Status root_st = get_lake_persistent_index_snapshot_root(&root);
+    if (!root_st.ok()) {
+        VLOG(2) << "pk-index snapshot GC skipped: " << root_st.to_string();
+        return;
+    }
+    int64_t removed = 0;
+    Status gc_st = gc_stale_lake_persistent_index_snapshots(root, max_age, &removed);
+    if (!gc_st.ok()) {
+        LOG(WARNING) << "pk-index snapshot GC failed under " << root << ": " << gc_st.to_string();
+        return;
+    }
+    if (removed > 0) {
+        LOG(INFO) << "pk-index snapshot GC removed " << removed << " stale files under " << root;
+    }
 }
 
 size_t UpdateManager::get_rowset_num_deletes(int64_t tablet_id, int64_t version, const RowsetMetadataPB& rowset_meta) {

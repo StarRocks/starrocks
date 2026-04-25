@@ -169,6 +169,11 @@ public:
     void expire_cache();
 
     void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+
+    // Walk `<root>/lake_pk_snapshot/` and remove snapshot files older than
+    // `pk_index_snapshot_max_age_sec`. Best-effort. Called periodically by the
+    // update_cache_expire background thread when snapshot persistence is enabled.
+    void gc_stale_pk_index_snapshots();
     void preload_update_state(const TxnLog& op_write, Tablet* tablet);
     void preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet, const TabletSchemaCSPtr& tablet_schema);
 
@@ -272,6 +277,14 @@ private:
 
     PkIndexShard& _get_pk_index_shard(int64_t tabletId);
 
+    // Pre-walk the index cache and serialise each currently-cached entry to local disk.
+    // Used as a pre-eviction / pre-shutdown hook: lets a future cold load skip the
+    // rowset-scan + load_dels stage. No-op when snapshot persistence is disabled.
+    // Per-entry failures are logged but do not abort the walk. `reason` shows up in
+    // log lines for operator visibility (e.g. "shutdown", "ttl-eviction",
+    // "memory-pressure-eviction").
+    void _capture_index_cache_snapshots(const char* reason);
+
     // decide whether use light publish compaction stategy or not
     bool _use_light_publish_primary_compaction(TabletManager* mgr, const TxnLogPB_OpCompaction& op_compaction,
                                                int64_t tablet_id, int64_t txn_id);
@@ -288,6 +301,7 @@ private:
     // compaction cache
     DynamicCache<string, CompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
+    std::atomic<int64_t> _last_pk_snapshot_gc_millis = 0;
     std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
 

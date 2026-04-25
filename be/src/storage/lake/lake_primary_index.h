@@ -126,6 +126,14 @@ public:
     int32_t publish_sst_flush_count() const;
     int64_t publish_sst_flush_bytes() const;
 
+    // Best-effort snapshot of the underlying cloud-native PK index to local disk so
+    // that a future cold-load can skip the rowset-scan + load_dels stage. Returns
+    // OK on success (or when there is nothing to do — disabled, non-cloud-native,
+    // index in active use), and a non-OK status only on serialisation / IO errors.
+    // The caller (UpdateManager pre-eviction / shutdown walk) treats per-entry
+    // failures as best-effort and continues.
+    Status try_snapshot_to_local(TabletManager* tablet_mgr);
+
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);

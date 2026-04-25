@@ -18,6 +18,7 @@
 
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
+#include "common/config.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -26,6 +27,7 @@
 #include "storage/lake/rowset.h"
 #include "storage/lake/rowset_update_state.h"
 #include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/persistent_index_parallel_publish_context.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/tablet_meta_manager.h"
@@ -639,6 +641,43 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
         RETURN_IF_ERROR(flush_memtable());
     }
     return segment_pk_iterator->status();
+}
+
+Status LakePrimaryIndex::try_snapshot_to_local(TabletManager* tablet_mgr) {
+    if (!config::enable_pk_index_snapshot_persistence) {
+        return Status::OK();
+    }
+    if (tablet_mgr == nullptr) {
+        // UpdateManager torn down before tablet_mgr was set, or shutdown ordering removed
+        // tablet_mgr first. Without it we cannot fetch metadata; skip silently.
+        return Status::OK();
+    }
+    auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
+    if (lake_persistent_index == nullptr) {
+        // Either persistent index is disabled for this tablet, or it's the LOCAL variant.
+        // The snapshot path only applies to CLOUD_NATIVE; nothing to do here.
+        return Status::OK();
+    }
+    // Acquire the per-index mutex non-blocking. If another thread is currently mutating
+    // the index (upsert / commit / compact), skip this entry — capturing in the middle
+    // of an apply would produce a torn snapshot. The next eviction / shutdown round will
+    // try again. The version-check at restore time is the final correctness backstop.
+    auto guard = try_fetch_guard();
+    if (guard == nullptr) {
+        return Status::OK();
+    }
+    if (_data_version <= 0) {
+        // Index is loaded but has not yet committed any version we can pin a snapshot to.
+        return Status::OK();
+    }
+    auto metadata_or = tablet_mgr->get_tablet_metadata(_tablet_id, _data_version, /*fill_cache=*/false);
+    if (!metadata_or.ok()) {
+        // Metadata for this version is no longer cached / fetchable. Skip silently — the
+        // restore-side validity rules would reject any snapshot whose recorded version
+        // does not match a live metadata anyway.
+        return Status::OK();
+    }
+    return lake_persistent_index->try_serialize_to_local_snapshot(tablet_mgr, *metadata_or);
 }
 
 } // namespace starrocks::lake

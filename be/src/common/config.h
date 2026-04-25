@@ -479,6 +479,20 @@ CONF_String(pk_index_snapshot_local_dir, "");
 // Maximum age in seconds of a snapshot before it is considered stale and ignored at
 // restore time. Default 7 days.
 CONF_mInt64(pk_index_snapshot_max_age_sec, "604800");
+// Whether to capture a snapshot of every in-memory PK-index cache entry on BE shutdown.
+// Snapshots written here let the next BE start skip the full cold rebuild for tablets
+// that were resident at shutdown time. Honoured only when enable_pk_index_snapshot_persistence
+// is true. Default true so that any deployment that opts into snapshot persistence gets
+// the BE-restart benefit by default.
+CONF_mBool(pk_index_snapshot_capture_on_shutdown, "true");
+// Whether to capture a snapshot before evicting an entry from the PK-index cache (TTL-driven
+// or memory-pressure driven). Default false — opt-in until the eviction-time capture path
+// has been validated under sustained load. The snapshot is best-effort: per-entry failures
+// (lock contention, IO error) are logged but do not block eviction.
+CONF_mBool(pk_index_snapshot_capture_on_eviction, "false");
+// How often (in seconds) the cache-expire background thread scans the snapshot directory and
+// removes files older than pk_index_snapshot_max_age_sec. 0 disables GC. Default 30 minutes.
+CONF_mInt64(pk_index_snapshot_gc_interval_sec, "1800");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.

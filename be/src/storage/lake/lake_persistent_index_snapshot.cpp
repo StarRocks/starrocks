@@ -14,6 +14,7 @@
 
 #include "storage/lake/lake_persistent_index_snapshot.h"
 
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -22,6 +23,8 @@
 #include "base/hash/crc32c.h"
 #include "common/config.h"
 #include "fs/fs.h"
+#include "fs/fs_util.h"
+#include "fs/fs_factory.h"
 
 namespace starrocks {
 namespace lake {
@@ -107,32 +110,115 @@ Status read_lake_persistent_index_snapshot(const std::string& path, LakePersiste
     return Status::OK();
 }
 
-Status get_lake_persistent_index_snapshot_path(int64_t tablet_id, int64_t captured_version, std::string* path) {
-    if (path == nullptr) {
-        return Status::InvalidArgument("path out-param is null");
+Status get_lake_persistent_index_snapshot_root(std::string* root) {
+    if (root == nullptr) {
+        return Status::InvalidArgument("root out-param is null");
     }
-    std::string root = config::pk_index_snapshot_local_dir;
-    if (root.empty()) {
+    std::string base = config::pk_index_snapshot_local_dir;
+    if (base.empty()) {
         const std::string& roots = config::storage_root_path;
         if (roots.empty()) {
             return Status::InvalidArgument("no storage_root_path configured for pk-index snapshot");
         }
         size_t semi = roots.find(';');
-        root = (semi == std::string::npos) ? roots : roots.substr(0, semi);
+        base = (semi == std::string::npos) ? roots : roots.substr(0, semi);
         // Trim a trailing comma-suffix used by some deployments (e.g. "/data;medium:HDD").
-        size_t comma = root.find(',');
+        size_t comma = base.find(',');
         if (comma != std::string::npos) {
-            root = root.substr(0, comma);
+            base = base.substr(0, comma);
         }
     }
-    if (root.empty()) {
+    if (base.empty()) {
         return Status::InvalidArgument("derived snapshot root path is empty");
     }
-    if (root.back() == '/') {
-        root.pop_back();
+    if (base.back() == '/') {
+        base.pop_back();
     }
-    *path = root + "/lake_pk_snapshot/" + std::to_string(tablet_id) + "/v" + std::to_string(captured_version) +
-            ".snapshot";
+    *root = base + "/lake_pk_snapshot/";
+    return Status::OK();
+}
+
+Status get_lake_persistent_index_snapshot_path(int64_t tablet_id, int64_t captured_version, std::string* path) {
+    if (path == nullptr) {
+        return Status::InvalidArgument("path out-param is null");
+    }
+    std::string root;
+    RETURN_IF_ERROR(get_lake_persistent_index_snapshot_root(&root));
+    *path = root + std::to_string(tablet_id) + "/v" + std::to_string(captured_version) + ".snapshot";
+    return Status::OK();
+}
+
+Status gc_stale_lake_persistent_index_snapshots(const std::string& snapshot_root, int64_t max_age_sec,
+                                                int64_t* removed_count) {
+    if (removed_count != nullptr) {
+        *removed_count = 0;
+    }
+    if (max_age_sec <= 0) {
+        return Status::OK();
+    }
+    if (snapshot_root.empty()) {
+        return Status::InvalidArgument("snapshot_root is empty");
+    }
+    if (!fs::path_exist(snapshot_root)) {
+        // Nothing to GC yet — directory is created lazily when the first snapshot is written.
+        return Status::OK();
+    }
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(snapshot_root));
+    const int64_t now_sec =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count();
+
+    // Top-level entries under <root>/lake_pk_snapshot/ are per-tablet directories.
+    std::vector<std::string> tablet_dirs;
+    Status iter_st = fs->iterate_dir(snapshot_root, [&](std::string_view name) -> bool {
+        if (name == "." || name == "..") return true;
+        tablet_dirs.emplace_back(name);
+        return true;
+    });
+    if (!iter_st.ok()) {
+        return iter_st;
+    }
+
+    for (const auto& tablet_subdir : tablet_dirs) {
+        const std::string tablet_dir = snapshot_root + tablet_subdir;
+        // Skip non-directories defensively (older deployments may have left flat files).
+        auto is_dir_or = fs->is_directory(tablet_dir);
+        if (!is_dir_or.ok() || !is_dir_or.value()) {
+            continue;
+        }
+        Status per_tablet_iter = fs->iterate_dir2(tablet_dir, [&](DirEntry entry) -> bool {
+            if (entry.name == "." || entry.name == "..") return true;
+            if (entry.is_dir.value_or(false)) return true;
+            // Only touch snapshot files; ignore unknown content (someone may use the
+            // same root for other purposes; principle of least surprise).
+            if (entry.name.size() <= 9 || entry.name.substr(entry.name.size() - 9) != ".snapshot") {
+                return true;
+            }
+            if (!entry.mtime.has_value()) {
+                // Cannot evaluate age — skip rather than risk deleting fresh files.
+                return true;
+            }
+            const int64_t age = now_sec - entry.mtime.value();
+            if (age <= max_age_sec) {
+                return true;
+            }
+            const std::string path = tablet_dir + "/" + std::string(entry.name);
+            Status del_st = fs->delete_file(path);
+            if (del_st.ok()) {
+                if (removed_count != nullptr) {
+                    (*removed_count)++;
+                }
+            } else {
+                LOG(WARNING) << "gc_stale_lake_persistent_index_snapshots: failed to delete " << path << ": "
+                             << del_st.to_string();
+            }
+            return true;
+        });
+        if (!per_tablet_iter.ok()) {
+            LOG(WARNING) << "gc_stale_lake_persistent_index_snapshots: iterate_dir2 failed for " << tablet_dir << ": "
+                         << per_tablet_iter.to_string();
+        }
+    }
     return Status::OK();
 }
 

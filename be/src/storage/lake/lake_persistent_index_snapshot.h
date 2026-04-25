@@ -66,6 +66,19 @@ Status read_lake_persistent_index_snapshot(const std::string& path, LakePersiste
 // usable root path can be derived.
 Status get_lake_persistent_index_snapshot_path(int64_t tablet_id, int64_t captured_version, std::string* path);
 
+// Derive the per-tablet snapshot root: `<root>/lake_pk_snapshot/`. Same root rules as
+// `get_lake_persistent_index_snapshot_path`. Trailing slash is included.
+Status get_lake_persistent_index_snapshot_root(std::string* root);
+
+// Walk the snapshot tree under `snapshot_root` (`<root>/lake_pk_snapshot/`) and remove
+// any `v<version>.snapshot` file whose mtime is older than `max_age_sec` seconds. A
+// `max_age_sec <= 0` is treated as "GC disabled" and the function returns OK without
+// touching the filesystem. `removed_count` (optional) reports how many files were
+// deleted in this pass; useful for tests and operator visibility. Best-effort: per-file
+// failures are logged but do not abort the pass.
+Status gc_stale_lake_persistent_index_snapshots(const std::string& snapshot_root, int64_t max_age_sec,
+                                                int64_t* removed_count = nullptr);
+
 // Pure helper that decides whether a previously captured snapshot is safe to use
 // for a load at `expected_version` on `expected_tablet_id` with `expected_schema_id`.
 // `now_unix_sec` and `max_age_sec` drive the age check (set `max_age_sec <= 0` to

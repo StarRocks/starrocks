@@ -699,6 +699,10 @@ void* StorageEngine::_update_cache_expire_thread_callback(void* arg) {
         _update_manager->expire_cache();
 #if defined(USE_STAROS) && !defined(BE_TEST)
         ExecEnv::GetInstance()->lake_update_manager()->expire_cache();
+        // Piggyback PK-index snapshot GC on the cache-expire cadence. The function is
+        // self-gated by pk_index_snapshot_gc_interval_sec and a no-op when snapshot
+        // persistence is disabled.
+        ExecEnv::GetInstance()->lake_update_manager()->gc_stale_pk_index_snapshots();
 #endif
     }
 
