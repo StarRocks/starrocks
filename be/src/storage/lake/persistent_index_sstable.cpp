@@ -16,6 +16,8 @@
 
 #include <butil/time.h> // NOLINT
 
+#include <limits>
+
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "common/config_primary_key_fwd.h"
@@ -203,16 +205,28 @@ Status PersistentIndexSstable::multi_get(const Slice* keys, const KeyIndexSet& k
                 continue;
             }
         }
+        // Tombstones encode NullIndexValue as (rssid=UINT32_MAX, rowid=UINT32_MAX); neither
+        // the shared_rssid overwrite nor the rssid_offset shift must touch them. Replacing
+        // rssid with a small shared_rssid, or adding a non-zero offset that wraps UINT32_MAX
+        // to a tiny value, would desynchronize the 64-bit value from NullIndexValue and the
+        // caller (e.g. PK-index upsert) would treat the tombstone as a live pointer into a
+        // real rowset, pushing bogus rowids into the publish delvec builder and tripping
+        // the delvec-consistency check.
+        auto is_tombstone = [](const IndexValueWithVerPB& v) {
+            return v.rssid() == std::numeric_limits<uint32_t>::max();
+        };
         // fill shared rssid & version if have
         if (_sstable_pb.has_shared_version() && _sstable_pb.shared_version() > 0) {
             DCHECK(_sstable_pb.has_shared_rssid());
             for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                if (is_tombstone(index_value_with_ver_pb.values(j))) continue;
                 index_value_with_ver_pb.mutable_values(j)->set_rssid(_sstable_pb.shared_rssid());
                 index_value_with_ver_pb.mutable_values(j)->set_version(_sstable_pb.shared_version());
             }
         }
         if (_sstable_pb.rssid_offset() != 0) {
             for (size_t j = 0; j < index_value_with_ver_pb.values_size(); ++j) {
+                if (is_tombstone(index_value_with_ver_pb.values(j))) continue;
                 const int64_t rssid =
                         static_cast<int64_t>(index_value_with_ver_pb.values(j).rssid()) + _sstable_pb.rssid_offset();
                 index_value_with_ver_pb.mutable_values(j)->set_rssid(static_cast<uint32_t>(rssid));
