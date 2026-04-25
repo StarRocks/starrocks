@@ -61,9 +61,7 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     // untouched through both the shared-rssid overwrite and the rssid_offset shift. An
     // unguarded offset adds to UINT32_MAX and wraps to a small valid-looking rssid, which
     // later upserts would mistake for a live pointer and corrupt the publish delvec.
-    auto is_tombstone = [](const IndexValueWithVerPB& v) {
-        return v.rssid() == std::numeric_limits<uint32_t>::max();
-    };
+    auto is_tombstone = [](const IndexValueWithVerPB& v) { return v.rssid() == std::numeric_limits<uint32_t>::max(); };
     // fill shared version & rssid if have
     if (iter_ptr->shared_version() > 0) {
         for (size_t i = 0; i < index_value_ver.values_size(); ++i) {

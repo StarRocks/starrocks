@@ -851,9 +851,8 @@ TEST_F(PersistentIndexSstableTest, test_multi_get_preserves_tombstones_with_rssi
     ASSERT_EQ(found.size(), static_cast<size_t>(kNumTombstones));
     for (int i = 0; i < kNumTombstones; i++) {
         ASSERT_EQ(NullIndexValue, values[i].get_value())
-                << "tombstone at key " << key_str[i] << " leaked non-null value 0x" << std::hex
-                << values[i].get_value() << " rssid=" << values[i].get_rssid()
-                << " rowid=" << values[i].get_rowid();
+                << "tombstone at key " << key_str[i] << " leaked non-null value 0x" << std::hex << values[i].get_value()
+                << " rssid=" << values[i].get_rssid() << " rowid=" << values[i].get_rowid();
     }
 }
 
