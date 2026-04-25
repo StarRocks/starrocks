@@ -72,8 +72,8 @@ Status read_lake_persistent_index_snapshot(const std::string& path, LakePersiste
         return Status::InvalidArgument("meta out-param is null");
     }
     ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(path));
-    const uint64_t file_size = rf->size();
-    if (file_size < kSnapshotHeaderLen + kSnapshotChecksumLen) {
+    ASSIGN_OR_RETURN(const int64_t file_size, rf->get_size());
+    if (file_size < static_cast<int64_t>(kSnapshotHeaderLen + kSnapshotChecksumLen)) {
         return Status::Corruption("snapshot file too small for header + checksum");
     }
 
@@ -88,7 +88,7 @@ Status read_lake_persistent_index_snapshot(const std::string& path, LakePersiste
     }
     const uint32_t meta_pb_size =
             decode_fixed32_le(reinterpret_cast<const uint8_t*>(header + kSnapshotMagicLen + sizeof(uint32_t)));
-    if (file_size != kSnapshotHeaderLen + meta_pb_size + kSnapshotChecksumLen) {
+    if (file_size != static_cast<int64_t>(kSnapshotHeaderLen + meta_pb_size + kSnapshotChecksumLen)) {
         return Status::Corruption("snapshot file size does not match declared meta_pb_size");
     }
 
