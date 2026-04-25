@@ -14,7 +14,7 @@
 
 #include "util/compression/lzo_decompressor_registry.h"
 
-#include <mutex>
+#include <atomic>
 
 namespace starrocks::compression {
 
@@ -24,13 +24,8 @@ StatusOr<size_t> unsupported_lzo_decompress(const char*, const char*, char*, cha
     return Status::NotSupported("LZO decompressor is not registered");
 }
 
-std::mutex& lzo_decompressor_mutex() {
-    static std::mutex mutex;
-    return mutex;
-}
-
-LzoDecompressor& lzo_decompressor() {
-    static LzoDecompressor decompressor = unsupported_lzo_decompress;
+std::atomic<LzoDecompressor>& lzo_decompressor() {
+    static std::atomic<LzoDecompressor> decompressor = unsupported_lzo_decompress;
     return decompressor;
 }
 
@@ -41,22 +36,20 @@ Status register_lzo_decompressor(LzoDecompressor decompressor) {
         return Status::InvalidArgument("LZO decompressor must not be null");
     }
 
-    std::lock_guard lock(lzo_decompressor_mutex());
-    LzoDecompressor& registered = lzo_decompressor();
-    if (registered != unsupported_lzo_decompress && registered != decompressor) {
+    LzoDecompressor expected = unsupported_lzo_decompress;
+    if (lzo_decompressor().compare_exchange_strong(expected, decompressor, std::memory_order_acq_rel,
+                                                   std::memory_order_acquire)) {
+        return Status::OK();
+    }
+    if (expected != decompressor) {
         return Status::AlreadyExist("LZO decompressor already registered");
     }
-    registered = decompressor;
     return Status::OK();
 }
 
 StatusOr<size_t> lzo_decompress(const char* input_address, const char* input_limit, char* output_address,
                                 char* output_limit) {
-    LzoDecompressor decompressor;
-    {
-        std::lock_guard lock(lzo_decompressor_mutex());
-        decompressor = lzo_decompressor();
-    }
+    LzoDecompressor decompressor = lzo_decompressor().load(std::memory_order_relaxed);
     return decompressor(input_address, input_limit, output_address, output_limit);
 }
 
