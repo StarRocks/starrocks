@@ -23,6 +23,9 @@ The following table describes the parameters you configure for Unity Catalog:
 | unity.catalog.vended-credentials-enabled | No | Default `true`. When enabled, the FE calls `POST /api/2.1/unity-catalog/temporary-table-credentials` per table and passes the resulting short-lived credentials to the BE. |
 | unity.catalog.request-timeout-ms | No | Default `30000`. Per-request timeout for UC control plane calls. |
 | unity.catalog.max-retries | No | Default `3`. Number of retries for transient UC errors. |
+| unity.catalog.cache.enabled | No | Whether the FE caches Unity Catalog REST responses (schemas, tables, `TableInfo`, and vended credentials) between queries. Defaults to `true`. Set to `false` to force every read path to call UC directly, e.g. when debugging stale-metadata issues. |
+| unity.catalog.cache.ttl-sec | No | TTL, in seconds, applied to every Unity Catalog client-side cache (schemas, tables, `TableInfo`, and vended credentials). Defaults to `60`. Also applies to cached credentials, but see the safety-margin below for the expiration floor. |
+| unity.catalog.cache.credentials.safety-margin-sec | No | Seconds subtracted from a cached credential's server-side `expiration_time` before StarRocks re-vends. Defaults to `600` (10 minutes). A cached credential is only returned if `expiration_time - safety_margin > now`, otherwise StarRocks calls UC again. Setting this to at least the maximum expected query duration ensures a handed-out credential remains valid for the full scan. |
 | unity.catalog.aws.region | No | Optional AWS region override for vended credentials. When unset (the default), StarRocks infers the region from Unity Catalog's `metastore_summary` endpoint on first use (see *Region inference* below). Set this explicitly to skip that REST call -- useful when the workspace token does not have access to `metastore_summary`, when running against an OSS Unity Catalog deployment that does not expose the endpoint, or when you simply want to avoid the extra round-trip on cold start. Has no effect on Azure or GCP metastores. |
 
 When `unity.catalog.vended-credentials-enabled` is `true` you can usually omit `StorageCredentialParams`; the vended credentials minted by UC are used instead. AWS S3 and Azure ADLS Gen2 are supported in v1; GCS falls back to catalog-level credentials.
@@ -54,6 +57,10 @@ PROPERTIES (
     "unity.catalog.vended-credentials-enabled" = "true"
 );
 ```
+
+###### Client-side caching
+
+In front of the UC REST client StarRocks keeps a lightweight per-catalog cache that memoizes `listSchemas`, `listTables`, `GET /tables/{name}`, and `POST /temporary-table-credentials`. All four caches share a single TTL (`unity.catalog.cache.ttl-sec`, default `60`), and cached credentials additionally honor the server-side `expiration_time` minus `unity.catalog.cache.credentials.safety-margin-sec` (default `600`), so a credential is never returned from the cache within 10 minutes of its actual expiry. At the default 60 s TTL the safety margin does not come into play — every entry is evicted before the safety floor is reached — but it becomes the active guard if you raise the TTL toward the UC credential lifetime (~1 hour). The cache is on by default and can be turned off with `unity.catalog.cache.enabled = false` — useful when debugging stale-metadata issues or while validating a newly promoted schema.
 
 ###### Region inference
 
