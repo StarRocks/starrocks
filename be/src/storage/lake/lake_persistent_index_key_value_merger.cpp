@@ -14,6 +14,8 @@
 
 #include "storage/lake/lake_persistent_index_key_value_merger.h"
 
+#include <limits>
+
 #include "base/debug/trace.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -55,9 +57,17 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
         // this row has been deleted in this sst, skip it
         return Status::OK();
     }
+    // Tombstones encode NullIndexValue as (rssid=UINT32_MAX, rowid=UINT32_MAX); keep them
+    // untouched through both the shared-rssid overwrite and the rssid_offset shift. An
+    // unguarded offset adds to UINT32_MAX and wraps to a small valid-looking rssid, which
+    // later upserts would mistake for a live pointer and corrupt the publish delvec.
+    auto is_tombstone = [](const IndexValueWithVerPB& v) {
+        return v.rssid() == std::numeric_limits<uint32_t>::max();
+    };
     // fill shared version & rssid if have
     if (iter_ptr->shared_version() > 0) {
         for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
+            if (is_tombstone(index_value_ver.values(i))) continue;
             index_value_ver.mutable_values(i)->set_version(iter_ptr->shared_version());
             index_value_ver.mutable_values(i)->set_rssid(iter_ptr->shared_rssid());
         }
@@ -65,6 +75,7 @@ Status KeyValueMerger::merge(const sstable::Iterator* iter_ptr) {
     if (iter_ptr->rssid_offset() != 0) {
         const int32_t rssid_offset = iter_ptr->rssid_offset();
         for (size_t i = 0; i < index_value_ver.values_size(); ++i) {
+            if (is_tombstone(index_value_ver.values(i))) continue;
             const int64_t rssid = static_cast<int64_t>(index_value_ver.values(i).rssid()) + rssid_offset;
             index_value_ver.mutable_values(i)->set_rssid(static_cast<uint32_t>(rssid));
         }
