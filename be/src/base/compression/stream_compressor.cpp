@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/compression/stream_compressor.h"
+#include "base/compression/stream_compressor.h"
 
 #include <bzlib.h>
 #include <glog/logging.h>
@@ -43,10 +43,10 @@
 #include <optional>
 
 #include "base/coding.h"
+#include "base/compression/compression_context_pool_singletons.h"
+#include "base/compression/compression_headers.h"
 #include "fmt/compile.h"
 #include "gutil/strings/substitute.h"
-#include "util/compression/compression_context_pool_singletons.h"
-#include "util/compression/compression_headers.h"
 
 namespace starrocks {
 

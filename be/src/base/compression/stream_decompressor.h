@@ -16,8 +16,8 @@
 
 #include <memory>
 
-#include "common/status.h"
-#include "common/statusor.h"
+#include "base/status.h"
+#include "base/statusor.h"
 #include "gen_cpp/types.pb.h"
 
 namespace starrocks {

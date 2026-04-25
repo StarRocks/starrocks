@@ -40,6 +40,7 @@
 #include <string_view>
 
 #include "base/coding.h"
+#include "base/compression/block_compression.h"
 #include "base/hash/crc32c.h"
 #include "base/string/faststring.h"
 #include "base/utility/scoped_cleanup.h"
@@ -58,7 +59,6 @@
 #include "runtime/raw_container_checked.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/storage_page_decoder.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 

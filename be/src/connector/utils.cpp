@@ -17,6 +17,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "arrow/util/decimal.h"
+#include "base/compression/compression_utils.h"
 #include "base/url_coding.h"
 #include "base/utility/integer_util.h"
 #include "column/chunk_extra_data.h"
@@ -26,7 +27,6 @@
 #include "exprs/expr.h"
 #include "formats/parquet/parquet_file_writer.h"
 #include "types/datum.h"
-#include "util/compression/compression_utils.h"
 
 namespace starrocks::connector {
 

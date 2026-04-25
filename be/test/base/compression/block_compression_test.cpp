@@ -32,18 +32,18 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/compression/block_compression.h"
+#include "base/compression/block_compression.h"
 
 #include <gtest/gtest.h>
 
 #include <iostream>
 #include <thread>
 
+#include "base/compression/compression_context_pool_singletons.h"
 #include "base/container/raw_container.h"
 #include "base/random/random.h"
 #include "base/string/faststring.h"
 #include "gen_cpp/segment.pb.h"
-#include "util/compression/compression_context_pool_singletons.h"
 
 namespace starrocks {
 
@@ -262,9 +262,9 @@ TEST_F(BlockCompressionTest, test_issue_10721) {
 }
 
 static const size_t kBenchmarkCompressionTimes = 1000;
-static const size_t kBenchmarkCompressionConcurrentThreads = 32;
+[[maybe_unused]] static const size_t kBenchmarkCompressionConcurrentThreads = 32;
 static const size_t kBenchmarkCompressionMultiSliceNum = 2;
-static const size_t str_length = 1024 * 64;
+[[maybe_unused]] static const size_t str_length = 1024 * 64;
 
 void benchmark_single_slice_compression(starrocks::CompressionTypePB type, std::string& str) {
     const BlockCompressionCodec* codec = nullptr;

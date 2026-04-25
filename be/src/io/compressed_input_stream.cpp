@@ -14,8 +14,8 @@
 
 #include "io/compressed_input_stream.h"
 
+#include "base/compression/stream_decompressor.h"
 #include "gutil/strings/substitute.h"
-#include "util/compression/stream_decompressor.h"
 
 namespace starrocks::io {
 

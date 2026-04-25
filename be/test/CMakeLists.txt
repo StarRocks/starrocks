@@ -300,7 +300,6 @@ set(EXEC_FILES
         ./types/type_checker_xml_loader_test.cpp
         ./column/simd_selector_test.cpp
         ./column/simd_mulselector_test.cpp
-        ./util/block_compression_test.cpp
         ./util/brpc_stub_cache_test.cpp
         ./util/byte_buffer_test.cpp
         ./util/cidr_test.cpp

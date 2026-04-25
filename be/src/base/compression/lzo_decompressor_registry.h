@@ -16,8 +16,8 @@
 
 #include <cstddef>
 
-#include "common/status.h"
-#include "common/statusor.h"
+#include "base/status.h"
+#include "base/statusor.h"
 
 namespace starrocks::compression {
 

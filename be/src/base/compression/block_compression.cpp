@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "util/compression/block_compression.h"
+#include "base/compression/block_compression.h"
 
 #ifdef __x86_64__
 #include <libdeflate.h>
@@ -40,12 +40,12 @@
 #include <zlib.h>
 
 #include "base/coding.h"
+#include "base/compression/compression_context_pool_singletons.h"
+#include "base/compression/compression_headers.h"
+#include "base/compression/lzo_decompressor_registry.h"
 #include "base/string/faststring.h"
 #include "gutil/endian.h"
 #include "gutil/strings/substitute.h"
-#include "util/compression/compression_context_pool_singletons.h"
-#include "util/compression/compression_headers.h"
-#include "util/compression/lzo_decompressor_registry.h"
 
 namespace starrocks {
 

@@ -44,6 +44,8 @@
 
 #include "base/brpc/brpc.h"
 #include "base/brpc/ref_count_closure.h"
+#include "base/compression/block_compression.h"
+#include "base/compression/compression_utils.h"
 #include "base/uid_util.h"
 #include "column/chunk.h"
 #include "common/config_compression_fwd.h"
@@ -64,8 +66,6 @@
 #include "runtime/runtime_state.h"
 #include "serde/protobuf_serde.h"
 #include "util/brpc_stub_cache.h"
-#include "util/compression/block_compression.h"
-#include "util/compression/compression_utils.h"
 #include "util/internal_service_recoverable_stub.h"
 
 namespace starrocks {

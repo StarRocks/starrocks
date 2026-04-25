@@ -28,7 +28,7 @@
  * limitations under the License.
  */
 
-#include "util/compression/compression_context_pool_singletons.h"
+#include "base/compression/compression_context_pool_singletons.h"
 
 #include <cstdlib>
 #include <memory>

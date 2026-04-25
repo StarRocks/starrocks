@@ -39,8 +39,8 @@
 #include <vector>
 
 #include "base/container/raw_container.h"
+#include "base/status.h"
 #include "base/string/slice.h"
-#include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 
 namespace starrocks {

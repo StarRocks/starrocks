@@ -16,10 +16,10 @@
 
 #include <unistd.h>
 
+#include "base/compression/compression_context_pool_metrics.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "runtime/starrocks_metrics.h"
-#include "util/compression/compression_context_pool_metrics.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {

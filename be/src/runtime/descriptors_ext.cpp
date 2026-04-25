@@ -19,6 +19,7 @@
 #include <ios>
 #include <sstream>
 
+#include "base/compression/block_compression.h"
 #include "base/time/timezone_utils.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -32,7 +33,6 @@
 #include "runtime/arena_allocator.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
-#include "util/compression/block_compression.h"
 
 namespace starrocks {
 // ============== HDFS Table Descriptor ============

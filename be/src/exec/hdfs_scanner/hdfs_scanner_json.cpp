@@ -14,13 +14,13 @@
 
 #include "exec/hdfs_scanner/hdfs_scanner_json.h"
 
+#include "base/compression/compression_utils.h"
 #include "common/simdjson_util.h"
 #include "exprs/chunk_predicate_evaluator.h"
 #include "formats/avro/nullable_column.h"
 #include "formats/json/json_utils.h"
 #include "formats/json/nullable_column.h"
 #include "runtime/runtime_state.h"
-#include "util/compression/compression_utils.h"
 
 namespace starrocks {
 

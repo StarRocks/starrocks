@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "util/compression/lzo_decompressor_registry.h"
+#include "base/compression/lzo_decompressor_registry.h"
 
 #include <atomic>
 
