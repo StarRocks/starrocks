@@ -45,9 +45,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/compression/compression_headers.h"
-namespace orc {
-uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
-} // namespace orc
+#include "util/compression/lzo_decompressor_registry.h"
 
 namespace starrocks {
 
@@ -1092,14 +1090,13 @@ public:
             if (input_size < block_size) {
                 return Status::InternalError("LzoBlockCompression decompress failed: input data not enough");
             }
-            try {
-                uint64_t read = orc::lzoDecompress(input_data, input_data + block_size, output_data, output_limit);
-                DCHECK(read <= uncompressed_size);
-                uncompressed_size -= read;
-                output_data += read;
-            } catch (const std::runtime_error& e) {
+            ASSIGN_OR_RETURN(size_t read, compression::lzo_decompress(input_data, input_data + block_size, output_data,
+                                                                      output_limit));
+            if (read > uncompressed_size) {
                 return Status::InternalError("LzoBlockCompression decompress failed: data corruption");
             }
+            uncompressed_size -= read;
+            output_data += read;
 
             input_data += block_size;
             input_size -= block_size;

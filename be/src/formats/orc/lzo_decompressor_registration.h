@@ -12,17 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <cstdio>
+#pragma once
 
-#include "formats/orc/lzo_decompressor_registration.h"
-#include "testutil/init_test_env.h"
+#include "common/status.h"
 
-int main(int argc, char** argv) {
-    auto lzo_status = starrocks::register_orc_lzo_decompressor();
-    if (!lzo_status.ok()) {
-        fprintf(stderr, "fail to register ORC LZO decompressor: %s\n", lzo_status.to_string().c_str());
-        return 1;
-    }
+namespace starrocks {
 
-    return starrocks::init_test_env(argc, argv);
-}
+Status register_orc_lzo_decompressor();
+
+} // namespace starrocks
