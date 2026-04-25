@@ -32,13 +32,13 @@
 
 #include <atomic>
 #include <memory>
-#include <shared_mutex>
+#include <string>
+#include <utility>
 
 #include "base/concurrency/moodycamel/concurrentqueue.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "runtime/starrocks_metrics.h"
-#include "util/global_metrics_registry.h"
+#include "util/compression/compression_context_pool_metrics.h"
 
 namespace starrocks::compression {
 
@@ -85,11 +85,7 @@ public:
               _deleter(std::move(deleter)),
               _resetter(std::move(resetter)),
               _created_counter(0) {
-        auto metrics = GlobalMetricsRegistry::instance()->metrics();
-        std::string full_name = pool_name + "_context_pool_create_count";
-        _created_counter_metrics = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
-        metrics->register_metric(full_name, _created_counter_metrics.get());
-        metrics->register_hook(full_name, [this]() { _created_counter_metrics->set_value(_created_counter.load()); });
+        register_compression_context_pool_metric(pool_name, &_created_counter);
     }
 
     StatusOr<Ref> get() {
@@ -133,7 +129,6 @@ private:
 
     moodycamel::ConcurrentQueue<InternalRef> _ctx_resources;
 
-    std::unique_ptr<UIntGauge> _created_counter_metrics;
     std::atomic<size_t> _created_counter;
 };
 } // namespace starrocks::compression

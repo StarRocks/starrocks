@@ -19,6 +19,7 @@
 #include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "runtime/starrocks_metrics.h"
+#include "util/compression/compression_context_pool_metrics.h"
 #include "util/system_metrics.h"
 
 namespace starrocks {
@@ -34,6 +35,7 @@ const std::string GlobalMetricsRegistry::_s_hook_name = "starrocks_metrics";
 GlobalMetricsRegistry::GlobalMetricsRegistry(StarRocksMetrics* fast_metrics)
         : _fast_metrics(fast_metrics), _metrics(_s_registry_name) {
     DCHECK(_fast_metrics != nullptr);
+    compression::install_compression_context_pool_metrics(&_metrics);
 #define REGISTER_STARROCKS_METRIC(name) _metrics.register_metric(#name, &(_fast_metrics->name))
     // You can put StarRocksMetrics's metrics initial code here
     REGISTER_STARROCKS_METRIC(fragment_requests_total);

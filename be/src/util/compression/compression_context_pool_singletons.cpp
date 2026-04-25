@@ -32,6 +32,8 @@
 
 #include <cstdlib>
 #include <memory>
+#include <new>
+#include <string>
 
 namespace starrocks::compression {
 
@@ -246,4 +248,5 @@ LZ4_CCtx_Pool& lz4_cctx_pool() {
 StatusOr<LZ4_CCtx_Pool::Ref> getLZ4_CCtx() {
     return lz4_cctx_pool().get();
 }
+
 } // namespace starrocks::compression
