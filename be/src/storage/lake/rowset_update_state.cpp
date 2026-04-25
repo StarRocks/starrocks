@@ -191,18 +191,20 @@ static bool has_partial_update(const RowsetUpdateStateParams& params) {
 //
 // Lazy load is ENABLED when:
 // 1. Normal transaction (no txn_meta) - safe to defer loading as no special merge logic needed
-// 2. Condition update with SST ingestion but no partial updates - parallel path can handle lazy load
+// 2. Condition update without partial updates - both the SST-backed parallel path and the
+//    non-SST chunk-parallel path iterate the PK column chunk by chunk, so neither needs the
+//    full segment materialized upfront.
 //
 // Lazy load is DISABLED when:
 // 1. Partial updates are involved - WHY: partial update handler needs immediate access to standalone
-//    PK columns to merge with existing data, can't wait for lazy loading
-// 2. Condition update without SST files - WHY: serial condition merge path requires full PK column
-//    upfront for old value lookups
+//    PK columns to merge with existing data, can't wait for lazy loading.
 //
 // PERFORMANCE: Enabling lazy load reduces peak memory by ~50% for large primary key columns (>100MB)
+// and, for the non-SST condition-merge path, lets _do_update_with_condition produce multiple
+// per-segment chunks so its compare phase actually scales on lake_partial_update_thread_pool.
 static bool should_enable_lazy_load(const RowsetUpdateStateParams& params) {
-    return !params.op_write.has_txn_meta() || (!params.op_write.txn_meta().merge_condition().empty() &&
-                                               !has_partial_update(params) && params.op_write.ssts_size() > 0);
+    return !params.op_write.has_txn_meta() ||
+           (!params.op_write.txn_meta().merge_condition().empty() && !has_partial_update(params));
 }
 
 Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateStateParams& params, int64_t base_version,
