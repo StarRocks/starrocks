@@ -63,6 +63,8 @@ public final class UnityCatalogTypes {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class TableInfo {
+        @JsonProperty("name")
+        public String name;
         @JsonProperty("full_name")
         public String fullName;
         @JsonProperty("table_id")

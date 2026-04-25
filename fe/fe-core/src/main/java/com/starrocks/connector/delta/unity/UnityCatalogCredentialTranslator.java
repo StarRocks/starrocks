@@ -100,7 +100,8 @@ public final class UnityCatalogCredentialTranslator {
             if (!Strings.isNullOrEmpty(awsRegion)) {
                 props.put(CLIENT_REGION, awsRegion);
             }
-            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(props);
+            CloudConfiguration cc = CloudConfigurationFactory.buildCloudConfigurationForVendedCredentials(props,
+                    tableLocation);
             if (cc.getCloudType() != CloudType.DEFAULT) {
                 return cc;
             }
