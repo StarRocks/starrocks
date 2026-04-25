@@ -58,6 +58,7 @@ ADD_BE_LIB(Formats
         orc/orc_memory_pool.cpp
         orc/orc_min_max_decoder.cpp
         orc/orc_schema_builder.cpp
+        orc/lzo_decompressor_registration.cpp
         orc/utils.cpp
         orc/column_reader.cpp
         orc/memory_stream/MemoryInputStream.cc

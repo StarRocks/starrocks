@@ -47,10 +47,7 @@
 #include "gutil/strings/substitute.h"
 #include "util/compression/compression_context_pool_singletons.h"
 #include "util/compression/compression_headers.h"
-
-namespace orc {
-uint64_t lzoDecompress(const char* inputAddress, const char* inputLimit, char* outputAddress, char* outputLimit);
-} // namespace orc
+#include "util/compression/lzo_decompressor_registry.h"
 
 namespace starrocks {
 
@@ -921,10 +918,11 @@ Status LzoStreamDecompressor::decompress(uint8_t* input, size_t input_len, size_
         if (compressed_size == uncompressed_size) {
             memcpy(ctx->buffer_data, ptr, compressed_size);
         } else {
-            try {
-                (void)orc::lzoDecompress((char*)ptr, (char*)ptr + compressed_size, (char*)ctx->buffer_data,
-                                         (char*)ctx->buffer_data + uncompressed_size);
-            } catch (const std::runtime_error& e) {
+            ASSIGN_OR_RETURN(
+                    auto decompressed_size,
+                    compression::lzo_decompress((char*)ptr, (char*)ptr + compressed_size, (char*)ctx->buffer_data,
+                                                (char*)ctx->buffer_data + uncompressed_size));
+            if (decompressed_size != uncompressed_size) {
                 return Status::InternalError(strings::Substitute("$0 decompress failed", NAME));
             }
         }

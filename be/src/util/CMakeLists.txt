@@ -26,6 +26,7 @@ set(UTIL_FILES
   compression/block_compression.cpp
   compression/compression_context_pool_metrics.cpp
   compression/compression_context_pool_singletons.cpp
+  compression/lzo_decompressor_registry.cpp
   compression/stream_compressor.cpp
   compression/stream_decompressor.cpp
   download_util.cpp
