@@ -87,6 +87,7 @@ fi
 
 if starrocks_is_darwin ; then
     PARALLEL=$(starrocks_detect_parallelism)
+    # Darwin thirdparty is prepared separately and validated before BE configure.
 else
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
@@ -380,25 +381,6 @@ if [ ${BUILD_FORMAT_LIB} -eq 1 ]; then
 fi
 
 if starrocks_is_darwin && { [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ]; }; then
-    # Auto-trigger Darwin TP build when missing. Sentinels span the chain
-    # (libprotobuf.a early, libbrpc.a mid, libxml2.dylib late); a mid-chain
-    # abort misses later ones and re-triggers. libarrow_flight_sql.a is a
-    # patch-level version sentinel — it is the last artifact the new Arrow
-    # Flight + source-built gRPC produces, and be/CMakeLists.txt unconditionally
-    # links arrow_flight / arrow_flight_sql / gRPC::grpc{,++}.
-    needs_tp_build=0
-    for _artifact in lib/libprotobuf.a lib/libbrpc.a lib/libxml2.dylib lib/libarrow_flight_sql.a; do
-        if [[ ! -e "${STARROCKS_THIRDPARTY}/installed/${_artifact}" ]]; then
-            needs_tp_build=1
-            break
-        fi
-    done
-    if [[ ${needs_tp_build} -eq 1 ]]; then
-        echo "Thirdparty libraries need to be build ..."
-        ${STARROCKS_THIRDPARTY}/build-thirdparty-darwin.sh -j "${PARALLEL}"
-    fi
-    unset needs_tp_build _artifact
-
     starrocks_validate_darwin_thirdparty
 fi
 
