@@ -18,6 +18,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/runtime")
 
 set(RUNTIME_CORE_FILES
+    client_cache.cpp
     current_thread.cpp
     descriptors.cpp
     runtime_state.cpp
@@ -29,12 +30,20 @@ set(RUNTIME_CORE_FILES
     runtime_filter_factory.cpp
     runtime_filter_cache.cpp
     bucket_aware_partition.cpp
+    query_statistics.cpp
+    record_batch_queue.cpp
     starrocks_metrics.cpp
+    global_dict/decoder.cpp
+    global_dict/miscs.cpp
+    global_dict/types.cpp
+    type_pack.cpp
+    load_fail_point.cpp
     memory/roaring_hook.cpp
     memory/system_allocator.cpp
     memory/tracked_allocator.cpp
     memory/mem_chunk_allocator.cpp
     memory/memory_allocator.cpp
+    prof/heap_prof.cpp
 )
 
 ADD_BE_LIB(RuntimeCore
@@ -55,7 +64,6 @@ set(RUNTIME_FILES
     broker_mgr.cpp
     buffer_control_block.cpp
     buffer_control_result_writer.cpp
-    client_cache.cpp
     local_pass_through_buffer.cpp
     lookup_stream_mgr.cpp
     data_stream_mgr.cpp
@@ -80,7 +88,6 @@ set(RUNTIME_FILES
     load_channel.cpp
     local_tablets_channel.cpp
     snapshot_loader.cpp
-    query_statistics.cpp
     message_body_sink.cpp
     stream_load/transaction_mgr.cpp
     stream_load/stream_load_context.cpp
@@ -96,7 +103,6 @@ set(RUNTIME_FILES
     routine_load/data_consumer_pool.cpp
     routine_load/routine_load_task_executor.cpp
     small_file_mgr.cpp
-    record_batch_queue.cpp
     result_queue_mgr.cpp
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
@@ -112,11 +118,8 @@ set(RUNTIME_FILES
     tablets_channel.cpp
     runtime_filter_worker.cpp
     runtime_filter_serde.cpp
-    global_dict/decoder.cpp
     global_dict/fragment_dict_state.cpp
     global_dict/parser.cpp
-    global_dict/miscs.cpp
-    global_dict/types.cpp
     lake_tablets_channel.cpp
     lake_snapshot_loader.cpp
     profile_report_worker.cpp
@@ -127,12 +130,9 @@ set(RUNTIME_FILES
     table_function_table_sink.cpp
     blackhole_table_sink.cpp
     dictionary_cache_sink.cpp
-    type_pack.cpp
     customized_result_writer.cpp
     diagnose_daemon.cpp
-    load_fail_point.cpp
     logconfig.cpp
-    prof/heap_prof.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}
