@@ -1211,9 +1211,9 @@ static std::unordered_set<uint32_t> build_rssid_coverage(const TabletMetadataPB&
 //      differs from the offset translation. In this case the sstable mixes
 //      keys that need different translations — the single-parameter
 //      rssid_offset cannot express both.
-static bool sstable_translation_lands_in_metadata(
-        const PersistentIndexSstablePB& sst, const TabletMergeContext& ctx,
-        const std::unordered_set<uint32_t>& covered_rssids, int64_t source_high) {
+static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB& sst, const TabletMergeContext& ctx,
+                                                  const std::unordered_set<uint32_t>& covered_rssids,
+                                                  int64_t source_high) {
     int64_t effective_high = source_high + ctx.rssid_offset();
     if (effective_high < 0 || effective_high > std::numeric_limits<uint32_t>::max()) {
         return false;
