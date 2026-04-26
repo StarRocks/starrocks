@@ -83,6 +83,7 @@ set(PIPELINE_RUNTIME_SRCS
 )
 
 set(PIPELINE_ADAPTERS_SRCS
+    pipeline/exec_node_pipeline_adapter.cpp
     pipeline/fragment_executor.cpp
     pipeline/pipeline_builder.cpp
 )
@@ -224,7 +225,6 @@ set(EXEC_NON_PIPELINE_FILES
     exec_factory.cpp
     exec_node.cpp
     pipeline_node.cpp
-    exec_node_executor.cpp
     exchange_node.cpp
     scan_node.cpp
     select_node.cpp

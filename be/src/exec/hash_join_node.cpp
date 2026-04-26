@@ -26,6 +26,7 @@
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/group_execution/execution_group_builder.h"
@@ -260,10 +261,10 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
     auto build_op = std::make_shared<HashJoinBuilderFactory>(context->next_operator_id(), id(), hash_joiner_factory,
                                                              std::move(partial_rf_merger), _distribution_mode,
                                                              build_side_spill_channel_factory);
-    this->init_runtime_filter_for_operator(build_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, build_op.get(), context, rc_rf_probe_collector);
 
     auto probe_op = std::make_shared<HashJoinProbeFactory>(context->next_operator_id(), id(), hash_joiner_factory);
-    this->init_runtime_filter_for_operator(probe_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, probe_op.get(), context, rc_rf_probe_collector);
 
     rhs_operators.emplace_back(std::move(build_op));
     context->add_pipeline(rhs_operators);
@@ -328,7 +329,7 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
             !_conjunct_ctxs.empty() || !_other_join_conjunct_ctxs.empty() ||
             lhs_operators.back()->has_runtime_filters();
     if (need_accumulate_chunk) {
-        may_add_chunk_accumulate_operator(lhs_operators, context, id());
+        pipeline::may_add_chunk_accumulate_operator(lhs_operators, context, id());
     }
 
     return lhs_operators;

@@ -40,7 +40,7 @@ public:
     void bind_runtime_in_filters(RuntimeState* state, int32_t driver_sequence,
                                  std::vector<ExprContext*>* runtime_in_filters) override;
 
-    // invoked by ExecNode::init_runtime_filter_for_operator to initialize fields involving runtime filter
+    // Invoked by the ExecNode-to-pipeline adapter to initialize fields involving runtime filter.
     void init_runtime_filter(RuntimeFilterHub* runtime_filter_hub, const std::vector<TTupleId>& tuple_ids,
                              const LocalRFWaitingSet& rf_waiting_set, const RowDescriptor& row_desc,
                              const std::shared_ptr<RefCountedRuntimeFilterProbeCollector>& runtime_filter_collector,

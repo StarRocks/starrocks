@@ -30,6 +30,7 @@
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "exec/olap_scan_prepare.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/chunk_buffer_limiter.h"
@@ -955,7 +956,7 @@ StatusOr<pipeline::OpFactories> OlapScanNode::decompose_to_pipeline(pipeline::Pi
     auto scan_prepare_op = std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(),
                                                                                       this, scan_ctx_factory);
     scan_prepare_op->set_degree_of_parallelism(shared_morsel_queue ? 1 : dop);
-    this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, scan_prepare_op.get(), context, rc_rf_probe_collector);
 
     auto exec_group = context->find_exec_group_by_plan_node_id(_id);
     context->set_current_execution_group(exec_group);
@@ -969,7 +970,7 @@ StatusOr<pipeline::OpFactories> OlapScanNode::decompose_to_pipeline(pipeline::Pi
     // scan_op.
     auto scan_op = std::make_shared<pipeline::OlapScanOperatorFactory>(context->next_operator_id(), this,
                                                                        std::move(scan_ctx_factory));
-    this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, scan_op.get(), context, rc_rf_probe_collector);
 
     auto ops = pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
     return context->maybe_interpolate_debug_ops(runtime_state(), _id, ops);

@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "column/column_helper.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/set/intersect_build_sink_operator.h"
@@ -104,7 +105,8 @@ StatusOr<pipeline::OpFactories> IntersectNode::decompose_to_pipeline(pipeline::P
             context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[0],
             _has_outer_join_child));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(ops_with_intersect_build_sink.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, ops_with_intersect_build_sink.back().get(), context,
+                                               rc_rf_probe_collector);
     context->add_pipeline(ops_with_intersect_build_sink);
 
     // Use the rest children to erase keys from the hast table by IntersectProbeSinkOperator.
@@ -120,8 +122,8 @@ StatusOr<pipeline::OpFactories> IntersectNode::decompose_to_pipeline(pipeline::P
         ops_with_intersect_probe_sink.emplace_back(std::make_shared<IntersectProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), intersect_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(ops_with_intersect_probe_sink.back().get(), context,
-                                               rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, ops_with_intersect_probe_sink.back().get(), context,
+                                                   rc_rf_probe_collector);
         context->add_pipeline(ops_with_intersect_probe_sink);
     }
 
@@ -130,7 +132,7 @@ StatusOr<pipeline::OpFactories> IntersectNode::decompose_to_pipeline(pipeline::P
     auto intersect_output_source = std::make_shared<IntersectOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), intersect_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(intersect_output_source.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, intersect_output_source.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(intersect_output_source.get(),
                                                 context->source_operator(ops_with_intersect_build_sink));
     operators_with_intersect_output_source.emplace_back(std::move(intersect_output_source));

@@ -29,6 +29,7 @@
 #include "exec/pipeline/bucket_process_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
@@ -88,7 +89,7 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::_decompose_to_pipeline(pi
     // Create a shared RefCountedRuntimeFilterCollector
     // Initialize OperatorFactory's fields involving runtime filters.
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
-    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_sink_op.get(), context, rc_rf_probe_collector);
     auto bucket_process_context_factory = std::make_shared<BucketProcessContextFactory>();
     if (per_bucket_optimize) {
         agg_sink_op = std::make_shared<BucketProcessSinkOperatorFactory>(
@@ -99,7 +100,7 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::_decompose_to_pipeline(pi
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_source_op.get(), context, rc_rf_probe_collector);
 
     if (per_bucket_optimize) {
         auto bucket_source_operator = std::make_shared<BucketProcessSourceOperatorFactory>(
@@ -212,7 +213,7 @@ StatusOr<pipeline::OpFactories> AggregateBlockingNode::decompose_to_pipeline(
     }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(ops_with_source, context, id());
+        pipeline::may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
 
     ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);

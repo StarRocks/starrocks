@@ -28,6 +28,7 @@
 #include "exec/pipeline/bucket_process_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
@@ -62,8 +63,9 @@ StatusOr<pipeline::OpFactories> DistinctBlockingNode::_decompose_to_pipeline(pip
         auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<SinkFactoryT>(context->next_operator_id(), id(), aggregator_factory,
-                                                            spill_channel_factory);
+        auto sink_operator =
+                std::make_shared<SinkFactoryT>(context->next_operator_id(), id(), aggregator_factory,
+                                               spill_channel_factory);
         auto source_operator = std::make_shared<SourceFactoryT>(context->next_operator_id(), id(), aggregator_factory);
         context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
@@ -92,7 +94,7 @@ StatusOr<pipeline::OpFactories> DistinctBlockingNode::_decompose_to_pipeline(pip
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_sink_op.get(), context, rc_rf_probe_collector);
 
     if (per_bucket_optimize) {
         auto bucket_source_operator = std::make_shared<BucketProcessSourceOperatorFactory>(
@@ -103,7 +105,7 @@ StatusOr<pipeline::OpFactories> DistinctBlockingNode::_decompose_to_pipeline(pip
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_source_op.get(), context, rc_rf_probe_collector);
     ops_with_sink.push_back(std::move(agg_sink_op));
 
     // The upstream pipeline may be changed by *maybe_interpolate_local_shuffle_exchange*.
@@ -185,7 +187,7 @@ StatusOr<pipeline::OpFactories> DistinctBlockingNode::decompose_to_pipeline(pipe
     }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
-        may_add_chunk_accumulate_operator(ops_with_source, context, id());
+        pipeline::may_add_chunk_accumulate_operator(ops_with_source, context, id());
     }
     ops_with_source = context->maybe_interpolate_debug_ops(runtime_state(), _id, ops_with_source);
 

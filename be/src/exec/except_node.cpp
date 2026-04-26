@@ -15,6 +15,7 @@
 #include "exec/except_node.h"
 
 #include "column/column_helper.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/set/except_build_sink_operator.h"
@@ -103,7 +104,8 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     ops_with_except_build_sink.emplace_back(std::make_shared<ExceptBuildSinkOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[0]));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(ops_with_except_build_sink.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, ops_with_except_build_sink.back().get(), context,
+                                               rc_rf_probe_collector);
     context->add_pipeline(ops_with_except_build_sink);
     context->push_dependent_pipeline(context->last_pipeline());
     DeferOp pop_dependent_pipeline([context]() { context->pop_dependent_pipeline(); });
@@ -121,7 +123,8 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
         ops_with_except_probe_sink.emplace_back(std::make_shared<ExceptProbeSinkOperatorFactory>(
                 context->next_operator_id(), id(), except_partition_ctx_factory, _child_expr_lists[i], i - 1));
         // Initialize OperatorFactory's fields involving runtime filters.
-        this->init_runtime_filter_for_operator(ops_with_except_probe_sink.back().get(), context, rc_rf_probe_collector);
+        pipeline::init_runtime_filter_for_operator(*this, ops_with_except_probe_sink.back().get(), context,
+                                                   rc_rf_probe_collector);
         context->add_pipeline(ops_with_except_probe_sink);
     }
 
@@ -130,7 +133,7 @@ StatusOr<pipeline::OpFactories> ExceptNode::decompose_to_pipeline(pipeline::Pipe
     auto except_output_source = std::make_shared<ExceptOutputSourceOperatorFactory>(
             context->next_operator_id(), id(), except_partition_ctx_factory, _children.size() - 1);
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(except_output_source.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, except_output_source.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(except_output_source.get(),
                                                 context->source_operator(ops_with_except_build_sink));
     ops_with_except_output_source.emplace_back(std::move(except_output_source));

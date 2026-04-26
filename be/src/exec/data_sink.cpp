@@ -43,6 +43,7 @@
 #include "connector/file_chunk_sink.h"
 #include "connector/file_connector.h"
 #include "connector/hive_chunk_sink.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/query_context.h"
 #ifndef __APPLE__
@@ -302,7 +303,7 @@ Status DataSink::decompose_data_sink_to_pipeline(pipeline::PipelineBuilderContex
         // Accumulate chunks before sending to result sink
         if (runtime_state->query_options().__isset.enable_result_sink_accumulate &&
             runtime_state->query_options().enable_result_sink_accumulate) {
-            ExecNode::may_add_chunk_accumulate_operator(prev_operators, context,
+            pipeline::may_add_chunk_accumulate_operator(prev_operators, context,
                                                         Operator::s_pseudo_plan_node_id_for_final_sink);
         }
         // Result sink doesn't have plan node id;
