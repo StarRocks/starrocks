@@ -22,7 +22,6 @@
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/comparator.h"
-#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
