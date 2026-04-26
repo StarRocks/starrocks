@@ -27,15 +27,18 @@
 #include "base/hash/crc32c.h"
 #include "base/testutil/sync_point.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "common/config_rowset_fwd.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
+#include "gen_cpp/persistent_index.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_column_group.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -47,6 +50,9 @@
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
+#include "storage/sstable/iterator.h"
+#include "storage/sstable/options.h"
+#include "storage/sstable/table_builder.h"
 #include "storage/tablet_schema.h"
 
 namespace {
@@ -1214,6 +1220,23 @@ static std::unordered_set<uint32_t> build_rssid_coverage(const TabletMetadataPB&
 static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB& sst, const TabletMergeContext& ctx,
                                                   const std::unordered_set<uint32_t>& covered_rssids,
                                                   int64_t source_high) {
+    // shared_rssid path is handled separately by the caller; this helper is
+    // only for the non-shared_rssid branch.
+    //
+    // Detection only meaningfully discriminates when this child has dedup
+    // entries — those are the cases where the offset-based projection can
+    // diverge from the dedup mapping. With no dedup, the offset path is the
+    // canonical answer regardless of what the sstable's high word looks like.
+    // This narrowing keeps trivial test fixtures (which sometimes set sstable
+    // max_rss_rowid out-of-band of any rowset id) from flagging spuriously.
+    if (!ctx.has_shared_rssid_mapping()) {
+        return true;
+    }
+    // Skip detection when there are no covered rssids — metadata has no
+    // rowsets with segments, so any "uncovered" verdict would be vacuous.
+    if (covered_rssids.empty()) {
+        return true;
+    }
     int64_t effective_high = source_high + ctx.rssid_offset();
     if (effective_high < 0 || effective_high > std::numeric_limits<uint32_t>::max()) {
         return false;
@@ -1235,6 +1258,134 @@ static bool sstable_translation_lands_in_metadata(const PersistentIndexSstablePB
         }
     });
     return ok;
+}
+
+// Rebuild a non-shared_rssid sstable for the merged tablet by reading every
+// key of the input sstable and applying per-key rssid translation:
+//   stored_rssid in shared_rssid_map → canonical_rssid (dedup'd source)
+//   otherwise                       → stored_rssid + ctx.rssid_offset
+// The output sstable is written to merged_tablet_id's sst directory with
+// rssid_offset=0 and shared_rssid unset — its keys directly carry the final
+// effective rssids, so the read path's translation logic stays a pass-through.
+//
+// This is the Phase 2 core of Bug B. Called only when
+// sstable_translation_lands_in_metadata returns false; healthy sstables are
+// untouched and continue down the legacy offset projection path.
+StatusOr<PersistentIndexSstablePB> rebuild_sstable_with_per_key_remap(
+        TabletManager* tablet_manager, int64_t source_tablet_id, int64_t merged_tablet_id,
+        const PersistentIndexSstablePB& input_pb, const TabletMergeContext& ctx) {
+    auto* update_mgr = tablet_manager->update_mgr();
+    if (update_mgr == nullptr) {
+        return Status::InternalError("rebuild_sstable: update_mgr is null");
+    }
+    auto* block_cache = update_mgr->block_cache();
+    Cache* cache = (block_cache != nullptr) ? block_cache->cache() : nullptr;
+
+    // 1. Open the input sstable for reading. PersistentIndexSstable::new_sstable
+    //    handles encryption unwrap + RAF + init, returning a fully-initialized
+    //    reader that knows nothing about translation (good — we want the raw
+    //    stored rssids, not the offset-projected ones).
+    auto source_path = tablet_manager->sst_location(source_tablet_id, input_pb.filename());
+    PersistentIndexSstablePB raw_pb = input_pb;
+    raw_pb.set_rssid_offset(0);  // suppress reader-time translation
+    raw_pb.clear_shared_rssid();
+    raw_pb.clear_shared_version();
+    ASSIGN_OR_RETURN(auto reader, PersistentIndexSstable::new_sstable(raw_pb, source_path, cache,
+                                                                      false /*need_filter*/));
+
+    // 2. Open the output writer. Place under merged tablet's sst path so the
+    //    file is owned by the merged tablet from the start; on merge failure
+    //    the file is orphaned and cleaned by vacuum eventually.
+    auto out_filename = gen_sst_filename();
+    auto out_path = tablet_manager->sst_location(merged_tablet_id, out_filename);
+    WritableFileOptions wopts;
+    std::string out_encryption_meta;
+    if (config::enable_transparent_data_encryption) {
+        ASSIGN_OR_RETURN(auto pair, KeyCache::instance().create_encryption_meta_pair_using_current_kek());
+        wopts.encryption_info = pair.info;
+        out_encryption_meta.swap(pair.encryption_meta);
+    }
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, out_path));
+
+    std::unique_ptr<sstable::FilterPolicy> filter_policy(
+            const_cast<sstable::FilterPolicy*>(sstable::NewBloomFilterPolicy(10)));
+    sstable::Options options;
+    options.filter_policy = filter_policy.get();
+    sstable::TableBuilder builder(options, wf.get());
+
+    // 3. Iterate input, remap each value's rssid per shared_rssid_map / offset,
+    //    and write the modified IndexValuesWithVerPB into the output sstable.
+    //    Multi-version values per key are preserved — every value gets its own
+    //    remap, no broad-stroke version overwrite (the failure mode of the
+    //    earlier shared_rssid attempt in PR #72177).
+    sstable::ReadOptions ro;
+    std::unique_ptr<sstable::Iterator> iter(reader->new_iterator(ro));
+    iter->SeekToFirst();
+    uint32_t max_effective_rssid = 0;
+    int64_t key_count = 0;
+    while (iter->Valid()) {
+        Slice key = iter->key();
+        Slice value_slice = iter->value();
+
+        IndexValuesWithVerPB value_pb;
+        if (!value_pb.ParseFromArray(value_slice.data, value_slice.size)) {
+            return Status::Corruption("rebuild_sstable: failed to parse IndexValuesWithVerPB");
+        }
+        for (auto& v : *value_pb.mutable_values()) {
+            uint32_t stored_rssid = v.rssid();
+            uint32_t effective_rssid;
+            auto map_it = ctx.shared_rssid_map_lookup(stored_rssid);
+            if (map_it.has_value()) {
+                effective_rssid = *map_it;
+            } else {
+                int64_t off = static_cast<int64_t>(stored_rssid) + ctx.rssid_offset();
+                if (off < 0 || off > std::numeric_limits<uint32_t>::max()) {
+                    return Status::Corruption(
+                            fmt::format("rebuild_sstable: rssid overflow stored={} offset={}",
+                                        stored_rssid, ctx.rssid_offset()));
+                }
+                effective_rssid = static_cast<uint32_t>(off);
+            }
+            v.set_rssid(effective_rssid);
+            max_effective_rssid = std::max(max_effective_rssid, effective_rssid);
+        }
+        std::string serialized;
+        if (!value_pb.SerializeToString(&serialized)) {
+            return Status::InternalError("rebuild_sstable: failed to serialize IndexValuesWithVerPB");
+        }
+        RETURN_IF_ERROR(builder.Add(key, Slice(serialized)));
+        ++key_count;
+        iter->Next();
+    }
+    RETURN_IF_ERROR(iter->status());
+
+    if (auto st = builder.Finish(); !st.ok()) {
+        return st;
+    }
+    uint64_t filesize = builder.FileSize();
+    auto [key_start, key_end] = builder.KeyRange();
+    RETURN_IF_ERROR(wf->close());
+
+    // 4. Build output PB. rssid_offset=0 + no shared_rssid means the read
+    //    path returns stored rssids unchanged — and since we wrote the
+    //    effective rssids directly, those match the merged tablet's rowset
+    //    id space.
+    PersistentIndexSstablePB output_pb;
+    output_pb.set_filename(out_filename);
+    output_pb.set_filesize(filesize);
+    output_pb.mutable_range()->set_start_key(key_start.to_string());
+    output_pb.mutable_range()->set_end_key(key_end.to_string());
+    output_pb.set_encryption_meta(out_encryption_meta);
+    // Use UINT32_MAX-1 as low (matches ingest_sst convention for sstables
+    // representing all rows of a logical rowset).
+    output_pb.set_max_rss_rowid((static_cast<uint64_t>(max_effective_rssid) << 32) |
+                                (std::numeric_limits<uint32_t>::max() - 1));
+    output_pb.set_shared(false);
+    output_pb.set_rssid_offset(0);
+    LOG(INFO) << "rebuild_sstable: source=" << input_pb.filename() << " (tablet=" << source_tablet_id
+              << ") -> dest=" << out_filename << " (tablet=" << merged_tablet_id << "), keys=" << key_count
+              << ", max_effective_rssid=" << max_effective_rssid;
+    return output_pb;
 }
 
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
@@ -1313,20 +1464,24 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                     return Status::Corruption("Sstable has delvec but no shared_rssid, cannot project delvec");
                 }
                 int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
-                // Phase 1 (detection-only): observe sstables whose post-merge
-                // translation would produce a rssid outside the merged
-                // metadata's rowset.id+segment_idx coverage. Phase 2 will
-                // call rebuild_sstable() in this branch instead of just
-                // logging.
                 if (!sstable_translation_lands_in_metadata(sst, ctx, covered_rssids, high)) {
+                    // The sstable's stored rssids would translate to rssid slots
+                    // that have no rowset in merged metadata — either the offset
+                    // path's effective_high is uncovered, or shared_rssid_map has
+                    // an entry whose mapping diverges from the offset translation
+                    // (per-key remap needed but offset is single-parameter).
+                    // Read every key, apply per-key remap, write a fresh sstable
+                    // owned by the merged tablet. The output uses rssid_offset=0
+                    // and has all effective rssids encoded in the keys directly,
+                    // so the read path becomes a pass-through and the consistency
+                    // check at meta_file.cpp:608 sees only valid rssids.
                     g_tablet_reshard_merge_sstable_needs_rebuild_total << 1;
-                    LOG(WARNING) << "merge_sstables: sstable " << sst.filename()
-                                 << " post-merge translation would land outside merged "
-                                 << "metadata's rowset coverage (source_high=" << high
-                                 << ", ctx.rssid_offset=" << ctx.rssid_offset()
-                                 << ", merged_tablet=" << new_metadata->id()
-                                 << "). Phase 2 will rebuild this sstable; for now using "
-                                 << "the legacy offset projection (may produce ghost rssid).";
+                    ASSIGN_OR_RETURN(auto rebuilt_pb,
+                                     rebuild_sstable_with_per_key_remap(tablet_manager, ctx.metadata()->id(),
+                                                                        new_metadata->id(), sst, ctx));
+                    out->Clear();
+                    out->CopyFrom(rebuilt_pb);
+                    continue;
                 }
                 // Accumulate rssid_offset so a stacked merge composes correctly
                 // (test branch fix: read path adds the stored offset once, so
