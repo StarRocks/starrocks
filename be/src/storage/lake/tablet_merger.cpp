@@ -1519,8 +1519,7 @@ StatusOr<std::optional<PersistentIndexSstablePB>> rebuild_sstable_with_per_key_r
                                 "rebuild_sstable: orphaned stored rssid and merged metadata has no covered "
                                 "rssids; cannot place sentinel");
                     }
-                    uint32_t sentinel_rssid =
-                            *std::min_element(covered_rssids.begin(), covered_rssids.end());
+                    uint32_t sentinel_rssid = *std::min_element(covered_rssids.begin(), covered_rssids.end());
                     ++dropped_entry_count;
                     v.set_rssid(sentinel_rssid);
                     *out_pb.add_values() = v;
