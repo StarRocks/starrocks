@@ -14,7 +14,9 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include <atomic>
 #include <chrono>
+#include <mutex>
 #include <tuple>
 #include <unordered_set>
 
@@ -1272,21 +1274,108 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
-    MutableColumnPtr pk_column;
-    if (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2) {
-        // more than one key column or big endian encoding
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, pk_encoding_type).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
-    }
-    vector<uint32_t> rowids;
-    rowids.reserve(4096);
-    auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
-    auto chunk = chunk_shared_ptr.get();
+    const bool need_pk_column =
+            (pk_columns.size() > 1 || pk_encoding_type == PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
-    int64_t get_next_cost_us = 0;
-    int64_t pk_encode_cost_us = 0;
-    int64_t build_values_cost_us = 0;
+    std::atomic<int64_t> get_next_cost_us{0};
+    std::atomic<int64_t> pk_encode_cost_us{0};
+    std::atomic<int64_t> build_values_cost_us{0};
+
+    // Per-segment rebuild work: read chunks from |itr|, encode primary keys, and call insert().
+    // Used by both the serial and the within-tablet parallel paths. When |insert_mutex| is non-null,
+    // the call into insert() is serialised under it (parallel mode); when null, insert() is called
+    // directly (serial mode). Each invocation owns its own pk_column / chunk / rowids buffers, so
+    // multiple invocations may run concurrently.
+    auto rebuild_one_segment = [&](ChunkIterator* itr, uint32_t rssid, int64_t rowset_version,
+                                   std::mutex* insert_mutex) -> Status {
+        DeferOp close_iter([&] { itr->close(); });
+        MutableColumnPtr local_pk_column;
+        if (need_pk_column) {
+            if (!PrimaryKeyEncoder::create_column(pkey_schema, &local_pk_column, pk_encoding_type).ok()) {
+                return Status::InternalError("create column for primary key encoder failed");
+            }
+        }
+        auto local_chunk_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
+        auto* local_chunk = local_chunk_ptr.get();
+        std::vector<uint32_t> local_rowids;
+        local_rowids.reserve(4096);
+        const uint64_t base = ((uint64_t)rssid) << 32;
+        int64_t local_get_next = 0;
+        int64_t local_encode = 0;
+        int64_t local_build = 0;
+        while (true) {
+            local_chunk->reset();
+            local_rowids.clear();
+            const int64_t t1 = GetCurrentTimeMicros();
+            auto st = itr->get_next(local_chunk, &local_rowids);
+            local_get_next += GetCurrentTimeMicros() - t1;
+            if (st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                get_next_cost_us += local_get_next;
+                pk_encode_cost_us += local_encode;
+                build_values_cost_us += local_build;
+                return st;
+            }
+            Column* pkc = nullptr;
+            if (local_pk_column) {
+                const int64_t t2 = GetCurrentTimeMicros();
+                local_pk_column->reset_column();
+                PrimaryKeyEncoder::encode(pkey_schema, *local_chunk, 0, local_chunk->num_rows(), local_pk_column.get(),
+                                          pk_encoding_type);
+                local_encode += GetCurrentTimeMicros() - t2;
+                pkc = local_pk_column.get();
+            } else {
+                pkc = const_cast<Column*>(local_chunk->columns()[0].get());
+            }
+            const int64_t t3 = GetCurrentTimeMicros();
+            std::vector<IndexValue> values;
+            values.reserve(pkc->size());
+            DCHECK(pkc->size() <= local_rowids.size());
+            for (uint32_t k = 0; k < pkc->size(); k++) {
+                values.emplace_back(base + local_rowids[k]);
+            }
+            local_build += GetCurrentTimeMicros() - t3;
+            if (values.back().get_value() <= rebuild_rss_rowid_point) {
+                // lower AND equal than rebuild point, skip
+                continue;
+            }
+            TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
+            // TODO: Refactor the code to remove tmp slice array.
+            Buffer<Slice> keys;
+            keys.reserve(pkc->size());
+            if (pkc->is_binary() || pkc->is_large_binary()) {
+                ColumnHelper::build_slices(pkc, keys);
+                if (insert_mutex != nullptr) {
+                    std::lock_guard<std::mutex> lg(*insert_mutex);
+                    RETURN_IF_ERROR(insert(pkc->size(), keys.data(), values.data(), rowset_version));
+                } else {
+                    RETURN_IF_ERROR(insert(pkc->size(), keys.data(), values.data(), rowset_version));
+                }
+            } else {
+                RawBytesVisitor visitor;
+                RETURN_IF_ERROR(pkc->accept(&visitor));
+                const auto* fkeys = visitor.result();
+                for (size_t k = 0; k < pkc->size(); ++k) {
+                    keys.emplace_back(fkeys, _key_size);
+                    fkeys += _key_size;
+                }
+                if (insert_mutex != nullptr) {
+                    std::lock_guard<std::mutex> lg(*insert_mutex);
+                    RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
+                                           rowset_version));
+                } else {
+                    RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
+                                           rowset_version));
+                }
+            }
+        }
+        get_next_cost_us += local_get_next;
+        pk_encode_cost_us += local_encode;
+        build_values_cost_us += local_build;
+        return Status::OK();
+    };
+
     // Rowset whose version is between max_sstable_version and base_version should be recovered.
     for (auto& rowset : rowsets) {
         TRACE_COUNTER_INCREMENT("total_segment_cnt", rowset->num_segments());
@@ -1328,75 +1417,66 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         }
         auto& itrs = res.value();
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
-        for (size_t i = 0; i < itrs.size(); i++) {
-            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
-            auto itr = itrs[i].get();
-            if (itr == nullptr) {
-                continue;
-            }
-            DeferOp close_iter([&] { itr->close(); });
-            uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
-            if (rssid < rebuild_rss_id) {
-                // lower than rebuild point, skip
-                // Notice: segment id that equal `rebuild_rss_id` can't be skip because
-                // there are maybe some rows need to rebuild.
-                continue;
-            }
-            TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
-            while (true) {
-                chunk->reset();
-                rowids.clear();
-                int64_t t1 = GetCurrentTimeMicros();
-                auto st = itr->get_next(chunk, &rowids);
-                get_next_cost_us += GetCurrentTimeMicros() - t1;
-                if (st.is_end_of_file()) {
-                    break;
-                } else if (!st.ok()) {
-                    return st;
-                } else {
-                    Column* pkc = nullptr;
-                    if (pk_column) {
-                        int64_t t2 = GetCurrentTimeMicros();
-                        pk_column->reset_column();
-                        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get(),
-                                                  pk_encoding_type);
-                        pk_encode_cost_us += GetCurrentTimeMicros() - t2;
-                        pkc = pk_column.get();
-                    } else {
-                        pkc = const_cast<Column*>(chunk->columns()[0].get());
-                    }
-                    int64_t t3 = GetCurrentTimeMicros();
-                    uint64_t base = ((uint64_t)rssid) << 32;
-                    std::vector<IndexValue> values;
-                    values.reserve(pkc->size());
-                    DCHECK(pkc->size() <= rowids.size());
-                    for (uint32_t i = 0; i < pkc->size(); i++) {
-                        values.emplace_back(base + rowids[i]);
-                    }
-                    build_values_cost_us += GetCurrentTimeMicros() - t3;
-                    if (values.back().get_value() <= rebuild_rss_rowid_point) {
-                        // lower AND equal than rebuild point, skip
-                        continue;
-                    }
-                    TRACE_COUNTER_INCREMENT("rebuild_index_num_rows", pkc->size());
-                    // TODO: Refactor the code to remove tmp slice array.
-                    Buffer<Slice> keys;
-                    keys.reserve(pkc->size());
-                    if (pkc->is_binary() || pkc->is_large_binary()) {
-                        ColumnHelper::build_slices(pkc, keys);
-                        RETURN_IF_ERROR(insert(pkc->size(), keys.data(), values.data(), rowset_version));
-                    } else {
-                        RawBytesVisitor visitor;
-                        RETURN_IF_ERROR(pkc->accept(&visitor));
-                        const auto* fkeys = visitor.result();
-                        for (size_t i = 0; i < pkc->size(); ++i) {
-                            keys.emplace_back(fkeys, _key_size);
-                            fkeys += _key_size;
-                        }
-                        RETURN_IF_ERROR(insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(),
-                                               rowset_version));
-                    }
+
+        // Within-tablet segment-level parallelism. When enabled and there are at least 2 segments
+        // to rebuild for this rowset, dispatch each segment's read+encode+insert work to the
+        // pk_index_execution_thread_pool and serialise insert() calls under a per-rowset mutex.
+        // Bounded by `pk_index_parallel_execution_threadpool_max_threads` (defaults to num_cores/2),
+        // which provides natural admission control across concurrent tablet rebuilds.
+        const bool parallel_segments = config::enable_pk_index_rebuild_segment_parallel && itrs.size() > 1;
+        if (parallel_segments) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_segment_parallel_us");
+            auto token = ExecEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
+                    ThreadPool::ExecutionMode::CONCURRENT);
+            std::mutex insert_mutex;
+            Status task_status = Status::OK();
+            Trace* parent_trace = Trace::CurrentTrace();
+            for (size_t i = 0; i < itrs.size(); i++) {
+                auto* itr = itrs[i].get();
+                if (itr == nullptr) {
+                    continue;
                 }
+                uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+                if (rssid < rebuild_rss_id) {
+                    // lower than rebuild point, skip
+                    itr->close();
+                    continue;
+                }
+                TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
+                auto submit_st = token->submit_func([&, itr, rssid, rowset_version, parent_trace]() {
+                    ADOPT_TRACE(parent_trace);
+                    auto st = rebuild_one_segment(itr, rssid, rowset_version, &insert_mutex);
+                    if (!st.ok()) {
+                        std::lock_guard<std::mutex> lg(insert_mutex);
+                        task_status.update(st);
+                    }
+                });
+                if (!submit_st.ok()) {
+                    // submit failed: close iterator here and record status
+                    itr->close();
+                    std::lock_guard<std::mutex> lg(insert_mutex);
+                    task_status.update(submit_st);
+                }
+            }
+            token->wait();
+            RETURN_IF_ERROR(task_status);
+        } else {
+            for (size_t i = 0; i < itrs.size(); i++) {
+                TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
+                auto* itr = itrs[i].get();
+                if (itr == nullptr) {
+                    continue;
+                }
+                uint32_t rssid = rowset->id() + get_segment_idx(rowset->metadata(), static_cast<int32_t>(i));
+                if (rssid < rebuild_rss_id) {
+                    // lower than rebuild point, skip
+                    // Notice: segment id that equal `rebuild_rss_id` can't be skip because
+                    // there are maybe some rows need to rebuild.
+                    itr->close();
+                    continue;
+                }
+                TRACE_COUNTER_INCREMENT("rebuild_index_segment_cnt", 1);
+                RETURN_IF_ERROR(rebuild_one_segment(itr, rssid, rowset_version, /*insert_mutex=*/nullptr));
             }
         }
         // Rebuild from del files
@@ -1404,9 +1484,9 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             RETURN_IF_ERROR(load_dels(rowset, pkey_schema, rowset_version));
         }
     }
-    TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us);
-    TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us);
-    TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us);
+    TRACE_COUNTER_INCREMENT("rebuild_get_next_cost_us", get_next_cost_us.load());
+    TRACE_COUNTER_INCREMENT("rebuild_pk_encode_cost_us", pk_encode_cost_us.load());
+    TRACE_COUNTER_INCREMENT("rebuild_build_values_cost_us", build_values_cost_us.load());
     TRACE_COUNTER_INCREMENT("segment_io_local_disk_us", stats.io_ns_read_local_disk / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_remote_us", stats.io_ns_remote / 1000);
     TRACE_COUNTER_INCREMENT("segment_io_count_local_disk", stats.io_count_local_disk);

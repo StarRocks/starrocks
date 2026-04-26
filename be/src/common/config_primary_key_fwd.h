@@ -136,6 +136,18 @@ CONF_mBool(enable_pk_index_snapshot_lazy_sst_open, "true");
 // snapshot root, so this only extends boot CPU/IO usage, not BRPC ready time.
 CONF_Bool(enable_pk_index_snapshot_block_prewarm, "true");
 
+// Within-tablet parallelism for the cold rebuild loop in `LakePersistentIndex::load_from_lake_tablet`.
+// When true, segment iteration (read chunk -> encode PK -> insert) within each rowset is dispatched
+// across `pk_index_execution_thread_pool` so multiple segments are read+encoded concurrently. The
+// `_memtable->insert()` call itself is serialised under a per-rebuild mutex, so memtable consistency
+// is preserved. Operates on the rebuild path that fires on snapshot-MISS or no-snapshot tablets —
+// the fall-through after `try_restore_from_local_snapshot()` returns NotFound. iter-058 measured
+// vdb util 53-61% (below 70% guardrail) with CPU 75-94% during cold-burst, indicating CPU is the
+// binder; parallelising the segment scan should consume the CPU headroom productively. Bounded by
+// `pk_index_parallel_execution_threadpool_max_threads` (defaults to num_cores/2), which provides
+// natural admission control across concurrent tablet rebuilds.
+CONF_mBool(enable_pk_index_rebuild_segment_parallel, "true");
+
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 
