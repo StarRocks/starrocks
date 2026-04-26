@@ -281,8 +281,13 @@ Status PersistentIndexSstable::ensure_opened() const {
     if (!_lazy_pending.load(std::memory_order_acquire)) {
         return Status::OK();
     }
+    // Time the realize-on-first-use path so we can attribute lazy-open OSS RTT
+    // (footer + index + filter block reads) to the worker thread that triggered
+    // it. Skipped for already-opened sstables via the early-return above.
+    auto start_us = butil::gettimeofday_us();
     std::lock_guard<std::mutex> lg(_lazy_open_mutex);
     if (!_lazy_pending.load(std::memory_order_acquire)) {
+        TRACE_COUNTER_INCREMENT("pindex_ensure_opened_skip_cnt", 1);
         return Status::OK();
     }
     // ensure_opened() is logically const but mutates the deferred-open backing state.
@@ -307,6 +312,8 @@ Status PersistentIndexSstable::ensure_opened() const {
     mut->_lazy_tablet_mgr = nullptr;
     mut->_lazy_cache = nullptr;
     mut->_lazy_pending.store(false, std::memory_order_release);
+    TRACE_COUNTER_INCREMENT("pindex_ensure_opened_cnt", 1);
+    TRACE_COUNTER_INCREMENT("pindex_ensure_opened_us", butil::gettimeofday_us() - start_us);
     return Status::OK();
 }
 

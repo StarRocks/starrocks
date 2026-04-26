@@ -430,6 +430,9 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     if (key_indexes->empty() || _sstable_filesets.empty()) {
         return Status::OK();
     }
+    // Per-call timer: covers fileset routing + per-sstable ensure_opened() + table multi_get.
+    // Sums across all per-segment parallel-upsert worker tasks via TRACE_COUNTER accumulation.
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_get_from_sstables_us");
     for (auto iter = _sstable_filesets.rbegin(); iter != _sstable_filesets.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
         RETURN_IF_ERROR((*iter)->multi_get(keys, *key_indexes, version, values, &found_key_indexes));
@@ -446,6 +449,7 @@ Status LakePersistentIndex::get_from_inactive_memtables(size_t n, const Slice* k
     if (key_indexes->empty() || _inactive_memtables.empty()) {
         return Status::OK();
     }
+    TRACE_COUNTER_SCOPE_LATENCY_US("pindex_get_from_inactive_memtables_us");
     for (auto iter = _inactive_memtables.rbegin(); iter != _inactive_memtables.rend(); ++iter) {
         KeyIndexSet found_key_indexes;
         RETURN_IF_ERROR((*iter)->get(keys, values, *key_indexes, &found_key_indexes, version));

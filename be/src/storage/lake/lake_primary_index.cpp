@@ -640,13 +640,24 @@ Status LakePrimaryIndex::parallel_upsert(ThreadPoolToken* token, uint32_t rssid,
     }
     // Synchronize parallel execution if enabled
     if (token) {
+        // Pre-existing aggregate timer kept for backward compatibility with older traces.
         TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_wait_us");
-        token->wait(); // Wait for all submitted tasks to complete
-
+        {
+            // New: wall time spent waiting for the per-segment worker tasks (which run
+            // get_from_inactive_memtables + get_from_sstables, including any lazy
+            // ensure_opened()).
+            TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_token_wait_us");
+            token->wait(); // Wait for all submitted tasks to complete
+        }
         // Check for errors from parallel tasks
         RETURN_IF_ERROR(status);
-        // Flush accumulated updates to sstable file (batch optimization)
-        RETURN_IF_ERROR(flush_memtable());
+        {
+            // New: wall time spent in the post-wait synchronous flush_memtable() call.
+            // Distinguishes "tasks were slow" from "memtable backpressure stalled the
+            // sync flush after wait".
+            TRACE_COUNTER_SCOPE_LATENCY_US("parallel_upsert_post_flush_us");
+            RETURN_IF_ERROR(flush_memtable());
+        }
     }
     return segment_pk_iterator->status();
 }
