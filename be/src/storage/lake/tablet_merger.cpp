@@ -1529,17 +1529,16 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                     // to the legacy offset projection — production paths always
                     // have the file present.
                     g_tablet_reshard_merge_sstable_needs_rebuild_total << 1;
-                    auto rebuild_result = rebuild_sstable_with_per_key_remap(
-                            tablet_manager, ctx.metadata()->id(), new_metadata->id(), sst, ctx);
+                    auto rebuild_result = rebuild_sstable_with_per_key_remap(tablet_manager, ctx.metadata()->id(),
+                                                                             new_metadata->id(), sst, ctx);
                     if (rebuild_result.ok()) {
                         out->Clear();
                         out->CopyFrom(rebuild_result.value());
                         continue;
                     }
-                    LOG(WARNING) << "merge_sstables: rebuild_sstable failed for "
-                                 << sst.filename() << " (source_tablet=" << ctx.metadata()->id()
-                                 << ", merged_tablet=" << new_metadata->id()
-                                 << "): " << rebuild_result.status()
+                    LOG(WARNING) << "merge_sstables: rebuild_sstable failed for " << sst.filename()
+                                 << " (source_tablet=" << ctx.metadata()->id()
+                                 << ", merged_tablet=" << new_metadata->id() << "): " << rebuild_result.status()
                                  << ". Falling back to legacy offset projection.";
                 }
                 // Accumulate rssid_offset so a stacked merge composes correctly
