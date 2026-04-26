@@ -15,6 +15,7 @@
 #include "exec/pipeline/lookup_request.h"
 
 #include <brpc/controller.h>
+#include <butil/iobuf.h>
 
 #include <memory>
 
@@ -44,6 +45,64 @@
 namespace starrocks::pipeline {
 
 DEFINE_FAIL_POINT(lookup_request_failed);
+
+namespace {
+
+template <typename Message>
+Status parse_lookup_http_frame_from_iobuf(butil::IOBuf* iobuf, Message* message, const char* frame_name) {
+    size_t protobuf_size = 0;
+    if (UNLIKELY(iobuf->cutn(&protobuf_size, sizeof(protobuf_size)) != sizeof(protobuf_size))) {
+        return Status::InternalError(fmt::format("failed to read lookup http {} protobuf size", frame_name));
+    }
+    if (UNLIKELY(iobuf->size() < protobuf_size)) {
+        return Status::InternalError(fmt::format("lookup http {} protobuf size {} exceeds iobuf size {}", frame_name,
+                                                 protobuf_size, iobuf->size()));
+    }
+
+    butil::IOBuf protobuf_iobuf;
+    iobuf->cutn(&protobuf_iobuf, protobuf_size);
+    butil::IOBufAsZeroCopyInputStream wrapper(protobuf_iobuf);
+    if (UNLIKELY(!message->ParseFromZeroCopyStream(&wrapper))) {
+        return Status::InternalError(fmt::format("failed to parse lookup http {} protobuf", frame_name));
+    }
+
+    size_t attachment_size = 0;
+    if (UNLIKELY(iobuf->cutn(&attachment_size, sizeof(attachment_size)) != sizeof(attachment_size))) {
+        return Status::InternalError(fmt::format("failed to read lookup http {} attachment size", frame_name));
+    }
+    if (UNLIKELY(attachment_size != iobuf->size())) {
+        return Status::InternalError(fmt::format("{} != {} during lookup http {} attachment deserialization",
+                                                 attachment_size, iobuf->size(), frame_name));
+    }
+    return Status::OK();
+}
+
+} // namespace
+
+Status parse_lookup_request_from_http_iobuf(butil::IOBuf* iobuf, PLookUpRequest* request) {
+    RETURN_IF_ERROR(parse_lookup_http_frame_from_iobuf(iobuf, request, "request"));
+
+    for (size_t i = 0; i < request->request_columns_size(); i++) {
+        auto pcolumn = request->mutable_request_columns(i);
+        if (UNLIKELY(iobuf->size() < pcolumn->data_size())) {
+            return Status::InternalError(fmt::format("io_buf size {} is less than column data size {}", iobuf->size(),
+                                                     pcolumn->data_size()));
+        }
+        size_t size = iobuf->cutn(pcolumn->mutable_data(), pcolumn->data_size());
+        if (UNLIKELY(size != pcolumn->data_size())) {
+            return Status::InternalError(fmt::format("iobuf read {} != expected {}", size, pcolumn->data_size()));
+        }
+    }
+    if (UNLIKELY(!iobuf->empty())) {
+        return Status::InternalError(
+                fmt::format("lookup http request has {} trailing attachment bytes", iobuf->size()));
+    }
+    return Status::OK();
+}
+
+Status parse_lookup_response_from_http_iobuf(butil::IOBuf* iobuf, PLookUpResponse* response) {
+    return parse_lookup_http_frame_from_iobuf(iobuf, response, "response");
+}
 
 // Copy the prepared request columns into the execution chunk so the local
 // lookup operator can execute without additional marshaling.
@@ -146,6 +205,26 @@ StatusOr<size_t> RemoteLookUpRequestContext::fill_response(const ChunkPtr& resul
 void RemoteLookUpRequestContext::callback(const Status& status) {
     VLOG_FILE << "RemoteLookUpRequestContext callback: " << status.to_string();
     status.to_protobuf(response->mutable_status());
+    auto* brpc_cntl = static_cast<brpc::Controller*>(cntl);
+    if (brpc_cntl->request_protocol() == brpc::PROTOCOL_HTTP) {
+        butil::IOBuf column_attachment;
+        brpc_cntl->response_attachment().swap(column_attachment);
+
+        butil::IOBuf response_iobuf;
+        butil::IOBufAsZeroCopyOutputStream wrapper(&response_iobuf);
+        if (UNLIKELY(!response->SerializeToZeroCopyStream(&wrapper))) {
+            cntl->SetFailed("failed to serialize lookup response protobuf");
+            done->Run();
+            return;
+        }
+        size_t response_size = response_iobuf.size();
+        brpc_cntl->response_attachment().append(&response_size, sizeof(response_size));
+        brpc_cntl->response_attachment().append(response_iobuf);
+
+        size_t attachment_size = column_attachment.size();
+        brpc_cntl->response_attachment().append(&attachment_size, sizeof(attachment_size));
+        brpc_cntl->response_attachment().append(column_attachment);
+    }
     done->Run();
 }
 

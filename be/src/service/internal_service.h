@@ -199,6 +199,9 @@ public:
     void lookup(google::protobuf::RpcController* controller, const PLookUpRequest* request, PLookUpResponse* response,
                 google::protobuf::Closure* done) override;
 
+    void lookup_via_http(google::protobuf::RpcController* controller, const PHttpRequest* request,
+                         PLookUpResponse* response, google::protobuf::Closure* done) override;
+
     void lookup_close(google::protobuf::RpcController* controller, const PLookUpCloseRequest* request,
                       PLookUpCloseResponse* response, google::protobuf::Closure* done) override;
 

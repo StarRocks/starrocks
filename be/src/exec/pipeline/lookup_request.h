@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "base/phmap/phmap.h"
 #include "column/column.h"
 #include "compute_env/sorting/sort_permute.h"
@@ -25,7 +27,14 @@
 #include "storage/range.h"
 #include "storage/rowset/common.h"
 
+namespace butil {
+class IOBuf;
+}
+
 namespace starrocks::pipeline {
+
+Status parse_lookup_request_from_http_iobuf(butil::IOBuf* iobuf, PLookUpRequest* request);
+Status parse_lookup_response_from_http_iobuf(butil::IOBuf* iobuf, PLookUpResponse* response);
 
 // Describes the lifecycle of a single lookup request, regardless of whether
 // it is served locally or remotely. Implementations collect the columns needed
@@ -78,6 +87,7 @@ public:
     PLookUpResponse* response = nullptr;
     ::google::protobuf::Closure* done = nullptr;
     ChunkPtr request_chunk;
+    std::shared_ptr<PLookUpRequest> owned_request;
 };
 using RemoteLookUpRequestContextPtr = std::shared_ptr<RemoteLookUpRequestContext>;
 

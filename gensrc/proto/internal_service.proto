@@ -846,5 +846,6 @@ service PInternalService {
 
     rpc update_transaction_state(PUpdateTransactionStateRequest) returns (PUpdateTransactionStateResponse);
     rpc lookup(PLookUpRequest) returns (PLookUpResponse);
+    rpc lookup_via_http(PHttpRequest) returns (PLookUpResponse);
     rpc lookup_close(PLookUpCloseRequest) returns (PLookUpCloseResponse);
 };
