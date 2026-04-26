@@ -22,6 +22,7 @@
 #include "base/string/slice.h"
 #include "base/uid_util.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/sstable/comparator.h"
@@ -56,6 +57,12 @@ public:
                      KeyIndexSet* found_key_indexes) const;
 
     void get_all_sstable_pbs(PersistentIndexSstableMetaPB* sstable_pbs) const;
+
+    // Force-open every sstable in this fileset that was constructed via lazy mode. Used on
+    // the snapshot-restore-MISS path (see `LakePersistentIndex::realize_filesets_eagerly`)
+    // so the cold rebuild loop can rely on opened sstables. Returns the number of sstables
+    // that were actually realized this call (already-opened sstables are no-ops). Idempotent.
+    StatusOr<int> realize_all_sstables();
 
     // Check whether this fileset contains an SST with the given filename.
     // Cheaper than get_all_sstable_pbs: no protobuf copy, just string comparison.

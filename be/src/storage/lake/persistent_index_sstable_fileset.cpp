@@ -120,9 +120,16 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
     // 0. if single standalone sstable, directly get.
     if (_standalone_sstable != nullptr) {
         DCHECK(_sstable_map.empty());
+        // Lazy-open SSTs (constructed via PersistentIndexSstable::new_sstable_lazy) skip the
+        // OSS Table::Open at init time. Realize the open on the first read that targets the
+        // sstable; ensure_opened() is a no-op for eagerly-opened sstables.
+        RETURN_IF_ERROR(_standalone_sstable->ensure_opened());
         return _standalone_sstable->multi_get(keys, key_indexes, version, values, found_key_indexes);
     }
-    // 1. divide key_indexes into different groups according to sstables
+    // 1. divide key_indexes into different groups according to sstables. The routing uses
+    //    the per-sstable [start_key, end_key] range from the PB metadata, not any data
+    //    inside the SST file, so it is safe even when a target SST is still in deferred-open
+    //    state — only SSTs whose key range overlaps a query key get realized below.
     std::unordered_map<PersistentIndexSstable*, KeyIndexSet> sstable_key_indexes_map;
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("fileset_get_divide_us");
@@ -141,6 +148,7 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
     }
     // 2. multi get from each sstable
     for (const auto& [sstable, sstable_key_indexes] : sstable_key_indexes_map) {
+        RETURN_IF_ERROR(sstable->ensure_opened());
         RETURN_IF_ERROR(sstable->multi_get(keys, sstable_key_indexes, version, values, found_key_indexes));
     }
     return Status::OK();
@@ -157,6 +165,21 @@ void PersistentIndexSstableFileset::get_all_sstable_pbs(PersistentIndexSstableMe
     if (_standalone_sstable != nullptr) {
         sstable_pbs->add_sstables()->CopyFrom(_standalone_sstable->sstable_pb());
     }
+}
+
+StatusOr<int> PersistentIndexSstableFileset::realize_all_sstables() {
+    int realized = 0;
+    for (const auto& [key_pair, sstable] : _sstable_map) {
+        if (!sstable->is_opened()) {
+            RETURN_IF_ERROR(sstable->ensure_opened());
+            ++realized;
+        }
+    }
+    if (_standalone_sstable != nullptr && !_standalone_sstable->is_opened()) {
+        RETURN_IF_ERROR(_standalone_sstable->ensure_opened());
+        ++realized;
+    }
+    return realized;
 }
 
 bool PersistentIndexSstableFileset::contains_sst(const std::string& filename) const {

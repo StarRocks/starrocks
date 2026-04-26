@@ -263,6 +263,53 @@ StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable(
     return std::move(sstable);
 }
 
+StatusOr<PersistentIndexSstableUniquePtr> PersistentIndexSstable::new_sstable_lazy(
+        const PersistentIndexSstablePB& sstable_pb, std::string location, Cache* cache, bool need_filter,
+        const TabletMetadataPtr& metadata, TabletManager* tablet_mgr) {
+    auto sstable = std::make_unique<PersistentIndexSstable>();
+    sstable->_sstable_pb.CopyFrom(sstable_pb);
+    sstable->_lazy_location = std::move(location);
+    sstable->_lazy_cache = cache;
+    sstable->_lazy_need_filter = need_filter;
+    sstable->_lazy_metadata = metadata;
+    sstable->_lazy_tablet_mgr = tablet_mgr;
+    sstable->_lazy_pending.store(true, std::memory_order_release);
+    return std::move(sstable);
+}
+
+Status PersistentIndexSstable::ensure_opened() const {
+    if (!_lazy_pending.load(std::memory_order_acquire)) {
+        return Status::OK();
+    }
+    std::lock_guard<std::mutex> lg(_lazy_open_mutex);
+    if (!_lazy_pending.load(std::memory_order_acquire)) {
+        return Status::OK();
+    }
+    // ensure_opened() is logically const but mutates the deferred-open backing state.
+    auto* mut = const_cast<PersistentIndexSstable*>(this);
+    RandomAccessFileOptions opts;
+    if (!mut->_sstable_pb.encryption_meta().empty()) {
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta(mut->_sstable_pb.encryption_meta()));
+        opts.encryption_info = std::move(info);
+    }
+    ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(opts, mut->_lazy_location));
+    // Reuse the eager init() to avoid duplicating the corruption-retry / delvec-load logic.
+    // init() does `_sstable_pb.CopyFrom(sstable_pb)` so passing the already-stored PB is a no-op
+    // beyond a redundant copy on this rare deferred-open path.
+    PersistentIndexSstablePB pb_copy;
+    pb_copy.CopyFrom(mut->_sstable_pb);
+    RETURN_IF_ERROR(mut->init(std::move(rf), pb_copy, mut->_lazy_cache, mut->_lazy_need_filter, /*delvec=*/nullptr,
+                              mut->_lazy_metadata, mut->_lazy_tablet_mgr));
+    // Clear the captured deferred-open args; we hold no references after this point. The
+    // store-release publishes the open to other threads spinning on the atomic flag.
+    mut->_lazy_location.clear();
+    mut->_lazy_metadata.reset();
+    mut->_lazy_tablet_mgr = nullptr;
+    mut->_lazy_cache = nullptr;
+    mut->_lazy_pending.store(false, std::memory_order_release);
+    return Status::OK();
+}
+
 PersistentIndexSstableStreamBuilder::PersistentIndexSstableStreamBuilder(std::unique_ptr<WritableFile> wf,
                                                                          std::string encryption_meta)
         : _wf(std::move(wf)), _encryption_meta(std::move(encryption_meta)) {

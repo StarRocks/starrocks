@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -87,12 +89,44 @@ public:
                                                                  const TabletMetadataPtr& metadata = nullptr,
                                                                  TabletManager* tablet_mgr = nullptr);
 
+    // Construct a PersistentIndexSstable in deferred-open state. The sstable's PB metadata
+    // (filename, range, fileset_id, max_rss_rowid, encryption_meta) is populated immediately
+    // so the containing fileset's per-key routing (`_sstable_map.upper_bound`) works without
+    // any OSS reads. The actual `sstable::Table::Open` (footer + index + filter + meta-index
+    // block reads) is deferred until the first call that needs it (currently `multi_get` via
+    // `ensure_opened()`). The arguments captured here mirror `new_sstable` so the deferred
+    // open path can be a drop-in for the eager one.
+    static StatusOr<PersistentIndexSstableUniquePtr> new_sstable_lazy(const PersistentIndexSstablePB& sstable_pb,
+                                                                      std::string location, Cache* cache,
+                                                                      bool need_filter,
+                                                                      const TabletMetadataPtr& metadata,
+                                                                      TabletManager* tablet_mgr);
+
+    // Trigger the deferred `Table::Open` if this sstable was constructed via
+    // `new_sstable_lazy`. Idempotent and thread-safe: concurrent callers race on
+    // `_lazy_open_mutex` and only the first one runs the open. After this returns OK the
+    // sstable behaves identically to one constructed via the eager `new_sstable`.
+    Status ensure_opened() const;
+
+    bool is_opened() const { return _sst != nullptr; }
+
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
     std::unique_ptr<sstable::FilterPolicy> _filter_policy{nullptr};
     std::unique_ptr<RandomAccessFile> _rf{nullptr};
     PersistentIndexSstablePB _sstable_pb;
     DelVectorPtr _delvec;
+
+    // Deferred-open state. When `_lazy_pending` is true on a const accessor path, the caller
+    // must invoke `ensure_opened()` before touching `_sst` / `_delvec`. The mutex is mutable
+    // because `ensure_opened()` is logically const (state mutation is internal).
+    mutable std::atomic<bool> _lazy_pending{false};
+    mutable std::mutex _lazy_open_mutex;
+    std::string _lazy_location;
+    Cache* _lazy_cache{nullptr};
+    bool _lazy_need_filter{true};
+    TabletMetadataPtr _lazy_metadata;
+    TabletManager* _lazy_tablet_mgr{nullptr};
 };
 
 class PersistentIndexSstableStreamBuilder {

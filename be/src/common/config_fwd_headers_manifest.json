@@ -725,6 +725,7 @@
         "pk_index_snapshot_gc_interval_sec",
         "enable_pk_index_snapshot_prewarm_on_boot",
         "pk_index_snapshot_prewarm_threads",
+        "enable_pk_index_snapshot_lazy_sst_open",
         "ignore_merge_condition_inside_same_transaction",
         "update_memory_limit_percent",
         "enable_retry_apply",

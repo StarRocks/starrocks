@@ -70,9 +70,24 @@ LakePersistentIndex::~LakePersistentIndex() {
 
 StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_open_sstables_parallel(
         const PersistentIndexSstableMetaPB& sstable_meta, TabletManager* tablet_mgr, int64_t tablet_id, Cache* cache,
-        const TabletMetadataPtr& metadata) {
+        const TabletMetadataPtr& metadata, bool lazy_open) {
     const int num_sstables = sstable_meta.sstables_size();
     std::vector<PersistentIndexSstableUniquePtr> sstables(num_sstables);
+
+    if (lazy_open) {
+        // Stub-only construction: no OSS reads, no thread pool, just attach the PB and the
+        // location string so the sstable can be realized on first multi_get. This is the
+        // hot path for snapshot-HIT loads — the cost we're saving here was up to ~4.3 s p50
+        // of `pindex_init_sst_open_us` measured in iter-052.
+        for (int i = 0; i < num_sstables; i++) {
+            auto& pb = sstable_meta.sstables(i);
+            ASSIGN_OR_RETURN(auto sst,
+                             PersistentIndexSstable::new_sstable_lazy(pb, tablet_mgr->sst_location(tablet_id, pb.filename()),
+                                                                      cache, /*need_filter=*/true, metadata, tablet_mgr));
+            sstables[i] = std::move(sst);
+        }
+        return std::move(sstables);
+    }
 
     std::mutex mutex;
     Status shared_status;
@@ -111,7 +126,7 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
     return std::move(sstables);
 }
 
-Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
+Status LakePersistentIndex::init(const TabletMetadataPtr& metadata, bool lazy_open_ssts) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_init_us");
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
@@ -120,13 +135,16 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     const PersistentIndexSstableMetaPB& sstable_meta = metadata->sstable_meta();
     const int num_sstables = sstable_meta.sstables_size();
     TRACE_COUNTER_INCREMENT("pindex_init_sst_cnt", num_sstables);
+    if (lazy_open_ssts) {
+        TRACE_COUNTER_INCREMENT("pindex_init_lazy_open", 1);
+    }
 
     int64_t sst_open_us = 0;
     std::vector<PersistentIndexSstableUniquePtr> sstables;
     {
         int64_t t_open = GetCurrentTimeMicros();
         ASSIGN_OR_RETURN(sstables, _open_sstables_parallel(sstable_meta, _tablet_mgr, _tablet_id, block_cache->cache(),
-                                                           metadata));
+                                                           metadata, lazy_open_ssts));
         sst_open_us = GetCurrentTimeMicros() - t_open;
     }
 
@@ -164,6 +182,39 @@ Status LakePersistentIndex::init(const TabletMetadataPtr& metadata) {
     // to make sure we can generate sst order by `max_rss_rowid`.
     _memtable = std::make_unique<PersistentIndexMemtable>(_tablet_mgr, _tablet_id, max_rss_rowid);
     return Status::OK();
+}
+
+Status LakePersistentIndex::realize_filesets_eagerly() {
+    // Drive every fileset's underlying sstable to its opened state. The fileset doesn't expose
+    // an "open all" walker, so we fan out via `multi_get` would be wasteful — instead we rely
+    // on `PersistentIndexSstable::ensure_opened()` being public on each sstable. To reach
+    // them we use the existing `get_all_sstable_pbs` introspection only for counting; the
+    // realize itself happens through the fileset's iteration semantics by calling
+    // `ensure_opened()` on each held sstable. Filesets keep their sstables in std::map
+    // (`_sstable_map`) or as a single standalone, neither of which is currently iterable
+    // from the outside — so we walk via a simple multi_get with no keys, which now triggers
+    // ensure_opened() on every routed SST. That would need synthetic keys; instead, expose
+    // a tight public realizer on the fileset.
+    int64_t t_realize = GetCurrentTimeMicros();
+    int realized_cnt = 0;
+    for (auto& fileset : _sstable_filesets) {
+        ASSIGN_OR_RETURN(int n, fileset->realize_all_sstables());
+        realized_cnt += n;
+    }
+    TRACE_COUNTER_INCREMENT("pindex_realize_lazy_us", GetCurrentTimeMicros() - t_realize);
+    TRACE_COUNTER_INCREMENT("pindex_realize_lazy_cnt", realized_cnt);
+    return Status::OK();
+}
+
+bool LakePersistentIndex::snapshot_file_exists(int64_t tablet_id, int64_t captured_version) {
+    if (!config::enable_pk_index_snapshot_persistence) {
+        return false;
+    }
+    std::string path;
+    if (!get_lake_persistent_index_snapshot_path(tablet_id, captured_version, &path).ok()) {
+        return false;
+    }
+    return fs::path_exist(path);
 }
 
 void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes) {
@@ -1190,6 +1241,11 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
             return Status::OK();
         }
         TRACE_COUNTER_INCREMENT("pindex_snapshot_restore_miss", 1);
+        // Snapshot MISS — the cold rebuild loop below reads through the SSTs (load_dels and
+        // get_from_sstables on overlap reads), so any deferred-open sstables from lazy init
+        // must be realized now. Cheap when init() ran in eager mode (every sstable already
+        // opened, this is a pure walk).
+        RETURN_IF_ERROR(realize_filesets_eagerly());
     }
     // 1. create and set key column schema
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata->schema());

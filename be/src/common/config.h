@@ -509,6 +509,14 @@ CONF_Bool(enable_pk_index_snapshot_prewarm_on_boot, "true");
 // dominant cost is the metadata read (OSS round-trip), so a small thread pool overlaps RTTs
 // without saturating CPU. 0 disables pre-warm even when the master switch is on. Default 8.
 CONF_Int32(pk_index_snapshot_prewarm_threads, "8");
+// When a valid PK-index snapshot exists for the loading tablet+version, defer the per-SST
+// `Table::Open` (footer / index / filter block reads from OSS) until the first multi_get
+// that actually targets that SST. The snapshot restore populates the in-memory state so
+// the publish that triggered the load can complete from memtable; SSTs whose key range
+// is not touched by the publish stay unopened. No-op unless
+// enable_pk_index_snapshot_persistence is also true. Default true: when snapshot
+// persistence is on, eager SST opens are wasted work for any tablet whose snapshot HITs.
+CONF_mBool(enable_pk_index_snapshot_lazy_sst_open, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.

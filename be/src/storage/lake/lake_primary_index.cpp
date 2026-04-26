@@ -121,7 +121,15 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
             set_enable_persistent_index(true);
             auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
-            RETURN_IF_ERROR(lake_persistent_index->init(metadata));
+            // Snapshot-HIT-likely loads enter lazy-open mode: a cheap path-existence check
+            // for the on-disk snapshot file gates whether init() builds opened sstables or
+            // deferred stubs. On a HIT the publish that triggered this load completes from
+            // the snapshot's restored memtable; SSTs whose key range never gets queried stay
+            // unopened. On a MISS load_from_lake_tablet realizes them before rebuild.
+            const bool lazy_open_ssts = config::enable_pk_index_snapshot_persistence &&
+                                        config::enable_pk_index_snapshot_lazy_sst_open &&
+                                        LakePersistentIndex::snapshot_file_exists(metadata->id(), base_version);
+            RETURN_IF_ERROR(lake_persistent_index->init(metadata, lazy_open_ssts));
             return lake_persistent_index->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
         default:
@@ -715,8 +723,13 @@ Status LakePrimaryIndex::try_lake_load_from_snapshot(TabletManager* tablet_mgr, 
     // Construct the cloud-native PK index, init from metadata, then call the public restore
     // entry. On miss (NotFound) we leave _loaded=false so the caller does not insert a
     // half-built entry into _index_cache; the next publish path will do the cold rebuild.
+    // Boot prewarm only succeeds when the snapshot file is present, so use lazy-open mode
+    // to avoid the OSS Table::Open work for tablets that won't be touched until first
+    // publish. The publish-time lake_load goes through `LakePrimaryIndex::load_from_lake_tablet`
+    // and the deferred opens are realized on demand by `multi_get` via `ensure_opened()`.
     auto persistent = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
-    RETURN_IF_ERROR(persistent->init(metadata));
+    const bool lazy_open_ssts = config::enable_pk_index_snapshot_lazy_sst_open;
+    RETURN_IF_ERROR(persistent->init(metadata, lazy_open_ssts));
     Status restore_st = persistent->try_restore_from_local_snapshot(tablet_mgr, metadata, base_version);
     if (!restore_st.ok()) {
         return restore_st;
