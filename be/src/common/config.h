@@ -517,6 +517,18 @@ CONF_Int32(pk_index_snapshot_prewarm_threads, "8");
 // enable_pk_index_snapshot_persistence is also true. Default true: when snapshot
 // persistence is on, eager SST opens are wasted work for any tablet whose snapshot HITs.
 CONF_mBool(enable_pk_index_snapshot_lazy_sst_open, "true");
+// During boot prewarm, after a snapshot HIT restores in-memory state, eagerly open every
+// SST that the snapshot covers so footer/index/metaindex/filter blocks are populated in
+// `PersistentIndexBlockCache` (the LRU consulted by Table::Open / Table::ApproximateOffsetOf).
+// First publish on each prewarmed tablet then finds `_sst != nullptr` (ensure_opened()
+// becomes a no-op) AND its block reads HIT the LRU. Targets the residual cold-burst tail
+// observed in iter-056: `pindex_ensure_opened_us` p50 = 5.13 s (84% of `parallel_upsert_wait_us`)
+// when `enable_pk_index_snapshot_lazy_sst_open=true` because the OSS RTT cost was deferred
+// from `init()` to first multi_get. No-op unless enable_pk_index_snapshot_persistence,
+// enable_pk_index_snapshot_prewarm_on_boot, and enable_pk_index_snapshot_lazy_sst_open are all
+// also true. Boot is async: prewarm runs on the same detached worker pool that walks the
+// snapshot root, so this only extends boot CPU/IO usage, not BRPC ready time.
+CONF_Bool(enable_pk_index_snapshot_block_prewarm, "true");
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 // The minimum rows threshold to enable parallel get for primary key index in shared-data mode.

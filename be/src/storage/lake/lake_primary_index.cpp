@@ -746,6 +746,30 @@ Status LakePrimaryIndex::try_lake_load_from_snapshot(TabletManager* tablet_mgr, 
         return restore_st;
     }
 
+    // Block prewarm: when lazy-open is on, restore alone leaves every SST in the deferred
+    // state — the first publish-time multi_get pays the OSS Table::Open cost (footer / index /
+    // metaindex / filter block reads). Iter-056 measured this at 5.13 s p50 on cold-burst
+    // events, dominating `parallel_upsert_wait_us` 6.14 s. Eagerly opening every SST here
+    // populates `PersistentIndexBlockCache` so the first publish finds the SST already
+    // opened AND its block reads HIT the LRU. Best-effort: any failure leaves the SSTs in
+    // their pre-existing lazy state so the publish path's existing `ensure_opened()` is the
+    // fallback. Net effect on the prewarm path: extra O(num_ssts × block_read) work on the
+    // boot worker thread, no change to BRPC ready time (boot prewarm is detached anyway).
+    if (lazy_open_ssts && config::enable_pk_index_snapshot_block_prewarm) {
+        const int64_t prewarm_start_us = GetCurrentTimeMicros();
+        Status realize_st = persistent->realize_filesets_eagerly();
+        const int64_t prewarm_us = GetCurrentTimeMicros() - prewarm_start_us;
+        if (!realize_st.ok()) {
+            LOG(WARNING) << "pk-index snapshot block prewarm: realize_filesets_eagerly failed tablet="
+                         << metadata->id() << " version=" << base_version << " elapsed_us=" << prewarm_us
+                         << " : " << realize_st.to_string()
+                         << " — first publish will fall back to per-multi_get ensure_opened()";
+        } else {
+            VLOG(1) << "pk-index snapshot block prewarm: tablet=" << metadata->id()
+                    << " version=" << base_version << " elapsed_us=" << prewarm_us;
+        }
+    }
+
     _persistent_index = std::move(persistent);
     set_enable_persistent_index(true);
     _status = Status::OK();
