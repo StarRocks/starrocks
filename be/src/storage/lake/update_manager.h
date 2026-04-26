@@ -187,6 +187,22 @@ public:
     // which a clean capture can complete.
     void pre_shutdown_hook();
 
+    // Symmetric counterpart to `pre_shutdown_hook`, invoked from the BE startup
+    // sequence (after exec_env / lake tablet manager are initialised, before BRPC
+    // accepts connections). Walks `<root>/lake_pk_snapshot/`, picks the newest
+    // `v<version>.snapshot` per tablet directory, and asynchronously restores each
+    // tablet into `_index_cache`. Per-tablet failures (snapshot stale, metadata
+    // unavailable, schema/version mismatch) are logged but do not block the walk
+    // or block subsequent publishes — those tablets simply fall back to the
+    // existing lazy-restore-on-publish path.
+    //
+    // Returns immediately after dispatching work; the actual restores happen on
+    // a small background thread pool so that a slow OSS metadata RTT for one
+    // tablet does not block the rest. Tagged best-effort: a no-op when the
+    // master switch is off, the snapshot root is absent, or the directory is
+    // empty.
+    void boot_prewarm_hook();
+
     // Record the latest TabletMetadataPtr seen for `tablet_id` so that — if the
     // tablet is later evicted from `_index_cache` — shutdown can still write a
     // stub snapshot referencing the SST list at this version. Called from

@@ -680,4 +680,54 @@ Status LakePrimaryIndex::try_snapshot_to_local(TabletManager* tablet_mgr) {
     return lake_persistent_index->try_serialize_to_local_snapshot(tablet_mgr, *metadata_or);
 }
 
+Status LakePrimaryIndex::try_lake_load_from_snapshot(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+                                                     int64_t base_version) {
+    if (tablet_mgr == nullptr || metadata == nullptr) {
+        return Status::InvalidArgument("tablet_mgr / metadata must be non-null");
+    }
+    // Mirror lake_load: take _lock, early-return if already loaded at a fresh version.
+    std::lock_guard<std::mutex> lg(_lock);
+    if (_loaded && !need_rebuild()) {
+        return _status;
+    }
+    if (need_rebuild()) {
+        // Defer to the publish-path lake_load — pre-warm has nothing to add when a rebuild
+        // is required, and we explicitly do NOT want to run the cold-rebuild loop here.
+        return Status::NotFound("rebuild required, skip prewarm");
+    }
+    if (!metadata->enable_persistent_index() ||
+        metadata->persistent_index_type() != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return Status::NotFound("prewarm only applies to CLOUD_NATIVE persistent-index tablets");
+    }
+
+    _tablet_id = metadata->id();
+
+    // Build the same key schema lake_load would set up so a subsequent publish does not
+    // need to redo this work.
+    auto tablet_schema = std::make_shared<TabletSchema>(metadata->schema());
+    std::vector<ColumnId> pk_columns(tablet_schema->num_key_columns());
+    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
+        pk_columns[i] = static_cast<ColumnId>(i);
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+    _set_schema(pkey_schema);
+
+    // Construct the cloud-native PK index, init from metadata, then call the public restore
+    // entry. On miss (NotFound) we leave _loaded=false so the caller does not insert a
+    // half-built entry into _index_cache; the next publish path will do the cold rebuild.
+    auto persistent = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
+    RETURN_IF_ERROR(persistent->init(metadata));
+    Status restore_st = persistent->try_restore_from_local_snapshot(tablet_mgr, metadata, base_version);
+    if (!restore_st.ok()) {
+        return restore_st;
+    }
+
+    _persistent_index = std::move(persistent);
+    set_enable_persistent_index(true);
+    _status = Status::OK();
+    _loaded = true;
+    update_data_version(base_version);
+    return Status::OK();
+}
+
 } // namespace starrocks::lake

@@ -111,6 +111,27 @@ Status read_lake_persistent_index_snapshot(const std::string& path, LakePersiste
     return Status::OK();
 }
 
+int64_t parse_snapshot_version_from_filename(std::string_view name) {
+    constexpr std::string_view kSuffix = ".snapshot";
+    if (name.size() <= kSuffix.size() + 1 || name[0] != 'v' ||
+        name.substr(name.size() - kSuffix.size()) != kSuffix) {
+        return -1;
+    }
+    int64_t version = 0;
+    for (size_t i = 1; i < name.size() - kSuffix.size(); i++) {
+        const char c = name[i];
+        if (c < '0' || c > '9') {
+            return -1;
+        }
+        // Bound the accumulator by INT63_MAX/10 so digit overflow is detected before it wraps.
+        if (version > (std::numeric_limits<int64_t>::max() - 9) / 10) {
+            return -1;
+        }
+        version = version * 10 + (c - '0');
+    }
+    return version;
+}
+
 Status get_lake_persistent_index_snapshot_root(std::string* root) {
     if (root == nullptr) {
         return Status::InvalidArgument("root out-param is null");

@@ -89,6 +89,14 @@ Status validate_lake_persistent_index_snapshot(const LakePersistentIndexSnapshot
                                                int64_t expected_tablet_id, int64_t expected_version,
                                                int64_t expected_schema_id, int64_t now_unix_sec, int64_t max_age_sec);
 
+// Parse the integer version embedded in a snapshot filename of the form
+// `v<NNN>.snapshot` (the form produced by `get_lake_persistent_index_snapshot_path`).
+// Returns -1 on any non-conforming name (wrong prefix / suffix, non-digit characters,
+// digit overflow). The boot-time pre-warm walk and any future tooling that needs to
+// pick "latest version per tablet" share this parser to keep the on-disk filename
+// schema in one place.
+int64_t parse_snapshot_version_from_filename(std::string_view name);
+
 // Construct and write a "stub" snapshot for a tablet that is NOT currently in
 // `_index_cache` but whose recent metadata is still tracked. The stub records:
 //   - the tablet metadata version and schema id (validity-rule inputs)

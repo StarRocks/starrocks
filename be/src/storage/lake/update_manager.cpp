@@ -14,6 +14,10 @@
 
 #include "storage/lake/update_manager.h"
 
+#include <atomic>
+#include <thread>
+#include <vector>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -116,6 +120,183 @@ void UpdateManager::pre_shutdown_hook() {
     // but recently loaded" tablets uncaptured, which then incur a full cold
     // rebuild on the next BE start. The stub-snapshot walk closes that gap.
     _capture_evicted_tablet_snapshots("pre-shutdown-evicted");
+}
+
+namespace {
+
+struct PrewarmTarget {
+    int64_t tablet_id = 0;
+    int64_t version = 0;
+};
+
+} // namespace
+
+void UpdateManager::boot_prewarm_hook() {
+    if (!config::enable_pk_index_snapshot_persistence || !config::enable_pk_index_snapshot_prewarm_on_boot) {
+        return;
+    }
+    if (_tablet_mgr == nullptr) {
+        return;
+    }
+    const int32_t worker_threads = config::pk_index_snapshot_prewarm_threads;
+    if (worker_threads <= 0) {
+        return;
+    }
+
+    std::string snapshot_root;
+    Status root_st = get_lake_persistent_index_snapshot_root(&snapshot_root);
+    if (!root_st.ok()) {
+        LOG(INFO) << "pk-index snapshot prewarm: no snapshot root derivable: " << root_st.to_string();
+        return;
+    }
+    if (!fs::path_exist(snapshot_root)) {
+        LOG(INFO) << "pk-index snapshot prewarm: snapshot root " << snapshot_root << " does not exist; nothing to do";
+        return;
+    }
+    auto fs_or = FileSystemFactory::CreateSharedFromString(snapshot_root);
+    if (!fs_or.ok()) {
+        LOG(WARNING) << "pk-index snapshot prewarm: cannot open snapshot root " << snapshot_root << ": "
+                     << fs_or.status().to_string();
+        return;
+    }
+    auto fs = fs_or.value();
+
+    // Walk top-level entries: each is a per-tablet directory `<tablet_id>/`.
+    std::vector<std::string> tablet_dirs;
+    Status iter_st = fs->iterate_dir(snapshot_root, [&](std::string_view name) -> bool {
+        if (name == "." || name == "..") return true;
+        tablet_dirs.emplace_back(name);
+        return true;
+    });
+    if (!iter_st.ok()) {
+        LOG(WARNING) << "pk-index snapshot prewarm: iterate_dir failed for " << snapshot_root << ": "
+                     << iter_st.to_string();
+        return;
+    }
+
+    // For each tablet dir, find the highest-versioned snapshot file.
+    std::vector<PrewarmTarget> targets;
+    targets.reserve(tablet_dirs.size());
+    for (const auto& dir_name : tablet_dirs) {
+        // The directory name must be a positive int — skip anything else (best-effort: someone
+        // dropped a stray file in the snapshot root).
+        int64_t tablet_id = 0;
+        if (dir_name.empty()) continue;
+        bool numeric = true;
+        for (char c : dir_name) {
+            if (c < '0' || c > '9') {
+                numeric = false;
+                break;
+            }
+            tablet_id = tablet_id * 10 + (c - '0');
+        }
+        if (!numeric || tablet_id <= 0) continue;
+
+        const std::string tablet_dir = snapshot_root + dir_name;
+        int64_t best_version = -1;
+        Status per_tablet_iter = fs->iterate_dir(tablet_dir, [&](std::string_view name) -> bool {
+            if (name == "." || name == "..") return true;
+            const int64_t v = parse_snapshot_version_from_filename(name);
+            if (v > best_version) {
+                best_version = v;
+            }
+            return true;
+        });
+        if (!per_tablet_iter.ok()) {
+            // Per-tablet iteration failure is best-effort; continue with the next tablet.
+            VLOG(1) << "pk-index snapshot prewarm: iterate_dir failed for " << tablet_dir << ": "
+                    << per_tablet_iter.to_string();
+            continue;
+        }
+        if (best_version < 0) continue;
+        targets.push_back({tablet_id, best_version});
+    }
+
+    if (targets.empty()) {
+        LOG(INFO) << "pk-index snapshot prewarm: snapshot root " << snapshot_root
+                  << " has no usable snapshot files; nothing to pre-warm";
+        return;
+    }
+
+    // Run the per-tablet pre-warm on a detached background thread that fans out to
+    // `worker_threads` worker threads. Boot does not block on completion: the BE is
+    // ready to accept requests immediately, and any tablet whose snapshot has not yet
+    // been restored will hit the existing lazy-restore-on-publish path on first use.
+    LOG(INFO) << "pk-index snapshot prewarm: dispatching " << targets.size() << " tablet(s) across "
+              << worker_threads << " worker thread(s) from " << snapshot_root;
+
+    auto walker = [this, targets = std::move(targets), worker_threads, snapshot_root]() mutable {
+        std::atomic<size_t> next{0};
+        std::atomic<int64_t> ok{0};
+        std::atomic<int64_t> miss{0};
+        std::atomic<int64_t> failed{0};
+
+        auto worker_fn = [&]() {
+            while (true) {
+                const size_t i = next.fetch_add(1, std::memory_order_relaxed);
+                if (i >= targets.size()) {
+                    return;
+                }
+                const auto& t = targets[i];
+
+                auto metadata_or =
+                        _tablet_mgr->get_tablet_metadata(t.tablet_id, t.version, /*fill_cache=*/false);
+                if (!metadata_or.ok()) {
+                    // Most common reason here is that the FE has advanced this tablet's metadata
+                    // beyond the snapshot's captured_version, so the exact-version object no
+                    // longer exists. Fall back to lazy-restore on the next publish.
+                    miss.fetch_add(1, std::memory_order_relaxed);
+                    VLOG(1) << "pk-index snapshot prewarm: get_tablet_metadata failed tablet=" << t.tablet_id
+                            << " version=" << t.version << ": " << metadata_or.status().to_string();
+                    continue;
+                }
+                auto metadata = std::move(metadata_or).value();
+
+                // The publish path uses the same `get_or_create` lookup; pre-warm reuses it so
+                // the eventual publish lookup finds our entry.
+                auto* index_entry = _index_cache.get_or_create(metadata->id());
+                index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
+                auto& index = index_entry->value();
+                Status restore_st = index.try_lake_load_from_snapshot(_tablet_mgr, metadata, t.version);
+                if (!restore_st.ok()) {
+                    // Pre-warm did not populate this entry; remove it so the publish path
+                    // creates a fresh one and runs the cold rebuild without any partial state.
+                    if (restore_st.is_not_found()) {
+                        miss.fetch_add(1, std::memory_order_relaxed);
+                    } else {
+                        failed.fetch_add(1, std::memory_order_relaxed);
+                        LOG(WARNING) << "pk-index snapshot prewarm: try_lake_load_from_snapshot failed tablet="
+                                     << t.tablet_id << " version=" << t.version << ": " << restore_st.to_string();
+                    }
+                    _index_cache.remove(index_entry);
+                    continue;
+                }
+                _index_cache.update_object_size(index_entry, index.memory_usage());
+                // Track the metadata so a stub snapshot can still be captured at shutdown if
+                // this entry is later evicted before any publish ever loads it. Mirrors the
+                // call inside `prepare_primary_index`.
+                note_pk_tablet_metadata(metadata->id(), metadata);
+                _index_cache.release(index_entry);
+                ok.fetch_add(1, std::memory_order_relaxed);
+            }
+        };
+
+        std::vector<std::thread> workers;
+        workers.reserve(worker_threads);
+        for (int32_t w = 0; w < worker_threads; w++) {
+            workers.emplace_back(worker_fn);
+        }
+        for (auto& w : workers) {
+            w.join();
+        }
+
+        LOG(INFO) << "pk-index snapshot prewarm: complete root=" << snapshot_root << " walked=" << targets.size()
+                  << " ok=" << ok.load(std::memory_order_relaxed)
+                  << " miss=" << miss.load(std::memory_order_relaxed)
+                  << " failed=" << failed.load(std::memory_order_relaxed);
+    };
+
+    std::thread(std::move(walker)).detach();
 }
 
 void UpdateManager::note_pk_tablet_metadata(int64_t tablet_id, const TabletMetadataPtr& metadata) {

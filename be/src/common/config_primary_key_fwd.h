@@ -100,6 +100,20 @@ CONF_mBool(pk_index_snapshot_capture_on_eviction, "false");
 // removes files older than pk_index_snapshot_max_age_sec. 0 disables GC. Default 30 minutes.
 CONF_mInt64(pk_index_snapshot_gc_interval_sec, "1800");
 
+// Whether the BE pre-warms the PK-index cache from on-disk snapshot files at startup. When
+// enabled, the BE walks `<root>/lake_pk_snapshot/` after exec_env init and asynchronously
+// restores each tablet into `_index_cache` so that the first publish on each tablet hits a
+// warm cache rather than paying the lazy-restore latency. No-op unless
+// enable_pk_index_snapshot_persistence is also true. Default true so that any deployment that
+// has opted into snapshot persistence gets the boot-time win for free.
+CONF_Bool(enable_pk_index_snapshot_prewarm_on_boot, "true");
+
+// How many tablets the boot-time pre-warm walk attempts in parallel. Each task does one
+// tablet-metadata fetch + one snapshot-file read + one bulk_insert into the cache; the
+// dominant cost is the metadata read (OSS round-trip), so a small thread pool overlaps RTTs
+// without saturating CPU. 0 disables pre-warm even when the master switch is on. Default 8.
+CONF_Int32(pk_index_snapshot_prewarm_threads, "8");
+
 // Whether enable parallel get for primary key index in shared-data mode.
 CONF_mBool(enable_pk_index_parallel_execution, "true");
 

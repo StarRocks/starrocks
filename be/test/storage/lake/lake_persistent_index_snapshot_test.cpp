@@ -392,4 +392,40 @@ TEST(LakePersistentIndexSnapshotStubTest, write_then_read_roundtrip) {
     EXPECT_TRUE(mismatch_st.is_not_found()) << mismatch_st.to_string();
 }
 
+// Boot-time pre-warm shares this filename parser with the GC walk; verify that
+// well-formed names round-trip and that every malformed shape is rejected with -1.
+// A regression in either direction would silently degrade pre-warm coverage (false
+// negatives skip valid snapshots; false positives could feed a non-existent version
+// into get_tablet_metadata at boot).
+TEST(LakePersistentIndexSnapshotParse, well_formed_versions) {
+    EXPECT_EQ(0, parse_snapshot_version_from_filename("v0.snapshot"));
+    EXPECT_EQ(7, parse_snapshot_version_from_filename("v7.snapshot"));
+    EXPECT_EQ(42, parse_snapshot_version_from_filename("v42.snapshot"));
+    EXPECT_EQ(123456789012LL, parse_snapshot_version_from_filename("v123456789012.snapshot"));
+}
+
+TEST(LakePersistentIndexSnapshotParse, rejects_malformed_names) {
+    // Wrong prefix.
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("7.snapshot"));
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("V7.snapshot"));
+    // Wrong suffix.
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("v7.snap"));
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("v7"));
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("v7.snapshot.bak"));
+    // Empty version digit run.
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("v.snapshot"));
+    // Non-digit in the version field.
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("v7a.snapshot"));
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("v-1.snapshot"));
+    // Empty / too-short to be valid.
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename(""));
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename(".snapshot"));
+}
+
+TEST(LakePersistentIndexSnapshotParse, rejects_overflow) {
+    // 19 nines fit in int63; a 20th digit would overflow int64. We only need to assert that
+    // an obviously over-sized digit string returns -1 rather than wrapping into a bogus value.
+    EXPECT_EQ(-1, parse_snapshot_version_from_filename("v99999999999999999999.snapshot"));
+}
+
 } // namespace starrocks::lake
