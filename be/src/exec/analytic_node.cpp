@@ -22,6 +22,7 @@
 #include "common/runtime_profile.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/hash_partition_context.h"
 #include "exec/pipeline/hash_partition_sink_operator.h"
 #include "exec/pipeline/hash_partition_source_operator.h"
@@ -116,14 +117,14 @@ StatusOr<pipeline::OpFactories> AnalyticNode::decompose_to_pipeline(pipeline::Pi
 
     ops_with_sink.emplace_back(
             std::make_shared<AnalyticSinkOperatorFactory>(context->next_operator_id(), id(), _tnode, analytor_factory));
-    this->init_runtime_filter_for_operator(ops_with_sink.back().get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, ops_with_sink.back().get(), context, rc_rf_probe_collector);
     context->add_pipeline(ops_with_sink);
 
     OpFactories ops_with_source;
     auto source_op =
             std::make_shared<AnalyticSourceOperatorFactory>(context->next_operator_id(), id(), analytor_factory);
     source_op->set_skewed(is_skewed);
-    this->init_runtime_filter_for_operator(source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, source_op.get(), context, rc_rf_probe_collector);
     context->inherit_upstream_source_properties(source_op.get(), upstream_source_op);
     ops_with_source.push_back(std::move(source_op));
 

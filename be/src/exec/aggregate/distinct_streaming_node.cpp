@@ -17,6 +17,7 @@
 #include "exec/aggregator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_source_operator.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -57,12 +58,12 @@ StatusOr<pipeline::OpFactories> DistinctStreamingNode::decompose_to_pipeline(
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_sink_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_sink_op.get(), context, rc_rf_probe_collector);
     ops_with_sink.emplace_back(std::move(agg_sink_op));
 
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, agg_source_op.get(), context, rc_rf_probe_collector);
     ops_with_source.push_back(std::move(agg_source_op));
 
     if (should_cache) {

@@ -212,17 +212,14 @@ public:
 
     std::set<TPlanNodeId>& local_rf_waiting_set() { return _local_rf_waiting_set; }
 
-    // initialize OperatorFactories' fields involving runtime filters.
-    void init_runtime_filter_for_operator(OperatorFactory* op, pipeline::PipelineBuilderContext* context,
-                                          const RcRfProbeCollectorPtr& rc_rf_probe_collector);
+    const std::vector<SlotId>& filter_null_value_columns() const { return _filter_null_value_columns; }
+    const std::vector<TupleSlotMapping>& tuple_slot_mappings() const { return _tuple_slot_mappings; }
 
     // Extract node id from p->name().
     static int get_node_id_from_profile(RuntimeProfile* p);
 
     // Names of counters shared by all exec nodes
     static const std::string ROW_THROUGHPUT_COUNTER;
-
-    static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
     void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
 

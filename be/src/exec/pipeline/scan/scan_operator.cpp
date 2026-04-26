@@ -23,6 +23,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/olap_scan_node.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/query_context.h"
@@ -709,7 +710,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
     }
 
     if ((!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) && !ops.back()->has_topn_filter()) {
-        ExecNode::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
+        pipeline::may_add_chunk_accumulate_operator(ops, context, scan_node->id());
     }
 
     ops = context->maybe_interpolate_collect_stats(context->runtime_state(), scan_node->id(), ops);

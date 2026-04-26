@@ -21,6 +21,7 @@
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_heap_sort.h"
 #include "exec/chunks_sorter_topn.h"
+#include "exec/pipeline/exec_node_pipeline_adapter.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -236,7 +237,7 @@ StatusOr<pipeline::OpFactories> TopNNode::_decompose_to_pipeline(pipeline::Pipel
             _early_materialized_slots, spill_channel_factory);
 
     // Initialize OperatorFactory's fields involving runtime filters.
-    this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
+    pipeline::init_runtime_filter_for_operator(*this, sink_operator.get(), context, rc_rf_probe_collector);
 
     OpFactories operators_source_with_sort;
     SourceOperatorFactoryPtr source_operator;
