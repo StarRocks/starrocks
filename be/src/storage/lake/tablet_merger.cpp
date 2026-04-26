@@ -68,6 +68,7 @@ bvar::Adder<int64_t> g_tablet_merge_dcg_rebuild_fallback_not_supported_total(
 // translation would land outside the merged metadata's rowset coverage.
 extern bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_needs_rebuild_total;
 extern bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_rebuild_failed_total;
+extern bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_rebuild_dropped_entries_total;
 
 namespace starrocks::lake {
 
@@ -1370,9 +1371,9 @@ static StatusOr<uint32_t> remap_stored_rssid_for_rebuild(
         const std::unordered_set<uint32_t>& covered_rssids) {
     auto it = source_rssid_to_rowset.find(stored_rssid);
     if (it == source_rssid_to_rowset.end()) {
-        return Status::Corruption(fmt::format(
+        return Status::NotFound(fmt::format(
                 "rebuild_sstable: stored rssid {} has no owning (rowset, segment) in source child tablet {} "
-                "(offset={})",
+                "(offset={}); compacted-away in this child, drop and rely on compaction-output sstable",
                 stored_rssid, source_tablet_id, rssid_offset));
     }
     const RowsetMetadataPB* src = it->second.rowset;
@@ -1484,6 +1485,7 @@ StatusOr<std::optional<PersistentIndexSstablePB>> rebuild_sstable_with_per_key_r
     bool any_real_value_seen = false;
     bool saw_any_tombstone = false;
     int64_t key_count = 0;
+    int64_t dropped_entry_count = 0;
     while (iter->Valid()) {
         Slice key = iter->key();
         Slice value_slice = iter->value();
@@ -1492,22 +1494,38 @@ StatusOr<std::optional<PersistentIndexSstablePB>> rebuild_sstable_with_per_key_r
         if (!value_pb.ParseFromArray(value_slice.data, value_slice.size)) {
             return Status::Corruption("rebuild_sstable: failed to parse IndexValuesWithVerPB");
         }
+        IndexValuesWithVerPB out_pb;
         for (auto& v : *value_pb.mutable_values()) {
             // Tombstone (NullIndexValue): pass through verbatim, do NOT remap.
             if (v.rssid() == kRebuildNullRssid && v.rowid() == kRebuildNullRowid) {
                 saw_any_tombstone = true;
+                *out_pb.add_values() = v;
                 continue;
             }
-            // Real entry: remap rssid via source-lineage helper.
-            ASSIGN_OR_RETURN(uint32_t new_rssid,
-                             remap_stored_rssid_for_rebuild(v.rssid(), source_rssid_to_rowset, ctx.rssid_offset(),
-                                                            shared_rssid_lookup, source_tablet_id, covered_rssids));
+            // Real entry: remap via source-lineage helper. NotFound → drop
+            // (compaction-output sstable in merged metadata covers the key).
+            auto remap_result = remap_stored_rssid_for_rebuild(v.rssid(), source_rssid_to_rowset, ctx.rssid_offset(),
+                                                               shared_rssid_lookup, source_tablet_id, covered_rssids);
+            if (!remap_result.ok()) {
+                if (remap_result.status().is_not_found()) {
+                    ++dropped_entry_count;
+                    g_tablet_reshard_merge_sstable_rebuild_dropped_entries_total << 1;
+                    continue;
+                }
+                return remap_result.status();
+            }
+            uint32_t new_rssid = remap_result.value();
             v.set_rssid(new_rssid);
+            *out_pb.add_values() = v;
             any_real_value_seen = true;
             max_remapped_rssid = std::max(max_remapped_rssid, new_rssid);
         }
+        if (out_pb.values_size() == 0) {
+            iter->Next();
+            continue;
+        }
         std::string serialized;
-        if (!value_pb.SerializeToString(&serialized)) {
+        if (!out_pb.SerializeToString(&serialized)) {
             return Status::InternalError("rebuild_sstable: failed to serialize IndexValuesWithVerPB");
         }
         RETURN_IF_ERROR(builder.Add(key, Slice(serialized)));
@@ -1515,6 +1533,11 @@ StatusOr<std::optional<PersistentIndexSstablePB>> rebuild_sstable_with_per_key_r
         iter->Next();
     }
     RETURN_IF_ERROR(iter->status());
+    if (dropped_entry_count > 0) {
+        LOG(WARNING) << "rebuild_sstable: dropped " << dropped_entry_count
+                     << " entries with compacted-away source rssid (sstable=" << input_pb.filename()
+                     << ", source_tablet=" << source_tablet_id << ", merged_tablet=" << merged_tablet_id << ")";
+    }
 
     // Empty-output case: no keys yielded by the iterator (all delete-marked).
     // Return nullopt so the caller skips adding an empty PB to merged metadata.
