@@ -135,21 +135,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(storage_engine->start_bg_threads());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
-#ifndef __APPLE__
-    // Symmetric counterpart to pre_shutdown_hook: kick off boot-time pre-warm of the PK-index
-    // cache from on-disk snapshot files now that exec_env and the lake tablet manager are up.
-    // The hook returns immediately after dispatching work to a background thread pool, so this
-    // does NOT block the rest of the startup sequence — the BRPC / HTTP servers come up at
-    // their normal time and any tablet not yet pre-warmed falls back to the lazy-restore-on-
-    // publish path on first access. No-op when snapshot persistence or pre-warm is disabled.
-    if (auto* lake_tablet_mgr = exec_env->lake_tablet_manager()) {
-        if (auto* update_mgr = lake_tablet_mgr->update_mgr()) {
-            update_mgr->boot_prewarm_hook();
-        }
-    }
-    LOG(INFO) << process_name << " start step " << start_step++ << ": pk-index snapshot prewarm dispatched";
-#endif
-
     [[maybe_unused]] bool use_same_datacache_instance = false;
 #ifdef USE_STAROS
 #ifndef __APPLE__
@@ -170,6 +155,24 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 #ifndef __APPLE__
     // Register datacache metrics
     register_datacache_metrics(use_same_datacache_instance);
+
+    // Symmetric counterpart to pre_shutdown_hook: kick off boot-time pre-warm of the PK-index
+    // cache from on-disk snapshot files. The hook fans out to a detached worker pool that
+    // calls `TabletManager::get_tablet_metadata()` for each tablet — which routes through
+    // `StarletLocationProvider::real_location()` → `StarOSWorker::retrieve_shard_info()`.
+    // That dependency means the hook MUST be dispatched AFTER `init_staros_worker(...)` has
+    // run; firing it earlier (right after `start_bg_threads()`) raced the worker init and
+    // SIGSEGV'd in `retrieve_shard_info` on cold boot in iter-042.
+    // The hook returns immediately after dispatching to a background thread pool, so the
+    // BRPC / HTTP servers below come up at their normal time and any tablet not yet
+    // pre-warmed falls back to the lazy-restore-on-publish path on first access. No-op when
+    // snapshot persistence or pre-warm is disabled.
+    if (auto* lake_tablet_mgr = exec_env->lake_tablet_manager()) {
+        if (auto* update_mgr = lake_tablet_mgr->update_mgr()) {
+            update_mgr->boot_prewarm_hook();
+        }
+    }
+    LOG(INFO) << process_name << " start step " << start_step++ << ": pk-index snapshot prewarm dispatched";
 #endif
 
     // set up thrift client before providing any service to the external
