@@ -81,9 +81,9 @@ StatusOr<std::vector<PersistentIndexSstableUniquePtr>> LakePersistentIndex::_ope
         // of `pindex_init_sst_open_us` measured in iter-052.
         for (int i = 0; i < num_sstables; i++) {
             auto& pb = sstable_meta.sstables(i);
-            ASSIGN_OR_RETURN(auto sst,
-                             PersistentIndexSstable::new_sstable_lazy(pb, tablet_mgr->sst_location(tablet_id, pb.filename()),
-                                                                      cache, /*need_filter=*/true, metadata, tablet_mgr));
+            ASSIGN_OR_RETURN(auto sst, PersistentIndexSstable::new_sstable_lazy(
+                                               pb, tablet_mgr->sst_location(tablet_id, pb.filename()), cache,
+                                               /*need_filter=*/true, metadata, tablet_mgr));
             sstables[i] = std::move(sst);
         }
         return std::move(sstables);
