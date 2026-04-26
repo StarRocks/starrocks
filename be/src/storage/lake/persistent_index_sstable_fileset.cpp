@@ -18,6 +18,7 @@
 
 #include "base/debug/trace.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/thread/thread.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/persistent_index.h"
@@ -155,8 +156,16 @@ Status PersistentIndexSstableFileset::multi_get(const Slice* keys, const KeyInde
     //    SSTs. Concurrent inserts into the shared `found_key_indexes` set are serialised
     //    under a mutex.
     auto* pool = ExecEnv::GetInstance() != nullptr ? ExecEnv::GetInstance()->pk_index_execution_thread_pool() : nullptr;
-    const bool parallel =
-            config::enable_pk_index_multi_get_parallel && sstable_key_indexes_map.size() > 1 && pool != nullptr;
+    // Skip parallel dispatch when the caller is itself a worker on the same pool. Otherwise
+    // `token->wait()` below trips the pool's deadlock-self-submit check (FATAL in
+    // ThreadPool::check_not_pool_thread_unlocked). The reentrant case is real on the cold-rebuild
+    // path: `UpdateManager::_do_update` already submits per-segment `parallel_get` /
+    // `parallel_upsert` tasks to `pk_index_execution_thread_pool`, which call back into
+    // `LakePersistentIndex::get` -> `get_from_sstables` -> this `multi_get`.
+    Thread* cur = Thread::current_thread();
+    const bool on_pool_worker = cur != nullptr && cur->name() == "cloud_native_pk_index_execution";
+    const bool parallel = config::enable_pk_index_multi_get_parallel && sstable_key_indexes_map.size() > 1 &&
+                          pool != nullptr && !on_pool_worker;
     if (parallel) {
         TRACE_COUNTER_SCOPE_LATENCY_US("fileset_multi_get_parallel_us");
         auto token = pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
