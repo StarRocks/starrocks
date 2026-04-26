@@ -62,6 +62,17 @@ public:
 
     bool has_shared_rssid_mapping() const { return !_shared_rssid_map.empty(); }
 
+    // Returns the canonical rssid if |rssid| was deduped, else std::nullopt.
+    // Lets callers distinguish "explicit dedup remap" from "default offset map"
+    // without falling through map_rssid's offset path.
+    std::optional<uint32_t> shared_rssid_map_lookup(uint32_t rssid) const {
+        auto it = _shared_rssid_map.find(rssid);
+        if (it == _shared_rssid_map.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
     // Fills shared_rssid_map so that all rssids occupied by |rowset| map to
     // the corresponding rssid in |canonical_rowset|.
     void update_shared_rssid_map(const RowsetMetadataPB& rowset, const RowsetMetadataPB& canonical_rowset) {
@@ -608,13 +619,53 @@ Status merge_sstables(const std::vector<TabletMergeContext>& merge_contexts, Tab
                     out->mutable_delvec()->CopyFrom(dv_it->second);
                 }
             } else {
-                // No shared_rssid (legacy format): use rssid_offset
+                // No shared_rssid (legacy format): use rssid_offset.
                 if (sst.has_delvec() && sst.delvec().size() > 0) {
                     return Status::Corruption("Sstable has delvec but no shared_rssid, cannot project delvec");
                 }
+                // The high word of max_rss_rowid encodes the largest rssid present in
+                // the sstable's keys — for memtable-flush sstables this equals the
+                // source rowset's id (or id+max_segment_idx for multi-segment rowsets).
+                // If that source rowset is a duplicate of a canonical rowset already
+                // produced by an earlier child (shared_rssid_map hit), the blanket
+                // ctx.rssid_offset() translation would map the sstable's keys to the
+                // duplicate's *would-be* slot in the merged id space — a position that
+                // has no rowset in the merged metadata, since the duplicate was skipped
+                // in merge_rowsets. Subsequent INSERT publishes hit
+                // MetaFileBuilder::update_num_del_stat (meta_file.cpp:608) with
+                //   "unexpected segment id: <ghost_rssid> tablet id: <merged_tablet>"
+                // because PK index lookups return that ghost rssid which has no
+                // corresponding rowset.id+segment_idx mapping.
+                //
+                // Detect this by consulting shared_rssid_map for the sstable's source
+                // rssid. When it maps, switch to the shared_rssid projection: stamp
+                // shared_rssid with the canonical rssid, clear the blanket offset, and
+                // patch the high word of max_rss_rowid. The read path
+                // (persistent_index_sstable.cpp:207) then replaces every key's rssid
+                // with the canonical, which is the correct id for the dedup'd rowset.
+                int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
+                if (high >= 0 && high <= static_cast<int64_t>(std::numeric_limits<uint32_t>::max())) {
+                    auto source_rssid = static_cast<uint32_t>(high);
+                    // Use unconditional map_rssid only when it differs from the simple
+                    // offset translation — i.e. shared_rssid_map has an explicit entry
+                    // for this source rssid, indicating dedup.
+                    auto map_it = ctx.shared_rssid_map_lookup(source_rssid);
+                    if (map_it.has_value()) {
+                        out->set_shared_rssid(*map_it);
+                        // shared_version is required for the read-path remap branch
+                        // (persistent_index_sstable.cpp:207). Use the merged tablet's
+                        // version as a stable >0 marker; the actual numeric value is
+                        // not used for ordering, only for the ">0" gate.
+                        out->set_shared_version(new_metadata->version());
+                        out->set_rssid_offset(0); // do not double-transform
+                        uint64_t low = sst.max_rss_rowid() & 0xffffffffULL;
+                        out->set_max_rss_rowid((static_cast<uint64_t>(*map_it) << 32) | low);
+                        out->clear_delvec();
+                        continue;
+                    }
+                }
                 out->set_rssid_offset(static_cast<int32_t>(ctx.rssid_offset()));
                 uint64_t low = sst.max_rss_rowid() & 0xffffffffULL;
-                int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
                 out->set_max_rss_rowid((static_cast<uint64_t>(high + ctx.rssid_offset()) << 32) | low);
                 out->clear_delvec();
             }

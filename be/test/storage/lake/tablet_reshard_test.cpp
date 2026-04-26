@@ -4030,4 +4030,105 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_file_paths_covers_a
                                                 _tablet_manager->lcrm_location(tablet_id, "parallel_orphan.crm")));
 }
 
+// merge_sstables's non-shared_rssid branch used to apply ctx.rssid_offset
+// blindly. When a sstable's source rowset is deduped against an earlier
+// child's canonical rowset (shared_rssid_map hit), the offset translation
+// would produce a "ghost" rssid pointing to the duplicate's would-be slot in
+// the merged id space — a position with no rowset, since the duplicate was
+// skipped in merge_rowsets. The downstream symptom is INSERT publish failing
+// at MetaFileBuilder::update_num_del_stat (meta_file.cpp:608) with
+// "unexpected segment id: <ghost> tablet id: <merged>".
+TEST_F(LakeTabletReshardTest, test_tablet_merging_sstable_remap_for_deduped_source_rowset) {
+    const int64_t base_version = 1;
+    const int64_t new_version = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+
+    prepare_tablet_dirs(child_a);
+    prepare_tablet_dirs(child_b);
+    prepare_tablet_dirs(merged_tablet);
+
+    // Both children share rowset id=5 (memtable-flush sstable, no shared_rssid)
+    // plus a unique local rowset. Merge dedups id=5; the dedup'd sstable's
+    // effective rssid at read time must land on rowset.id=5 in merged metadata.
+    auto make_child = [&](int64_t tablet_id, uint32_t local_rowset_id, const std::string& local_seg) {
+        auto meta = std::make_shared<TabletMetadataPB>();
+        meta->set_id(tablet_id);
+        meta->set_version(base_version);
+        meta->set_next_rowset_id(local_rowset_id + 1);
+        set_primary_key_schema(meta.get(), 1001);
+        auto* shared_rs = meta->add_rowsets();
+        shared_rs->set_id(5);
+        shared_rs->set_version(1);
+        shared_rs->set_num_rows(10);
+        shared_rs->set_data_size(100);
+        shared_rs->add_segments("shared_seg.dat");
+        shared_rs->add_segment_size(100);
+        shared_rs->add_shared_segments(true);
+        auto* shared_sst = meta->mutable_sstable_meta()->add_sstables();
+        shared_sst->set_filename("shared_sst.sst");
+        shared_sst->set_filesize(256);
+        shared_sst->set_shared(true);
+        shared_sst->set_max_rss_rowid((static_cast<uint64_t>(5) << 32) | 99);
+        auto* local_rs = meta->add_rowsets();
+        local_rs->set_id(local_rowset_id);
+        local_rs->set_version(1);
+        local_rs->set_num_rows(10);
+        local_rs->set_data_size(100);
+        local_rs->add_segments(local_seg);
+        local_rs->add_segment_size(100);
+        return meta;
+    };
+
+    auto meta_a = make_child(child_a, 6, "a_local.dat");
+    auto meta_b = make_child(child_b, 7, "b_local.dat");
+
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_a));
+    EXPECT_OK(_tablet_manager->put_tablet_metadata(meta_b));
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
+    merging_info.add_old_tablet_ids(child_a);
+    merging_info.add_old_tablet_ids(child_b);
+    merging_info.set_new_tablet_id(merged_tablet);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(1);
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
+                                              txn_info, false, tablet_metadatas, tablet_ranges));
+
+    auto merged = tablet_metadatas.at(merged_tablet);
+
+    // Build the rssid coverage map the way meta_file.cpp:580-585 does when
+    // checking PK index consistency.
+    std::unordered_set<uint32_t> covered_rssids;
+    for (const auto& rowset : merged->rowsets()) {
+        for (int j = 0; j < rowset.segments_size(); ++j) {
+            covered_rssids.insert(rowset.id() + static_cast<uint32_t>(j));
+        }
+    }
+
+    // Every sstable in the merged metadata must have its read-time effective
+    // rssid covered by some rowset.id+segment_idx. Otherwise a future INSERT
+    // would hit "unexpected segment id" on publish.
+    for (const auto& sst : merged->sstable_meta().sstables()) {
+        uint32_t effective_rssid;
+        if (sst.has_shared_rssid() && sst.has_shared_version() && sst.shared_version() > 0) {
+            effective_rssid = sst.shared_rssid();
+        } else {
+            // For a key originally written with rssid=5 (the source rowset id):
+            effective_rssid = static_cast<uint32_t>(static_cast<int64_t>(5) + sst.rssid_offset());
+        }
+        EXPECT_TRUE(covered_rssids.count(effective_rssid))
+                << "sstable " << sst.filename() << " effective rssid " << effective_rssid
+                << " has no covering rowset.id+segment_idx in merged metadata";
+    }
+}
+
 } // namespace starrocks
