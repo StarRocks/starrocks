@@ -47,6 +47,13 @@ bvar::Adder<int64_t> g_tablet_reshard_merge_total("tablet_reshard_merge_total");
 bvar::Adder<int64_t> g_tablet_reshard_merge_failed("tablet_reshard_merge_failed");
 bvar::LatencyRecorder g_tablet_reshard_merge_latency("tablet_reshard_merge");
 bvar::Adder<int64_t> g_tablet_reshard_merge_input_tablet_count("tablet_reshard_merge_input_tablet_count");
+// Counts non-shared_rssid sstables whose post-merge rssid translation would
+// land outside the merged metadata's rowset.id+segment_idx coverage. Phase 1
+// is detection-only — bumping this counter signals a sstable that Phase 2
+// would rebuild. After Phase 2 lands, the counter mirrors actual rebuild
+// invocations.
+bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_needs_rebuild_total(
+        "tablet_reshard_merge_sstable_needs_rebuild_total");
 
 // Layer 2: Identical metrics
 bvar::Adder<int64_t> g_tablet_reshard_identical_total("tablet_reshard_identical_total");

@@ -57,6 +57,11 @@ bvar::Adder<int64_t> g_tablet_merge_dcg_rebuild_fallback_not_supported_total(
 
 } // namespace
 
+// Defined in tablet_reshard.cpp at file scope (alongside the other reshard
+// metrics). Bumped from merge_sstables when an input sstable's post-merge
+// translation would land outside the merged metadata's rowset coverage.
+extern bvar::Adder<int64_t> g_tablet_reshard_merge_sstable_needs_rebuild_total;
+
 namespace starrocks::lake {
 
 namespace {
@@ -90,6 +95,25 @@ public:
     }
 
     bool has_shared_rssid_mapping() const { return !_shared_rssid_map.empty(); }
+
+    // Read-only access to shared_rssid_map for detection/diagnostics in
+    // merge_sstables. Returns nullopt when |rssid| is not deduped (caller
+    // should fall through to default offset translation).
+    std::optional<uint32_t> shared_rssid_map_lookup(uint32_t rssid) const {
+        auto it = _shared_rssid_map.find(rssid);
+        if (it == _shared_rssid_map.end()) return std::nullopt;
+        return it->second;
+    }
+
+    // Iterate the shared_rssid_map without exposing the container type.
+    // Used by detection helpers that need to filter entries by source rssid
+    // range. The callback receives (src_rssid, canonical_rssid) pairs.
+    template <typename Fn>
+    void for_each_shared_rssid_mapping(Fn&& fn) const {
+        for (const auto& [src, dst] : _shared_rssid_map) {
+            fn(src, dst);
+        }
+    }
 
     // Fills shared_rssid_map so that all rssids occupied by |rowset| map to
     // the corresponding rssid in |canonical_rowset|.
@@ -1159,11 +1183,70 @@ Status merge_delvecs(TabletManager* tablet_manager, const std::vector<TabletMerg
     return Status::OK();
 }
 
+// Build the set of rssids covered by a tablet's rowsets (mirrors
+// MetaFileBuilder::update_num_del_stat construction at meta_file.cpp:580-585).
+// A non-shared_rssid sstable's post-merge translation must produce rssids that
+// land inside this set; otherwise PK index lookups return "ghost" rssids that
+// downstream consistency checks reject as "unexpected segment id".
+static std::unordered_set<uint32_t> build_rssid_coverage(const TabletMetadataPB& metadata) {
+    std::unordered_set<uint32_t> covered;
+    for (const auto& rowset : metadata.rowsets()) {
+        for (int j = 0; j < rowset.segments_size(); ++j) {
+            covered.insert(rowset.id() + get_segment_idx(rowset, j));
+        }
+    }
+    return covered;
+}
+
+// Detection helper for Phase 1. Returns true when the input sstable's
+// post-merge translation could produce a rssid that has no rowset.id+segment_idx
+// in the merged metadata. The check is conservative — false positives are fine
+// (Phase 2 will rebuild them anyway), but false negatives must not happen.
+//
+// Two failure shapes we look for:
+//   1. The sstable's effective max rssid (= max_rss_rowid >> 32 + ctx.rssid_offset
+//      via the offset path) has no covering rowset+segment_idx.
+//   2. shared_rssid_map has an entry whose key is <= max_rss_rowid >> 32
+//      (i.e., could appear in this sstable's stored rssids) AND whose value
+//      differs from the offset translation. In this case the sstable mixes
+//      keys that need different translations — the single-parameter
+//      rssid_offset cannot express both.
+static bool sstable_translation_lands_in_metadata(
+        const PersistentIndexSstablePB& sst, const TabletMergeContext& ctx,
+        const std::unordered_set<uint32_t>& covered_rssids, int64_t source_high) {
+    int64_t effective_high = source_high + ctx.rssid_offset();
+    if (effective_high < 0 || effective_high > std::numeric_limits<uint32_t>::max()) {
+        return false;
+    }
+    if (covered_rssids.find(static_cast<uint32_t>(effective_high)) == covered_rssids.end()) {
+        return false;
+    }
+    bool ok = true;
+    ctx.for_each_shared_rssid_mapping([&](uint32_t src_rssid, uint32_t mapped) {
+        if (!ok) return;
+        if (static_cast<int64_t>(src_rssid) > source_high) return;
+        int64_t offset_alternative = static_cast<int64_t>(src_rssid) + ctx.rssid_offset();
+        if (offset_alternative != static_cast<int64_t>(mapped)) {
+            ok = false;
+            return;
+        }
+        if (covered_rssids.find(mapped) == covered_rssids.end()) {
+            ok = false;
+        }
+    });
+    return ok;
+}
+
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
                       TabletMetadataPB* new_metadata) {
     auto* dest = new_metadata->mutable_sstable_meta()->mutable_sstables();
     // key: filename -> index in dest, for shared dedup + consistency check
     std::unordered_map<std::string, int> shared_dedup;
+
+    // Pre-compute coverage set once for Phase 1 detection. Empty sstable_meta
+    // (no rowsets with segments) just yields an empty set; detection then
+    // becomes a no-op for sstables that produce any rssid.
+    const auto covered_rssids = build_rssid_coverage(*new_metadata);
 
     auto* update_manager = tablet_manager->update_mgr();
     for (auto& ctx : merge_contexts) {
@@ -1229,6 +1312,25 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                 if (sst.has_delvec() && sst.delvec().size() > 0) {
                     return Status::Corruption("Sstable has delvec but no shared_rssid, cannot project delvec");
                 }
+                int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
+                // Phase 1 (detection-only): observe sstables whose post-merge
+                // translation would produce a rssid outside the merged
+                // metadata's rowset.id+segment_idx coverage. Phase 2 will
+                // call rebuild_sstable() in this branch instead of just
+                // logging.
+                if (!sstable_translation_lands_in_metadata(sst, ctx, covered_rssids, high)) {
+                    g_tablet_reshard_merge_sstable_needs_rebuild_total << 1;
+                    LOG(WARNING) << "merge_sstables: sstable " << sst.filename()
+                                 << " post-merge translation would land outside merged "
+                                 << "metadata's rowset coverage (source_high=" << high
+                                 << ", ctx.rssid_offset=" << ctx.rssid_offset()
+                                 << ", merged_tablet=" << new_metadata->id()
+                                 << "). Phase 2 will rebuild this sstable; for now using "
+                                 << "the legacy offset projection (may produce ghost rssid).";
+                }
+                // Accumulate rssid_offset so a stacked merge composes correctly
+                // (test branch fix: read path adds the stored offset once, so
+                // it must be the cumulative shift from the original rowset id).
                 const int64_t accumulated_offset = static_cast<int64_t>(sst.rssid_offset()) + ctx.rssid_offset();
                 if (accumulated_offset < std::numeric_limits<int32_t>::min() ||
                     accumulated_offset > std::numeric_limits<int32_t>::max()) {
@@ -1238,7 +1340,6 @@ Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeCont
                 }
                 out->set_rssid_offset(static_cast<int32_t>(accumulated_offset));
                 uint64_t low = sst.max_rss_rowid() & 0xffffffffULL;
-                int64_t high = static_cast<int64_t>(sst.max_rss_rowid() >> 32);
                 const int64_t new_high = high + ctx.rssid_offset();
                 if (new_high < 0 || new_high > std::numeric_limits<uint32_t>::max()) {
                     return Status::Corruption(
