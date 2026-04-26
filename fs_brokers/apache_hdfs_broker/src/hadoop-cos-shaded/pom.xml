@@ -49,14 +49,29 @@ under the License.
                     <groupId>org.json</groupId>
                     <artifactId>json</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>com.qcloud</groupId>
+                    <artifactId>cos_api-bundle</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/cos_api-bundle -->
         <dependency>
             <groupId>com.qcloud</groupId>
-            <artifactId>cos_api-bundle</artifactId>
+            <artifactId>cos_api</artifactId>
             <version>5.6.137.2</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.core</groupId>
+                    <artifactId>jackson-core</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud/cosn-ranger-interface -->
@@ -102,6 +117,14 @@ under the License.
                              <shadedPattern>shaded.starrocks.org.apache.hadoop.security.proto</shadedPattern>
                          </relocation>
                     </relocations>
+                    <filters>
+                        <filter>
+                            <artifact>com.qcloud:hadoop-ranger-client-for-hadoop</artifact>
+                            <excludes>
+                                <exclude>META-INF/maven/io.netty/netty/**</exclude>
+                            </excludes>
+                        </filter>
+                    </filters>
                 </configuration>
                 <executions>
                     <execution>
